@@ -17,6 +17,7 @@ const BODIES: unknown[] = [undefined, null, 'text', 7, {}, [], { error: 'usage_l
   { error: { errors: [{ reason: 'insufficientPermissions' }] } }, { error: { status: 'UNAUTHENTICATED' } },
   { error: { errors: [{ reason: 'rateLimitExceeded' }] } }, { error: { code: 403, errors: [{ reason: 'quotaExceeded' }] } },
   { error: { code: 403, status: 'PERMISSION_DENIED' } },
+  { error: { code: 'ErrorAccessDenied', errors: [{ reason: 'rateLimitExceeded' }], status: 'PERMISSION_DENIED' } },
   { category: 'MISSING_SCOPES' }, { category: 'VALIDATION_ERROR' }, { category: 'UNKNOWN' }, { category: { category: 'MISSING_SCOPES' } },
   { error_details: { code: 'AUTH.AUTHENTICATION.API_KEY_INVALID' } }, { error_details: { code: '' } }, { error: { code: '' } },
   { message: 'V3 API access is not enabled for this account' }, { message: 'Account inactive' },
@@ -32,6 +33,8 @@ test.each(IDS)("%s's definition is today's", id => {
   const now = derived[id];
   const then = legacy[id];
   expect(data(now)).toEqual(data(then));
+  // Key order reaches the authorize URL; toEqual ignores it.
+  expect(JSON.stringify(now.oauth2?.authParams)).toBe(JSON.stringify(then.oauth2?.authParams));
   expect([typeof now.errorDetail, typeof now.rateLimit, typeof now.retry.waitFromBody])
     .toEqual([typeof then.errorDetail, typeof then.rateLimit, typeof then.retry.waitFromBody]);
   for (const body of BODIES) {
@@ -49,4 +52,21 @@ test('the calendar base', () => { expect(derived.GOOGLE_CALENDAR_BASE).toBe(lega
 test("Unipile's other refusal types are now carried, slash made a dot (the design's change)", () => {
   expect(detail(derived.unipile.errorDetail?.({ type: 'errors/disconnected_account' }))).toBe('errors.disconnected_account');
   expect(legacy.unipile.errorDetail?.({ type: 'errors/disconnected_account' })).toBeUndefined();
+});
+
+/** The design's change for Google and Microsoft: an empty code is no code, so the next path is read, and a path's whole
+ * rest is tried as one key first. No real answer has these shapes. Legacy's detail, today's, and Google's 403 wait now. */
+test.each([
+  [{ error: { code: '', errors: [{ reason: 'rateLimitExceeded' }], status: 'X' } }, '', 'rateLimitExceeded', 60_000],
+  [{ error: { errors: [{ reason: '' }], status: 'RESOURCE_EXHAUSTED' } }, '', 'RESOURCE_EXHAUSTED', undefined],
+  [{ error: { errors: { 0: { reason: 'rateLimitExceeded' } } } }, undefined, 'rateLimitExceeded', 60_000],
+  [{ 'error.code': 'quotaExceeded' }, undefined, 'quotaExceeded', 60_000],
+  [{ error: { 'errors.0.reason': 'rateLimitExceeded' } }, undefined, 'rateLimitExceeded', 60_000],
+])('Google and Microsoft read %j as the design says (the design\'s change)', (body, then, now, waitMs) => {
+  for (const id of ['google', 'microsoft'] as const) {
+    expect(legacy[id].errorDetail?.(body)).toBe(then);
+    expect(derived[id].errorDetail?.(body)).toBe(now);
+  }
+  expect(legacy.google.rateLimit?.(403, new Headers(), body)).toBeUndefined();
+  expect(derived.google.rateLimit?.(403, new Headers(), body)).toEqual(waitMs === undefined ? undefined : { waitMs });
 });
