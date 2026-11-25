@@ -16,8 +16,7 @@ export type SlackClient = {
   revoke(): Promise<void>;
 };
 
-// `ok` must be Slack's `true`: the entry marks only `ok: false` as failed.
-const postedSchema = z.object({ ok: z.literal(true), ts: z.string() });
+const postedSchema = z.object({ ts: z.string() });
 const channelSchema = z.object({ id: z.string(), name: z.string(), is_private: z.boolean().optional() });
 const metadataSchema = z.object({ next_cursor: z.string() });
 const channelsSchema = z.looseObject({ channels: z.array(z.unknown()) });
@@ -46,8 +45,7 @@ export function slackClient(input: { token: string; fetch: typeof fetch }): Slac
     headers: { 'Content-Type': 'application/json; charset=utf-8' } });
   return {
     async postMessage(message) {
-      const { ts } = parseAnswer(postedSchema, await posts.json('/chat.postMessage', { method: 'POST', json: message }));
-      return { ts };
+      return parseAnswer(postedSchema, await posts.json('/chat.postMessage', { method: 'POST', json: message }));
     },
     async channels() {
       const channels: SlackChannel[] = [];

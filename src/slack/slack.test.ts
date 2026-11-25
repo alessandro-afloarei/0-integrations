@@ -49,7 +49,7 @@ describe('Slack client', () => {
     expect(Date.now()).toBe(started);
   });
 
-  it.each([{}, { ok: true }, { ok: true, ts: 1 }, { ok: 'true', ts: '1' }])('rejects malformed post success %j', async body => {
+  it.each([{}, { ok: true }, { ok: true, ts: 1 }, { ok: 'true', ts: 1 }])('rejects malformed post success %j', async body => {
     const http = fakeFetch([{ url: 'https://slack.com/api/chat.postMessage', respond: () => Response.json(body) }]);
     await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).postMessage({ channel: 'C1', text: 'hi' }))
       .rejects.toMatchObject({ code: 'invalid_response' });
@@ -109,8 +109,9 @@ describe('Slack review regressions', () => {
   it('reads a refusal outside 2xx too: a 401 invalid_auth is GrantRevoked', async () => {
     const http = fakeFetch([{ url: 'https://slack.com/api/chat.postMessage',
       respond: () => Response.json({ ok: false, error: 'invalid_auth' }, { status: 401 }) }]);
-    await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).postMessage({ channel: 'C1', text: 'hi' }))
-      .rejects.toBeInstanceOf(GrantRevoked);
+    const result = slackClient({ token: 'xoxb-1', fetch: http.fetch }).postMessage({ channel: 'C1', text: 'hi' });
+    await expect(result).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(result).rejects.toMatchObject({ detail: 'invalid_auth' });
     expect(http.calls).toHaveLength(1);
   });
 

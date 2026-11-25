@@ -384,6 +384,18 @@ test("an entry's client sends its credential, its headers under the caller's, an
     headers: { 'user-agent': 'app' } }).json('/users/me');
   expect(fake.calls[0]).toMatchObject({ url: 'https://api.notion.com/v1/users/me',
     headers: { authorization: 'Bearer k', 'notion-version': '2026-03-11', 'user-agent': 'app' } });
+  await createClient(notion, { token: () => Promise.resolve('k'), fetch: fake.fetch, minIntervalMs: 0,
+    headers: { 'notion-version': 'x' } }).json('/users/me');
+  expect(fake.calls[1]?.headers['notion-version']).toBe('x');
+});
+
+test('a code that echoes the renewed token is no detail', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({}, { status: 401 }),
+    () => Response.json({ type: 'renewed_key' }, { status: 403 })) }]);
+  const token = vi.fn<(rejected?: string) => Promise<string>>().mockResolvedValueOnce('old_key').mockResolvedValue('renewed_key');
+  await expect(createClient(hosted, { token, fetch: fake.fetch, minIntervalMs: 0 }).json('/x'))
+    .rejects.toMatchObject({ code: 'rejected', status: 403, detail: null });
+  expect(fake.calls.map(call => call.headers['x-api-key'])).toEqual(['old_key', 'renewed_key']);
 });
 
 test("Aircall's Basic credential is filled from a plain value and the secret, and a missing value sends nothing", async () => {
