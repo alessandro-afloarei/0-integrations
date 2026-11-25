@@ -1,6 +1,7 @@
 # Entries and the engine: design
 
-Status: accepted, 2026-11-25. This is phase 1 of the [roadmap](../../ROADMAP.md).
+Status: accepted, 2026-11-25; amended the same day to drop compatibility with 0.12. This is phase 1 of the
+[roadmap](../../ROADMAP.md).
 
 ## Intent
 
@@ -23,7 +24,8 @@ Five rules decide every choice below:
 ## Goals
 
 - `defineProvider({...})`: one typed, pure-data entry per provider in `src/catalogue/<id>.ts`.
-- The engine runs any entry. The 17 current providers move onto entries, and their module clients keep their calls.
+- The engine runs any entry. The 17 current providers move onto entries. A module keeps only the calls that carry
+  meaning; its sign-in, errors and paging are the engine's, read from its entry.
 - A typed client inferred from the entry, with no code generation.
 - Every entry gets authenticated raw HTTP for free, so an entry with only `auth` and `http` is already useful.
 - One table test runs over every entry. A new entry adds no test code.
@@ -34,7 +36,8 @@ Five rules decide every choice below:
 - New providers. They come in the next phase, in batches.
 - Storage adapters, route handlers and the connect screen (later phases).
 - Unified data models, a scheduler, a sync engine.
-- Describing every API feature as data. What data cannot say stays code, in a provider's module or its quirks file.
+- Describing every API feature as data. What data cannot say stays code, in a provider's module.
+- Compatibility with 0.12. An old call is removed in the step that replaces it; nothing is kept for old callers.
 
 ## Anti-goals
 
@@ -98,7 +101,7 @@ That is a whole provider: sign-in form, credential check, account identity, retr
   key. There are no fallbacks, conditions or functions. Each place that takes a template states its names:
   - `auth.send`: every field of the entry by its name, secret or plain, plus `{token}`: the access token, or the
     entry's only secret field.
-  - `identify` and `save`: the lookup described under `identify`.
+  - `identify` and `save` values: the lookup described under `identify`.
   - `webhook.signed`: `{body}`, `{timestamp}`, `{method}`, `{url}`.
   - an operation's `path`: its declared `path` parameters.
 - **Path**: a dotted path into an answer (`data.user.id`, `errors.0.code`). At each level the whole remaining path is
@@ -141,9 +144,10 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `docs` and `categories`,
-`fields[].default` and `help`, `Send.value`, `oauth2.send`, `Request.base` and `Operation.base`, the `s` and
-`epochSeconds` body-wait units, the `epochMs` reset unit, `paging` and `operations`, which arrive with the walker
-and the client, and quirks, which arrive with generic identify.
+`fields[].default` and `help`, `Send.value`, `oauth2.send`, `Call.base` and `Operation.base`, placeholders in
+`identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds
+`offset`, `page` and `linkHeader`, `Size`, and `Where.variables`. `paging` and `operations` arrive with the walker and
+the client.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -159,8 +163,7 @@ type Auth =
   | { kind: 'key'; send?: Send }
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; pkce?: false; clientAuth?: 'basic';
       scopeSeparator?: ','; authorizeParams?: Record<string, string>; tokenTypes?: readonly string[];
-      failed?: When; reusesGrant?: true; send?: Send }
-  | { kind: 'hosted'; send?: Send };
+      failed?: When; reusesGrant?: true; send?: Send };
 
 type Send = { header: string; value?: Template } | { basic: readonly [Template, Template] };
 ```
@@ -172,15 +175,15 @@ type Send = { header: string; value?: Template } | { basic: readonly [Template, 
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today.
-- `hosted` is a sign-in the provider hosts and data cannot describe. Its quirks file starts it. Its `{token}` is the
-  app's own key for that provider, passed like OAuth client credentials, never a field.
+- A sign-in the provider hosts on its own page (Unipile's) is not a kind: the entry is a `key` entry for the app's own
+  key, and the provider's module offers the hosted link and the account lookup as calls.
 
 ### `identify` and `save`
 
 ```ts
-type Identify = { request?: Request; id?: Value; name?: Value; lowercase?: true;
+type Identify = { request?: Call; id?: Value; name?: Value; lowercase?: true;
   rejectWhen?: readonly (Omit<When, 'detail'> & { detail?: string })[] };
-type Request = { method?: Method; path?: Template; query?: Record<string, string>; graphql?: string; base?: string };
+type Call = { method?: Method; path?: Template; query?: Record<string, string>; graphql?: string; base?: string };
 type Value = Path | readonly Path[] | Template;
 ```
 
@@ -188,8 +191,12 @@ type Value = Path | readonly Path[] | Template;
 seen only inside the engine) and `connection.*` (the plain values). A string with braces is a template over the same
 lookup, where `{id}` is the id already found: `'Portal {id}'`.
 
-- The request is sent only when a value needs the answer. Slack's identity is all `tokenAnswer.*`, so it sends none.
-  HubSpot's `id: ['tokenAnswer.hub_id', 'portalId']` sends one only when the token answer has no `hub_id`.
+- The request is sent only when a value needs the answer, or at once when there is no `id` and no `name` (a
+  credential check). Slack's identity is all `tokenAnswer.*`, so it sends none. HubSpot's
+  `id: ['tokenAnswer.hub_id', 'portalId']` sends one only when the token answer has no `hub_id`.
+- Microsoft's account is the immutable Graph id, named by its address: `id: 'id'`, `name: ['mail',
+  'userPrincipalName']`, `lowercase: true`. The rule that a mailbox has an address belongs to the mailbox reader, which
+  needs one.
 - "Present" means not null or undefined. An id must then be a non-empty string or a positive integer, else the answer
   is `invalid_response` with detail `missing_fields`. A blank name falls back to the id.
 - `lowercase` lowercases and trims the id and the name when they are strings.
@@ -255,8 +262,10 @@ The engine owns the stop rules, and entries hold no stop expressions:
 - `linkHeader` follows `rel="next"`. `nextUrl` follows a full URL in the body. Both stay on the provider's origin, and
   `nextUrl` under `pathPrefix`, counted from the base URL's path. A link that leaves is `invalid_response`.
 
-A module's public cursor never changes in this phase. A module moves onto the walker only when its requests and its
-cursors stay identical, which its tests and recording prove. Otherwise it keeps its own loop.
+A module keeps its own public cursor and builds its own requests, and reads its next cursor through its entry's shape,
+so its stop rules are the engine's. A module whose cursor is not a provider's cursor (a page number, a restart point,
+a query) keeps its own loop. The walker is built on `paginate`: the library has one paging loop and one
+repeated-cursor guard.
 
 ### `webhook`
 
@@ -288,51 +297,34 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 - There are no sync concepts here: no parent and child streams, no incremental cursors, no transforms. An app calls an
   operation with the parent's id.
 
-### Quirks
+### What data cannot say
 
-What data cannot say is a typed hook in a sibling file, passed as `defineProvider`'s second argument:
-
-```ts
-// src/catalogue/unipile.ts
-export const unipile = defineProvider({ id: 'unipile', /* … */ auth: [{ kind: 'hosted', send: { header: 'x-api-key' } }] }, quirks);
-
-type Quirks = {
-  /** Start a sign-in the entry cannot describe. Returns the URL the browser goes to. */
-  authorize?(input: { http: HttpClient; state: string; redirectUri: string; options: Values }): Promise<string>;
-  /** Identity that takes more than one request, or a rule beyond paths. */
-  identify?(input: { http: HttpClient; values: Values; tokenAnswer: Values }):
-    Promise<{ account: { id: string; name: string }; values?: Values }>;
-};
-type Values = Readonly<Record<string, unknown>>;
-```
-
-Two hooks, because two of the 17 providers need code and they need these two: Unipile's hosted sign-in and its
-two-request identity, and Microsoft's rule that a mailbox account must have an address. `options` is what the app
-passed to `startConnect`; `values` holds what the sign-in returned (an account id) and the plain fields. A hook only
-gets the entry's own HTTP client, so it can only call the provider. A third hook is added when a provider proves it
-cannot be data. Functions are dropped when the catalogue prints to JSON, which records `quirks: true`.
+There are no hooks, and `defineProvider` takes one argument. What an entry cannot say is a call of the provider's
+module: Unipile's hosted sign-in link and its two-request account lookup are its module's `authLink` and `account`.
+A hook is added only when a provider's sign-in or identity can be neither data nor a module call.
 
 ## The engine
 
-The existing core functions keep their names and take an entry where they took a provider definition.
+The core functions keep their names and take an entry. `ProviderDefinition`, `./providers`, `OAuthConnect`,
+`DirectConnect` and the module connect objects are gone.
 
 | Area | Change |
 |---|---|
 | `catalogue` (new) | `defineProvider`, the entry types, the template and path helpers. |
-| `http` | `createClient` reads `auth.send`, `http`, `errors`, `rateLimit` from the entry. The error and rate-limit functions of today become interpreters of the declared rules. |
-| `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: form, OAuth 2 or hosted. Both take `scopes`, which default to the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify and revoke are generic. A failed identify still revokes the fresh grant unless `reusesGrant`. Revoke treats a 2xx, a 404, `invalid_grant`, a revoked grant and the entry's `goneErrors` as done. `finishConnect` returns `{ secret, values, account }`. |
-| `oauth`, `credentials` | Same behaviour, driven by the entry. |
-| `paginate` | A walker for the five declared shapes, beside today's `paginate`. The repeated-cursor guard stays. |
-| `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, plus `deliveryId`. |
-| `client` (new) | `client(entry, { token, values?, headers?, fetch? })` returns the typed operations, plus `request` and `pages` for raw calls. `token` is a string or a function that renews it. |
-| `vault` | `SecretStore` may also read and replace a connection's plain `values`. Optional in this phase, so existing stores keep working. |
+| `http` (internal) | `createClient(entry, options)` reads `auth.send`, `http`, `errors`, `rateLimit` from the entry, and `classify` interprets the declared rules. `./http` is no longer a subpath: `client` is the public client. |
+| `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. |
+| `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, client, tokens)` is the one revoke: by RFC 7009 or by request, as the entry declares; a 2xx, a 404, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done. |
+| `paginate` | Unchanged. The walker for the declared shapes is built on it. |
+| `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, plus `deliveryId(entry.webhook, request)`. |
+| `client` (new) | `client(entry, { token, values?, headers?, fetch? })` returns the typed operations, plus `json`, `request` and `pages` for raw calls. `token` is a string or a function that renews it. |
+| `vault` | Unchanged. A connection's plain values are the app's to keep. |
 
 ```ts
 import { client } from '0-integrations/client';
 import { attio } from '0-integrations/catalogue/attio';
 
 const api = client(attio, { token: process.env.ATTIO_KEY });
-const self = await api.request('/self');                       // raw, authenticated, retried
+const self = await api.json('/self');                          // raw, authenticated, retried
 for await (const record of api.records.list({ object: 'people' })) { /* typed */ }
 ```
 
@@ -341,7 +333,8 @@ inferred from the literal. The entry types are hand-written TypeScript. A zod sc
 tests only and checks every entry.
 
 **Modules.** A provider's hand-written module (`0-integrations/hubspot`) stays where the provider needs real code:
-answer shapes with meaning, incremental reads, webhook parsing. It is built on its entry and keeps its public calls.
+answer shapes with meaning, incremental reads, webhook parsing, a sign-in the provider hosts. It is built on its entry:
+its client, its errors and its next cursors are the engine's.
 
 **Packaging.** `"./catalogue/*"` is one wildcard export, so a new entry needs no `package.json` edit. A test compares
 the rest of `exports` with the source tree. The build is `tsc`, then a short script that imports the compiled entries
@@ -353,10 +346,12 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
 
 1. **Shape.** The entry matches the schema. It holds no function. Every URL is https. Every placeholder names a
    declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip.
-2. **Replay**, when a recording sits beside it (`<id>.recording.json`): identify with a good and a bad credential, the
-   first page of each declared paging shape and a walk to the end, a 429, the OAuth exchange and revoke, and webhook
-   samples, valid and tampered.
-3. **Fake**, when the provider's module has one: the same cases against the fake, so the fake is held to the recording.
+2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): identify with
+   a good and a bad credential. The module kits run the first page, a walk to the end and a 429 on the same
+   recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange and revoke, and webhook samples
+   join the table's replay with the first entry that has them and no module.
+3. **Fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is held to
+   the recording.
 
 A recording is a real capture from a real account, cleaned by the privacy check. A made-up one tests the code but
 leaves the entry `declared`. The module kits stay for what an entry cannot know, such as incremental reads.
@@ -365,29 +360,30 @@ leaves the entry `declared`. The module kits stay for what an entry cannot know,
 
 ## What an app developer learns
 
-Two concepts: an **entry** (a provider) and a **connection** (one account's secret and plain values). Sign-in is
-`startConnect` and `finishConnect`; calls go through `client`. OAuth app credentials are arguments, never a stored
+Two concepts: an **entry** (a provider) and a **connection** (one account's secret and plain values, which the app
+keeps). Sign-in is `startConnect` and `finishConnect`; calls go through `client`. OAuth app credentials are arguments, never a stored
 "integration" object.
 
 ## Order of work
 
 Each step leaves `pnpm check` green and the package releasable.
 
-**Stage A: the foundation.** Steps 1 to 9 change no public API.
+**Stage A: the foundation.** Steps 1 to 4 add the catalogue beside today's API. From step 5 on, each old call is
+removed in the step that replaces it; nothing is kept for 0.12 callers.
 
 1. Shared internals and safe cleanups: one detail sanitiser, one `Retry-After` reader (it accepts fractions of a
    second, as the tests send), shared answer helpers.
 2. The entry types, `defineProvider`, and the three helpers: template, path and condition.
 3. The 17 entries, and the interpreters of the declared error, rate-limit and body-wait rules. Today's `./providers`
-   is derived from the entries, so its exported shapes and behaviour stay.
+   is derived from the entries for this step only.
 4. `catalogue.json`, the wildcard export and the exports test.
-5. The core functions accept entries as well as today's definitions.
-6. Generic identify and revoke. The quirks hooks.
-7. The paging walker. A module moves onto it only where its requests and cursors stay identical.
-8. The table test and the recording format's sign-in and webhook steps.
-9. Plain connection `values` in `SecretStore`, optional.
-10. Entry-driven connect. **Breaking**: `OAuthConnect`, `DirectConnect` and `./providers` give way.
-11. Declared operations and the inferred client.
+5. HTTP calls run on entries; the modules' own error readers give way to the declared rules.
+6. Generic identify. Microsoft's identity is data, so no hook is needed.
+7. OAuth, credentials and webhooks read entries; one revoke; `deliveryId`.
+8. Entry-driven connect. `OAuthConnect`, `DirectConnect`, the module connect objects, then `./providers` go.
+9. The paging walker; modules read their next cursors through their entries.
+10. Recordings beside their entries, and the table test's replay of identify.
+11. Declared operations and the inferred client; `./http` becomes internal.
 12. Release 0.13.0 with a migration list.
 
 **Stage B: expansion.** Each item arrives with a first provider that needs it, an entry and a recording or a derived
