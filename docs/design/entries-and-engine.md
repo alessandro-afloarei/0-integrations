@@ -99,8 +99,8 @@ That is a whole provider: sign-in form, credential check, account identity, retr
 
 - **Template**: a string with `{name}` placeholders. A name that is missing is an error that names the entry and the
   key. There are no fallbacks, conditions or functions. Each place that takes a template states its names:
-  - `auth.send`: every field of the entry by its name, secret or plain, plus `{token}`: the access token, or the
-    entry's only secret field.
+  - `auth.send`: every plain field of the entry by its name, the entry's only secret field by its name, and `{token}`:
+    the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one.
   - `identify` and `save` values: the lookup described under `identify`.
   - `webhook.signed`: `{body}`, `{timestamp}`, `{method}`, `{url}`.
   - an operation's `path`: its declared `path` parameters.

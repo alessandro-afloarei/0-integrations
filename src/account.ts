@@ -7,6 +7,13 @@ import { fill, holds, placeholders, readPath } from './rules.js';
 export type Account = { id: string; name: string };
 type Read = (name: string) => Promise<unknown>;
 
+/** The names `identify` and `save` read from the lookup: each path, and each template's placeholders but `{id}` (the id
+ * already found). */
+export function lookupNames(entry: Pick<Entry, 'identify' | 'save'>): string[] {
+  const values = [entry.identify?.id, entry.identify?.name, ...Object.values(entry.save ?? {})].flat().filter(value => value !== undefined);
+  return values.flatMap(value => (value.includes('{') ? placeholders(value).filter(name => name !== 'id') : [value]));
+}
+
 /** A value: the first present of its paths, or a template (a string with braces) over the same lookup, where `{id}` is
  * the id already found (a bare path `id` reads the answer: GitHub's, Notion's and Microsoft's id). */
 async function valueOf(value: Value, read: Read, where: string, id?: string): Promise<unknown> {

@@ -7,8 +7,7 @@ none and starts with a form, and an entry whose kind is not known in the types (
 - A key entry starts as a form of its `fields`. `finishConnect(entry, { secret, values?, fetch })` reads only the
   declared fields, secret ones from `secret` and plain ones from `values`, and refuses one that is missing, blank or
   whitespace with `TypeError('connect_field_required: <name>')` before anything is sent; nothing else passes through.
-  The first secret field is the credential, so an entry that declares no secret field cannot be finished here
-  (`TypeError('connect_secret_required')`). Then the entry's `identify` runs: with a request it checks the credential
+  The entry's only secret field is the credential. Then the entry's `identify` runs: with a request it checks the credential
   and learns the account; an entry that declares none sends nothing, and its `account` is `null`.
 - An OAuth 2 entry starts with a redirect asking for the entry's `scopes.default`, with PKCE unless the entry says
   `pkce: false`. `finishConnect(entry, { client, code, redirectUri, codeVerifier?, fetch, onRevokeFailed })` exchanges

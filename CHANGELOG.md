@@ -27,6 +27,7 @@
 - fireflies: a 2xx that is no JSON is `invalid_response` with the answer's status (it was `null`) and its `Retry-After`
   in `retryAfterMs`. A non-2xx whose first GraphQL code is an empty string and that has no `extensions.code` is
   `unavailable` (it was `request_failed`).
+- unipile: its entry declares its `apiKey` field, so `startConnect(unipile)` returns a form that asks for it (it was empty).
 - unipile: `unipileConnect` is gone: call `client.authLink(link)` for the sign-in URL and
   `client.account(accountId, signal)` for the account.
 - `authorizeUrl`, `exchangeCode`, `refreshGrant` and `accessToken({ provider })` take a catalogue entry; a token answer

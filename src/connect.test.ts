@@ -122,11 +122,6 @@ describe('connect', () => {
     expect(http.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('12:token').toString('base64')}`);
   });
 
-  it('refuses a key entry that declares no secret field', async () => {
-    const bare = defineProvider({ id: 'bare', name: 'Bare', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.bare.test' } });
-    await expect(finishConnect(bare, { secret: { apiKey: 'key' }, fetch: fakeFetch([]).fetch })).rejects.toThrow(new TypeError('connect_secret_required'));
-  });
-
   it.each([undefined, {}, { apiId: '' }, { apiId: ' ' }])('refuses a key entry without a plain field (%j) before anything is sent', async values => {
     const http = fakeFetch([]);
     await expect(finishConnect(aircall, { secret: { apiToken: 'token' }, ...(values ? { values } : {}), fetch: http.fetch }))

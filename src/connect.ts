@@ -55,8 +55,8 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     };
     const secret = Object.fromEntries(fields.filter(field => field.secret).map(read));
     const values = Object.fromEntries(fields.filter(field => !field.secret).map(read));
-    const token = Object.values(secret)[0];
-    if (token === undefined) throw new TypeError('connect_secret_required');
+    // The entry's only secret field is the credential; the catalogue test holds every entry to one.
+    const [token = ''] = Object.values(secret);
     return { secret, ...await identifyAccount(entry, { fetch: input.fetch, token, values }) };
   }
   if (!('code' in input)) throw new TypeError('oauth_options_required');

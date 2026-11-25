@@ -1,10 +1,10 @@
 import * as oauth from 'oauth4webapi';
 import type { Auth, Entry } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { sendCall } from './account.js';
+import { lookupNames, sendCall } from './account.js';
 import { createClient } from './http.js';
 import { classify, codeOf, safeDetail } from './http-response.js';
-import { holds, placeholders } from './rules.js';
+import { holds } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
@@ -17,9 +17,7 @@ function oauth2(entry: Entry): Extract<Auth, { kind: 'oauth2' }> {
 
 /** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted. */
 function tokenAnswerKeys(entry: Entry): string[] {
-  const reads = [entry.identify?.id, entry.identify?.name, ...Object.values(entry.save ?? {})].flat().filter(read => read !== undefined);
-  const paths = reads.flatMap(read => (read.includes('{') ? placeholders(read) : [read]));
-  const keys = paths.filter(path => path.startsWith('tokenAnswer.')).map(path => path.split('.')[1] ?? '');
+  const keys = lookupNames(entry).filter(name => name.startsWith('tokenAnswer.')).map(name => name.split('.')[1] ?? '');
   return [...new Set([...keys, ...(entry.scopes?.requireGranted ? ['scope'] : [])])];
 }
 
