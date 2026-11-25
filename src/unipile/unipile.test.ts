@@ -92,7 +92,7 @@ test('refuses a blank state, or an expiry it cannot write in UTC, before asking'
 
 test("names Unipile's refusal by its type and thrower, so a member's grant falling short reads apart from our key", async () => {
   for (const [type, detail] of [['provider/insufficient_permissions', 'provider.insufficient_permissions'],
-    ['api/expired_authorization', 'api.expired_authorization'], ['errors/disconnected_account', null]] as const) {
+    ['api/expired_authorization', 'api.expired_authorization'], ['errors/disconnected_account', 'errors.disconnected_account']] as const) {
     const refusing = fakeFetch([{ url: `${API}/acc_1/calendars`, respond: () => Response.json({ object: 'Error', type, status: 403 },
       { status: 403 }) }]);
     await expect(client(refusing.fetch).calendars('acc_1')).rejects.toMatchObject({ code: 'rejected', status: 403, detail });

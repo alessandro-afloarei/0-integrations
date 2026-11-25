@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Entry } from './catalogue.js';
+import { breakcold } from './catalogue/breakcold.js';
+import { fireflies } from './catalogue/fireflies.js';
+import { github } from './catalogue/github.js';
+import { lusha } from './catalogue/lusha.js';
+import { unipile } from './catalogue/unipile.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { bodyWaitOf, classify, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
 
@@ -115,4 +120,53 @@ test('codeOf, bodyWaitOf and retryPolicy', () => {
   expect(retryPolicy({})).toEqual({ limit: 1, maxWaitMs: 60_000, defaultWaitMs: 1000 });
   expect(retryPolicy({ limit: 0, waitFromBody: { path: 'w', unit: 'epochMs' } })).toEqual({ limit: 0, maxWaitMs: 0, defaultWaitMs: 0 });
   expect(retryPolicy({ limit: 3, defaultWaitMs: 30_000 })).toEqual({ limit: 3, maxWaitMs: 60_000, defaultWaitMs: 30_000 });
+});
+
+test.each([
+  [500, 'auth_failed', 'rejected'], [429, 'auth_failed', 'rejected'], [401, 'too_many_requests', 'rejected'],
+  [500, 'too_many_requests', 'rate_limited'], [200, 'too_many_requests', 'rate_limited'], [429, undefined, 'rate_limited'],
+  [200, 'object_not_found', 'not_found'], [429, 'object_not_found', 'rate_limited'], [404, 'object_not_found', 'not_found'],
+  [500, 'query_too_big', 'request_failed'], [408, 'timeout', 'request_failed'], [503, undefined, 'unavailable'],
+] as const)('Fireflies: GraphQL codes before statuses, HTTP %i with %j is %s', (status, code, expected) => {
+  for (const error of [{ code }, { extensions: { code } }]) {
+    expect(fail(fireflies, status, { errors: [error] })).toMatchObject({ code: expected, status, detail: code ?? null });
+  }
+});
+
+test('Fireflies: a codeless error inside a 200 is request_failed, an empty list is success', () => {
+  for (const error of [null, { message: 'private' }, { extensions: {} }]) {
+    expect(fail(fireflies, 200, { errors: [error], data: {} })).toEqual({ code: 'request_failed', status: 200, detail: null, retryAfterMs: null });
+  }
+  expect(classify(fireflies, response(200, { errors: [], data: {} }))).toBeNull();
+  expect(classify(fireflies, response(200, {}))).toBeNull();
+});
+
+test("Fireflies: the first error's epoch-ms wait, the header first", () => {
+  const limited = { errors: [{ code: 'too_many_requests', extensions: { metadata: { retryAfter: NOW + 4000 } } }] };
+  expect(fail(fireflies, 200, limited)).toMatchObject({ retryAfterMs: 4000 });
+  expect(fail(fireflies, 200, limited, { 'Retry-After': '2' })).toMatchObject({ retryAfterMs: 2000 });
+  expect(fail(fireflies, 200, { errors: [{ code: 'auth_failed' }, { code: 'x', extensions: { metadata: { retryAfter: NOW + 4000 } } }] }))
+    .toMatchObject({ code: 'rejected', retryAfterMs: null });
+});
+
+test('GitHub: three 403 rules, the reset only when none remain', () => {
+  const reset = String(NOW / 1000 + 90);
+  expect(fail(github, 403, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': reset })).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
+  expect(fail(github, 429, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': reset })).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
+  expect(fail(github, 403, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': 'soon' })).toMatchObject({ retryAfterMs: 60_000 });
+  expect(fail(github, 403, {}, { 'retry-after': '30' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 30_000 });
+  expect(fail(github, 403, { message: 'You have exceeded a secondary rate limit' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
+  expect(fail(github, 429, {})).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
+  expect(fail(github, 403, { message: 'Resource not accessible' })).toMatchObject({ code: 'rejected', retryAfterMs: null });
+});
+
+test('Lusha: the v3 message is request_failed, any other 403 rejected', () => {
+  expect(fail(lusha, 403, { message: 'V3 API access is not enabled for this account' })).toMatchObject({ code: 'request_failed', status: 403, detail: 'v3_not_enabled' });
+  expect(fail(lusha, 403, { message: 'Account inactive' })).toMatchObject({ code: 'rejected', detail: null });
+});
+
+test("Breakcold's body wait in milliseconds and code at error.code; Unipile's slash made a dot", () => {
+  expect(fail(breakcold, 429, { error: { code: 'usage_limit', retryAfterMs: 12.1 } })).toMatchObject({ code: 'rate_limited', detail: 'usage_limit', retryAfterMs: 13 });
+  expect(fail(breakcold, 402, { error: { code: 7 } })).toMatchObject({ code: 'request_failed', detail: null });
+  expect(fail(unipile, 403, { type: 'provider/insufficient_permissions' })).toMatchObject({ code: 'rejected', detail: 'provider.insufficient_permissions' });
 });

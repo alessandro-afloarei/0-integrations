@@ -1,11 +1,17 @@
-import type { Entry, Errors } from './catalogue.js';
+import type { Entry, Errors, Webhook } from './catalogue.js';
 import { aircall as aircallEntry } from './catalogue/aircall.js';
+import { apollo as apolloEntry } from './catalogue/apollo.js';
 import { attio as attioEntry } from './catalogue/attio.js';
+import { breakcold as breakcoldEntry } from './catalogue/breakcold.js';
 import { exa as exaEntry } from './catalogue/exa.js';
 import { fathom as fathomEntry } from './catalogue/fathom.js';
+import { fireflies as firefliesEntry } from './catalogue/fireflies.js';
 import { firecrawl as firecrawlEntry } from './catalogue/firecrawl.js';
+import { github as githubEntry } from './catalogue/github.js';
 import { granola as granolaEntry } from './catalogue/granola.js';
+import { lusha as lushaEntry } from './catalogue/lusha.js';
 import { notion as notionEntry } from './catalogue/notion.js';
+import { unipile as unipileEntry } from './catalogue/unipile.js';
 import { bodyWaitOf, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
 import { holds } from './rules.js';
 
@@ -60,8 +66,8 @@ export type ProviderDefinition = {
 function definitionOf(entry: Entry): ProviderDefinition {
   const { http, errors = {} } = entry;
   const [auth] = entry.auth;
-  // Tasks 6 and 7 derive these with their first entries.
-  if (auth.kind === 'oauth2' || entry.webhook) throw new TypeError('derivation_missing');
+  // Task 7 derives this with its first entries.
+  if (auth.kind === 'oauth2') throw new TypeError('derivation_missing');
   // Slack and Fireflies read their errors inside a 200 in their own modules: their definitions carried no function.
   const inBody = errors.failed !== undefined;
   const waitFromBody = !inBody && http.retry?.waitFromBody !== undefined;
@@ -69,6 +75,7 @@ function definitionOf(entry: Entry): ProviderDefinition {
     id: entry.id, baseUrl: http.baseUrl, timeoutMs: http.timeoutMs ?? 30_000, minIntervalMs: http.minIntervalMs ?? 0,
     ...('send' in auth ? { auth: 'basic' in auth.send ? { header: 'authorization', prefix: 'Basic ' } : { header: auth.send.header, prefix: '' } } : {}),
     retry: { ...retryPolicy(http.retry), ...(waitFromBody ? { waitFromBody: (body: unknown) => bodyWaitOf(http.retry, body, Date.now()) } : {}) },
+    ...(entry.webhook ? { webhook: schemeOf(entry.webhook) } : {}),
     ...(!inBody && (errors.detail !== undefined || errors.rules?.some(rule => rule.detail !== undefined))
       ? { errorDetail: (body: unknown) => detailOf(errors, body) } : {}),
     ...(http.rateLimit ? { rateLimit: (status: number, headers: Headers, body: unknown) => {
@@ -76,6 +83,13 @@ function definitionOf(entry: Entry): ProviderDefinition {
       return limit && { waitMs: limit.waitMs ?? 0 };
     } } : {}),
   };
+}
+
+/** An entry's webhook as today's scheme: SHA-256 over the raw body, hex, a five-minute tolerance unless it says otherwise. */
+function schemeOf(webhook: Webhook): HmacScheme {
+  return { signed: webhook.signed ?? '{body}', signatureHeader: webhook.header, prefix: webhook.prefix ?? '',
+    encoding: webhook.encoding ?? 'hex',
+    ...(webhook.timestamp ? { timestamp: { header: webhook.timestamp.header, toleranceSeconds: webhook.timestamp.toleranceSeconds ?? 300 } } : {}) };
 }
 
 /** A rule's detail when it reads the body alone (today's errorDetail saw no status or header), else the provider's code. */
@@ -112,11 +126,7 @@ export const slack: ProviderDefinition = {
   },
 };
 
-export const fireflies: ProviderDefinition = {
-  id: 'fireflies', baseUrl: 'https://api.fireflies.ai/graphql', timeoutMs: 30000, minIntervalMs: 0,
-  retry: { limit: 0, maxWaitMs: 0, defaultWaitMs: 0 },
-  webhook: { signed: '{body}', signatureHeader: 'x-hub-signature', prefix: 'sha256=', encoding: 'hex' },
-};
+export const fireflies = definitionOf(firefliesEntry);
 
 export const granola = definitionOf(granolaEntry);
 
@@ -128,66 +138,13 @@ export const aircall = definitionOf(aircallEntry);
 
 export const notion = definitionOf(notionEntry);
 
-/** GitHub: 5,000 requests an hour per person, shared with their other tokens and apps, and calling on while limited can get
- * an integration banned: no retry. A limit answers 403 or 429. The hourly one has `x-ratelimit-remaining: 0` and lasts until
- * `x-ratelimit-reset` (epoch seconds); a secondary one says so in its message and asks for a minute when no Retry-After
- * names its wait. */
-export const github: ProviderDefinition = {
-  id: 'github', baseUrl: 'https://api.github.com', timeoutMs: 30000, minIntervalMs: 250,
-  retry: { limit: 0, maxWaitMs: 0, defaultWaitMs: 0 },
-  rateLimit: (status, headers, body) => {
-    const exhausted = headers.get('x-ratelimit-remaining') === '0';
-    const message = typeof body === 'object' && body !== null && 'message' in body ? body.message : null;
-    const limited = status === 429 || (status === 403
-      && (exhausted || headers.has('retry-after') || (typeof message === 'string' && /rate limit/iu.test(message))));
-    if (!limited) return undefined;
-    const reset = Number(headers.get('x-ratelimit-reset'));
-    return { waitMs: exhausted && Number.isSafeInteger(reset) && reset > 0 ? Math.max(0, reset * 1000 - Date.now()) : 60_000 };
-  },
-};
+export const github = definitionOf(githubEntry);
 
-/** Apollo: limits are per team and endpoint, the Free plan's enrichment 50 a minute. A plan window's 429 names its wait in
- * `retry-after`; a platform one names none and asks for 60 seconds. */
-export const apollo: ProviderDefinition = {
-  id: 'apollo', baseUrl: 'https://api.apollo.io/api/v1', auth: { header: 'x-api-key', prefix: '' },
-  timeoutMs: 30000, minIntervalMs: 1200,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 60000 },
-  // `error_details.code` (`AUTH.AUTHENTICATION.API_KEY_INVALID`), Apollo's only error payload from 2027-02-16.
-  errorDetail: body => {
-    const details = typeof body === 'object' && body !== null && 'error_details' in body ? body.error_details : null;
-    const code: unknown = typeof details === 'object' && details !== null && 'code' in details ? details.code : null;
-    return typeof code === 'string' ? code : undefined;
-  },
-};
+export const apollo = definitionOf(apolloEntry);
 
-/** Lusha: the Free and Starter plans allow 40 calls a minute (account usage 5), and no `Retry-After` is documented. */
-export const lusha: ProviderDefinition = {
-  id: 'lusha', baseUrl: 'https://api.lusha.com', auth: { header: 'api_key', prefix: '' },
-  timeoutMs: 30000, minIntervalMs: 1500,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 60000 },
-  // Lusha refuses an account without v3 access with a 403, as it does an inactive one; only its message tells them apart.
-  errorDetail: body => (typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string'
-    && body.message.startsWith('V3 API access is not enabled') ? 'v3_not_enabled' : undefined),
-};
+export const lusha = definitionOf(lushaEntry);
 
-/** Breakcold's documented error object, `{ error: { code, message, requestId, retryAfterMs? } }`, or nothing. */
-function breakcoldError(body: unknown): { code?: unknown; retryAfterMs?: unknown } {
-  if (typeof body !== 'object' || body === null || !('error' in body)) return {};
-  return typeof body.error === 'object' && body.error !== null ? body.error : {};
-}
-
-export const breakcold: ProviderDefinition = {
-  id: 'breakcold', baseUrl: 'https://rest.breakcold.com/api/v1', timeoutMs: 30000, minIntervalMs: 0,
-  retry: {
-    limit: 1, maxWaitMs: 60000, defaultWaitMs: 0,
-    waitFromBody: body => { const { retryAfterMs } = breakcoldError(body); return typeof retryAfterMs === 'number' ? retryAfterMs : undefined; },
-  },
-  webhook: {
-    signed: '{timestamp}.{body}', signatureHeader: 'x-webhook-signature', prefix: 'sha256=', encoding: 'hex',
-    timestamp: { header: 'x-webhook-timestamp', toleranceSeconds: 300 },
-  },
-  errorDetail: body => { const { code } = breakcoldError(body); return typeof code === 'string' ? code : undefined; },
-};
+export const breakcold = definitionOf(breakcoldEntry);
 
 /** A provider's error code from `{ error: { code } }` (Graph) or `{ error: { errors: [{ reason }], status } }` (Google). */
 function nestedErrorCode(body: unknown): string | undefined {
@@ -236,16 +193,7 @@ export const google: ProviderDefinition = {
   },
 };
 
-export const unipile: ProviderDefinition = {
-  id: 'unipile', baseUrl: 'https://api.unipile.com/v2', auth: { header: 'x-api-key', prefix: '' }, timeoutMs: 30000, minIntervalMs: 0,
-  retry: { limit: 3, maxWaitMs: 60000, defaultWaitMs: 30000 },
-  // Unipile names a refusal by `type`, its thrower first (`provider/insufficient_permissions`, `api/expired_authorization`):
-  // a member's grant falling short reads apart from our own key. The slash becomes a dot, as a detail allows.
-  errorDetail: body => {
-    const type = typeof body === 'object' && body !== null && 'type' in body ? body.type : null;
-    return typeof type === 'string' && /^(api|provider)\/\w+$/u.test(type) ? type.replace('/', '.') : undefined;
-  },
-};
+export const unipile = definitionOf(unipileEntry);
 
 export const firecrawl = definitionOf(firecrawlEntry);
 
