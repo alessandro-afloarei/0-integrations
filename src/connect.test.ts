@@ -112,6 +112,16 @@ describe('connect', () => {
     expect(http.calls).toHaveLength(0);
   });
 
+  it("refuses an app's key entry that declares no secret field, before anything is sent", async () => {
+    const plain = defineProvider({ id: 'plain', name: 'Plain', fields: [{ name: 'region', title: 'Region' }], auth: [{ kind: 'key' }],
+      http: { baseUrl: 'https://api.plain.test' }, identify: { request: { path: '/me' }, id: 'id' } });
+    const http = fakeFetch([]);
+    expect(await startConnect(plain)).toEqual({ kind: 'form', fields: [{ name: 'region', title: 'Region' }] });
+    await expect(finishConnect(plain, { secret: {}, values: { region: 'eu' }, fetch: http.fetch }))
+      .rejects.toThrow(new TypeError('connect_secret_field_missing: plain'));
+    expect(http.calls).toHaveLength(0);
+  });
+
   it('keeps and sends only the fields the entry declares, each in its own record', async () => {
     const http = fakeFetch([{ url: 'https://api.aircall.io/v1/company', respond: () => Response.json({ company: { name: 'Lumen' } }) }]);
     const form = { apiId: '12', apiToken: 'plain-copy', note: 'extra' };
