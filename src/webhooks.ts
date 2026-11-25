@@ -24,7 +24,8 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-/** What an app dedupes a delivery on: the declared header, or the body's paths joined with `:`; null when one is missing. */
+/** What an app dedupes a delivery on: the declared header, or the body's paths joined with `:`; null when one is missing.
+ * Read it only after `verifyWebhook` accepted the request. */
 export function deliveryId(webhook: Webhook, request: WebhookRequest): string | null {
   const source = webhook.deliveryId;
   if (source === undefined) return null;

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Every line below breaks 0.12 unless it says otherwise.
+
 - New: `0-integrations/catalogue` (`defineProvider` and the entry types), one entry per provider at
   `0-integrations/catalogue/<id>`, and `0-integrations/catalogue.json`, all 17 providers as plain data.
 - A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
@@ -16,9 +18,8 @@
   and a path also reads an own dotted key (`{ "error.code": … }`, `{ "error.retryAfterMs": … }`) and an object keyed
   `0` (`{ "errors": { "0": … } }`): apollo, breakcold, fireflies, google and microsoft read such bodies differently than
   before.
-- `createClient(entry, { token, fetch, values?, … })` takes a catalogue entry; Aircall's credential is built from
-  `values: { apiId }` and the API token.
-- `createClient` takes the entry first, and an entry always has a base URL (`base_url_required` is gone).
+- `createClient(entry, { token, fetch, values?, … })` takes a catalogue entry first, and an entry always has a base URL
+  (`base_url_required` is gone); Aircall's credential is built from `values: { apiId }` and the API token.
 - slack: a code outside 2xx is read too: a 401 `invalid_auth` (or another revoked code) is `GrantRevoked`, and a 429
   carries Slack's `error` (`ratelimited`) as its detail.
 - fireflies: `identify(client)` is gone: call `client.user()`.
@@ -54,7 +55,8 @@
 - google: a token answer without `scope` passes `requireGranted`, since it granted the scopes requested (RFC 6749
   §5.1); it was refused as `scope_missing`.
 - An id that is only whitespace is `invalid_response` (`missing_fields`) for every provider; only a lowercased one was.
-- An account id may be a positive integer for every provider (Slack, Google and Microsoft required a string).
+- A provider may answer an account id as a positive integer, read as its decimal string, for every provider (Slack,
+  Google and Microsoft required a string).
 - slack: `botUserId` is saved as Slack answers it (it was kept only when a string, else `null`).
 - A malformed identity is `invalid_response` with detail `missing_fields` and the answer's status for every provider
   (HubSpot's carried status and detail `null`).
@@ -63,8 +65,9 @@
 - microsoft: the account id is Graph's `id` lowercased (Graph ids are lowercase GUIDs). A user with no address (neither
   `mail` nor `userPrincipalName`, or one without `@`) now signs in, named by its address if any, else its id; the
   mailbox reader still refuses it as `no_mailbox` at its first read.
-- Breaking: `0-integrations/providers` and its types (`ProviderDefinition`, `OAuth2Definition`, `RetryPolicy`,
-  `HmacScheme`) are gone: import the entry from `0-integrations/catalogue/<id>`.
+- `0-integrations/providers` and its types (`ProviderDefinition`, `OAuth2Definition`, `RetryPolicy`, `HmacScheme`) are
+  gone: import the entry from `0-integrations/catalogue/<id>`. `GOOGLE_CALENDAR_BASE` is gone: read
+  `google.http.bases.calendar`.
 
 ## 0.12.0
 

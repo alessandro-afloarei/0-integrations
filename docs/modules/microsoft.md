@@ -11,19 +11,7 @@ makes the event unreadable (skipped) rather than misread. An all-day event comes
 UTC+12, a day early east of UTC+12 (New Zealand's summer, Tonga, Kiribati). Graph names the member's own answer apart from the attendees;
 the reader puts it on their attendee entry. A next page is Graph's `@odata.nextLink`, followed only on Graph.
 
-Sign a member in with `startConnect(google, …)` or `startConnect(microsoft, …)` (the entries at
-`0-integrations/catalogue/<id>`; PKCE, the verifier for the app to keep with its state) and finish with `finishConnect`.
-Google's account is the Gmail address, lowercased. Microsoft's is the user's immutable Graph `id`, lowercased, named by
-`mail` when Graph answers one (else `userPrincipalName`), lowercased, and by the id when that name is blank: a tenant's admin can set a user's `mail` to any address,
-another organization's included, so the address never says who signed in (nOAuth). A Microsoft user with no address
-signs in; the mailbox reader refuses it (`no_mailbox`) at its first read. Microsoft rotates the refresh token on every
-refresh (`accessToken` stores the successor) and has no endpoint that revokes one app's delegated grant, so its entry
-declares no revoke: the grant lapses once the app deletes its tokens. Google's consent screen lets the member untick a
-scope: its entry's `requireGranted` refuses a grant short of either (`rejected`, `scope_missing`), and `finishConnect`
-revokes it. Google keeps the refresh token until it is revoked; `revokeGrant(google, { ...grant, client, fetch })`
-revokes it, and a token already revoked resolves. A Google project in "Testing" gets
-refresh tokens that expire after 7 days, and a password change ends a grant with Gmail scopes: both refresh as
-`GrantRevoked`.
+Signing a member in, each account's id and revoking a grant: [connect › Google and Microsoft](connect.md#google-and-microsoft).
 
 `fakeMicrosoft` and `fakeGoogle` (`microsoft/fake`, `google/fake`) answer the sign-in (consent with PKCE, code exchange,
 refresh, Google's revoke) and the reads from synthetic mailboxes: `signIn(state)` names who consents (null declines),

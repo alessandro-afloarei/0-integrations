@@ -10,8 +10,8 @@ afternoon, not a week. For each service it covers, the library provides:
 - incoming webhooks.
 
 **Today** the library is the core (`vault`, `credentials`, `oauth`, `connect`, `http`, `webhooks`, `paginate`,
-`testing`) plus 17 provider modules, each with a fake. The declared catalogue, the adapters and the connect screen are
-planned; the rest of this page describes where it is going.
+`testing`), the declared catalogue (one entry per provider) and the provider modules, each with a fake. The adapters
+and the connect screen are planned; the rest of this page describes where it is going.
 
 ## Goals
 
@@ -49,9 +49,10 @@ catalogue without the adapters.
 - **Core.** Will run any entry: connect, OAuth, credentials, the vault, HTTP with retries, paging, webhook schemes, a
   sync helper the app runs in its own job runner, and an SSRF guard for templated URLs. Today there is no SSRF guard:
   the app passes its own guarded `fetch`.
-- **Declared catalogue.** Will hold one typed entry per provider, written from the provider's own docs and checked at
-  build time. An entry will be pure data: auth alternatives, form fields, identity, revoke, verify, HTTP and retry
-  rules, paging, webhook scheme, scopes and named operations, from which a typed client will be generated.
+- **Declared catalogue.** Holds one typed entry per provider, written from the provider's own docs and checked by one
+  table test. An entry is pure data: auth alternatives, form fields, identity (which also checks the credential),
+  revoke, HTTP and retry rules, webhook scheme and scopes; paging and named operations follow, with a client whose
+  types are inferred from the entry.
 - **Deep modules.** Will be hand-written clients for the providers that earn them: typed reads and writes, zod-checked
   answers, parsed webhooks, a fake and recordings.
 - **Adapters.** Will be separate packages: a Postgres store, a Redis lock and nonce store, route handlers for OAuth and
@@ -82,7 +83,7 @@ Each phase ends with a release. Breaking changes are listed in the changelog wit
 | # | Phase | Done when |
 |---|---|---|
 | 0 | Open-source readiness | Apache 2.0 license, contributor docs, security policy and issue templates; the repository public |
-| 1 | Entry format and generic engine | The entry format, its lints, `catalogue.json`, tiers and declared operations with an inferred typed client; today's providers moved onto entries; new auth modes, templated URLs, generic identify, revoke and verify, 5xx retry and more webhook schemes |
+| 1 | Entry format and generic engine | The entry format, its lints, `catalogue.json`, tiers and declared operations with an inferred typed client; today's providers moved onto entries; new auth modes, templated URLs, generic identify and revoke, 5xx retry and more webhook schemes |
 | 2 | Breadth | 300 or more entries, added in category batches with their main operations, 100 or more at `recorded` or above |
 | 3 | Adapters | The Postgres, Redis and route-handler packages |
 | 4 | Connect screen | The React connect screen, drawn from `catalogue.json` |

@@ -17,7 +17,9 @@ none and starts with a form, and an entry whose kind is not known in the types (
   cleanup. An entry whose `reusesGrant` says re-consent can return a live connection's grant skips the cleanup: only
   the app knows who owns it.
 
-To ask for other scopes, derive an entry: `defineProvider({ ...google, scopes: { default: [...] } })`.
+To ask for other scopes, derive an entry: `defineProvider({ ...google, scopes: { default: [...] } })`. `defineProvider`
+does not refuse a misspelled key at compile time (the catalogue test does, for the entries in this repository), so check
+the key's name.
 
 The result is `{ secret, values, account }`, typed from the entry: the secret to seal (the grant, or the secret fields by
 name), the plain values to keep (the plain fields by name, and what the entry's `save` keeps when the provider answers
@@ -26,4 +28,31 @@ validation, the registered redirect URI, verifier storage and sealing the secret
 `codeVerifier` to the browser:** keep it on the server and redirect with `url` alone. Blank OAuth states and missing
 required verifiers are refused.
 
-The [HubSpot page](hubspot.md) shows a whole connect against the HubSpot fake.
+A key provider's connect is a form, then one call:
+
+```ts
+import { aircall } from '0-integrations/catalogue/aircall';
+import { finishConnect, startConnect } from '0-integrations/connect';
+
+const { fields } = await startConnect(aircall); // API ID, and API token (secret)
+const { secret, values, account } = await finishConnect(aircall, { secret: { apiToken }, values: { apiId }, fetch });
+// secret: { apiToken } to seal; values: { apiId } to keep; account: { id: apiId, name: the company's name }
+```
+
+The [HubSpot page](hubspot.md) shows a whole OAuth connect against the HubSpot fake.
+
+## Google and Microsoft
+
+Sign a member in with `startConnect(google, …)` or `startConnect(microsoft, …)` (the entries at
+`0-integrations/catalogue/<id>`; PKCE, the verifier for the app to keep with its state) and finish with `finishConnect`.
+Google's account is the Gmail address, lowercased. Microsoft's is the user's immutable Graph `id`, lowercased, named by
+`mail` when Graph answers one (else `userPrincipalName`), lowercased, and by the id when that name is blank: a tenant's admin can set a user's `mail` to any address,
+another organization's included, so the address never says who signed in (nOAuth). A Microsoft user with no address
+signs in; the mailbox reader refuses it (`no_mailbox`) at its first read. Microsoft rotates the refresh token on every
+refresh (`accessToken` stores the successor) and has no endpoint that revokes one app's delegated grant, so its entry
+declares no revoke: the grant lapses once the app deletes its tokens. Google's consent screen lets the member untick a
+scope: its entry's `requireGranted` refuses a grant short of either (`rejected`, `scope_missing`), and `finishConnect`
+revokes it. Google keeps the refresh token until it is revoked; `revokeGrant(google, { ...grant, client, fetch })`
+revokes it, and a token already revoked resolves. A Google project in "Testing" gets
+refresh tokens that expire after 7 days, and a password change ends a grant with Gmail scopes: both refresh as
+`GrantRevoked`.
