@@ -222,3 +222,8 @@ test.each(['upstream_error; private_context=synthetic-marker', 'x'.repeat(65), '
     expect(JSON.stringify(caught)).not.toContain(detail);
   }
 });
+
+test('a GraphQL code that echoes the key is no detail', async () => {
+  await expect(client(answer({ errors: [{ code: 'fixture_key' }] }), 'fixture_key').user())
+    .rejects.toMatchObject({ code: 'request_failed', detail: null });
+});

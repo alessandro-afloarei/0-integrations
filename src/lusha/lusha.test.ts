@@ -81,3 +81,9 @@ test('tells an account without v3 access from a bad key, and reports running out
   await expect(client(answering({ statusCode: 402, message: 'Insufficient credits for this operation' }, 402).fetch).company('y.test'))
     .rejects.toMatchObject({ code: 'request_failed', status: 402 });
 });
+
+test("the entry's own detail is never taken for a credential, even when the key is a fragment of it", async () => {
+  const v3 = fakeFetch(fakeLusha({ account: () => 'v3_not_enabled' }));
+  await expect(lushaClient({ apiKey: 'enabled', fetch: v3.fetch, minIntervalMs: 0 }).usage())
+    .rejects.toMatchObject({ code: 'request_failed', detail: 'v3_not_enabled' });
+});

@@ -8,8 +8,8 @@ export const orNull = <T extends z.ZodType>(schema: T) => schema.nullish().trans
 /** @internal */
 export const text = orNull(z.string());
 
-/** An ISO time with its offset, written in UTC as `toISOString()` does (`YYYY-MM-DDTHH:MM:SS.sssZ`), the only form Unipile
- * accepts. One without its offset would be read in the provider's own zone, so it is refused before a request. */
+/** An ISO time with its offset, written in UTC as `toISOString()` does (`YYYY-MM-DDTHH:MM:SS.sssZ`), the only form some
+ * providers accept. One without its offset would be read in the provider's own zone, so it is refused before a request. */
 export function utc(value: string): string {
   if (!datetime.safeParse(value).success) throw new TypeError('date_invalid');
   return new Date(value).toISOString();

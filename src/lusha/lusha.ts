@@ -52,27 +52,19 @@ const batchSchema = z.object({ results: z.array(z.looseObject({ error: z.object(
 /** Item errors that are Lusha's final answer; any other (`ENRICH_FAILED`) failed this time. */
 const NO_MATCH = new Set(['NOT_FOUND', 'COMPLIANCE_RESTRICTED']);
 
-/** An account without v3 access is not a bad key, and no new key fixes it: `request_failed`, not `rejected`. */
-function v3Refusal(error: unknown): never {
-  if (error instanceof ProviderHttpError && error.detail === 'v3_not_enabled') {
-    throw new ProviderHttpError('request_failed', 403, 'v3_not_enabled');
-  }
-  throw error;
-}
-
 export function lushaClient(input: { apiKey: string; fetch: typeof fetch; minIntervalMs?: number }): LushaClient {
   const http = createClient(lusha, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   async function lookup<T>(path: string, json: unknown, schema: z.ZodType<T>): Promise<LushaLookup<T>> {
     // A lookup changes nothing and a 429 was not charged, so it is waited out like a GET's.
-    const answer = await http.json(path, { method: 'POST', json, idempotent: true }).catch(v3Refusal);
+    const answer = await http.json(path, { method: 'POST', json, idempotent: true });
     const { results: [result], billing } = parseAnswer(batchSchema, answer);
     if (result?.error && !NO_MATCH.has(result.error.code)) throw new ProviderHttpError('unavailable', null, 'enrich_failed');
     return { match: result && !result.error ? parseAnswer(schema, result) : null, creditsCharged: billing?.creditsCharged ?? null };
   }
   return {
     async usage() {
-      return parseAnswer(usageSchema, await http.json('/v3/account/usage').catch(v3Refusal));
+      return parseAnswer(usageSchema, await http.json('/v3/account/usage'));
     },
     person: query => lookup('/v3/contacts/search', { contacts: [query] }, personSchema),
     company: domain => lookup('/v3/companies/search-and-enrich', { companies: [{ domain }] }, companySchema),

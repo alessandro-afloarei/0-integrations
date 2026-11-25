@@ -103,7 +103,7 @@ const eventSchema = z.object({
   attendees: z.array(z.object({ email: z.string(), display_name: emptyAsNull, is_organizer: z.boolean(), is_resource: z.boolean(),
     response_status: z.enum(['yes', 'no', 'maybe', 'noreply']) })).nullish().transform(list => list ?? []),
   organizer: z.object({ email: z.string(), display_name: emptyAsNull }),
-  conference: z.object({ provider: z.string(), url: orNull(z.string()) }).nullish().transform(conference => conference ?? null),
+  conference: orNull(z.object({ provider: z.string(), url: orNull(z.string()) })),
   event_type: z.string(), transparency: z.string(),
   // Required: an event that does not say whether it is private is skipped, never taken as public.
   visibility: z.enum(['public', 'private']),

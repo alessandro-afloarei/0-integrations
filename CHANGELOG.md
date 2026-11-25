@@ -22,6 +22,9 @@
 - slack: a code outside 2xx is read too: a 401 `invalid_auth` (or another revoked code) is `GrantRevoked`, and a 429
   carries Slack's `error` (`ratelimited`) as its detail.
 - slack: an answer is refused when its `ok` is false; a 200 that carries no `ok` is read by its data.
+- lusha: an account without v3 access keeps the answer's `Retry-After` in `retryAfterMs` (it was always `null`).
+- fireflies: an empty-string GraphQL code is skipped and the next path read (`errors.0.extensions.code`), and a 200
+  that is no JSON is `invalid_response` with status 200 (it was `null`).
 
 ## 0.12.0
 
