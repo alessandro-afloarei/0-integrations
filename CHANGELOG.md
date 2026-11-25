@@ -10,7 +10,7 @@
   the body's wait or the default.
 - One sanitiser reads the detail of HTTP and OAuth errors, and a `/` in a provider's code becomes `.` in `detail` for
   every provider. An OAuth refusal's detail now follows the HTTP rule: 1 to 64 characters of letters, digits, `_`, `.`
-  or `-`, in any position.
+  or `-`, in any position. A code holding the credential its request sent, before or after that `.`, is no detail.
 - unipile: any refusal `type` that passes the sanitiser is carried as the detail, `/` read as `.`; before, only `api/…`
   and `provider/…` types were, so `errors/…` types are now carried too.
 - google, microsoft: an empty-string error code is skipped and the next one is read. A path also reads an own dotted

@@ -1,7 +1,7 @@
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import { ProviderHttpError } from './errors.js';
-import { responseJson } from './http-response.js';
+import { responseJson, sentWith } from './http-response.js';
 import type { ProviderDefinition } from './providers.js';
 import { retryAfterMs } from './retry-after.js';
 
@@ -160,7 +160,7 @@ export function createClient(input: {
     for (let hop = 0; ; hop++) {
       const response = await send(url, bearer, options);
       const next = hop < MAX_REDIRECTS ? redirectTarget(url, options.method ?? 'GET', response) : null;
-      if (next === null) return response;
+      if (next === null) return sentWith(response, bearer);
       url = next;
     }
   }

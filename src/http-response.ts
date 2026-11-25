@@ -16,17 +16,32 @@ function statusCode(status: number): ProviderErrorCode {
 /** A provider's error code as a short token (a slash read as a dot), or null when it could carry a body or a secret. */
 export function safeDetail(code: string, secrets: readonly string[] = []): string | null {
   const detail = code.replaceAll('/', '.');
-  return /^[\w.-]{1,64}$/u.test(detail) && !secrets.some(secret => secret.length > 0 && code.includes(secret)) ? detail : null;
+  const holdsSecret = secrets.some(secret => secret.length > 0 && (code.includes(secret) || detail.includes(secret)));
+  return /^[\w.-]{1,64}$/u.test(detail) && !holdsSecret ? detail : null;
+}
+
+/** The credential each answer's request sent, so a code echoing it is never a detail; it never leaves this library. */
+const credentials = new WeakMap<ProviderResponse, string>();
+
+/** Records the credential `response`'s request sent; only the HTTP client calls it. */
+export function sentWith(response: ProviderResponse, credential: string): ProviderResponse {
+  credentials.set(response, credential);
+  return response;
+}
+
+/** A provider's code as an answer's detail: never one holding the credential its request sent. */
+function answerDetail(response: ProviderResponse, code: string): string | null {
+  return safeDetail(code, [credentials.get(response) ?? '']);
 }
 
 /** Shared by json() and providers which must also read headers on HTTP-successful error responses. */
-export function responseJson(provider: ProviderDefinition, response: { status: number; headers: Headers; data: unknown }): unknown {
+export function responseJson(provider: ProviderDefinition, response: ProviderResponse): unknown {
   const { status, headers, data } = response;
   if (status < 200 || status >= 300) {
     const detail = provider.errorDetail?.(data);
     const limit = provider.rateLimit?.(status, headers, data);
     throw new ProviderHttpError(limit ? 'rate_limited' : statusCode(status), status,
-      detail === undefined ? null : safeDetail(detail),
+      detail === undefined ? null : answerDetail(response, detail),
       { retryAfterMs: retryAfterMs(headers, Date.now(), limit?.waitMs ?? provider.retry.waitFromBody?.(data)) });
   }
   if (data === undefined) throw new ProviderHttpError('invalid_response', status, null,
@@ -73,7 +88,7 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   const answer = { status, headers, body, code };
   // Steps 1 to 3 read only an answer that is an error: outside 2xx, or a 2xx `failed` marks.
   if (ok && (errors.failed === undefined || !holds(errors.failed, answer))) return null;
-  const detail = code === undefined ? null : safeDetail(code);
+  const detail = code === undefined ? null : answerDetail(response, code);
   if (code !== undefined && errors.revoked?.includes(code)) return new GrantRevoked(detail);
   const bodyWait = bodyWaitOf(entry.http.retry, body, now);
   // An error a rule decides is no declared rate limit, so it never carries that limit's wait.

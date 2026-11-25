@@ -315,6 +315,7 @@ test('what beforeRequest throws reaches the caller unchanged, and nothing is sen
 
 test("a refusal carries the provider's own error code", async () => {
   const usage = script(breakcold, () => Response.json({ error: { code: 'usage_limit', message: 'm', requestId: 'r' } }, { status: 402 }));
+  usage.token.mockResolvedValue('bk_test'); // 't' is in 'usage_limit', and a code holding the credential is no detail
   await expect(usage.client.json('/records')).rejects.toMatchObject({ code: 'request_failed', status: 402, detail: 'usage_limit' });
   const bare = script(breakcold, () => new Response('gateway', { status: 502 }));
   await expect(bare.client.json('/records')).rejects.toMatchObject({ code: 'unavailable', detail: null });
@@ -334,6 +335,16 @@ test('a provider code that is not a short token is not carried', async () => {
   for (const code of ['x'.repeat(65), 'usage limit; email=a@b.test', '']) {
     const fake = script(breakcold, () => Response.json({ error: { code } }, { status: 402 }));
     await expect(fake.client.json('/records')).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  }
+});
+
+test('a provider code holding the credential the request sent is not carried', async () => {
+  const key = 'uk_live.Abc-123';
+  for (const [type, detail] of [[key, null], [`errors/${key}`, null], ['errors/disconnected_account', 'errors.disconnected_account']]) {
+    const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type }, { status: 403 }) }]);
+    const client = createClient({ provider: unipile, token: () => Promise.resolve(key), fetch: fake.fetch });
+    await expect(client.json('/accounts')).rejects.toMatchObject({ code: 'rejected', detail });
+    expect(fake.calls[0]?.headers['x-api-key']).toBe(key);
   }
 });
 

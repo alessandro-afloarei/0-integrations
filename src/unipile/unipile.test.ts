@@ -11,7 +11,7 @@ const posts: LinkedInPost[] = [{ url: 'https://www.linkedin.com/posts/lumen_1', 
 const signIn: HostedSignIn = { state: 'n'.repeat(64), redirectUri: 'http://localhost:3000/api/integrations/linkedin/finish',
   expiresOn: '2099-10-11T21:00:00.000Z', providers: ['linkedin'] };
 const answering = (url: string | RegExp, body: unknown) => fakeFetch([{ url, respond: () => Response.json(body) }]);
-const client = (fetchImpl: typeof fetch) => unipileClient({ apiKey: 'u', fetch: fetchImpl });
+const client = (fetchImpl: typeof fetch) => unipileClient({ apiKey: 'u-test', fetch: fetchImpl });
 
 test('round-trips every call through its fake', async () => {
   const fake = fakeFetch(fakeUnipile({ authLink: link => `https://auth.test/link?state=${link.state}`,

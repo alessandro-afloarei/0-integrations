@@ -10,6 +10,9 @@ import { slack } from './catalogue/slack.js';
 import { unipile } from './catalogue/unipile.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { bodyWaitOf, classify, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
+import { createClient } from './http.js';
+import { unipile as unipileDefinition } from './providers.js';
+import { fakeFetch } from './testing.js';
 
 test.each([
   ['usage_limit', [], 'usage_limit'],
@@ -17,7 +20,7 @@ test.each([
   ['provider/insufficient_permissions', [], 'provider.insufficient_permissions'],
   ['errors/disconnected_account', [], 'errors.disconnected_account'],
   ['x'.repeat(65), [], null], ['usage limit; email=a@b.test', [], null], ['', [], null], ['error\nprivate', [], null],
-  ['xoxb_token', ['xoxb_token'], null], ['bad_code', ['', 'other'], 'bad_code'],
+  ['xoxb_token', ['xoxb_token'], null], ['bad_code', ['', 'other'], 'bad_code'], ['fixture/key', ['fixture.key'], null],
 ] as const)('safeDetail(%j, %j) is %j', (code, secrets, detail) => {
   expect(safeDetail(code, secrets)).toBe(detail);
 });
@@ -172,6 +175,15 @@ test("Breakcold's body wait in milliseconds and code at error.code; Unipile's sl
   expect(fail(breakcold, 429, { error: { code: 'usage_limit', retryAfterMs: 12.1 } })).toMatchObject({ code: 'rate_limited', detail: 'usage_limit', retryAfterMs: 13 });
   expect(fail(breakcold, 402, { error: { code: 7 } })).toMatchObject({ code: 'request_failed', detail: null });
   expect(fail(unipile, 403, { type: 'provider/insufficient_permissions' })).toMatchObject({ code: 'rejected', detail: 'provider.insufficient_permissions' });
+});
+
+test("an answer's code holding the credential its request sent is no detail", async () => {
+  const key = 'uk_live.Abc-123';
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type: key }, { status: 403 }) }]);
+  const client = createClient({ provider: unipileDefinition, token: () => Promise.resolve(key), fetch: fake.fetch });
+  const answer = await client.request('/accounts');
+  expect(classify(unipile, answer)).toMatchObject({ code: 'rejected', detail: null });
+  expect(fail(unipile, 403, { type: key })).toMatchObject({ code: 'rejected', detail: key });
 });
 
 test('Google: a numeric error.code is no code, so the reason decides', () => {
