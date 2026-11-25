@@ -7,7 +7,7 @@ import { headerValue, keptHeaders, type MailboxCalendar, type MailboxEmail, type
   type MailboxEventTime, type MailboxReader } from '../mailbox/mailbox.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { unipile } from '../providers.js';
+import { unipile } from '../catalogue/unipile.js';
 import { datetime, orNull, pageSize, utc } from '../shapes.js';
 
 export type LinkedInCompany = { id: string; name: string; tagline: string; description: string; industry: string[];
@@ -149,8 +149,7 @@ const eventRead = eventSchema.transform(({ timezone, ...event }, context): Mailb
 
 /** Unipile V2. The sign-in link is a POST, so a 429 on it is never waited out: a person is waiting on it. */
 export function unipileClient(input: { apiKey: string; fetch: typeof fetch }): UnipileClient {
-  const http = createClient({ provider: unipile, token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
-    headers: { accept: 'application/json' } });
+  const http = createClient(unipile, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
   const on = (accountId: string, path: string) => `/${encodeURIComponent(accountId)}${path}`;
 
   /**

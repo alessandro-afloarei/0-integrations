@@ -1,11 +1,11 @@
-import { aircall } from '../providers.js';
+import { aircall } from '../catalogue/aircall.js';
 import type { Route } from '../testing.js';
 import type { AircallCall, AircallUtterance } from './aircall.js';
 
 /** A call and what its transcription answers: utterances, none yet (404), or a company without AI Assist (403). */
 export type FakeAircallCall = AircallCall & { transcript: AircallUtterance[] | 'none' | 'ai_assist_required' };
 
-const BASE = aircall.baseUrl ?? '';
+const BASE = aircall.http.baseUrl;
 
 /**
  * Aircall for one key at a time: `account('api_id:api_token')` is what it reads, null a key Aircall refuses. Calls answer

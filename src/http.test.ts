@@ -1,17 +1,28 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { defineProvider, type Entry } from './catalogue.js';
+import { aircall } from './catalogue/aircall.js';
+import { breakcold } from './catalogue/breakcold.js';
+import { exa } from './catalogue/exa.js';
+import { fireflies } from './catalogue/fireflies.js';
+import { github } from './catalogue/github.js';
+import { granola } from './catalogue/granola.js';
+import { hubspot } from './catalogue/hubspot.js';
+import { notion } from './catalogue/notion.js';
 import { createClient } from './http.js';
-import { breakcold, exa, fireflies, granola, hubspot, unipile, type ProviderDefinition } from './providers.js';
 import { fakeFetch, sequence } from './testing.js';
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-24T12:00:00Z')); });
 afterEach(() => vi.useRealTimers());
 
-function script(provider: ProviderDefinition, ...responses: (() => Response)[]) {
+function script(entry: Entry, ...responses: (() => Response)[]) {
   const fake = fakeFetch([{ url: /https:/, respond: sequence(...responses) }]);
   const token = vi.fn<(rejected?: string) => Promise<string>>().mockResolvedValue('t');
-  const client = createClient({ provider: { ...provider, minIntervalMs: 0 }, token, fetch: fake.fetch });
+  const client = createClient(entry, { token, fetch: fake.fetch, minIntervalMs: 0 });
   return { ...fake, token, client };
 }
+/** A key sent bare in a header, and the provider's code at `type`: a code that may echo the key. */
+const hosted = defineProvider({ id: 'hosted', name: 'Hosted', auth: [{ kind: 'hosted', send: { header: 'x-api-key' } }],
+  http: { baseUrl: 'https://api.hosted.test/v2' }, errors: { detail: 'type' } });
 const ok = () => Response.json({ ok: true });
 const limited = () => Response.json({}, { status: 429 });
 
@@ -20,7 +31,7 @@ test('sends the token where the provider wants it', async () => {
     const fake = script(provider, ok);
     expect(await fake.client.json('/items?old=1', { query: { q: 'two' } })).toEqual({ ok: true });
     expect(fake.calls[0]?.headers[header]).toBe(value);
-    expect(fake.calls[0]?.url).toBe(`${provider.baseUrl ?? ''}/items?old=1&q=two`);
+    expect(fake.calls[0]?.url).toBe(`${provider.http.baseUrl}/items?old=1&q=two`);
   }
 });
 
@@ -119,7 +130,7 @@ test('403 is rejected, 404 not_found, 500 unavailable, 400 request_failed', asyn
 
 test("times out at the provider's timeoutMs", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => new Promise<Response>(() => {}) }]);
-  const client = createClient({ provider: hubspot, token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const client = createClient(hubspot, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   let settled = false;
   const result = client.json('/items').catch((e: unknown) => { settled = true; return e; });
   await vi.advanceTimersByTimeAsync(29999);
@@ -130,7 +141,7 @@ test("times out at the provider's timeoutMs", async () => {
 
 test('paces requests to minIntervalMs', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
-  const client = createClient({ provider: granola, token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const client = createClient(granola, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   const first = client.json('/notes');
   const second = client.json('/notes');
   await vi.advanceTimersByTimeAsync(0);
@@ -150,14 +161,12 @@ test('request hands back a 500 body for the caller to read', async () => {
 });
 
 test("uses the app's baseUrl and headers", async () => {
-  const fake = fakeFetch([{ url: 'https://api1.unipile.com:13111/api/v1/users', respond: ok }]);
-  const client = createClient({ provider: unipile, token: () => Promise.resolve('k'), fetch: fake.fetch,
-    baseUrl: 'https://api1.unipile.com:13111/api/v1', headers: { 'user-agent': 'integrations-test' } });
+  const fake = fakeFetch([{ url: 'https://api1.hosted.test:13111/api/v1/users', respond: ok }]);
+  const client = createClient(hosted, { token: () => Promise.resolve('k'), fetch: fake.fetch,
+    baseUrl: 'https://api1.hosted.test:13111/api/v1', headers: { 'user-agent': 'integrations-test' } });
   await client.json('/users');
-  expect(fake.calls[0]?.url).toBe('https://api1.unipile.com:13111/api/v1/users');
+  expect(fake.calls[0]?.url).toBe('https://api1.hosted.test:13111/api/v1/users');
   expect(fake.calls[0]?.headers).toMatchObject({ 'user-agent': 'integrations-test', 'x-api-key': 'k' });
-  const bare: ProviderDefinition = { id: 'bare', timeoutMs: 30000, minIntervalMs: 0, retry: unipile.retry };
-  expect(() => createClient({ provider: bare, token: () => Promise.resolve('k'), fetch: fake.fetch })).toThrow('base_url_required');
 });
 
 test('invalid JSON is unavailable as data and invalid_response through json', async () => {
@@ -168,7 +177,7 @@ test('invalid JSON is unavailable as data and invalid_response through json', as
 
 test('network failures and caller aborts are unavailable', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => { throw new TypeError('fetch failed'); } }]);
-  const client = createClient({ provider: hubspot, token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const client = createClient(hubspot, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   await expect(client.json('/items')).rejects.toMatchObject({ code: 'unavailable', status: null });
   const controller = new AbortController();
   controller.abort();
@@ -204,7 +213,8 @@ test('a hanging 429 body times out and is cancelled', async () => {
   const cancel = vi.fn();
   const body = new ReadableStream<Uint8Array>({ cancel });
   const fake = fakeFetch([{ url: /https:/, respond: () => new Response(body, { status: 429 }) }]);
-  const client = createClient({ provider: { ...breakcold, timeoutMs: 20 }, token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const slow = { ...breakcold, http: { ...breakcold.http, timeoutMs: 20 } };
+  const client = createClient(slow, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   let settled = false;
   const result = client.json('/items').catch((error: unknown) => { settled = true; return error; });
   await vi.advanceTimersByTimeAsync(19);
@@ -238,7 +248,7 @@ test('never follows a redirect to another host', async () => {
     redirects.push(request.redirect);
     return new Response(null, { status: 302, headers: { location: 'https://elsewhere.test/steal' } });
   } }]);
-  const client = createClient({ provider: exa, token: () => Promise.resolve('key'), fetch: fake.fetch });
+  const client = createClient(exa, { token: () => Promise.resolve('key'), fetch: fake.fetch });
   await expect(client.json('/search')).rejects.toMatchObject({ code: 'request_failed', status: 302 });
   expect(redirects).toEqual(['manual']);
   expect(fake.calls.map(call => call.url)).toEqual(['https://api.exa.ai/search']);
@@ -250,7 +260,7 @@ test('follows a same-origin redirect with the credential, as Breakcold\'s univer
       respond: () => new Response(null, { status: 307, headers: { location: '/api/v1/eu/crm/objects?workspaceId=w' } }) },
     { url: 'https://rest.breakcold.com/api/v1/eu/crm/objects', respond: () => Response.json({ objects: [] }) },
   ]);
-  const client = createClient({ provider: breakcold, token: () => Promise.resolve('key'), fetch: fake.fetch });
+  const client = createClient(breakcold, { token: () => Promise.resolve('key'), fetch: fake.fetch });
   expect(await client.json('/crm/objects', { query: { workspaceId: 'w' } })).toEqual({ objects: [] });
   expect(fake.calls.map(call => [call.url, call.headers.authorization])).toEqual([
     ['https://rest.breakcold.com/api/v1/crm/objects?workspaceId=w', 'Bearer key'],
@@ -261,14 +271,14 @@ test('follows a same-origin redirect with the credential, as Breakcold\'s univer
 test('never follows a redirect that carries credentials in its address', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => new Response(null, { status: 307,
     headers: { location: 'https://u:p@api.exa.ai/search' } }) }]);
-  const client = createClient({ provider: exa, token: () => Promise.resolve('key'), fetch: fake.fetch });
+  const client = createClient(exa, { token: () => Promise.resolve('key'), fetch: fake.fetch });
   await expect(client.json('/search')).rejects.toMatchObject({ code: 'request_failed', status: 307 });
   expect(fake.calls).toHaveLength(1);
 });
 
 test('never turns a write into a GET to follow a redirect', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => new Response(null, { status: 302, headers: { location: '/moved' } }) }]);
-  const client = createClient({ provider: exa, token: () => Promise.resolve('key'), fetch: fake.fetch });
+  const client = createClient(exa, { token: () => Promise.resolve('key'), fetch: fake.fetch });
   await expect(client.json('/search', { method: 'POST', json: { query: 'q' } }))
     .rejects.toMatchObject({ code: 'request_failed', status: 302 });
   expect(fake.calls).toHaveLength(1);
@@ -276,7 +286,7 @@ test('never turns a write into a GET to follow a redirect', async () => {
 
 test('stops following redirects after five hops', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => new Response(null, { status: 307, headers: { location: '/again' } }) }]);
-  const client = createClient({ provider: exa, token: () => Promise.resolve('key'), fetch: fake.fetch });
+  const client = createClient(exa, { token: () => Promise.resolve('key'), fetch: fake.fetch });
   await expect(client.json('/search')).rejects.toMatchObject({ code: 'request_failed', status: 307 });
   expect(fake.calls).toHaveLength(6);
 });
@@ -286,7 +296,7 @@ test('requests refused at once share one renewal', async () => {
     ? Response.json({}, { status: 401 }) : ok() }]);
   const token = vi.fn<(rejected?: string) => Promise<string>>()
     .mockResolvedValueOnce('old').mockResolvedValue('new');
-  const client = createClient({ provider: { ...hubspot, minIntervalMs: 0 }, token, fetch: fake.fetch });
+  const client = createClient(hubspot, { token, fetch: fake.fetch, minIntervalMs: 0 });
   expect(await Promise.all([client.json('/a'), client.json('/b'), client.json('/c')])).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
   expect(token.mock.calls).toEqual([[], ['old']]);
 });
@@ -294,8 +304,8 @@ test('requests refused at once share one renewal', async () => {
 test('beforeRequest runs once per call, with its address, before anything is sent', async () => {
   const seen: string[] = [];
   const fake = fakeFetch([{ url: /https:/, respond: sequence(limited, ok) }]);
-  const client = createClient({ provider: { ...breakcold, retry: { ...breakcold.retry, defaultWaitMs: 1 } },
-    token: () => Promise.resolve('t'), fetch: fake.fetch, beforeRequest: url => { seen.push(url.toString()); } });
+  const quick = { ...breakcold, http: { ...breakcold.http, retry: { ...breakcold.http.retry, defaultWaitMs: 1 } } };
+  const client = createClient(quick, { token: () => Promise.resolve('t'), fetch: fake.fetch, beforeRequest: url => { seen.push(url.toString()); } });
   const result = client.json('/records', { query: { limit: '100' } });
   await vi.advanceTimersByTimeAsync(10);
   expect(await result).toEqual({ ok: true });
@@ -307,7 +317,7 @@ test('what beforeRequest throws reaches the caller unchanged, and nothing is sen
   class Spent extends Error {}
   const spent = new Spent('budget');
   const fake = script(breakcold, ok);
-  const client = createClient({ provider: breakcold, token: () => Promise.resolve('t'), fetch: fake.fetch,
+  const client = createClient(breakcold, { token: () => Promise.resolve('t'), fetch: fake.fetch,
     beforeRequest: () => Promise.reject(spent) });
   await expect(client.json('/records')).rejects.toBe(spent);
   expect(fake.calls).toHaveLength(0);
@@ -325,7 +335,7 @@ test("a refusal carries the provider's own error code", async () => {
 
 test('beforeRequest reads a copy of the address, so metering never changes the request', async () => {
   const fake = script(breakcold, ok);
-  const client = createClient({ provider: breakcold, token: () => Promise.resolve('t'), fetch: fake.fetch,
+  const client = createClient(breakcold, { token: () => Promise.resolve('t'), fetch: fake.fetch,
     beforeRequest: url => { url.searchParams.delete('cursor'); url.pathname = '/elsewhere'; } });
   await client.json('/records', { query: { cursor: 'c2' } });
   expect(fake.calls[0]?.url).toBe('https://rest.breakcold.com/api/v1/records?cursor=c2');
@@ -342,7 +352,7 @@ test('a provider code holding the credential the request sent is not carried', a
   const key = 'uk_live.Abc-123';
   for (const [type, detail] of [[key, null], [`errors/${key}`, null], ['errors/disconnected_account', 'errors.disconnected_account']]) {
     const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type }, { status: 403 }) }]);
-    const client = createClient({ provider: unipile, token: () => Promise.resolve(key), fetch: fake.fetch });
+    const client = createClient(hosted, { token: () => Promise.resolve(key), fetch: fake.fetch });
     await expect(client.json('/accounts')).rejects.toMatchObject({ code: 'rejected', detail });
     expect(fake.calls[0]?.headers['x-api-key']).toBe(key);
   }
@@ -352,7 +362,7 @@ test('a credential is matched as a detail reads: trimmed as sent, a slash read a
   for (const [key, type, detail] of [['  uk_live.Abc-123  ', 'uk_live.Abc-123', null], ['abc/def', 'abc/def', null],
     ['  uk_live.Abc-123  ', 'errors/disconnected_account', 'errors.disconnected_account']] as const) {
     const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type }, { status: 403 }) }]);
-    const client = createClient({ provider: unipile, token: () => Promise.resolve(key), fetch: fake.fetch });
+    const client = createClient(hosted, { token: () => Promise.resolve(key), fetch: fake.fetch });
     await expect(client.json('/accounts')).rejects.toMatchObject({ code: 'rejected', detail });
     expect(fake.calls[0]?.headers['x-api-key']).toBe(key.trim());
   }
@@ -366,4 +376,36 @@ test('the retry waits an HTTP-date Retry-After, read as the error reads it', asy
   expect(fake.calls).toHaveLength(1);
   await vi.advanceTimersByTimeAsync(1);
   expect(await result).toEqual({ ok: true });
+});
+
+test("an entry's client sends its credential, its headers under the caller's, and its base", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await createClient(notion, { token: () => Promise.resolve('k'), fetch: fake.fetch, minIntervalMs: 0,
+    headers: { 'user-agent': 'app' } }).json('/users/me');
+  expect(fake.calls[0]).toMatchObject({ url: 'https://api.notion.com/v1/users/me',
+    headers: { authorization: 'Bearer k', 'notion-version': '2026-03-11', 'user-agent': 'app' } });
+});
+
+test("Aircall's Basic credential is filled from a plain value and the secret, and a missing value sends nothing", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await createClient(aircall, { token: () => Promise.resolve('tok'), values: { apiId: 'id1' }, fetch: fake.fetch, minIntervalMs: 0 }).json('/company');
+  expect(fake.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('id1:tok').toString('base64')}`);
+  await expect(createClient(aircall, { token: () => Promise.resolve('tok'), fetch: fake.fetch, minIntervalMs: 0 }).json('/company'))
+    .rejects.toThrow('template_missing: aircall {apiId}');
+  expect(fake.calls).toHaveLength(1);
+});
+
+test('a code that echoes the Basic header is no detail', async () => {
+  const keyed = defineProvider({ id: 'keyed', name: 'Keyed', fields: [{ name: 'user', title: 'User' }, { name: 'key', title: 'Key', secret: true }],
+    auth: [{ kind: 'key', send: { basic: ['{user}', '{key}'] } }], http: { baseUrl: 'https://api.keyed.test' }, errors: { detail: 'code' } });
+  const header = Buffer.from('u:k').toString('base64'); // 'dTpr': no padding, so it passes the detail pattern
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ code: header }, { status: 400 }) }]);
+  await expect(createClient(keyed, { token: () => Promise.resolve('k'), values: { user: 'u' }, fetch: fake.fetch, minIntervalMs: 0 }).json('/x'))
+    .rejects.toMatchObject({ code: 'request_failed', detail: null });
+});
+
+test("GitHub's declared rate limits classify a 403", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ message: 'secondary rate limit' }, { status: 403 }) }]);
+  await expect(createClient(github, { token: () => Promise.resolve('k'), fetch: fake.fetch, minIntervalMs: 0 }).json('/user'))
+    .rejects.toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 60_000 });
 });

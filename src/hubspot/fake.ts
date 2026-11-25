@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { hubspot } from '../providers.js';
+import { hubspot } from '../catalogue/hubspot.js';
 import type { Route } from '../testing.js';
 import { HUBSPOT_SCOPES, type HubSpotObject, type HubSpotRecord, type HubSpotStageRevision } from './hubspot.js';
 
@@ -55,7 +55,7 @@ export function fakeHubSpot(input: HubSpotFakeData | (() => HubSpotFakeData)): R
   let nextCode = 0;
   let issued = 0;
   const route = (method: string, path: string, respond: Route['respond']): Route => ({
-    method, url: `${hubspot.baseUrl ?? ''}${path}`, respond,
+    method, url: `${hubspot.http.baseUrl}${path}`, respond,
   });
   const results = (items: readonly unknown[]) => Response.json({ results: items });
   const idsIn = async (request: Request) => batchSchema.parse(await request.json()).inputs.map(input => input.id);

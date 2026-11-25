@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ProviderHttpError } from './errors.js';
+import type { Entry } from './catalogue.js';
+import { breakcold } from './catalogue/breakcold.js';
+import { hubspot } from './catalogue/hubspot.js';
 import { createClient } from './http.js';
-import { breakcold, hubspot, type ProviderDefinition } from './providers.js';
 import { firefliesClient } from './fireflies/fireflies.js';
 import { hubspotClient } from './hubspot/hubspot.js';
 import { slackClient } from './slack/slack.js';
@@ -15,8 +17,8 @@ function scripted(...responses: (() => Response)[]) {
   return fakeFetch([{ url: /https:/u, respond: sequence(...responses) }]);
 }
 
-function http(provider: ProviderDefinition, fetch: typeof globalThis.fetch) {
-  return createClient({ provider: { ...provider, minIntervalMs: 0 }, token: () => Promise.resolve('fixture-key'), fetch });
+function http(entry: Entry, fetch: typeof globalThis.fetch) {
+  return createClient(entry, { token: () => Promise.resolve('fixture-key'), fetch, minIntervalMs: 0 });
 }
 
 describe('provider wait metadata', () => {
@@ -141,8 +143,7 @@ describe('Slack retry hints', () => {
   test.each([200, 429])('keeps a Retry-After on an HTTP %i post refusal without another send', async status => {
     const fake = scripted(() => Response.json({ ok: false, error: 'ratelimited' }, { status, headers: { 'Retry-After': '2' } }));
     await expect(slackClient({ token: 'fixture-key', fetch: fake.fetch }).postMessage({ channel: 'C1', text: 'hi' }))
-      .rejects.toMatchObject({ code: status === 200 ? 'request_failed' : 'rate_limited', status,
-        detail: status === 200 ? 'ratelimited' : null, retryAfterMs: 2000 });
+      .rejects.toMatchObject({ code: status === 200 ? 'request_failed' : 'rate_limited', status, detail: 'ratelimited', retryAfterMs: 2000 });
     expect(fake.calls).toHaveLength(1);
   });
 

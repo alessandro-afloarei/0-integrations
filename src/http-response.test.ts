@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import type { Entry } from './catalogue.js';
+import { defineProvider, type Entry } from './catalogue.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
@@ -7,11 +7,9 @@ import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { lusha } from './catalogue/lusha.js';
 import { slack } from './catalogue/slack.js';
-import { unipile } from './catalogue/unipile.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { bodyWaitOf, classify, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
 import { createClient } from './http.js';
-import { unipile as unipileDefinition } from './providers.js';
 import { fakeFetch } from './testing.js';
 
 test.each([
@@ -172,19 +170,23 @@ test('Lusha: the v3 message is request_failed, any other 403 rejected', () => {
   expect(fail(lusha, 403, { message: 'Account inactive' })).toMatchObject({ code: 'rejected', detail: null });
 });
 
-test("Breakcold's body wait in milliseconds and code at error.code; Unipile's slash made a dot", () => {
+/** A key sent bare in a header, and the provider's code at `type` (`provider/insufficient_permissions`). */
+const hosted = defineProvider({ id: 'hosted', name: 'Hosted', auth: [{ kind: 'hosted', send: { header: 'x-api-key' } }],
+  http: BASE, errors: { detail: 'type' } });
+
+test("Breakcold's body wait in milliseconds and code at error.code; a slash in a code made a dot", () => {
   expect(fail(breakcold, 429, { error: { code: 'usage_limit', retryAfterMs: 12.1 } })).toMatchObject({ code: 'rate_limited', detail: 'usage_limit', retryAfterMs: 13 });
   expect(fail(breakcold, 402, { error: { code: 7 } })).toMatchObject({ code: 'request_failed', detail: null });
-  expect(fail(unipile, 403, { type: 'provider/insufficient_permissions' })).toMatchObject({ code: 'rejected', detail: 'provider.insufficient_permissions' });
+  expect(fail(hosted, 403, { type: 'provider/insufficient_permissions' })).toMatchObject({ code: 'rejected', detail: 'provider.insufficient_permissions' });
 });
 
 test("an answer's code holding the credential its request sent is no detail", async () => {
   const key = 'uk_live.Abc-123';
   const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type: key }, { status: 403 }) }]);
-  const client = createClient({ provider: unipileDefinition, token: () => Promise.resolve(key), fetch: fake.fetch });
+  const client = createClient(hosted, { token: () => Promise.resolve(key), fetch: fake.fetch });
   const answer = await client.request('/accounts');
-  expect(classify(unipile, answer)).toMatchObject({ code: 'rejected', detail: null });
-  expect(fail(unipile, 403, { type: key })).toMatchObject({ code: 'rejected', detail: key });
+  expect(classify(hosted, answer)).toMatchObject({ code: 'rejected', detail: null });
+  expect(fail(hosted, 403, { type: key })).toMatchObject({ code: 'rejected', detail: key });
 });
 
 test('Google: a numeric error.code is no code, so the reason decides', () => {

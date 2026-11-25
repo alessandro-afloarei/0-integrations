@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { slack } from '../providers.js';
+import { slack } from '../catalogue/slack.js';
 import type { Route } from '../testing.js';
 import type { SlackChannel } from './slack.js';
 
@@ -27,7 +27,7 @@ export function fakeSlack(data: { redirectUri: string; team: { id: string; name:
       back.searchParams.set('code', code);
       return Response.redirect(back, 302);
     } },
-    { method: 'POST', url: `${slack.baseUrl ?? ''}/oauth.v2.access`, async respond(request) {
+    { method: 'POST', url: `${slack.http.baseUrl}/oauth.v2.access`, async respond(request) {
       const params = new URLSearchParams(await request.text());
       // Refresh grants stay unbound so fixture connections survive a dev-server restart.
       if (params.get('grant_type') !== 'refresh_token') {
@@ -41,7 +41,7 @@ export function fakeSlack(data: { redirectUri: string; team: { id: string; name:
       return Response.json({ ok: true, token_type: 'bot', access_token: `xoxe.xoxb-fixture-${String(Date.now())}`,
         refresh_token: `xoxe-1-fixture-${String(Date.now())}`, expires_in: 43_200, team: data.team, bot_user_id: data.botUserId });
     } },
-    { method: 'GET', url: `${slack.baseUrl ?? ''}/conversations.list`, respond(request) {
+    { method: 'GET', url: `${slack.http.baseUrl}/conversations.list`, respond(request) {
       const params = new URL(request.url).searchParams;
       const offset = Number(params.get('cursor') ?? 0);
       const limit = Number(params.get('limit') ?? 200);
@@ -49,12 +49,12 @@ export function fakeSlack(data: { redirectUri: string; team: { id: string; name:
       return Response.json({ ok: true, channels: items.map(channel => ({ id: channel.id, name: channel.name,
         is_private: channel.isPrivate })), response_metadata: { next_cursor: offset + limit < data.channels.length ? String(offset + limit) : '' } });
     } },
-    { method: 'POST', url: `${slack.baseUrl ?? ''}/chat.postMessage`, async respond(request) {
+    { method: 'POST', url: `${slack.http.baseUrl}/chat.postMessage`, async respond(request) {
       const { channel } = messageSchema.parse(await request.json());
       return data.deniedChannels?.includes(channel)
         ? Response.json({ ok: false, error: 'channel_not_found' })
         : Response.json({ ok: true, channel, ts: `${String(Math.floor(Date.now() / 1000))}.000100` });
     } },
-    { method: 'GET', url: `${slack.baseUrl ?? ''}/auth.revoke`, respond: () => Response.json({ ok: true, revoked: true }) },
+    { method: 'GET', url: `${slack.http.baseUrl}/auth.revoke`, respond: () => Response.json({ ok: true, revoked: true }) },
   ];
 }

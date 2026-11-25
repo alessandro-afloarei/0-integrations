@@ -1,11 +1,11 @@
-import { github } from '../providers.js';
+import { github } from '../catalogue/github.js';
 import type { Route } from '../testing.js';
 import type { GitHubIssue, GitHubRepo, GitHubUser } from './github.js';
 
 export type FakeGitHubRepo = GitHubRepo & { issues: readonly GitHubIssue[] };
 export type FakeGitHubAccount = { user: GitHubUser; repos: readonly FakeGitHubRepo[] };
 
-const BASE = github.baseUrl ?? '';
+const BASE = github.http.baseUrl;
 const ISSUES = new RegExp(`^${BASE.replaceAll('.', '\\.')}/repos/([^/]+)/([^/]+)/issues$`, 'u');
 const refusal = (status: number, message: string) => Response.json({ message, documentation_url: 'https://docs.github.com/rest',
   status: String(status) }, { status });

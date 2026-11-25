@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { eventsIn, type FakeMailbox } from '../mailbox/fake.js';
 import type { MailboxEmail, MailboxEmailAddress, MailboxEvent, MailboxEventTime } from '../mailbox/mailbox.js';
 import type { OAuthClient } from '../oauth.js';
-import { GOOGLE_CALENDAR_BASE, google } from '../providers.js';
+import { google } from '../catalogue/google.js';
 import type { Route } from '../testing.js';
 import { GOOGLE_SCOPES } from './google.js';
 
@@ -19,10 +19,10 @@ export type GoogleFakeData = {
   granted?: (address: string) => readonly string[];
 };
 
-const GMAIL = google.baseUrl ?? '';
-const AUTHORIZE = google.oauth2?.authUrl ?? '';
-const TOKEN = google.oauth2?.tokenUrl ?? '';
-const REVOKE = google.oauth2?.revokeUrl ?? '';
+const GMAIL = google.http.baseUrl;
+const AUTHORIZE = google.auth[0].authorizeUrl;
+const TOKEN = google.auth[0].tokenUrl;
+const REVOKE = google.revoke.url;
 const LABELS: Record<string, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT', trash: 'TRASH', spam: 'SPAM' };
 const RESPONSES = { yes: 'accepted', no: 'declined', maybe: 'tentative', noreply: 'needsAction' } as const;
 
@@ -218,12 +218,12 @@ export function fakeGoogle(data: GoogleFakeData): Route[] {
       return messages.length ? Response.json({ id: decodeURIComponent(id), historyId: '1', messages: messages.map(email => wireMessage(email, null)) })
         : notFound();
     }),
-    api(GOOGLE_CALENDAR_BASE, /^\/calendars\/([^/]+)$/u, (mailbox, _url, [, id = '']) => {
+    api(google.http.bases.calendar, /^\/calendars\/([^/]+)$/u, (mailbox, _url, [, id = '']) => {
       const wanted = decodeURIComponent(id);
       return wanted === 'primary' || wanted === mailbox.calendar.id
         ? Response.json({ kind: 'calendar#calendar', id: mailbox.calendar.id, summary: mailbox.calendar.name, timeZone: 'UTC' }) : notFound();
     }),
-    api(GOOGLE_CALENDAR_BASE, /^\/calendars\/([^/]+)\/events$/u, (mailbox, url, [, id = '']) => {
+    api(google.http.bases.calendar, /^\/calendars\/([^/]+)\/events$/u, (mailbox, url, [, id = '']) => {
       const params = url.searchParams;
       if (decodeURIComponent(id) !== mailbox.calendar.id) return notFound();
       if (params.get('orderBy') === 'startTime' && params.get('singleEvents') !== 'true') {

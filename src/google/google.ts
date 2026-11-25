@@ -6,13 +6,13 @@ import { decodeWords, headerValue, keptHeaders, parseAddressList, type MailboxEm
   type MailboxReader } from '../mailbox/mailbox.js';
 import { revokeGrant } from '../oauth.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { google as googleEntry } from '../catalogue/google.js';
-import { GOOGLE_CALENDAR_BASE, google } from '../providers.js';
+import { google } from '../catalogue/google.js';
+import { google as googleDefinition } from '../providers.js';
 import { datetime, pageSize } from '../shapes.js';
 
 /** A member's own mail and calendar, read-only. Gmail's is a restricted scope: Google verifies the app before it serves
  * more than its test users. */
-export const GOOGLE_SCOPES: readonly string[] = googleEntry.scopes.default;
+export const GOOGLE_SCOPES: readonly string[] = google.scopes.default;
 
 const header = z.object({ name: z.string(), value: z.string() });
 type Part = { mimeType?: string | null | undefined; filename?: string | null | undefined;
@@ -123,9 +123,8 @@ async function inTurn<T, R>(items: readonly T[], limit: number, work: (item: T) 
 
 /** One member's Gmail and Google Calendar, on their grant. */
 export function googleMailbox(input: { token: (rejected?: string) => Promise<string>; fetch: typeof fetch }): MailboxReader {
-  const gmail = createClient({ provider: google, token: input.token, fetch: input.fetch, headers: { accept: 'application/json' } });
-  const calendar = createClient({ provider: google, token: input.token, fetch: input.fetch, baseUrl: GOOGLE_CALENDAR_BASE,
-    headers: { accept: 'application/json' } });
+  const gmail = createClient(google, { token: input.token, fetch: input.fetch });
+  const calendar = createClient(google, { token: input.token, fetch: input.fetch, baseUrl: google.http.bases.calendar });
   /** A body part's text. Gmail keeps a large one apart, as an attachment of its message named by `attachmentId`. */
   const bodyText = async (messageId: string, part: Part | undefined): Promise<string> => {
     if (!part) return '';
@@ -213,7 +212,7 @@ export function googleMailbox(input: { token: (rejected?: string) => Promise<str
  * calendar would fail every read. Disconnect revokes the grant.
  */
 export const googleConnect: OAuthConnect<{ email: string }> = {
-  kind: 'oauth2', provider: google, scopes: GOOGLE_SCOPES,
+  kind: 'oauth2', provider: googleDefinition, scopes: GOOGLE_SCOPES,
   async identify({ grant, extras, fetch }) {
     const granted = new Set(typeof extras.scope === 'string' ? extras.scope.split(' ') : []);
     if (!GOOGLE_SCOPES.every(scope => granted.has(scope))) throw new ProviderHttpError('rejected', null, 'scope_missing');
@@ -222,7 +221,7 @@ export const googleConnect: OAuthConnect<{ email: string }> = {
   },
   async revoke({ grant, client, fetch }) {
     try {
-      await revokeGrant(google, client, grant.refreshToken ?? grant.accessToken, { fetch });
+      await revokeGrant(googleDefinition, client, grant.refreshToken ?? grant.accessToken, { fetch });
     } catch (error) {
       // Google answers a token already revoked as `invalid_token`: the grant is gone either way.
       if (!(error instanceof ProviderHttpError && error.detail === 'invalid_token')) throw error;

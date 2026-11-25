@@ -106,6 +106,14 @@ describe('Slack review regressions', () => {
     await expect(result).rejects.toMatchObject({ detail: error });
   });
 
+  it('reads a refusal outside 2xx too: a 401 invalid_auth is GrantRevoked', async () => {
+    const http = fakeFetch([{ url: 'https://slack.com/api/chat.postMessage',
+      respond: () => Response.json({ ok: false, error: 'invalid_auth' }, { status: 401 }) }]);
+    await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).postMessage({ channel: 'C1', text: 'hi' }))
+      .rejects.toBeInstanceOf(GrantRevoked);
+    expect(http.calls).toHaveLength(1);
+  });
+
   it.each(['invalid_auth', 'token_revoked', 'account_inactive', 'not_authed'])('revoking an already-gone token %s succeeds', async error => {
     const http = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => Response.json({ ok: false, error }) }]);
     await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).revoke()).resolves.toBeUndefined();

@@ -1,4 +1,4 @@
-import { attio } from '../providers.js';
+import { attio } from '../catalogue/attio.js';
 import type { Route } from '../testing.js';
 import type { AttioMember, AttioNote, AttioRecord, AttioWorkspace } from './attio.js';
 
@@ -6,7 +6,7 @@ export type FakeAttioWorkspace = Omit<AttioWorkspace, 'scope'> & {
   records: Readonly<Record<string, readonly AttioRecord[]>>; notes: readonly AttioNote[]; members: readonly AttioMember[];
 };
 
-const BASE = attio.baseUrl ?? '';
+const BASE = attio.http.baseUrl;
 const QUERY = new RegExp(`^${BASE.replaceAll('.', '\\.')}/objects/([^/]+)/records/query$`, 'u');
 
 /**

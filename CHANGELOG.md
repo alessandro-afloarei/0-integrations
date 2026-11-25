@@ -16,6 +16,11 @@
 - Every provider that reads an error code or a wait from the body skips an empty-string code and reads the next path,
   and a path also reads an own dotted key (`{ "error.code": … }`, `{ "error.retryAfterMs": … }`) and an object keyed
   `0` (`{ "errors": { "0": … } }`): apollo, breakcold, google and microsoft read such bodies differently than before.
+- `createClient(entry, { token, fetch, values?, … })` takes a catalogue entry; Aircall's credential is built from
+  `values: { apiId }` and the API token.
+- `createClient` takes the entry first, and an entry always has a base URL (`base_url_required` is gone).
+- slack: a code outside 2xx is read too: a 401 `invalid_auth` (or another revoked code) is `GrantRevoked`, and a 429
+  carries Slack's `error` (`ratelimited`) as its detail.
 
 ## 0.12.0
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { unipile } from '../providers.js';
+import { unipile } from '../catalogue/unipile.js';
 import type { Route } from '../testing.js';
 import type { LinkedInCompany, LinkedInPost, UnipileCalendar, UnipileEmail, UnipileEmailAddress, UnipileEvent, UnipileEventTime,
   UnipileSignInProvider } from './unipile.js';
@@ -26,7 +26,7 @@ const wirePerson = (person: UnipileEmailAddress) => ({ email: person.identifier,
 const wireTime = (time: UnipileEventTime) => ('date' in time ? { type: 'date', date: time.date }
   : { type: 'datetime', date_time: time.date_time, timezone: time.time_zone });
 const instant = (time: UnipileEventTime) => Date.parse('date' in time ? time.date : time.date_time);
-const API = unipile.baseUrl ?? '';
+const API = unipile.http.baseUrl;
 const BESIDE_CURSOR = new Set(['cursor', 'limit', 'meta_only']);
 /** A folder's role, as Gmail's system labels have one: its own name, but `DRAFTS` for the label `DRAFT`. */
 const folderRole = (id: string) => (id === 'DRAFT' ? 'DRAFTS' : ['INBOX', 'SENT', 'TRASH', 'SPAM'].includes(id) ? id : null);

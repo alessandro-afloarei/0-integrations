@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { fathom } from '../providers.js';
+import { fathom } from '../catalogue/fathom.js';
 import { datetime, orNull } from '../shapes.js';
 
 // Fathom's own field names: an app stores these values and reads them back with its own schema.
@@ -50,7 +50,7 @@ const listSchema = z.object({ items: z.array(z.unknown()), next_cursor: z.string
 const transcriptSchema = z.object({ transcript: z.array(transcriptItemSchema).nullable().transform(items => items ?? []) });
 
 export function fathomClient(input: { apiKey: string; fetch: typeof fetch; minIntervalMs?: number }): FathomClient {
-  const http = createClient({ provider: fathom, token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
+  const http = createClient(fathom, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   return {
     async meetings({ createdAfter, recordedBy, cursor }) {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { safeDetail } from '../http-response.js';
-import { fireflies } from '../providers.js';
+import { fireflies } from '../catalogue/fireflies.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { retryAfterMs } from '../retry-after.js';
@@ -93,7 +93,7 @@ function pageOffset(query: TranscriptQuery): number {
 }
 
 export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; signal?: AbortSignal }): FirefliesClient {
-  const http = createClient({ provider: fireflies, token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
+  const http = createClient(fireflies, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
   const request = async (query: string, variables: Record<string, unknown>): Promise<unknown> => {
     const { status, headers, data: body } = await http.request('', { method: 'POST', json: { query, variables }, ...(input.signal ? { signal: input.signal } : {}) });
     // Fireflies sends auth_failed with HTTP 500: the GraphQL code takes precedence over status.

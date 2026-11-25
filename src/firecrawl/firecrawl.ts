@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { parseAnswer } from '../parse.js';
-import { firecrawl } from '../providers.js';
+import { firecrawl } from '../catalogue/firecrawl.js';
 
 export type FirecrawlAction = { type: 'wait'; milliseconds: number } | { type: 'executeJavascript'; script: string };
 export type ScrapedPage = { url: string; status: number; title: string; markdown: string; scriptReturns: unknown[] };
@@ -29,7 +29,7 @@ const renderFailed = (error: unknown) => error instanceof ProviderHttpError && (
   || error.code === 'invalid_response' || (error.code === 'request_failed' && error.status !== 402));
 
 export function firecrawlClient(input: { apiKey: string; fetch: typeof fetch }): FirecrawlClient {
-  const http = createClient({ provider: firecrawl, token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
+  const http = createClient(firecrawl, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
   // A map or a scrape changes nothing, so a 429 is waited out like a GET's.
   const post = (path: string, json: unknown) => http.json(path, { method: 'POST', json, idempotent: true });
   const send = (url: string, actions?: readonly FirecrawlAction[]) => post('/v2/scrape',

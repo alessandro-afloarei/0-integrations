@@ -1,4 +1,4 @@
-import { notion } from '../providers.js';
+import { notion } from '../catalogue/notion.js';
 import type { Route } from '../testing.js';
 import type { NotionPage } from './notion.js';
 
@@ -6,7 +6,7 @@ import type { NotionPage } from './notion.js';
 export type FakeNotionPage = NotionPage & { markdown: string; cut?: boolean };
 export type FakeNotionWorkspace = { workspace_id: string; workspace_name: string | null; pages: readonly FakeNotionPage[] };
 
-const BASE = notion.baseUrl ?? '';
+const BASE = notion.http.baseUrl;
 const MARKDOWN = new RegExp(`^${BASE.replaceAll('.', '\\.')}/pages/([^/]+)/markdown$`, 'u');
 const error = (status: number, code: string, message: string) => Response.json({ object: 'error', status, code, message }, { status });
 

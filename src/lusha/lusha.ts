@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { parseAnswer } from '../parse.js';
-import { lusha } from '../providers.js';
+import { lusha } from '../catalogue/lusha.js';
 import { orNull, text } from '../shapes.js';
 
 // Lusha's own field names: an app stores these values and reads them back with its own schema.
@@ -61,7 +61,7 @@ function v3Refusal(error: unknown): never {
 }
 
 export function lushaClient(input: { apiKey: string; fetch: typeof fetch; minIntervalMs?: number }): LushaClient {
-  const http = createClient({ provider: lusha, token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
+  const http = createClient(lusha, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   async function lookup<T>(path: string, json: unknown, schema: z.ZodType<T>): Promise<LushaLookup<T>> {
     // A lookup changes nothing and a 429 was not charged, so it is waited out like a GET's.

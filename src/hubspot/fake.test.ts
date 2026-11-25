@@ -1,5 +1,5 @@
 import { createClient } from '../http.js';
-import { hubspot } from '../providers.js';
+import { hubspot } from '../catalogue/hubspot.js';
 import { ProviderHttpError } from '../errors.js';
 import { describe, expect, it } from 'vitest';
 import { fakeFetch, respondFrom } from '../testing.js';
@@ -247,7 +247,7 @@ describe('fakeHubSpot history batch limit', () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ status: 'error', category: 'VALIDATION_ERROR',
       message: 'The maximum number of inputs supported in a batch request for property histories is 50. Please reduce the number of items and try again.' });
-    const client = createClient({ provider: hubspot, token: () => Promise.resolve('fixture'), fetch: http.fetch, minIntervalMs: 0 });
+    const client = createClient(hubspot, { token: () => Promise.resolve('fixture'), fetch: http.fetch, minIntervalMs: 0 });
     const failure: unknown = await client.json('/crm/objects/2026-09/deals/batch/read', { method: 'POST', json: body })
       .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(ProviderHttpError);

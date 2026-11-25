@@ -6,14 +6,14 @@ import { headerValue, keptHeaders, type MailboxEmail, type MailboxEmailAddress, 
   type MailboxReader } from '../mailbox/mailbox.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { microsoft as microsoftEntry } from '../catalogue/microsoft.js';
-import { microsoft } from '../providers.js';
+import { microsoft } from '../catalogue/microsoft.js';
+import { microsoft as microsoftDefinition } from '../providers.js';
 import { datetime, pageSize, utc } from '../shapes.js';
 
 /** A member's own mailbox and calendar, read-only; `offline_access` gives the refresh token. */
-export const MICROSOFT_SCOPES: readonly string[] = microsoftEntry.scopes.default;
+export const MICROSOFT_SCOPES: readonly string[] = microsoft.scopes.default;
 
-const GRAPH = microsoft.baseUrl ?? '';
+const GRAPH = microsoft.http.baseUrl;
 const text = z.string().nullish().transform(value => value ?? '');
 const emailAddress = z.object({ name: z.string().nullish(), address: z.string().nullish() });
 const recipient = z.object({ emailAddress });
@@ -107,8 +107,8 @@ function ownPath(address: string): string | null {
 
 /** One member's Outlook mail and calendar through Microsoft Graph, on their delegated grant. */
 export function graphMailbox(input: { token: (rejected?: string) => Promise<string>; fetch: typeof fetch }): MailboxReader {
-  const http = createClient({ provider: microsoft, token: input.token, fetch: input.fetch,
-    headers: { accept: 'application/json', prefer: 'outlook.timezone="UTC"' } });
+  const http = createClient(microsoft, { token: input.token, fetch: input.fetch,
+    headers: { prefer: 'outlook.timezone="UTC"' } });
   let me: Promise<{ email: string }> | undefined;
   let folders: Promise<Map<string, string>> | undefined;
 
@@ -219,10 +219,9 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
 /** The member's sign-in. The account is the user's immutable Graph id, never the address, which their tenant's admin sets;
  *  the address is named, and is the mailbox's own for matching its owner in a meeting. */
 export const microsoftConnect: OAuthConnect<{ email: string }> = {
-  kind: 'oauth2', provider: microsoft, scopes: MICROSOFT_SCOPES,
+  kind: 'oauth2', provider: microsoftDefinition, scopes: MICROSOFT_SCOPES,
   async identify({ grant, fetch }) {
-    const user = await graphUser(createClient({ provider: microsoft, token: () => Promise.resolve(grant.accessToken), fetch,
-      headers: { accept: 'application/json' } }));
+    const user = await graphUser(createClient(microsoft, { token: () => Promise.resolve(grant.accessToken), fetch }));
     return { account: { id: user.id, name: user.email }, details: { email: user.email } };
   },
   // Microsoft has no endpoint that revokes one app's delegated grant: it lapses once the app forgets its tokens.

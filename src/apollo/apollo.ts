@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createClient } from '../http.js';
 import { parseAnswer } from '../parse.js';
-import { apollo } from '../providers.js';
+import { apollo } from '../catalogue/apollo.js';
 import { orNull, text } from '../shapes.js';
 
 // Apollo's own field names: an app stores these values and reads them back with its own schema.
@@ -49,7 +49,7 @@ const matchSchema = z.object({ person: candidate });
 const enrichSchema = z.object({ organization: candidate });
 
 export function apolloClient(input: { apiKey: string; fetch: typeof fetch; minIntervalMs?: number }): ApolloClient {
-  const http = createClient({ provider: apollo, token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
+  const http = createClient(apollo, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   return {
     async profile() {

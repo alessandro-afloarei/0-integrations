@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { eventsIn, type FakeMailbox } from '../mailbox/fake.js';
 import type { MailboxEmail, MailboxEvent, MailboxEventTime } from '../mailbox/mailbox.js';
 import type { OAuthClient } from '../oauth.js';
-import { microsoft } from '../providers.js';
+import { microsoft } from '../catalogue/microsoft.js';
 import type { Route } from '../testing.js';
 import { MICROSOFT_SCOPES } from './microsoft.js';
 
@@ -17,9 +17,9 @@ export type MicrosoftFakeData = {
   tokens?: Readonly<Record<string, string>>;
 };
 
-const GRAPH = microsoft.baseUrl ?? '';
-const AUTHORIZE = microsoft.oauth2?.authUrl ?? '';
-const TOKEN = microsoft.oauth2?.tokenUrl ?? '';
+const GRAPH = microsoft.http.baseUrl;
+const AUTHORIZE = microsoft.auth[0].authorizeUrl;
+const TOKEN = microsoft.auth[0].tokenUrl;
 const FOLDERS = { sentitems: 'sent', deleteditems: 'trash', junkemail: 'spam', inbox: 'inbox', drafts: 'drafts' } as const;
 const RESPONSES = { yes: 'accepted', no: 'declined', maybe: 'tentativelyAccepted', noreply: 'none' } as const;
 

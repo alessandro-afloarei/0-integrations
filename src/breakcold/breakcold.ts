@@ -3,7 +3,7 @@ import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { breakcold } from '../providers.js';
+import { breakcold } from '../catalogue/breakcold.js';
 
 // Breakcold's own field names: an app stores records, notes, meetings and segments and reads them back with its own schema.
 export type BreakcoldWorkspace = { id: string; name: string };
@@ -72,7 +72,7 @@ const path = (...parts: string[]) => parts.map(part => `/${encodeURIComponent(pa
 export function breakcoldClient(input: { apiKey: string; fetch: typeof fetch; userAgent: string;
   /** Every call ends with this deadline, and a 429 is answered at once instead of waited out. */
   signal?: AbortSignal; beforeRequest?: (url: URL) => void | Promise<void> }): BreakcoldClient {
-  const http = createClient({ provider: breakcold, token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
+  const http = createClient(breakcold, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
     headers: { 'user-agent': input.userAgent }, ...(input.beforeRequest ? { beforeRequest: input.beforeRequest } : {}) });
   const get = (route: string, query: Record<string, string> = {}) =>
     http.json(route, { query, ...(input.signal ? { signal: input.signal } : {}) });
