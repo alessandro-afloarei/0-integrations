@@ -1,5 +1,7 @@
-import { expect, test } from 'vitest';
-import { safeDetail } from './http-response.js';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import type { Entry } from './catalogue.js';
+import { GrantRevoked, ProviderHttpError } from './errors.js';
+import { bodyWaitOf, classify, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
 
 test.each([
   ['usage_limit', [], 'usage_limit'],
@@ -10,4 +12,107 @@ test.each([
   ['xoxb_token', ['xoxb_token'], null], ['bad_code', ['', 'other'], 'bad_code'],
 ] as const)('safeDetail(%j, %j) is %j', (code, secrets, detail) => {
   expect(safeDetail(code, secrets)).toBe(detail);
+});
+
+const NOW = Date.parse('2026-11-01T12:00:00Z');
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); });
+afterEach(() => vi.useRealTimers());
+type Rules = Pick<Entry, 'http' | 'errors'>;
+const BASE = { baseUrl: 'https://api.acme.test' };
+const response = (status: number, data: unknown, headers: Record<string, string> = {}) => ({ status, headers: new Headers(headers), data });
+const fail = (entry: Rules, status: number, data: unknown, headers?: Record<string, string>) => {
+  const error = classify(entry, response(status, data, headers));
+  return error instanceof ProviderHttpError
+    ? { code: error.code, status: error.status, detail: error.detail, retryAfterMs: error.retryAfterMs } : error;
+};
+
+/** Codes before statuses, a 2xx that `failed` marks, and a wait in the body as an epoch in milliseconds. */
+const graph: Rules = {
+  http: { ...BASE, retry: { limit: 0, waitFromBody: { path: 'errors.0.wait', unit: 'epochMs' } } },
+  errors: { detail: ['errors.0.code', 'errors.0.ext.code'], failed: { path: 'errors.0' }, rules: [
+    { when: { detail: 'denied' }, code: 'rejected' }, { when: { detail: 'slow_down' }, code: 'rate_limited' },
+    { when: { detail: true }, code: 'request_failed' }, { when: { status: 'error' }, code: 'unavailable' },
+  ] },
+};
+
+test.each([
+  [500, 'denied', 'rejected'], [429, 'denied', 'rejected'], [200, 'slow_down', 'rate_limited'],
+  [404, 'other', 'request_failed'], [503, undefined, 'unavailable'],
+] as const)('rules in order, a code before the status: %i with %j is %s', (status, code, expected) => {
+  for (const error of [{ code }, { ext: { code } }]) {
+    expect(fail(graph, status, { errors: [error] })).toMatchObject({ code: expected, status, detail: code ?? null });
+  }
+});
+
+test('a 2xx is an error only where `failed` holds, and one with no code is request_failed', () => {
+  for (const error of [null, { message: 'private' }]) {
+    expect(fail(graph, 200, { errors: [error] })).toEqual({ code: 'request_failed', status: 200, detail: null, retryAfterMs: null });
+  }
+  expect(classify(graph, response(200, { errors: [] }))).toBeNull();
+  expect(classify(graph, response(200, {}))).toBeNull();
+});
+
+test("the body's epoch wait, after Retry-After, read from the first error only", () => {
+  const limited = (wait: unknown) => ({ errors: [{ code: 'slow_down', wait }] });
+  expect(fail(graph, 200, limited(NOW + 4000))).toMatchObject({ retryAfterMs: 4000 });
+  expect(fail(graph, 200, limited(NOW + 4000), { 'Retry-After': '2' })).toMatchObject({ retryAfterMs: 2000 });
+  expect(fail(graph, 200, { errors: [{ code: 'denied' }, { wait: NOW + 4000 }] })).toMatchObject({ retryAfterMs: null });
+  for (const [wait, ms] of [[NOW - 1, 0], [NOW + 0.5, 1], [String(NOW), null], [-1, null], [Number.MAX_SAFE_INTEGER + 1, null]] as const) {
+    expect(fail(graph, 200, limited(wait))).toMatchObject({ retryAfterMs: ms });
+  }
+});
+
+/** A rate limit without a 429: by a header with a reset, by a message, by the provider's code. */
+const limits: Rules = {
+  http: { ...BASE, rateLimit: { defaultWaitMs: 60_000, when: [
+    { status: 403, header: 'x-left', equals: '0', resetAt: { header: 'x-reset', unit: 'epochSeconds' } },
+    { status: 403, path: 'message', contains: 'slow down' }, { status: 403, detail: 'quota' },
+  ] } },
+  errors: { detail: 'error.code' },
+};
+
+test('a declared rate limit waits its reset, Retry-After first, else the default', () => {
+  const reset = String(NOW / 1000 + 90);
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset })).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': 'soon' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset, 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 30_000 });
+  expect(fail(limits, 403, { message: 'Please SLOW DOWN' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
+  expect(fail(limits, 403, { error: { code: 'quota' } })).toMatchObject({ code: 'rate_limited', detail: 'quota', retryAfterMs: 60_000 });
+  expect(fail(limits, 403, { error: { code: 403 } })).toMatchObject({ code: 'rejected', detail: null, retryAfterMs: null });
+  expect(fail(limits, 429, {})).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+  expect(rateLimitOf(limits.http, { status: 403, headers: new Headers(), body: {} }, NOW)).toBeUndefined();
+});
+
+test('a rule with no status holds on any status and names its own detail', () => {
+  const plan: Rules = { http: BASE, errors: { rules: [{ when: { path: 'message', startsWith: 'Feature off' },
+    code: 'request_failed', detail: 'feature_off' }] } };
+  expect(fail(plan, 403, { message: 'Feature off for this plan' })).toMatchObject({ code: 'request_failed', status: 403, detail: 'feature_off' });
+  expect(fail(plan, 401, { message: 'Feature off' })).toMatchObject({ code: 'request_failed', status: 401, detail: 'feature_off' });
+  expect(fail(plan, 403, { message: 'Inactive' })).toMatchObject({ code: 'rejected', detail: null });
+});
+
+test('a revoked code is GrantRevoked, a slash becomes a dot, a body wait in milliseconds', () => {
+  const chat: Rules = { http: { ...BASE, retry: { defaultWaitMs: 0, waitFromBody: { path: 'error.waitMs', unit: 'ms' } } },
+    errors: { detail: 'error.code', failed: { path: 'ok', equals: false }, revoked: ['gone'] } };
+  const gone = classify(chat, response(200, { ok: false, error: { code: 'gone' } }));
+  expect(gone).toBeInstanceOf(GrantRevoked);
+  expect(gone).toMatchObject({ detail: 'gone' });
+  expect(fail(chat, 200, { ok: false, error: { code: 'busy' } })).toMatchObject({ code: 'request_failed', status: 200, detail: 'busy' });
+  expect(classify(chat, response(200, { ok: true }))).toBeNull();
+  expect(fail(chat, 429, { error: { code: 'kind/limit', waitMs: 12.1 } }))
+    .toMatchObject({ code: 'rate_limited', detail: 'kind.limit', retryAfterMs: 13 });
+});
+
+test('codeOf, bodyWaitOf and retryPolicy', () => {
+  expect(codeOf({ detail: ['a', 'b'] }, { a: 7, b: 'x' })).toBe('x');
+  expect(codeOf({ detail: ['a', 'b'] }, { a: '', b: 'x' })).toBe('x');
+  expect(codeOf({ detail: 'a' }, { a: { a: 'x' } })).toBeUndefined();
+  expect(codeOf({ detail: 'a', allow: ['KNOWN'] }, { a: 'OTHER' })).toBeUndefined();
+  expect(codeOf({ detail: 'a', allow: ['KNOWN'] }, { a: 'KNOWN' })).toBe('KNOWN');
+  expect(codeOf(undefined, { error: 'x' })).toBeUndefined();
+  expect(bodyWaitOf({ waitFromBody: { path: 'w', unit: 'ms' } }, { w: '1' }, NOW)).toBeUndefined();
+  expect(retryPolicy(undefined)).toEqual({ limit: 0, maxWaitMs: 0, defaultWaitMs: 0 });
+  expect(retryPolicy({})).toEqual({ limit: 1, maxWaitMs: 60_000, defaultWaitMs: 1000 });
+  expect(retryPolicy({ limit: 0, waitFromBody: { path: 'w', unit: 'epochMs' } })).toEqual({ limit: 0, maxWaitMs: 0, defaultWaitMs: 0 });
+  expect(retryPolicy({ limit: 3, defaultWaitMs: 30_000 })).toEqual({ limit: 3, maxWaitMs: 60_000, defaultWaitMs: 30_000 });
 });
