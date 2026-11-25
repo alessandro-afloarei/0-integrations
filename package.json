@@ -212,7 +212,7 @@
     "./catalogue.json": "./dist/catalogue.json"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/catalogue.mjs",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && node scripts/catalogue.mjs",
     "check": "tsc --noEmit && eslint . --max-warnings 0 && knip && vitest run",
     "prepack": "pnpm build"
   },
