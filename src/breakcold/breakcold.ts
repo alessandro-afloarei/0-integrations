@@ -105,9 +105,3 @@ export function breakcoldClient(input: { apiKey: string; fetch: typeof fetch; us
     segments: (meetingId, cursor) => paged(`/meetings${path(meetingId)}/transcript`, segmentSchema, cursor),
   };
 }
-
-/** Reads the delivery key after signature verification; routing and deduplication belong to the app. */
-export function parseWebhook(headers: Headers): { deliveryId: string } | null {
-  const deliveryId = headers.get('x-webhook-delivery-id');
-  return deliveryId ? { deliveryId } : null;
-}

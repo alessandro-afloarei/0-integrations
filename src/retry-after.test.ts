@@ -3,7 +3,9 @@ import { ProviderHttpError } from './errors.js';
 import type { Entry } from './catalogue.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { hubspot } from './catalogue/hubspot.js';
+import { slack } from './catalogue/slack.js';
 import { createClient } from './http.js';
+import { revokeGrant } from './oauth.js';
 import { firefliesClient } from './fireflies/fireflies.js';
 import { hubspotClient } from './hubspot/hubspot.js';
 import { slackClient } from './slack/slack.js';
@@ -149,7 +151,9 @@ describe('Slack retry hints', () => {
 
   test.each(['channels', 'revoke'] as const)('retains a hint on Slack %s without changing the refusal', async operation => {
     const fake = scripted(() => Response.json({ ok: false, error: 'ratelimited' }, { headers: { 'Retry-After': '2' } }));
-    await expect(slackClient({ token: 'fixture-key', fetch: fake.fetch })[operation]())
+    const run = operation === 'channels' ? slackClient({ token: 'fixture-key', fetch: fake.fetch }).channels()
+      : revokeGrant(slack, { accessToken: 'fixture-key', fetch: fake.fetch });
+    await expect(run)
       .rejects.toMatchObject({ code: 'request_failed', status: 200, detail: 'ratelimited', retryAfterMs: 2000 });
     expect(fake.calls).toHaveLength(1);
   });

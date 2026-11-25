@@ -4,10 +4,10 @@ import { ProviderHttpError } from '../errors.js';
 import { createClient, type HttpClient } from '../http.js';
 import { headerValue, keptHeaders, type MailboxEmail, type MailboxEmailAddress, type MailboxEvent, type MailboxEventTime,
   type MailboxReader } from '../mailbox/mailbox.js';
+import { revokeGrant } from '../oauth.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { microsoft } from '../catalogue/microsoft.js';
-import { microsoft as microsoftDefinition } from '../providers.js';
 import { datetime, pageSize, utc } from '../shapes.js';
 
 /** A member's own mailbox and calendar, read-only; `offline_access` gives the refresh token. */
@@ -219,11 +219,10 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
 /** The member's sign-in. The account is the user's immutable Graph id, never the address, which their tenant's admin sets;
  *  the address is named, and is the mailbox's own for matching its owner in a meeting. */
 export const microsoftConnect: OAuthConnect<{ email: string }> = {
-  kind: 'oauth2', provider: microsoftDefinition, scopes: MICROSOFT_SCOPES,
+  kind: 'oauth2', provider: microsoft, scopes: MICROSOFT_SCOPES,
   async identify({ grant, fetch }) {
     const user = await graphUser(createClient(microsoft, { token: () => Promise.resolve(grant.accessToken), fetch }));
     return { account: { id: user.id, name: user.email }, details: { email: user.email } };
   },
-  // Microsoft has no endpoint that revokes one app's delegated grant: it lapses once the app forgets its tokens.
-  revoke: () => Promise.resolve(),
+  revoke: input => revokeGrant(microsoft, { ...input.grant, fetch: input.fetch }),
 };

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import type { OAuthConnect } from '../connect.js';
-import { GrantRevoked, ProviderHttpError } from '../errors.js';
+import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
+import { revokeGrant } from '../oauth.js';
 import { paginate } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { slack } from '../catalogue/slack.js';
-import { slack as slackDefinition } from '../providers.js';
 
 export type SlackChannel = { id: string; name: string; isPrivate: boolean };
 export type SlackMessage = { channel: string; text: string; blocks?: readonly Record<string, unknown>[];
@@ -13,7 +13,6 @@ export type SlackMessage = { channel: string; text: string; blocks?: readonly Re
 export type SlackClient = {
   postMessage(message: SlackMessage): Promise<{ ts: string }>;
   channels(): Promise<{ items: SlackChannel[]; skipped: (string | null)[]; channelsCut: boolean }>;
-  revoke(): Promise<void>;
 };
 
 const postedSchema = z.object({ ts: z.string() });
@@ -24,8 +23,8 @@ const teamSchema = z.object({ id: z.string().min(1) });
 
 export const SLACK_SCOPES = slack.scopes.default;
 export const slackConnect: OAuthConnect<{ botUserId: string | null }> = {
-  kind: 'oauth2', provider: slackDefinition, scopes: SLACK_SCOPES, identify: input => Promise.resolve(identify(input)),
-  revoke: input => slackClient({ token: input.grant.accessToken, fetch: input.fetch }).revoke(),
+  kind: 'oauth2', provider: slack, scopes: SLACK_SCOPES, identify: input => Promise.resolve(identify(input)),
+  revoke: input => revokeGrant(slack, { ...input.grant, fetch: input.fetch }),
 };
 
 /** Slack supplies identity with the grant; no user token or webhook URL leaves this module. */
@@ -68,10 +67,6 @@ export function slackClient(input: { token: string; fetch: typeof fetch }): Slac
         }
       }
       return { items: channels.sort((a, b) => a.name.localeCompare(b.name)), skipped, channelsCut };
-    },
-    async revoke() {
-      try { await http.json('/auth.revoke'); }
-      catch (error) { if (!(error instanceof GrantRevoked)) throw error; }
     },
   };
 }

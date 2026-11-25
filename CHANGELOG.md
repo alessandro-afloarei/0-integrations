@@ -30,6 +30,15 @@
   `unavailable` (it was `request_failed`).
 - unipile: `unipileConnect` is gone: call `client.authLink(link)` for the sign-in URL and
   `client.account(accountId, signal)` for the account.
+- `authorizeUrl`, `exchangeCode`, `refreshGrant` and `accessToken({ provider })` take a catalogue entry; a token answer
+  is refused inside a 200 when the entry's `auth.failed` holds, with the code `errors.detail` reads (Slack's as before).
+- `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke, by RFC 7009 or by the entry's
+  request, and replaces `revokeGrant(definition, client, token, …)`; an entry without `revoke` is done, and only an
+  RFC 7009 revoke needs `client` (`oauth_client_required` without it). The connect objects' `revoke` call it.
+- slack: `slackClient(…).revoke()` is gone: call `revokeGrant(slack, { accessToken, fetch })`. A 404, or a 2xx that is
+  no JSON, from `auth.revoke` is now done (it was `not_found` and `invalid_response`).
+- `verifyWebhook` takes `entry.webhook`; new `deliveryId(entry.webhook, request)` reads the delivery id an entry declares.
+- breakcold: `parseWebhook` is gone: read `deliveryId(breakcold.webhook, request)`.
 
 ## 0.12.0
 

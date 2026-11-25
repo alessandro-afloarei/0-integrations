@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { afterEach, expect, test, vi } from 'vitest';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { authorizeUrl, exchangeCode, pkcePair, refreshGrant, revokeGrant } from './oauth.js';
-import { hubspot, slack, type ProviderDefinition } from './providers.js';
+import { defineProvider } from './catalogue.js';
+import { google } from './catalogue/google.js';
+import { hubspot } from './catalogue/hubspot.js';
+import { slack } from './catalogue/slack.js';
 import { fakeFetch } from './testing.js';
 import { slackClient } from './slack/slack.js';
 
@@ -12,6 +15,10 @@ const token = { access_token: 'a', refresh_token: 'r', expires_in: 1800, token_t
 function endpoint(body: unknown, status = 200) {
   return fakeFetch([{ url: /https:\/\//, respond: () => Response.json(body, { status }) }]);
 }
+/** PKCE on (no `pkce` key), the client secret by Basic auth, a fixed authorize parameter. */
+const pkced = defineProvider({ id: 'pkced', name: 'PKCE', auth: [{ kind: 'oauth2', authorizeUrl: 'https://auth.test/authorize',
+  tokenUrl: 'https://auth.test/token', clientAuth: 'basic', authorizeParams: { response_type: 'code' } }],
+  http: { baseUrl: 'https://api.auth.test' } });
 
 afterEach(() => vi.useRealTimers());
 
@@ -23,21 +30,17 @@ test("builds HubSpot's and Slack's authorize URLs", () => {
 });
 
 test('adds the PKCE challenge and fixed params when the provider asks', async () => {
-  const provider: ProviderDefinition = { ...hubspot, oauth2: {
-    authUrl: 'https://auth.test/authorize', tokenUrl: 'https://auth.test/token',
-    clientAuth: 'basic', pkce: true, scopeDelimiter: ' ', authParams: { response_type: 'code' },
-  } };
   const pair = await pkcePair();
   expect(pair.verifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
   expect(pair.challenge).toBe(createHash('sha256').update(pair.verifier).digest('base64url'));
   const input = { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's' };
-  expect(() => authorizeUrl(provider, input)).toThrow('code_challenge_required');
-  const url = authorizeUrl(provider, { ...input, codeChallenge: pair.challenge });
+  expect(() => authorizeUrl(pkced, input)).toThrow('code_challenge_required');
+  const url = authorizeUrl(pkced, { ...input, codeChallenge: pair.challenge });
   expect(url.searchParams.get('code_challenge')).toBe(pair.challenge);
   expect(url.searchParams.get('code_challenge_method')).toBe('S256');
   expect(url.searchParams.get('response_type')).toBe('code');
   const fake = endpoint(token);
-  await exchangeCode(provider, client, { ...exchange, codeVerifier: pair.verifier, fetch: fake.fetch });
+  await exchangeCode(pkced, client, { ...exchange, codeVerifier: pair.verifier, fetch: fake.fetch });
   expect(new URLSearchParams(fake.calls[0]?.body).get('code_verifier')).toBe(pair.verifier);
   expect(fake.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('id:private%2Dclient%2Dsecret').toString('base64')}`);
 });
@@ -100,13 +103,13 @@ test('a network failure is unavailable', async () => {
 });
 
 test('revoke treats 404 and invalid_grant as done', async () => {
-  await expect(revokeGrant(hubspot, client, 'old', { fetch: endpoint({}, 404).fetch })).resolves.toBeUndefined();
+  await expect(revokeGrant(hubspot, { refreshToken: 'old', client, fetch: endpoint({}, 404).fetch })).resolves.toBeUndefined();
   const noContent = fakeFetch([{ url: /https:/, respond: () => new Response(null, { status: 204 }) }]);
-  await expect(revokeGrant(hubspot, client, 'old', { fetch: noContent.fetch })).resolves.toBeUndefined();
-  await expect(revokeGrant(hubspot, client, 'old', { fetch: endpoint({ error: 'invalid_grant' }, 400).fetch })).resolves.toBeUndefined();
-  await expect(revokeGrant(hubspot, client, 'old', { fetch: endpoint({ error: 'invalid_client' }, 401).fetch }))
+  await expect(revokeGrant(hubspot, { refreshToken: 'old', client, fetch: noContent.fetch })).resolves.toBeUndefined();
+  await expect(revokeGrant(hubspot, { refreshToken: 'old', client, fetch: endpoint({ error: 'invalid_grant' }, 400).fetch }))
+    .resolves.toBeUndefined();
+  await expect(revokeGrant(hubspot, { refreshToken: 'old', client, fetch: endpoint({ error: 'invalid_client' }, 401).fetch }))
     .rejects.toMatchObject({ code: 'request_failed', detail: 'invalid_client', status: 401 });
-  await expect(revokeGrant(slack, client, 'old', { fetch: endpoint({}).fetch })).rejects.toThrow('revoke_unsupported');
 });
 
 test('errors never carry the tokens they were sent', async () => {
@@ -146,7 +149,7 @@ test('a refusal that is not an OAuth error body is request_failed', async () => 
   await expect(refreshGrant(hubspot, client, 'r', { fetch: challenge.fetch }))
     .rejects.toMatchObject({ code: 'request_failed', status: 401, detail: null });
   const page = fakeFetch([{ url: /https:/, respond: () => new Response('<html>bad request</html>', { status: 400 }) }]);
-  await expect(revokeGrant(hubspot, client, 'r', { fetch: page.fetch }))
+  await expect(revokeGrant(hubspot, { refreshToken: 'r', client, fetch: page.fetch }))
     .rejects.toMatchObject({ code: 'request_failed', status: 400 });
 });
 
@@ -156,10 +159,8 @@ test.each(['', '  '])('authorizeUrl refuses blank state %j directly', state => {
 });
 
 test.each([undefined, '', '  '])('exchangeCode refuses missing PKCE verifier %j before HTTP', async codeVerifier => {
-  if (!slack.oauth2) throw new Error('expected_oauth');
-  const provider = { ...slack, oauth2: { ...slack.oauth2, pkce: true } };
   const fake = endpoint(token);
-  await expect(exchangeCode(provider, client, { ...exchange, ...(codeVerifier === undefined ? {} : { codeVerifier }), fetch: fake.fetch }))
+  await expect(exchangeCode(pkced, client, { ...exchange, ...(codeVerifier === undefined ? {} : { codeVerifier }), fetch: fake.fetch }))
     .rejects.toThrow('code_verifier_required');
   expect(fake.calls).toHaveLength(0);
 });
@@ -175,4 +176,36 @@ test('Slack token_revoked has the same library error shape for refresh and posti
     expect(error).toBeInstanceOf(GrantRevoked);
     expect(error).toMatchObject({ name: 'GrantRevoked', message: 'grant_revoked', detail: 'token_revoked' });
   }
+});
+
+test('revokeGrant: Google falls back to the access token and treats invalid_token as gone; HubSpot skips with no refresh token', async () => {
+  const gone = fakeFetch([{ url: 'https://oauth2.googleapis.com/revoke', respond: () => Response.json({ error: 'invalid_token' }, { status: 400 }) }]);
+  await expect(revokeGrant(google, { accessToken: 'access-token', refreshToken: null, client, fetch: gone.fetch })).resolves.toBeUndefined();
+  expect(new URLSearchParams(gone.calls[0]?.body).get('token')).toBe('access-token');
+  const none = fakeFetch([]);
+  await revokeGrant(hubspot, { refreshToken: null, client, fetch: none.fetch });
+  expect(none.calls).toHaveLength(0);
+});
+
+test('revokeGrant: an RFC 7009 revoke without the OAuth app sends nothing', async () => {
+  const none = fakeFetch([]);
+  await expect(revokeGrant(hubspot, { refreshToken: 'r', fetch: none.fetch })).rejects.toThrow('oauth_client_required');
+  expect(none.calls).toHaveLength(0);
+});
+
+test('revokeGrant: Slack revokes by request with the access token and no OAuth app, and a token already gone is done', async () => {
+  const fake = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => Response.json({ ok: false, error: 'token_revoked' }) }]);
+  await expect(revokeGrant(slack, { accessToken: 'a', fetch: fake.fetch })).resolves.toBeUndefined();
+  expect(fake.calls[0]?.headers.authorization).toBe('Bearer a');
+});
+
+test("a token answer refused inside a 200 is read through the entry's own condition and code", async () => {
+  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch }))
+    .rejects.toMatchObject({ code: 'request_failed', detail: 'invalid_code' });
+  // A `failed` other than `ok: false`: today's hard-coded check would accept this answer.
+  const strict = defineProvider({ id: 'strict', name: 'Strict', auth: [{ kind: 'oauth2', authorizeUrl: 'https://strict.test/authorize',
+    tokenUrl: 'https://strict.test/token', pkce: false, failed: { path: 'error' } }], http: { baseUrl: 'https://api.strict.test' },
+    errors: { detail: 'error' } });
+  await expect(exchangeCode(strict, client, { ...exchange, fetch: endpoint({ ...token, error: 'code_used' }).fetch }))
+    .rejects.toMatchObject({ code: 'request_failed', detail: 'code_used' });
 });

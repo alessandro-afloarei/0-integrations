@@ -1,5 +1,5 @@
+import type { Entry } from './catalogue.js';
 import { authorizeUrl, exchangeCode, pkcePair, type Grant, type OAuthClient } from './oauth.js';
-import type { ProviderDefinition } from './providers.js';
 
 export type ConnectField = { name: string; label: string; secret: boolean };
 export type ConnectStart = { kind: 'redirect'; url: string; codeVerifier?: string }
@@ -7,7 +7,7 @@ export type ConnectStart = { kind: 'redirect'; url: string; codeVerifier?: strin
 export type ConnectIdentity<D> = { account: { id: string; name: string }; details: D };
 export type ConnectResult<S, D> = ConnectIdentity<D> & { secret: S };
 export type OAuthConnect<D> = {
-  kind: 'oauth2'; provider: ProviderDefinition; scopes: readonly string[];
+  kind: 'oauth2'; provider: Entry; scopes: readonly string[];
   identify: (input: { grant: Grant; extras: Record<string, unknown>; fetch: typeof fetch }) => Promise<ConnectIdentity<D>>;
   /** finishConnect revokes after failed identity unless re-consent can return a live connection's token. */
   reusesGrant?: true;
@@ -26,7 +26,8 @@ export async function startConnect<S, D>(provider: OAuthConnect<D> | DirectConne
   if (provider.kind === 'form') return { kind: 'form', fields: provider.fields };
   if (provider.kind === 'hosted') return { kind: 'hosted', url: await provider.authorize() };
   if (!options) throw new TypeError('oauth_options_required');
-  const pkce = provider.provider.oauth2?.pkce ? await pkcePair() : undefined;
+  const [auth] = provider.provider.auth;
+  const pkce = auth.kind === 'oauth2' && auth.pkce !== false ? await pkcePair() : undefined;
   return { kind: 'redirect', url: authorizeUrl(provider.provider, { ...options, scopes: provider.scopes,
     ...(pkce ? { codeChallenge: pkce.challenge } : {}) }).toString(), ...(pkce ? { codeVerifier: pkce.verifier } : {}) };
 }

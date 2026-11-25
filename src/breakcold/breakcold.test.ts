@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
+import { breakcold } from '../catalogue/breakcold.js';
 import { fakeFetch } from '../testing.js';
+import { deliveryId } from '../webhooks.js';
 import { breakcoldClient, type BreakcoldMeeting, type BreakcoldNote, type BreakcoldRecord, type BreakcoldSegment } from './breakcold.js';
 import { fakeBreakcold } from './fake.js';
 
@@ -123,10 +125,10 @@ test('a page claiming more with no cursor is refused, never read as the last', a
   expect(await client(answering({ data: [], pagination: { cursor: 'c2', hasMore: true } })).workspaces()).toMatchObject({ cursor: 'c2' });
 });
 
-test('reads Breakcold delivery id without changing its bytes', async () => {
-  const { parseWebhook } = await import('./breakcold.js');
-  expect(parseWebhook(new Headers({ 'x-webhook-delivery-id': 'delivery:1', 'x-webhook-event': 'record.updated' })))
-    .toEqual({ deliveryId: 'delivery:1' });
-  expect(parseWebhook(new Headers())).toBeNull();
-  expect(parseWebhook(new Headers({ 'x-webhook-delivery-id': '' }))).toBeNull();
+test('reads Breakcold delivery id without changing its bytes', () => {
+  const delivery = (headers: Headers) => deliveryId(breakcold.webhook,
+    { method: 'POST', url: 'https://app.test/webhook', headers, rawBody: new Uint8Array() });
+  expect(delivery(new Headers({ 'x-webhook-delivery-id': 'delivery:1', 'x-webhook-event': 'record.updated' }))).toBe('delivery:1');
+  expect(delivery(new Headers())).toBeNull();
+  expect(delivery(new Headers({ 'x-webhook-delivery-id': '' }))).toBeNull();
 });

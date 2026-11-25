@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
+import { microsoft } from '../catalogue/microsoft.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked } from '../errors.js';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { refreshGrant } from '../oauth.js';
-import { microsoft } from '../providers.js';
 import { fakeFetch, sequence } from '../testing.js';
 import calendarRecording from './fixtures/calendar-recording.json' with { type: 'json' };
 import mailRecording from './fixtures/mail-recording.json' with { type: 'json' };

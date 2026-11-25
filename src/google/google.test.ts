@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest';
+import { google } from '../catalogue/google.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked } from '../errors.js';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import type { FakeMailbox } from '../mailbox/fake.js';
 import { KIT_MAILBOX, kitMailbox } from '../mailbox/kit.test-support.js';
 import { refreshGrant } from '../oauth.js';
-import { google } from '../providers.js';
 import { fakeFetch, sequence } from '../testing.js';
 import calendarRecording from './fixtures/calendar-recording.json' with { type: 'json' };
 import mailRecording from './fixtures/mail-recording.json' with { type: 'json' };

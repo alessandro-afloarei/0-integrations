@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { hubspot } from '../catalogue/hubspot.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked, ProviderHttpError } from '../errors.js';
 import { refreshGrant, type Grant } from '../oauth.js';
-import { hubspot } from '../providers.js';
 import { fakeFetch, respondFrom, type Route } from '../testing.js';
 import { fakeHubSpot } from './fake.js';
 import * as hubspotModule from './hubspot.js';

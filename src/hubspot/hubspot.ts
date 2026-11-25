@@ -3,7 +3,6 @@ import type { OAuthConnect } from "../connect.js";
 import { revokeGrant } from "../oauth.js";
 import { createClient } from "../http.js";
 import { hubspot } from "../catalogue/hubspot.js";
-import { hubspot as hubspotDefinition } from "../providers.js";
 import { parseAnswer } from "../parse.js";
 import { paginate, type Page } from "../paginate.js";
 import { datetime } from "../shapes.js";
@@ -46,17 +45,13 @@ const ownersSchema = z.object({ results: z.array(z.object({ email: z.string().op
 export const HUBSPOT_SCOPES: readonly string[] = hubspot.scopes.default;
 
 export const hubspotConnect: OAuthConnect<{ portalId: string }> = {
-  kind: "oauth2", provider: hubspotDefinition, reusesGrant: true,
+  kind: "oauth2", provider: hubspot, reusesGrant: true,
   scopes: HUBSPOT_SCOPES,
   async identify({ grant, extras, fetch }) {
     const portalId = await portalOf(hubspotClient({ token: () => Promise.resolve(grant.accessToken), fetch }), extras);
     return { account: { id: portalId, name: `Portal ${portalId}` }, details: { portalId } };
   },
-  async revoke({ grant, client, fetch }) {
-    // Access-only grants expire naturally; HubSpot revokes refresh tokens.
-    if (grant.refreshToken === null) return;
-    await revokeGrant(hubspotDefinition, client, grant.refreshToken, { fetch });
-  },
+  revoke: input => revokeGrant(hubspot, { ...input.grant, client: input.client, fetch: input.fetch }),
 };
 
 /** The token answer names the portal when available; older answers need account-info. */

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { defineProvider } from './catalogue.js';
+import { slack } from './catalogue/slack.js';
 import { finishConnect, startConnect, type DirectConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
-import { slack } from './providers.js';
 import { fakeSlack } from './slack/fake.js';
 import { slackConnect } from './slack/slack.js';
 import { fakeFetch } from './testing.js';
@@ -19,6 +20,9 @@ async function authorize(http: ReturnType<typeof fakeFetch>): Promise<string> {
   http.calls.length = 0;
   return code;
 }
+const { authorizeUrl, tokenUrl, scopeSeparator, tokenTypes } = slack.auth[0];
+/** Slack with PKCE on: no `pkce` key. */
+const pkceSlack = defineProvider({ ...slack, auth: [{ kind: 'oauth2', authorizeUrl, tokenUrl, scopeSeparator, tokenTypes }] });
 afterEach(() => vi.useRealTimers());
 
 describe('connect', () => {
@@ -62,8 +66,7 @@ describe('connect', () => {
   });
 
   it('supports PKCE without owning state', async () => {
-    if (!slack.oauth2) throw new Error('expected_oauth');
-    const provider = { ...slackConnect, provider: { ...slack, oauth2: { ...slack.oauth2, pkce: true } } };
+    const provider = { ...slackConnect, provider: pkceSlack };
     const begun = await startConnect(provider, start);
     if (begun.kind !== 'redirect' || !begun.codeVerifier) throw new Error('expected_pkce');
     const params = new URL(begun.url).searchParams;
@@ -102,9 +105,8 @@ describe('connect review regressions', () => {
   });
 
   it('refuses a missing PKCE verifier before exchanging', async () => {
-    if (!slack.oauth2) throw new Error('expected_oauth');
     const http = fakeFetch(fakeSlack(data));
-    const provider = { ...slackConnect, provider: { ...slack, oauth2: { ...slack.oauth2, pkce: true } } };
+    const provider = { ...slackConnect, provider: pkceSlack };
     await expect(finishConnect(provider, { client: { clientId: 'client', clientSecret: 'secret' },
       code: 'code', redirectUri: callback, fetch: http.fetch, onRevokeFailed: vi.fn() })).rejects.toThrow('code_verifier_required');
     expect(http.calls).toHaveLength(0);

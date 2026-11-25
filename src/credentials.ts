@@ -1,10 +1,11 @@
+import type { Entry } from './catalogue.js';
 import { GrantRevoked, RefreshBusy, SecretUnavailable } from './errors.js';
 import type { Grant } from './oauth.js';
-import type { ProviderDefinition } from './providers.js';
 import type { SecretStore, Vault } from './vault.js';
 
 const REFRESH_REREAD_INTERVAL_MS = 500;
 const REFRESH_REREAD_WINDOW_MS = 5000;
+const REFRESH_MARGIN_MS = 15 * 60_000;
 
 export type WithLock = <T>(key: string, ttlSeconds: number, work: () => Promise<T>) => Promise<T | 'busy'>;
 
@@ -25,9 +26,8 @@ function grant(value: unknown): Grant {
 }
 
 export async function accessToken(input: SecretInput & {
-  provider: ProviderDefinition; withLock: WithLock; refresh: (refreshToken: string) => Promise<Grant>; rejected?: string;
+  provider: Entry; withLock: WithLock; refresh: (refreshToken: string) => Promise<Grant>; rejected?: string;
 }): Promise<string> {
-  const margin = input.provider.oauth2?.refreshMarginMs ?? 15 * 60_000;
   const usable = (value: Grant, marginMs: number) => value.accessToken !== input.rejected
     && (value.expiresAt === null || Date.parse(value.expiresAt) > Date.now() + marginMs);
   const read = async () => {
@@ -41,10 +41,10 @@ export async function accessToken(input: SecretInput & {
   };
 
   const initial = await read();
-  if (usable(initial.grant, margin)) return initial.grant.accessToken;
+  if (usable(initial.grant, REFRESH_MARGIN_MS)) return initial.grant.accessToken;
   const result = await input.withLock(`${input.provider.id}:refresh:${input.connectionId}`, 30, async () => {
     const latest = await read();
-    if (usable(latest.grant, margin)) return latest.grant.accessToken;
+    if (usable(latest.grant, REFRESH_MARGIN_MS)) return latest.grant.accessToken;
     if (latest.grant.refreshToken === null) throw new GrantRevoked();
     let refreshed: Grant;
     try {

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { slack } from '../catalogue/slack.js';
 import { GrantRevoked, ProviderHttpError } from '../errors.js';
+import { revokeGrant } from '../oauth.js';
 import { fakeFetch } from '../testing.js';
 import { fakeSlack } from './fake.js';
 import { identify, slackClient } from './slack.js';
@@ -15,7 +17,7 @@ describe('Slack client', () => {
     const client = slackClient({ token: 'xoxb-fixture', fetch: http.fetch });
     expect(await client.channels()).toEqual({ items: [data.channels[1], data.channels[0]], skipped: [], channelsCut: false });
     expect((await client.postMessage({ channel: 'C1', text: 'hi' })).ts).toMatch(/^\d+\.000100$/u);
-    await expect(client.revoke()).resolves.toBeUndefined();
+    await expect(revokeGrant(slack, { accessToken: 'xoxb-fixture', fetch: http.fetch })).resolves.toBeUndefined();
     await expect(client.postMessage({ channel: 'C0GONE', text: 'hi' }))
       .rejects.toMatchObject({ code: 'request_failed', status: 200, detail: 'channel_not_found' });
   });
@@ -117,14 +119,14 @@ describe('Slack review regressions', () => {
 
   it.each(['invalid_auth', 'token_revoked', 'account_inactive', 'not_authed'])('revoking an already-gone token %s succeeds', async error => {
     const http = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => Response.json({ ok: false, error }) }]);
-    await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).revoke()).resolves.toBeUndefined();
+    await expect(revokeGrant(slack, { accessToken: 'xoxb-1', fetch: http.fetch })).resolves.toBeUndefined();
   });
 
   it('sends no JSON Content-Type on GETs', async () => {
     const http = fakeFetch(fakeSlack(data));
     const client = slackClient({ token: 'xoxb-1', fetch: http.fetch });
     await client.channels();
-    await client.revoke();
+    await revokeGrant(slack, { accessToken: 'xoxb-1', fetch: http.fetch });
     expect(http.calls.map(call => call.headers['content-type'])).toEqual([undefined, undefined]);
   });
 
