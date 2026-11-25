@@ -9,10 +9,12 @@
   by the retry wait. The retry wait no longer accepts forms such as `2e3`, `+2`, `0x10` or `Infinity`: they fall back to
   the body's wait or the default.
 - One sanitiser reads the detail of HTTP and OAuth errors, and a `/` in a provider's code becomes `.` in `detail` for
-  every provider. OAuth refusals may now carry a detail with `.`, `-`, a leading digit, or a `/` read as `.`.
+  every provider. An OAuth refusal's detail now follows the HTTP rule: 1 to 64 characters of letters, digits, `_`, `.`
+  or `-`, in any position.
 - unipile: any refusal `type` that passes the sanitiser is carried as the detail, `/` read as `.`; before, only `api/…`
   and `provider/…` types were, so `errors/…` types are now carried too.
-- google, microsoft: an empty-string error code is skipped and the next one is read.
+- google, microsoft: an empty-string error code is skipped and the next one is read. A path also reads an own dotted
+  key (`{ "error.code": … }`) and an object keyed `0` (`{ "errors": { "0": … } }`).
 
 ## 0.12.0
 

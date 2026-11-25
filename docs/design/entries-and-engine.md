@@ -82,17 +82,15 @@ import { defineProvider } from '0-integrations/catalogue';
 export const attio = defineProvider({
   id: 'attio',
   name: 'Attio',
-  docs: 'https://docs.attio.com',
   fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.attio.com/v2', minIntervalMs: 100 },
+  http: { baseUrl: 'https://api.attio.com/v2', minIntervalMs: 100, retry: { maxWaitMs: 10_000 } },
   identify: { request: { path: '/self' }, id: 'workspace_id', name: 'workspace_name',
-    rejectWhen: [{ path: 'active', equals: false }, { status: 400 }] },
-  paging: { offset: { kind: 'offset', send: { query: 'offset' }, size: { send: { query: 'limit' }, value: 50 } } },
+    rejectWhen: [{ path: 'active', equals: false, detail: 'token_inactive' }, { status: 400 }] },
 });
 ```
 
-That is a whole provider: sign-in form, credential check, account identity, retry, paging and raw calls.
+That is a whole provider: sign-in form, credential check, account identity, retry and raw calls.
 
 ### Two small languages
 
@@ -114,10 +112,12 @@ type When = { status?: number | 'error'; header?: string; path?: Path; detail?: 
   equals?: string | number | boolean; in?: readonly string[]; startsWith?: string; contains?: string };
 ```
 
-Every stated part must hold. `status: 'error'` is any answer outside 2xx. `header` or `path` selects a value for the
-comparison; with no comparison it only has to be present. `contains` ignores case. `detail` tests the provider's own
-error code as `errors.detail` reads it: a string must equal it, `true` means there is one. There are no regular
-expressions in entries.
+Every stated part must hold. `status: 'error'` is any answer outside 2xx. One of `header` or `path`, never both,
+selects the value compared. A comparison (`equals`, `in`, `startsWith`, `contains`) needs one of them, and a header
+compares only to a string. With no comparison the value only has to be present: here that means not `undefined`, so a
+`null` counts. (In `identify`, present means neither `undefined` nor `null`.) `contains` ignores case. `detail` tests
+the provider's own error code as `errors.detail` reads it: a string must equal it, `true` means there is one. There
+are no regular expressions in entries.
 
 ### Fields of an entry
 
@@ -137,6 +137,13 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 | `paging` | Named paging shapes (below). | none |
 | `webhook` | The signature scheme (below). | none |
 | `operations` | Named reads and writes (below). | none |
+
+#### Arriving later
+
+Some pieces of this design are not in the code until a provider or a later step needs them: `docs` and `categories`,
+`fields[].default` and `help`, `Send.value`, `oauth2.send`, `Request.base` and `Operation.base`, the `s` and
+`epochSeconds` body-wait units, the `epochMs` reset unit, and `paging` and `operations`, which arrive with the walker
+and the client.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -172,7 +179,7 @@ type Send = { header: string; value?: Template } | { basic: readonly [Template, 
 
 ```ts
 type Identify = { request?: Request; id?: Value; name?: Value; lowercase?: true;
-  rejectWhen?: readonly (When & { detail?: string })[] };
+  rejectWhen?: readonly (Omit<When, 'detail'> & { detail?: string })[] };
 type Request = { method?: Method; path?: Template; query?: Record<string, string>; graphql?: string; base?: string };
 type Value = Path | readonly Path[] | Template;
 ```
@@ -186,8 +193,8 @@ lookup, where `{id}` is the id already found: `'Portal {id}'`.
 - "Present" means not null or undefined. An id must then be a non-empty string or a positive integer, else the answer
   is `invalid_response` with detail `missing_fields`. A blank name falls back to the id.
 - `lowercase` lowercases and trims the id and the name when they are strings.
-- `rejectWhen` names answers that mean a bad credential despite their status. The error is `rejected`, with the
-  rule's `detail`.
+- `rejectWhen` names answers that mean a bad credential despite their status. The error is `rejected`. A rule's
+  `detail` is the detail reported, so a `rejectWhen` condition cannot test the provider's code.
 - With no `id`, identify is only a credential check. There is no separate `verify`: none of the 17 providers needs
   the two apart.
 - Only the paths an entry names leave the token answer. Nothing else of it is returned or stored.
@@ -204,20 +211,26 @@ type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; fail
   rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
 ```
 
-An answer is classified in this order, and the first step that decides wins:
+An error answer is one outside 2xx, or a 2xx that `errors.failed` marks (`{ ok: false }`, GraphQL `errors`). It is
+classified in this order, and the first step that decides wins:
 
 1. `errors.revoked`: the provider's code is on the list, so the grant is gone (`GrantRevoked`).
-2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code.
-3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is the
-   matching rule's `resetAt`, else `Retry-After`, else `rateLimit.defaultWaitMs`.
-4. The status mapping of today, for an answer outside 2xx.
-5. `errors.failed`: a 2xx that is an error (`{ ok: false }`, GraphQL `errors`) is `request_failed`.
+2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code. The error carries only
+   `Retry-After`, else the body's wait: never a rate limit's.
+3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is
+   `Retry-After`, else the matching rule's `resetAt`, else `rateLimit.defaultWaitMs`.
+4. The status mapping of today. A failed 2xx is `request_failed`.
 
-- `errors.detail` is where the provider's own error code sits. A code counts only when it is a non-empty string. A
-  `/` in it becomes `.`, and it must then pass the library's strict pattern, so no provider text or secret reaches an
-  error. `allow` keeps only the listed codes.
+So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
+
+- `errors.detail` is where the provider's own error code sits. A code counts only when it is a non-empty string: an
+  empty one is skipped and the next path read. A `/` in it becomes `.`, and it must then pass the library's strict
+  pattern, so no provider text or secret reaches an error. `allow` keeps only the listed codes. It checks the first
+  code found, so a refused one hides a later path.
 - Only a 429 is retried, as today, on reads, up to `retry.limit`. The wait is `Retry-After`, else `waitFromBody`, else
   `retry.defaultWaitMs`, capped by `maxWaitMs`. An answer that step 3 reclassifies is reported, not retried.
+- With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
+  1 second. A `limit` of 0 means no retry and no waits.
 - The error taxonomy does not change.
 
 ### `paging`
