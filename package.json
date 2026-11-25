@@ -200,10 +200,19 @@
     "./hubspot/fake": {
       "types": "./dist/hubspot/fake.d.ts",
       "default": "./dist/hubspot/fake.js"
-    }
+    },
+    "./catalogue": {
+      "types": "./dist/catalogue.d.ts",
+      "default": "./dist/catalogue.js"
+    },
+    "./catalogue/*": {
+      "types": "./dist/catalogue/*.d.ts",
+      "default": "./dist/catalogue/*.js"
+    },
+    "./catalogue.json": "./dist/catalogue.json"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/catalogue.mjs",
     "check": "tsc --noEmit && eslint . --max-warnings 0 && knip && vitest run",
     "prepack": "pnpm build"
   },

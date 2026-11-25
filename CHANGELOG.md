@@ -2,9 +2,17 @@
 
 ## Unreleased
 
-- A `/` in a provider's error code becomes `.` in `detail` for every provider (Unipile's `errors/…` codes are now
-  carried), OAuth refusals carry codes the HTTP errors already carried (`.` and `-` allowed), and a fractional or
-  HTTP-date `Retry-After` is honoured by the retry wait.
+- New: `0-integrations/catalogue` (`defineProvider` and the entry types), one entry per provider at
+  `0-integrations/catalogue/<id>`, and `0-integrations/catalogue.json`, all 17 providers as plain data.
+  `0-integrations/providers` is unchanged and now derived from the entries.
+- A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
+  by the retry wait. The retry wait no longer accepts forms such as `2e3`, `+2`, `0x10` or `Infinity`: they fall back to
+  the body's wait or the default.
+- One sanitiser reads the detail of HTTP and OAuth errors, and a `/` in a provider's code becomes `.` in `detail` for
+  every provider. OAuth refusals may now carry a detail with `.`, `-`, a leading digit, or a `/` read as `.`.
+- unipile: any refusal `type` that passes the sanitiser is carried as the detail, `/` read as `.`; before, only `api/…`
+  and `provider/…` types were, so `errors/…` types are now carried too.
+- google, microsoft: an empty-string error code is skipped and the next one is read.
 
 ## 0.12.0
 
