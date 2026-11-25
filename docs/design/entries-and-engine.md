@@ -142,8 +142,8 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `docs` and `categories`,
 `fields[].default` and `help`, `Send.value`, `oauth2.send`, `Request.base` and `Operation.base`, the `s` and
-`epochSeconds` body-wait units, the `epochMs` reset unit, and `paging` and `operations`, which arrive with the walker
-and the client.
+`epochSeconds` body-wait units, the `epochMs` reset unit, `paging` and `operations`, which arrive with the walker
+and the client, and quirks, which arrive with generic identify.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.

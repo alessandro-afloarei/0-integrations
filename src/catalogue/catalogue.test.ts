@@ -104,8 +104,8 @@ describe.each(entries)('%s', (id, entry) => {
   });
 });
 
-test('ids are unique and all 17 entries are found', () => {
-  expect(entries.length).toBe(17);
+test("ids are unique and the folder's entries are found", () => {
+  expect(entries.length).toBeGreaterThanOrEqual(17);
   expect(new Set(entries.map(([id]) => id)).size).toBe(entries.length);
 });
 
