@@ -1,9 +1,9 @@
 import * as oauth from 'oauth4webapi';
 import type { Auth, Entry } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
+import { sendCall } from './account.js';
 import { createClient } from './http.js';
-import { classify, codeOf } from './http-response.js';
-import { oauthRefusal } from './oauth-error.js';
+import { classify, codeOf, safeDetail } from './http-response.js';
 import { holds, placeholders } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
@@ -59,7 +59,16 @@ function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThi
   };
 }
 
-async function send(work: () => Promise<Response>, entry: Entry, secrets: readonly string[]): Promise<Response> {
+type Context = ReturnType<typeof context>;
+
+/** An OAuth refusal: `invalid_grant` or a revoked code is a gone grant; the detail never holds what the request sent. */
+function refusal(code: string, entry: Entry, status: number, secrets: readonly string[]): Error {
+  const detail = safeDetail(code, secrets);
+  if (code === 'invalid_grant' || entry.errors?.revoked?.includes(code)) return new GrantRevoked(detail);
+  return new ProviderHttpError('request_failed', status, detail);
+}
+
+async function send(c: Context, entry: Entry, secrets: readonly string[], work: () => Promise<Response>): Promise<Response> {
   let response: Response;
   try {
     response = await work();
@@ -67,7 +76,7 @@ async function send(work: () => Promise<Response>, entry: Entry, secrets: readon
     throw new ProviderHttpError('unavailable', null);
   }
   if (response.status >= 500) throw new ProviderHttpError('unavailable', response.status);
-  const { failed } = oauth2(entry);
+  const { failed } = c.config;
   if (failed !== undefined && response.status === 200) {
     let body: unknown;
     try {
@@ -77,14 +86,14 @@ async function send(work: () => Promise<Response>, entry: Entry, secrets: readon
     }
     const code = codeOf(entry.errors, body);
     if (holds(failed, { status: response.status, headers: response.headers, body, code })) {
-      throw oauthRefusal(code ?? '', entry.errors?.revoked, response.status, secrets);
+      throw refusal(code ?? '', entry, response.status, secrets);
     }
   }
   return response;
 }
 
 function processingError(error: unknown, entry: Entry, status: number, secrets: readonly string[]): Error {
-  if (error instanceof oauth.ResponseBodyError) return oauthRefusal(error.error, entry.errors?.revoked, status, secrets);
+  if (error instanceof oauth.ResponseBodyError) return refusal(error.error, entry, status, secrets);
   return new ProviderHttpError(status >= 200 && status < 300 ? 'invalid_response' : 'request_failed', status);
 }
 
@@ -101,7 +110,7 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
   const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });
   if (input.codeVerifier) params.set('code_verifier', input.codeVerifier);
   const secrets = [client.clientSecret, input.code, input.codeVerifier ?? ''];
-  const response = await send(() => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options), entry, secrets);
+  const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options));
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
     const extras = Object.fromEntries(tokenAnswerKeys(entry).flatMap(key => answer[key] === undefined ? [] : [[key, answer[key]]]));
@@ -115,7 +124,7 @@ export async function refreshGrant(entry: Entry, client: OAuthClient, refreshTok
   input: { fetch: typeof fetch }): Promise<Grant> {
   const c = context(entry, client, input.fetch);
   const secrets = [client.clientSecret, refreshToken];
-  const response = await send(() => oauth.refreshTokenGrantRequest(c.as, c.client, c.auth, refreshToken, c.options), entry, secrets);
+  const response = await send(c, entry, secrets, () => oauth.refreshTokenGrantRequest(c.as, c.client, c.auth, refreshToken, c.options));
   try {
     return grant(await oauth.processRefreshTokenResponse(c.as, c.client, response, c.processing), refreshToken);
   } catch (error) {
@@ -126,7 +135,7 @@ export async function refreshGrant(entry: Entry, client: OAuthClient, refreshTok
 async function revokeToken(entry: Entry, client: OAuthClient, token: string, input: { fetch: typeof fetch }): Promise<void> {
   const c = context(entry, client, input.fetch);
   const secrets = [client.clientSecret, token];
-  const response = await send(() => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options), entry, secrets);
+  const response = await send(c, entry, secrets, () => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options));
   // Any 2xx, as providers answer a revoke with 200 or 204; oauth4webapi accepts only 200.
   if (response.ok || response.status === 404) return;
   try {
@@ -137,7 +146,8 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
 }
 
 /** Revokes what the entry's `revoke` names. Done also when the entry declares none, when the grant lacks the token it
- * names, and when the grant is already gone (a 2xx, a 404, `invalid_grant`, a revoked code, a `goneErrors` detail).
+ * names, and when the grant is already gone: a 2xx, `invalid_grant`, a revoked code, a `goneErrors` detail, and an RFC 7009
+ * revoke's 404 (a request revoke's 404 is a missing route, not a gone token).
  * `client` is the OAuth app, sent only by an RFC 7009 revoke, which refuses to start without it. */
 export async function revokeGrant(entry: Entry, input: { accessToken?: string; refreshToken?: string | null;
   client?: OAuthClient; fetch: typeof fetch }): Promise<void> {
@@ -155,8 +165,7 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
     const { accessToken } = input;
     if (accessToken === undefined) return;
     const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch });
-    const response = await http.request(revoke.request.path ?? '', { method: revoke.request.method ?? 'GET' });
-    const error = response.status === 404 ? null : classify(entry, response);
+    const error = classify(entry, await sendCall(http, revoke.request));
     if (error) throw error;
   } catch (error) {
     const gone = error instanceof GrantRevoked || (error instanceof ProviderHttpError && error.detail !== null

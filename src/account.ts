@@ -1,6 +1,6 @@
 import type { Call, Entry, Identify, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
-import { createClient, type HttpClient } from './http.js';
+import { createClient, type HttpClient, type ProviderResponse } from './http.js';
 import { responseJson } from './http-response.js';
 import { fill, holds, placeholders, readPath } from './rules.js';
 
@@ -22,18 +22,26 @@ async function valueOf(value: Value, read: Read, where: string, id?: string): Pr
   return undefined;
 }
 
-/** The identify request: GraphQL is a POST of the query to the base. A `rejectWhen` rule that holds is a bad credential. */
-async function ask(entry: Entry, http: HttpClient, call: Call, rejectWhen: NonNullable<Identify['rejectWhen']>):
-Promise<{ status: number; body: unknown }> {
-  const response = call.graphql === undefined
-    ? await http.request(call.path ?? '', { method: call.method ?? 'GET', ...(call.query ? { query: call.query } : {}) })
-    : await http.request('', { method: 'POST', json: { query: call.graphql, variables: {} } });
+/** Sends a declared call: GraphQL is a POST of the query to the base. */
+export function sendCall(http: HttpClient, call: Call): Promise<ProviderResponse> {
+  return call.graphql === undefined
+    ? http.request(call.path ?? '', { method: call.method ?? 'GET', ...(call.query ? { query: call.query } : {}) })
+    : http.request('', { method: 'POST', json: { query: call.graphql, variables: {} } });
+}
+
+/** The identify request's answer. A `rejectWhen` rule that holds is a bad credential. */
+async function ask(entry: Entry, http: HttpClient, identify: Identify): Promise<{ status: number; body: unknown }> {
+  const response = await sendCall(http, identify.request ?? {});
   const answer = { status: response.status, headers: response.headers, body: response.data };
-  for (const { detail, ...when } of rejectWhen) {
+  for (const { detail, ...when } of identify.rejectWhen ?? []) {
     if (holds(when, answer)) throw new ProviderHttpError('rejected', response.status, detail ?? null);
   }
   return { status: response.status, body: responseJson(entry, response) };
 }
+
+/** An id: a string that is not blank, or a positive integer. */
+const isId = (value: unknown): value is string | number => (typeof value === 'string' && value.trim() !== '')
+  || (typeof value === 'number' && Number.isSafeInteger(value) && value > 0);
 
 /** The account an entry's `identify` names and the values its `save` keeps. The request is sent at most once: when a
  * value reads its answer, or at once when no `id` or `name` is declared (a credential check). */
@@ -43,7 +51,7 @@ export async function identifyAccount(entry: Entry, input: { fetch: typeof fetch
   const values = input.values ?? {};
   const http = createClient(entry, { token: () => Promise.resolve(input.token), fetch: input.fetch, values });
   let answer: Promise<{ status: number; body: unknown }> | undefined;
-  const answered = () => (answer ??= ask(entry, http, identify.request ?? {}, identify.rejectWhen ?? []));
+  const answered = () => (answer ??= ask(entry, http, identify));
   let id: string | undefined;
   const read: Read = async name => {
     if (name.startsWith('tokenAnswer.')) return readPath(input.tokenAnswer, name.slice('tokenAnswer.'.length));
@@ -54,9 +62,8 @@ export async function identifyAccount(entry: Entry, input: { fetch: typeof fetch
   const text = (value: unknown) => (identify.lowercase && typeof value === 'string' ? value.trim().toLowerCase() : value);
   if (identify.id !== undefined) {
     const found = text(await valueOf(identify.id, read, entry.id));
-    if (!(typeof found === 'string' && found !== '') && !(typeof found === 'number' && Number.isSafeInteger(found) && found > 0)) {
-      const status = answer ? (await answer).status : input.tokenAnswer ? 200 : null;
-      throw new ProviderHttpError('invalid_response', status, 'missing_fields');
+    if (!isId(found)) {
+      throw new ProviderHttpError('invalid_response', (await answer)?.status ?? (input.tokenAnswer ? 200 : null), 'missing_fields');
     }
     id = String(found);
   }

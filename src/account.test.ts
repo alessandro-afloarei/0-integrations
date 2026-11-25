@@ -28,7 +28,7 @@ test('Slack reads the token answer only, falls back to the id for a blank name, 
     .toEqual({ account: { id: 'T1', name: 'T1' }, values: { botUserId: 'U1' } });
   expect(await identifyAccount(slack, { fetch: fake.fetch, token: 't', tokenAnswer: { team: { id: 'T1', name: 'Acme' } } }))
     .toEqual({ account: { id: 'T1', name: 'Acme' }, values: {} });
-  for (const tokenAnswer of [{}, { team: null }, { team: { name: 'Acme' } }, { team: { id: '' } }]) {
+  for (const tokenAnswer of [{}, { team: null }, { team: { name: 'Acme' } }, { team: { id: '' } }, { team: { id: '  ' } }]) {
     await expect(identifyAccount(slack, { fetch: fake.fetch, token: 't', tokenAnswer }))
       .rejects.toEqual(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
   }

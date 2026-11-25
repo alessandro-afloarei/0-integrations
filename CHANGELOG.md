@@ -34,8 +34,8 @@
 - `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke, by RFC 7009 or by the entry's
   request, and replaces `revokeGrant(definition, client, token, …)`; an entry without `revoke` is done, and only an
   RFC 7009 revoke needs `client` (`oauth_client_required` without it).
-- slack: `slackClient(…).revoke()` is gone: call `revokeGrant(slack, { accessToken, fetch })`. A 404, or a 2xx that is
-  no JSON, from `auth.revoke` is now done (it was `not_found` and `invalid_response`).
+- slack: `slackClient(…).revoke()` is gone: call `revokeGrant(slack, { accessToken, fetch })`. A 2xx that is no JSON
+  from `auth.revoke` is now done (it was `invalid_response`); a 404 is still `not_found`.
 - `verifyWebhook` takes `entry.webhook`; new `deliveryId(entry.webhook, request)` reads the delivery id an entry declares.
 - breakcold: `parseWebhook` is gone: read `deliveryId(breakcold.webhook, request)`.
 - `startConnect(entry, options?)` and `finishConnect(entry, input)` run any catalogue entry. `OAuthConnect`,
@@ -49,6 +49,9 @@
   Google's and Microsoft's address is `account.name`. A key entry's secret is its secret fields by name (`{ apiKey }`)
   and its values its plain fields: only declared fields are kept, and each must be given, not blank, before anything is
   sent (`connect_field_required: <name>`). `startConnect` requires an OAuth entry's options.
+- google: a token answer without `scope` passes `requireGranted`, since it granted the scopes requested (RFC 6749
+  §5.1); it was refused as `scope_missing`.
+- An id that is only whitespace is `invalid_response` (`missing_fields`) for every provider; only a lowercased one was.
 - An account id may be a positive integer for every provider (Slack, Google and Microsoft required a string).
 - slack: `botUserId` is saved as Slack answers it (it was kept only when a string, else `null`).
 - A malformed identity is `invalid_response` with detail `missing_fields` and the answer's status for every provider

@@ -232,13 +232,16 @@ describe('connect review regressions', () => {
     expect(onRevokeFailed).not.toHaveBeenCalled();
   });
 
-  it("compares the granted scopes split on the entry's separator", async () => {
+  it("compares the granted scopes split on the entry's separator; an answer naming none granted those asked", async () => {
     const commas = defineProvider({ id: 'commas', name: 'Commas', http: { baseUrl: 'https://api.commas.test' },
       auth: [{ kind: 'oauth2', authorizeUrl: 'https://commas.test/authorize', tokenUrl: 'https://commas.test/token', pkce: false, scopeSeparator: ',' }],
       scopes: { default: ['read', 'write'], requireGranted: true } });
-    const granting = (scope: string) => fakeFetch([{ url: 'https://commas.test/token', respond: () => Response.json({ access_token: 'a', token_type: 'bearer', scope }) }]);
-    const finish = (scope: string) => finishConnect(commas, { client, code: 'c', redirectUri: callback, fetch: granting(scope).fetch, onRevokeFailed: vi.fn() });
-    await expect(finish('read,write')).resolves.toEqual({ secret: { accessToken: 'a', refreshToken: null, expiresAt: null }, values: {}, account: null });
+    const granting = (scope?: string) => fakeFetch([{ url: 'https://commas.test/token', respond: () => Response.json({ access_token: 'a', token_type: 'bearer', scope }) }]);
+    const finish = (scope?: string) => finishConnect(commas, { client, code: 'c', redirectUri: callback, fetch: granting(scope).fetch, onRevokeFailed: vi.fn() });
+    const connected = { secret: { accessToken: 'a', refreshToken: null, expiresAt: null }, values: {}, account: null };
+    await expect(finish('read,write')).resolves.toEqual(connected);
+    // RFC 6749 §5.1: an answer without `scope` granted the scopes requested.
+    await expect(finish()).resolves.toEqual(connected);
     await expect(finish('read')).rejects.toEqual(new ProviderHttpError('rejected', null, 'scope_missing'));
   });
 

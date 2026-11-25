@@ -36,7 +36,8 @@ export function deliveryId(webhook: Webhook, request: WebhookRequest): string | 
     return null;
   }
   const parts = source.body.map(path => readPath(body, path));
-  return parts.every((part): part is string | number => typeof part === 'string' || typeof part === 'number') ? parts.join(':') : null;
+  return parts.every((part): part is string | number => (typeof part === 'string' && part !== '') || typeof part === 'number')
+    ? parts.join(':') : null;
 }
 
 export async function readCappedBody(request: Request, maxBytes: number): Promise<Buffer | null> {

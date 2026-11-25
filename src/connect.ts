@@ -62,8 +62,9 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
   if (!('code' in input)) throw new TypeError('oauth_options_required');
   const { grant, extras } = await exchangeCode(entry, input.client, input);
   try {
-    const granted = new Set(typeof extras.scope === 'string' ? extras.scope.split(auth.scopeSeparator ?? ' ') : []);
-    if (entry.scopes?.requireGranted && !entry.scopes.default.every(scope => granted.has(scope))) {
+    // RFC 6749 §5.1: a token answer without `scope` granted the scopes requested.
+    const granted = typeof extras.scope === 'string' ? new Set(extras.scope.split(auth.scopeSeparator ?? ' ')) : undefined;
+    if (entry.scopes?.requireGranted && granted && !entry.scopes.default.every(scope => granted.has(scope))) {
       throw new ProviderHttpError('rejected', null, 'scope_missing');
     }
     return { secret: grant, ...await identifyAccount(entry, { fetch: input.fetch, token: grant.accessToken, tokenAnswer: extras }) };

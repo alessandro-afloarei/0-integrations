@@ -5,6 +5,7 @@ import { authorizeUrl, exchangeCode, pkcePair, refreshGrant, revokeGrant } from 
 import { defineProvider } from './catalogue.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
+import { microsoft } from './catalogue/microsoft.js';
 import { slack } from './catalogue/slack.js';
 import { fakeFetch } from './testing.js';
 import { slackClient } from './slack/slack.js';
@@ -199,13 +200,26 @@ test('revokeGrant: Slack revokes by request with the access token and no OAuth a
   expect(fake.calls[0]?.headers.authorization).toBe('Bearer a');
 });
 
+test('revokeGrant: a request revoke reads its answer as any call does: a 404 is no gone token, a 2xx without JSON is done', async () => {
+  const missing = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => new Response('', { status: 404 }) }]);
+  await expect(revokeGrant(slack, { accessToken: 'a', fetch: missing.fetch })).rejects.toMatchObject({ code: 'not_found', status: 404 });
+  const plain = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => new Response('ok') }]);
+  await expect(revokeGrant(slack, { accessToken: 'a', fetch: plain.fetch })).resolves.toBeUndefined();
+});
+
+test('revokeGrant: an entry with no revoke (Microsoft) sends nothing', async () => {
+  const none = fakeFetch([]);
+  await expect(revokeGrant(microsoft, { accessToken: 'a', refreshToken: 'r', client, fetch: none.fetch })).resolves.toBeUndefined();
+  expect(none.calls).toHaveLength(0);
+});
+
 test("a token answer refused inside a 200 is read through the entry's own condition and code", async () => {
   await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch }))
     .rejects.toMatchObject({ code: 'request_failed', detail: 'invalid_code' });
   // A `failed` other than `ok: false`: today's hard-coded check would accept this answer.
   const strict = defineProvider({ id: 'strict', name: 'Strict', auth: [{ kind: 'oauth2', authorizeUrl: 'https://strict.test/authorize',
     tokenUrl: 'https://strict.test/token', pkce: false, failed: { path: 'error' } }], http: { baseUrl: 'https://api.strict.test' },
-    errors: { detail: 'error' } });
-  await expect(exchangeCode(strict, client, { ...exchange, fetch: endpoint({ ...token, error: 'code_used' }).fetch }))
+    errors: { detail: 'reason' } });
+  await expect(exchangeCode(strict, client, { ...exchange, fetch: endpoint({ ...token, error: 'refused', reason: 'code_used' }).fetch }))
     .rejects.toMatchObject({ code: 'request_failed', detail: 'code_used' });
 });

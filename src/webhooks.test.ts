@@ -75,5 +75,6 @@ test('deliveryId reads the declared header or the body paths', () => {
   expect(deliveryId(breakcold.webhook, request({}))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"meeting.transcribed","meeting_id":"m1"}')))).toBe('meeting.transcribed:m1');
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
+  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('not json')))).toBeNull();
 });
