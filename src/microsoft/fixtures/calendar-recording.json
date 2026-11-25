@@ -1,0 +1,552 @@
+{
+ "provider": "graph-calendar",
+ "synthetic": true,
+ "source": "Synthetic, played from the library's fake (src/microsoft/fake.ts), which answers in the shapes Microsoft documents for user, mailFolder, List messages and List calendarView (learn.microsoft.com/graph/api/user-get, /mailfolder-get, /user-list-messages, /user-list-calendarview): nextLink paging, UTC times without an offset beside their zone, and the 401 InvalidAuthenticationToken body. Replaced by a recording from a test mailbox (src/record.test.ts) before release.",
+ "recordedAt": "2026-11-12",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me?%24select=id%2Cmail%2CuserPrincipalName",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "2b9db1d5-0981-0bca-a30b-58e11782a154",
+    "mail": "lee@lumen.test",
+    "userPrincipalName": "lee@lumen.test",
+    "displayName": "Lee Park"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/calendar?%24select=id%2Cname",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "calendar-lee",
+    "name": "Calendar"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/calendars/calendar-lee/calendarView?startDateTime=2026-10-01T00%3A00%3A00.000Z&endDateTime=2027-01-01T00%3A00%3A00.000Z&%24top=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "event-1",
+      "iCalUId": "uid-1@northstar.test",
+      "seriesMasterId": null,
+      "createdDateTime": "2026-11-01T08:00:00.000Z",
+      "lastModifiedDateTime": "2026-11-01T08:00:00.000Z",
+      "subject": "Call 1",
+      "body": {
+       "contentType": "html",
+       "content": "<p>Agenda</p>"
+      },
+      "location": {
+       "displayName": ""
+      },
+      "isCancelled": false,
+      "isAllDay": false,
+      "start": {
+       "dateTime": "2026-11-01T10:00:00.0000000",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-01T10:30:00.0000000",
+       "timeZone": "UTC"
+      },
+      "type": "singleInstance",
+      "showAs": "busy",
+      "attendees": [
+       {
+        "type": "required",
+        "status": {
+         "response": "accepted"
+        },
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "organizer": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "responseStatus": {
+       "response": "organizer"
+      },
+      "onlineMeeting": null,
+      "onlineMeetingProvider": "unknown",
+      "sensitivity": "normal"
+     },
+     {
+      "id": "event-2",
+      "iCalUId": "uid-2@northstar.test",
+      "seriesMasterId": null,
+      "createdDateTime": "2026-11-01T08:00:00.000Z",
+      "lastModifiedDateTime": "2026-11-02T08:00:00.000Z",
+      "subject": "Call 2",
+      "body": {
+       "contentType": "html",
+       "content": "<p>Agenda</p>"
+      },
+      "location": {
+       "displayName": ""
+      },
+      "isCancelled": false,
+      "isAllDay": false,
+      "start": {
+       "dateTime": "2026-11-02T10:00:00.0000000",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-02T10:30:00.0000000",
+       "timeZone": "UTC"
+      },
+      "type": "singleInstance",
+      "showAs": "busy",
+      "attendees": [
+       {
+        "type": "required",
+        "status": {
+         "response": "accepted"
+        },
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "organizer": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "responseStatus": {
+       "response": "organizer"
+      },
+      "onlineMeeting": null,
+      "onlineMeetingProvider": "unknown",
+      "sensitivity": "normal"
+     }
+    ],
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/calendars/calendar-lee/calendarView?startDateTime=2026-10-01T00%3A00%3A00.000Z&endDateTime=2027-01-01T00%3A00%3A00.000Z&%24top=2&%24skip=2"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/calendar?%24select=id%2Cname",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "calendar-lee",
+    "name": "Calendar"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/calendars/calendar-lee/calendarView?startDateTime=2026-10-01T00%3A00%3A00.000Z&endDateTime=2027-01-01T00%3A00%3A00.000Z&%24top=2&%24skip=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "event-3",
+      "iCalUId": "uid-3@northstar.test",
+      "seriesMasterId": null,
+      "createdDateTime": "2026-11-01T08:00:00.000Z",
+      "lastModifiedDateTime": "2026-11-03T08:00:00.000Z",
+      "subject": "Call 3",
+      "body": {
+       "contentType": "html",
+       "content": "<p>Agenda</p>"
+      },
+      "location": {
+       "displayName": ""
+      },
+      "isCancelled": false,
+      "isAllDay": false,
+      "start": {
+       "dateTime": "2026-11-03T10:00:00.0000000",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-03T10:30:00.0000000",
+       "timeZone": "UTC"
+      },
+      "type": "singleInstance",
+      "showAs": "busy",
+      "attendees": [
+       {
+        "type": "required",
+        "status": {
+         "response": "accepted"
+        },
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "organizer": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "responseStatus": {
+       "response": "organizer"
+      },
+      "onlineMeeting": null,
+      "onlineMeetingProvider": "unknown",
+      "sensitivity": "normal"
+     },
+     {
+      "id": "event-4",
+      "iCalUId": "uid-4@northstar.test",
+      "seriesMasterId": null,
+      "createdDateTime": "2026-11-01T08:00:00.000Z",
+      "lastModifiedDateTime": "2026-11-04T08:00:00.000Z",
+      "subject": "Call 4",
+      "body": {
+       "contentType": "html",
+       "content": "<p>Agenda</p>"
+      },
+      "location": {
+       "displayName": ""
+      },
+      "isCancelled": false,
+      "isAllDay": false,
+      "start": {
+       "dateTime": "2026-11-04T10:00:00.0000000",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-04T10:30:00.0000000",
+       "timeZone": "UTC"
+      },
+      "type": "singleInstance",
+      "showAs": "busy",
+      "attendees": [
+       {
+        "type": "required",
+        "status": {
+         "response": "accepted"
+        },
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "organizer": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "responseStatus": {
+       "response": "organizer"
+      },
+      "onlineMeeting": null,
+      "onlineMeetingProvider": "unknown",
+      "sensitivity": "normal"
+     }
+    ],
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/calendars/calendar-lee/calendarView?startDateTime=2026-10-01T00%3A00%3A00.000Z&endDateTime=2027-01-01T00%3A00%3A00.000Z&%24top=2&%24skip=4"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/calendar?%24select=id%2Cname",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "calendar-lee",
+    "name": "Calendar"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/calendars/calendar-lee/calendarView?startDateTime=2026-10-01T00%3A00%3A00.000Z&endDateTime=2027-01-01T00%3A00%3A00.000Z&%24top=2&%24skip=4",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "event-5",
+      "iCalUId": "uid-5@northstar.test",
+      "seriesMasterId": null,
+      "createdDateTime": "2026-11-01T08:00:00.000Z",
+      "lastModifiedDateTime": "2026-11-05T08:00:00.000Z",
+      "subject": "Call 5",
+      "body": {
+       "contentType": "html",
+       "content": "<p>Agenda</p>"
+      },
+      "location": {
+       "displayName": ""
+      },
+      "isCancelled": false,
+      "isAllDay": false,
+      "start": {
+       "dateTime": "2026-11-05T10:00:00.0000000",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-05T10:30:00.0000000",
+       "timeZone": "UTC"
+      },
+      "type": "singleInstance",
+      "showAs": "busy",
+      "attendees": [
+       {
+        "type": "required",
+        "status": {
+         "response": "accepted"
+        },
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "organizer": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "responseStatus": {
+       "response": "organizer"
+      },
+      "onlineMeeting": null,
+      "onlineMeetingProvider": "unknown",
+      "sensitivity": "normal"
+     },
+     {
+      "id": "event-6",
+      "iCalUId": "uid-6@northstar.test",
+      "seriesMasterId": null,
+      "createdDateTime": "2026-11-01T08:00:00.000Z",
+      "lastModifiedDateTime": "2026-11-06T08:00:00.000Z",
+      "subject": "Call 6",
+      "body": {
+       "contentType": "html",
+       "content": "<p>Agenda</p>"
+      },
+      "location": {
+       "displayName": ""
+      },
+      "isCancelled": false,
+      "isAllDay": false,
+      "start": {
+       "dateTime": "2026-11-06T10:00:00.0000000",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-06T10:30:00.0000000",
+       "timeZone": "UTC"
+      },
+      "type": "singleInstance",
+      "showAs": "busy",
+      "attendees": [
+       {
+        "type": "required",
+        "status": {
+         "response": "accepted"
+        },
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "organizer": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "responseStatus": {
+       "response": "organizer"
+      },
+      "onlineMeeting": null,
+      "onlineMeetingProvider": "unknown",
+      "sensitivity": "normal"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/calendar?%24select=id%2Cname",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "calendar-lee",
+    "name": "Calendar"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/calendars/calendar-lee/calendarView?startDateTime=2026-11-05T00%3A00%3A00.000Z&endDateTime=2027-01-01T00%3A00%3A00.000Z&%24top=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "event-5",
+      "iCalUId": "uid-5@northstar.test",
+      "seriesMasterId": null,
+      "createdDateTime": "2026-11-01T08:00:00.000Z",
+      "lastModifiedDateTime": "2026-11-05T08:00:00.000Z",
+      "subject": "Call 5",
+      "body": {
+       "contentType": "html",
+       "content": "<p>Agenda</p>"
+      },
+      "location": {
+       "displayName": ""
+      },
+      "isCancelled": false,
+      "isAllDay": false,
+      "start": {
+       "dateTime": "2026-11-05T10:00:00.0000000",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-05T10:30:00.0000000",
+       "timeZone": "UTC"
+      },
+      "type": "singleInstance",
+      "showAs": "busy",
+      "attendees": [
+       {
+        "type": "required",
+        "status": {
+         "response": "accepted"
+        },
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "organizer": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "responseStatus": {
+       "response": "organizer"
+      },
+      "onlineMeeting": null,
+      "onlineMeetingProvider": "unknown",
+      "sensitivity": "normal"
+     },
+     {
+      "id": "event-6",
+      "iCalUId": "uid-6@northstar.test",
+      "seriesMasterId": null,
+      "createdDateTime": "2026-11-01T08:00:00.000Z",
+      "lastModifiedDateTime": "2026-11-06T08:00:00.000Z",
+      "subject": "Call 6",
+      "body": {
+       "contentType": "html",
+       "content": "<p>Agenda</p>"
+      },
+      "location": {
+       "displayName": ""
+      },
+      "isCancelled": false,
+      "isAllDay": false,
+      "start": {
+       "dateTime": "2026-11-06T10:00:00.0000000",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-06T10:30:00.0000000",
+       "timeZone": "UTC"
+      },
+      "type": "singleInstance",
+      "showAs": "busy",
+      "attendees": [
+       {
+        "type": "required",
+        "status": {
+         "response": "accepted"
+        },
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "organizer": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "responseStatus": {
+       "response": "organizer"
+      },
+      "onlineMeeting": null,
+      "onlineMeetingProvider": "unknown",
+      "sensitivity": "normal"
+     }
+    ]
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me?%24select=id%2Cmail%2CuserPrincipalName",
+   "status": 401,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "error": {
+     "code": "InvalidAuthenticationToken",
+     "message": "Access token validation failure."
+    }
+   }
+  }
+ ]
+}

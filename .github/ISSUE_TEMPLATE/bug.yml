@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in the library does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security issue, do not open an issue: follow SECURITY.md. Leave out real tokens, keys and personal data.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The package version you use.
+      placeholder: "0.12.0"
+    validations:
+      required: true
+  - type: input
+    id: module
+    attributes:
+      label: Module
+      description: The subpath you import, such as `connect` or `hubspot`.
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The call you made and what it answered or threw.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The smallest code that shows it, ideally against the module's fake.
+      render: ts

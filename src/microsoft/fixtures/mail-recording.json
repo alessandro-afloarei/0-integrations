@@ -1,0 +1,529 @@
+{
+ "provider": "graph-mail",
+ "synthetic": true,
+ "source": "Synthetic, played from the library's fake (src/microsoft/fake.ts), which answers in the shapes Microsoft documents for user, mailFolder, List messages and List calendarView (learn.microsoft.com/graph/api/user-get, /mailfolder-get, /user-list-messages, /user-list-calendarview): nextLink paging, UTC times without an offset beside their zone, and the 401 InvalidAuthenticationToken body. Replaced by a recording from a test mailbox (src/record.test.ts) before release.",
+ "recordedAt": "2026-11-12",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me?%24select=id%2Cmail%2CuserPrincipalName",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "2b9db1d5-0981-0bca-a30b-58e11782a154",
+    "mail": "lee@lumen.test",
+    "userPrincipalName": "lee@lumen.test",
+    "displayName": "Lee Park"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "msg-9",
+      "conversationId": "conv-9",
+      "internetMessageId": "<m9@northstar.test>",
+      "receivedDateTime": "2026-11-09T09:00:00.000Z",
+      "subject": "Northstar 9",
+      "parentFolderId": "folder-deleteditems",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     },
+     {
+      "id": "msg-8",
+      "conversationId": "conv-8",
+      "internetMessageId": "<m8@northstar.test>",
+      "receivedDateTime": "2026-11-08T09:00:00.000Z",
+      "subject": "Northstar 8",
+      "parentFolderId": "folder-junkemail",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     }
+    ],
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=2"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems?%24select=id",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "folder-sentitems"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/mailFolders/deleteditems?%24select=id",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "folder-deleteditems"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/mailFolders/junkemail?%24select=id",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "folder-junkemail"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "msg-7",
+      "conversationId": "conv-7",
+      "internetMessageId": "<m7@northstar.test>",
+      "receivedDateTime": "2026-11-07T09:00:00.000Z",
+      "subject": "Northstar 7",
+      "parentFolderId": "folder-sentitems",
+      "from": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     },
+     {
+      "id": "msg-6",
+      "conversationId": "conv-6",
+      "internetMessageId": "<m6@northstar.test>",
+      "receivedDateTime": "2026-11-06T09:00:00.000Z",
+      "subject": "Northstar 6",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     }
+    ],
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=4"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=4",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "msg-5",
+      "conversationId": "conv-5",
+      "internetMessageId": "<m5@northstar.test>",
+      "receivedDateTime": "2026-11-05T09:00:00.000Z",
+      "subject": "Northstar 5",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     },
+     {
+      "id": "msg-4",
+      "conversationId": "conv-4",
+      "internetMessageId": "<m4@northstar.test>",
+      "receivedDateTime": "2026-11-04T09:00:00.000Z",
+      "subject": "Northstar 4",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     }
+    ],
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=6"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=6",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "msg-3",
+      "conversationId": "conv-3",
+      "internetMessageId": "<m3@northstar.test>",
+      "receivedDateTime": "2026-11-03T09:00:00.000Z",
+      "subject": "Northstar 3",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     },
+     {
+      "id": "msg-11",
+      "conversationId": "conv-11",
+      "internetMessageId": "<m11@northstar.test>",
+      "receivedDateTime": "2026-11-02T10:00:00.000Z",
+      "subject": "Northstar 11",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     }
+    ],
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=8"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+1970-01-01T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=8",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "msg-2",
+      "conversationId": "conv-2",
+      "internetMessageId": "<m2@northstar.test>",
+      "receivedDateTime": "2026-11-02T09:00:00.000Z",
+      "subject": "Northstar 2",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     },
+     {
+      "id": "msg-1",
+      "conversationId": "conv-1",
+      "internetMessageId": "<m1@northstar.test>",
+      "receivedDateTime": "2026-11-01T09:00:00.000Z",
+      "subject": "Northstar 1",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+2026-11-05T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "msg-9",
+      "conversationId": "conv-9",
+      "internetMessageId": "<m9@northstar.test>",
+      "receivedDateTime": "2026-11-09T09:00:00.000Z",
+      "subject": "Northstar 9",
+      "parentFolderId": "folder-deleteditems",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     },
+     {
+      "id": "msg-8",
+      "conversationId": "conv-8",
+      "internetMessageId": "<m8@northstar.test>",
+      "receivedDateTime": "2026-11-08T09:00:00.000Z",
+      "subject": "Northstar 8",
+      "parentFolderId": "folder-junkemail",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     }
+    ],
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+2026-11-05T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=2"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+2026-11-05T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "msg-7",
+      "conversationId": "conv-7",
+      "internetMessageId": "<m7@northstar.test>",
+      "receivedDateTime": "2026-11-07T09:00:00.000Z",
+      "subject": "Northstar 7",
+      "parentFolderId": "folder-sentitems",
+      "from": {
+       "emailAddress": {
+        "name": "Lee Park",
+        "address": "lee@lumen.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Rui Costa",
+         "address": "rui@northstar.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     },
+     {
+      "id": "msg-6",
+      "conversationId": "conv-6",
+      "internetMessageId": "<m6@northstar.test>",
+      "receivedDateTime": "2026-11-06T09:00:00.000Z",
+      "subject": "Northstar 6",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     }
+    ],
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+2026-11-05T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=4"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me/messages?%24filter=receivedDateTime+ge+2026-11-05T00%3A00%3A00.000Z+and+isDraft+eq+false&%24orderby=receivedDateTime+desc&%24top=2&%24select=id%2CconversationId%2CinternetMessageId%2CreceivedDateTime%2Csubject%2Cfrom%2CtoRecipients%2CccRecipients%2CparentFolderId&%24skip=4",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "value": [
+     {
+      "id": "msg-5",
+      "conversationId": "conv-5",
+      "internetMessageId": "<m5@northstar.test>",
+      "receivedDateTime": "2026-11-05T09:00:00.000Z",
+      "subject": "Northstar 5",
+      "parentFolderId": "folder-inbox",
+      "from": {
+       "emailAddress": {
+        "name": "Rui Costa",
+        "address": "rui@northstar.test"
+       }
+      },
+      "toRecipients": [
+       {
+        "emailAddress": {
+         "name": "Lee Park",
+         "address": "lee@lumen.test"
+        }
+       }
+      ],
+      "ccRecipients": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://graph.microsoft.com/v1.0/me?%24select=id%2Cmail%2CuserPrincipalName",
+   "status": 401,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "error": {
+     "code": "InvalidAuthenticationToken",
+     "message": "Access token validation failure."
+    }
+   }
+  }
+ ]
+}

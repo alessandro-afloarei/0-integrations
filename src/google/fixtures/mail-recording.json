@@ -1,0 +1,608 @@
+{
+ "provider": "google-mail",
+ "synthetic": true,
+ "source": "Synthetic, played from the library's fake (src/google/fake.ts), which answers in the shapes Google documents for users.getProfile, users.messages.list and get (format=metadata), calendars.get and events.list (developers.google.com/gmail/api/reference/rest, /calendar/api/v3/reference): pageToken paging, RFC 3339 times with their offset, and the 401 UNAUTHENTICATED body. Replaced by a recording from a test mailbox (src/record.test.ts) before release.",
+ "recordedAt": "2026-11-12",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "emailAddress": "lee@lumen.test",
+    "messagesTotal": 11,
+    "threadsTotal": 11,
+    "historyId": "1"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=-in%3Adrafts&maxResults=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "messages": [
+     {
+      "id": "msg-7",
+      "threadId": "conv-7"
+     },
+     {
+      "id": "msg-6",
+      "threadId": "conv-6"
+     }
+    ],
+    "nextPageToken": "2",
+    "resultSizeEstimate": 2
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-7?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-7",
+    "threadId": "conv-7",
+    "labelIds": [
+     "SENT"
+    ],
+    "snippet": "",
+    "internalDate": "1794042000000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 7"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m7@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-6?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-6",
+    "threadId": "conv-6",
+    "labelIds": [
+     "INBOX"
+    ],
+    "snippet": "",
+    "internalDate": "1793955600000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 6"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m6@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=-in%3Adrafts&maxResults=2&pageToken=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "messages": [
+     {
+      "id": "msg-5",
+      "threadId": "conv-5"
+     },
+     {
+      "id": "msg-4",
+      "threadId": "conv-4"
+     }
+    ],
+    "nextPageToken": "4",
+    "resultSizeEstimate": 2
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-5?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-5",
+    "threadId": "conv-5",
+    "labelIds": [
+     "INBOX"
+    ],
+    "snippet": "",
+    "internalDate": "1793869200000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 5"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m5@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-4?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-4",
+    "threadId": "conv-4",
+    "labelIds": [
+     "INBOX"
+    ],
+    "snippet": "",
+    "internalDate": "1793782800000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 4"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m4@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=-in%3Adrafts&maxResults=2&pageToken=4",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "messages": [
+     {
+      "id": "msg-3",
+      "threadId": "conv-3"
+     },
+     {
+      "id": "msg-11",
+      "threadId": "conv-11"
+     }
+    ],
+    "nextPageToken": "6",
+    "resultSizeEstimate": 2
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-3?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-3",
+    "threadId": "conv-3",
+    "labelIds": [
+     "INBOX"
+    ],
+    "snippet": "",
+    "internalDate": "1793696400000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 3"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m3@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-11?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-11",
+    "threadId": "conv-11",
+    "labelIds": [
+     "INBOX",
+     "CATEGORY_PROMOTIONS"
+    ],
+    "snippet": "",
+    "internalDate": "1793613600000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 11"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m11@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=-in%3Adrafts&maxResults=2&pageToken=6",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "messages": [
+     {
+      "id": "msg-2",
+      "threadId": "conv-2"
+     },
+     {
+      "id": "msg-1",
+      "threadId": "conv-1"
+     }
+    ],
+    "resultSizeEstimate": 2
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-2?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-2",
+    "threadId": "conv-2",
+    "labelIds": [
+     "INBOX"
+    ],
+    "snippet": "",
+    "internalDate": "1793610000000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 2"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m2@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-1?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-1",
+    "threadId": "conv-1",
+    "labelIds": [
+     "INBOX"
+    ],
+    "snippet": "",
+    "internalDate": "1793523600000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 1"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m1@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=after%3A1793836800+-in%3Adrafts&maxResults=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "messages": [
+     {
+      "id": "msg-7",
+      "threadId": "conv-7"
+     },
+     {
+      "id": "msg-6",
+      "threadId": "conv-6"
+     }
+    ],
+    "nextPageToken": "2",
+    "resultSizeEstimate": 2
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-7?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-7",
+    "threadId": "conv-7",
+    "labelIds": [
+     "SENT"
+    ],
+    "snippet": "",
+    "internalDate": "1794042000000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 7"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m7@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-6?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-6",
+    "threadId": "conv-6",
+    "labelIds": [
+     "INBOX"
+    ],
+    "snippet": "",
+    "internalDate": "1793955600000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 6"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m6@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=after%3A1793836800+-in%3Adrafts&maxResults=2&pageToken=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "messages": [
+     {
+      "id": "msg-5",
+      "threadId": "conv-5"
+     }
+    ],
+    "resultSizeEstimate": 1
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-5?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "id": "msg-5",
+    "threadId": "conv-5",
+    "labelIds": [
+     "INBOX"
+    ],
+    "snippet": "",
+    "internalDate": "1793869200000",
+    "payload": {
+     "mimeType": "multipart/alternative",
+     "headers": [
+      {
+       "name": "From",
+       "value": "\"Rui Costa\" <rui@northstar.test>"
+      },
+      {
+       "name": "To",
+       "value": "\"Lee Park\" <lee@lumen.test>"
+      },
+      {
+       "name": "Subject",
+       "value": "Northstar 5"
+      },
+      {
+       "name": "Message-ID",
+       "value": "<m5@northstar.test>"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+   "status": 401,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "error": {
+     "code": 401,
+     "message": "Request had invalid authentication credentials.",
+     "errors": [
+      {
+       "message": "Request had invalid authentication credentials.",
+       "domain": "global",
+       "reason": "authError"
+      }
+     ],
+     "status": "UNAUTHENTICATED"
+    }
+   }
+  }
+ ]
+}

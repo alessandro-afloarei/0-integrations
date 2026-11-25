@@ -1,0 +1,239 @@
+{
+  "name": "0-integrations",
+  "version": "0.12.0",
+  "description": "Sign-in, tokens, calls and webhooks for every service, inside your own app.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "sideEffects": false,
+  "exports": {
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
+    "./providers": {
+      "types": "./dist/providers.d.ts",
+      "default": "./dist/providers.js"
+    },
+    "./vault": {
+      "types": "./dist/vault.d.ts",
+      "default": "./dist/vault.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./oauth": {
+      "types": "./dist/oauth.d.ts",
+      "default": "./dist/oauth.js"
+    },
+    "./credentials": {
+      "types": "./dist/credentials.d.ts",
+      "default": "./dist/credentials.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "default": "./dist/http.js"
+    },
+    "./webhooks": {
+      "types": "./dist/webhooks.d.ts",
+      "default": "./dist/webhooks.js"
+    },
+    "./paginate": {
+      "types": "./dist/paginate.d.ts",
+      "default": "./dist/paginate.js"
+    },
+    "./exa": {
+      "types": "./dist/exa/exa.d.ts",
+      "default": "./dist/exa/exa.js"
+    },
+    "./exa/fake": {
+      "types": "./dist/exa/fake.d.ts",
+      "default": "./dist/exa/fake.js"
+    },
+    "./firecrawl": {
+      "types": "./dist/firecrawl/firecrawl.d.ts",
+      "default": "./dist/firecrawl/firecrawl.js"
+    },
+    "./firecrawl/fake": {
+      "types": "./dist/firecrawl/fake.d.ts",
+      "default": "./dist/firecrawl/fake.js"
+    },
+    "./unipile": {
+      "types": "./dist/unipile/unipile.d.ts",
+      "default": "./dist/unipile/unipile.js"
+    },
+    "./unipile/fake": {
+      "types": "./dist/unipile/fake.d.ts",
+      "default": "./dist/unipile/fake.js"
+    },
+    "./mailbox": {
+      "types": "./dist/mailbox/mailbox.d.ts",
+      "default": "./dist/mailbox/mailbox.js"
+    },
+    "./microsoft": {
+      "types": "./dist/microsoft/microsoft.d.ts",
+      "default": "./dist/microsoft/microsoft.js"
+    },
+    "./microsoft/fake": {
+      "types": "./dist/microsoft/fake.d.ts",
+      "default": "./dist/microsoft/fake.js"
+    },
+    "./google": {
+      "types": "./dist/google/google.d.ts",
+      "default": "./dist/google/google.js"
+    },
+    "./google/fake": {
+      "types": "./dist/google/fake.d.ts",
+      "default": "./dist/google/fake.js"
+    },
+    "./granola": {
+      "types": "./dist/granola/granola.d.ts",
+      "default": "./dist/granola/granola.js"
+    },
+    "./granola/fake": {
+      "types": "./dist/granola/fake.d.ts",
+      "default": "./dist/granola/fake.js"
+    },
+    "./breakcold": {
+      "types": "./dist/breakcold/breakcold.d.ts",
+      "default": "./dist/breakcold/breakcold.js"
+    },
+    "./breakcold/fake": {
+      "types": "./dist/breakcold/fake.d.ts",
+      "default": "./dist/breakcold/fake.js"
+    },
+    "./slack": {
+      "types": "./dist/slack/slack.d.ts",
+      "default": "./dist/slack/slack.js"
+    },
+    "./slack/fake": {
+      "types": "./dist/slack/fake.d.ts",
+      "default": "./dist/slack/fake.js"
+    },
+    "./connect": {
+      "types": "./dist/connect.d.ts",
+      "default": "./dist/connect.js"
+    },
+    "./fireflies": {
+      "types": "./dist/fireflies/fireflies.d.ts",
+      "default": "./dist/fireflies/fireflies.js"
+    },
+    "./fireflies/fake": {
+      "types": "./dist/fireflies/fake.d.ts",
+      "default": "./dist/fireflies/fake.js"
+    },
+    "./fireflies/errors": {
+      "types": "./dist/fireflies/errors.d.ts",
+      "default": "./dist/fireflies/errors.js"
+    },
+    "./fathom": {
+      "types": "./dist/fathom/fathom.d.ts",
+      "default": "./dist/fathom/fathom.js"
+    },
+    "./fathom/fake": {
+      "types": "./dist/fathom/fake.d.ts",
+      "default": "./dist/fathom/fake.js"
+    },
+    "./attio": {
+      "types": "./dist/attio/attio.d.ts",
+      "default": "./dist/attio/attio.js"
+    },
+    "./attio/fake": {
+      "types": "./dist/attio/fake.d.ts",
+      "default": "./dist/attio/fake.js"
+    },
+    "./aircall": {
+      "types": "./dist/aircall/aircall.d.ts",
+      "default": "./dist/aircall/aircall.js"
+    },
+    "./aircall/fake": {
+      "types": "./dist/aircall/fake.d.ts",
+      "default": "./dist/aircall/fake.js"
+    },
+    "./notion": {
+      "types": "./dist/notion/notion.d.ts",
+      "default": "./dist/notion/notion.js"
+    },
+    "./notion/fake": {
+      "types": "./dist/notion/fake.d.ts",
+      "default": "./dist/notion/fake.js"
+    },
+    "./github": {
+      "types": "./dist/github/github.d.ts",
+      "default": "./dist/github/github.js"
+    },
+    "./github/fake": {
+      "types": "./dist/github/fake.d.ts",
+      "default": "./dist/github/fake.js"
+    },
+    "./apollo": {
+      "types": "./dist/apollo/apollo.d.ts",
+      "default": "./dist/apollo/apollo.js"
+    },
+    "./apollo/fake": {
+      "types": "./dist/apollo/fake.d.ts",
+      "default": "./dist/apollo/fake.js"
+    },
+    "./lusha": {
+      "types": "./dist/lusha/lusha.d.ts",
+      "default": "./dist/lusha/lusha.js"
+    },
+    "./lusha/fake": {
+      "types": "./dist/lusha/fake.d.ts",
+      "default": "./dist/lusha/fake.js"
+    },
+    "./hubspot": {
+      "types": "./dist/hubspot/hubspot.d.ts",
+      "default": "./dist/hubspot/hubspot.js"
+    },
+    "./hubspot/fake": {
+      "types": "./dist/hubspot/fake.d.ts",
+      "default": "./dist/hubspot/fake.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit && eslint . --max-warnings 0 && knip && vitest run",
+    "prepack": "pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "eslint": "^9.39.5",
+    "knip": "^6.43.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^4.1.12"
+  },
+  "dependencies": {
+    "ky": "2.2.0",
+    "oauth4webapi": "3.8.8",
+    "zod": "4.6.7"
+  },
+  "keywords": [
+    "oauth",
+    "integrations",
+    "api",
+    "webhooks",
+    "connectors",
+    "nango-alternative"
+  ],
+  "homepage": "https://github.com/alessandro-afloarei/0-integrations#readme",
+  "bugs": {
+    "url": "https://github.com/alessandro-afloarei/0-integrations/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alessandro-afloarei/0-integrations.git"
+  }
+}

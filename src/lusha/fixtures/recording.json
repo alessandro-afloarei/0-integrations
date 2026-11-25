@@ -1,0 +1,296 @@
+{
+ "provider": "lusha",
+ "synthetic": true,
+ "source": "Built from Lusha's documented v3 examples (https://docs.lusha.com/openapi.json: search contacts and search and enrich companies, each trimmed to its first result without clientReferenceId and billed as one match; the 401 body; https://docs.lusha.com/account/usage). The miss is the spec's per-item NOT_FOUND, charged 0 as https://docs.lusha.com/faq/billing says (https://docs.lusha.com/introduction says a minimum of 1). No test account.",
+ "recordedAt": "2026-11-10",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.lusha.com/v3/account/usage",
+   "status": 200,
+   "response": {
+    "credits": {
+     "total": 10000,
+     "used": 1500,
+     "remaining": 8500
+    },
+    "rateLimits": {
+     "daily": {
+      "limit": 5000,
+      "used": 120,
+      "remaining": 4880,
+      "resetsAt": "2026-03-31T00:00:00.000Z"
+     },
+     "hourly": {
+      "limit": 500,
+      "used": 20,
+      "remaining": 480,
+      "resetsAt": "2026-03-30T15:00:00.000Z"
+     },
+     "minute": {
+      "limit": 25,
+      "used": 1,
+      "remaining": 24,
+      "resetsAt": "2026-03-30T14:31:00.000Z"
+     }
+    },
+    "plan": {
+     "category": "professional",
+     "renewalType": "annual",
+     "startDate": "2026-01-01T00:00:00.000Z",
+     "endDate": "2027-01-01T00:00:00.000Z"
+    },
+    "pricing": {
+     "api_search": {
+      "credits": 1,
+      "perQuantity": 1
+     },
+     "reveal_company": {
+      "credits": 1,
+      "perQuantity": 1
+     },
+     "email": {
+      "credits": 1,
+      "perQuantity": 25
+     },
+     "phone": {
+      "credits": 5,
+      "perQuantity": 1
+     }
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.lusha.com/v3/contacts/search",
+   "body": {
+    "contacts": [
+     {
+      "email": "ana.lopez@acme.example"
+     }
+    ]
+   },
+   "status": 200,
+   "response": {
+    "requestId": "6e4b1192-9440-42c4-9a3e-793ddef6d73c",
+    "results": [
+     {
+      "id": "1000000001",
+      "firstName": "Ana",
+      "lastName": "Lopez",
+      "jobTitle": {
+       "title": "Head of Partnerships",
+       "departments": [
+        "Business Development"
+       ],
+       "seniority": "Director"
+      },
+      "company": {
+       "id": "16303253",
+       "name": "Lusha",
+       "domain": "www.lusha.com",
+       "industry": "Technology, Information & Media"
+      },
+      "location": {
+       "country": "Spain",
+       "city": "Madrid"
+      },
+      "socialLinks": {
+       "linkedin": "https://www.linkedin.com/in/ana-lopez-example"
+      },
+      "has": [
+       "firstName",
+       "lastName",
+       "jobTitle",
+       "location",
+       "socialLinks",
+       "emails"
+      ],
+      "canReveal": [
+       {
+        "field": "emails",
+        "credits": 1
+       }
+      ]
+     }
+    ],
+    "billing": {
+     "creditsCharged": 1,
+     "resultsReturned": 1
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.lusha.com/v3/contacts/search",
+   "body": {
+    "contacts": [
+     {
+      "email": "nobody@nowhere.example"
+     }
+    ]
+   },
+   "status": 200,
+   "response": {
+    "requestId": "3c7f6d96-4a72-40cd-96c1-2efcfabeb727",
+    "results": [
+     {
+      "error": {
+       "code": "NOT_FOUND",
+       "message": "Contact not found"
+      }
+     }
+    ],
+    "billing": {
+     "creditsCharged": 0,
+     "resultsReturned": 0
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.lusha.com/v3/companies/search-and-enrich",
+   "body": {
+    "companies": [
+     {
+      "domain": "lusha.com"
+     }
+    ]
+   },
+   "status": 200,
+   "response": {
+    "requestId": "21fe0733-65d6-436a-8d0c-2c9ac6f263f8",
+    "results": [
+     {
+      "id": "16303253",
+      "name": "Lusha",
+      "alternativeName": "lusha",
+      "domain": "www.lusha.com",
+      "alternativeDomains": [
+       "lusha.com"
+      ],
+      "description": "Lusha is the leader in Sales Streaming – a new sales paradigm that streams top leads straight to salespeople and handles all the outreach, so they can escape the lead grind and just sell.",
+      "companyType": "Private Company",
+      "yearFounded": 2016,
+      "employeeCount": {
+       "exact": 364,
+       "min": 201,
+       "max": 500
+      },
+      "industry": "Technology, Information & Media",
+      "subIndustry": "Software Development",
+      "specialities": [
+       "data accuracy",
+       "data enrichment",
+       "lead discovery",
+       "lead generation",
+       "prospecting",
+       "sales enablement",
+       "sales intelligence",
+       "software development"
+      ],
+      "sicCodes": [
+       {
+        "code": 7371,
+        "description": "Custom computer programming services"
+       }
+      ],
+      "naicsCodes": [
+       {
+        "code": 541511,
+        "description": "Custom Computer Programming Services"
+       }
+      ],
+      "location": {
+       "city": "Boston",
+       "state": "Massachusetts",
+       "country": "United States",
+       "countryIso2": "US",
+       "continent": "North America",
+       "zipCode": "02199"
+      },
+      "additionalLocations": [
+       {
+        "city": "New York City",
+        "state": "New York",
+        "country": "United States",
+        "countryIso2": "US",
+        "continent": "North America"
+       }
+      ],
+      "socialLinks": {
+       "linkedin": "https://www.linkedin.com/company/lushadata"
+      },
+      "linkedinFollowers": 64339,
+      "funding": {
+       "rounds": [
+        {
+         "currency": "USD",
+         "roundAmount": 205000000,
+         "roundType": "Private Equity Round",
+         "roundDate": "Nov 10, 2021"
+        },
+        {
+         "currency": "USD",
+         "roundAmount": 40000000,
+         "roundType": "Private Equity Round",
+         "roundDate": "Feb 10, 2021"
+        }
+       ],
+       "totalRounds": 2,
+       "totalRoundsAmount": 245000000,
+       "currency": "USD",
+       "isIpo": false,
+       "lastRoundType": "Private Equity Round",
+       "lastRoundAmount": 205000000,
+       "lastRoundDate": "Nov 10, 2021"
+      },
+      "technologies": [
+       "amazon",
+       "google analytics"
+      ],
+      "popularityTier": 1,
+      "logoUrl": "https://logo.lusha.co/brightdata/year=2024/month=05/day=03/j_lvq47h0g13te1b3wpu.e7b0795e7affc9953dadd43e6fce99a2c5260043.file_lvq4cfwv17kcb9m4ej.logo_cached.jpg",
+      "businessModel": [
+       "B2B"
+      ],
+      "emails": [
+       {
+        "email": "support@lusha.example"
+       }
+      ],
+      "keywords": [
+       "contact information",
+       "data accuracy",
+       "data enrichment",
+       "lead discovery",
+       "lead generation",
+       "prospecting",
+       "sales enablement",
+       "sales intelligence",
+       "software development"
+      ]
+     }
+    ],
+    "billing": {
+     "creditsCharged": 1,
+     "resultsReturned": 1
+    }
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://api.lusha.com/v3/account/usage",
+   "status": 401,
+   "response": {
+    "statusCode": 401,
+    "message": "Invalid API key"
+   }
+  }
+ ]
+}

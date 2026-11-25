@@ -1,0 +1,11 @@
+{
+  "source": "https://docs.fireflies.ai/graphql-api/webhooks-v2",
+  "recordedOn": "2026-11-01",
+  "description": "Synthetic events written from the documented V2 examples; no real account data.",
+  "events": [
+    { "event": "meeting.transcribed", "timestamp": 1793520000000, "meeting_id": "fixture-call-1", "client_reference_id": "fixture-upload" },
+    { "event": "meeting.summarized", "timestamp": 1793520001000, "meeting_id": "fixture-call-1" },
+    { "event": "meeting.bot_joined", "timestamp": 1793518000000, "meeting_id": "fixture-call-2" },
+    { "event": "meeting.summarized", "timestamp": 1793520002000, "meeting_id": "fixture-call-1", "reprocessed_at": 1793520001500 }
+  ]
+}

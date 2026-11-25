@@ -1,0 +1,823 @@
+{
+ "provider": "unipile-calendar",
+ "synthetic": true,
+ "source": "Synthetic: built from Unipile V2's API reference (getAccount, getEmailSenders, getCalendarsList, getCalendarEventList), every object's key set checked against live V2 answers on 2026-11-23 (keys and counts only, no value kept). The values are invented; no real mailbox's data is in this file.",
+ "recordedAt": "2026-11-23",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/accounts/kit-account",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "object": "Account",
+    "id": "kit-account",
+    "user_id": "lee@acme.example",
+    "name": "lee@acme.example",
+    "created_at": "2026-10-28T08:00:00.000Z",
+    "application_id": "app_synthetic",
+    "account_scope_id": null,
+    "status": "running",
+    "is_locked": false,
+    "provider": "google",
+    "oauth_scope": "https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/calendar.readonly",
+    "metadata": {
+     "allow_country_fallback": true,
+     "products_connection_status": {
+      "emails": "running",
+      "calendar": "running"
+     }
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/email-senders",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "EmailSender",
+      "email": "lee@acme.example",
+      "is_primary": true,
+      "is_default": true,
+      "verification_status": "verified"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Calendar",
+      "id": "lee@acme.example",
+      "name": "Lee Park",
+      "is_read_only": false,
+      "is_owned_by_user": true,
+      "is_default": true,
+      "background_color": "#9fe1e7",
+      "timezone": "Europe/Paris"
+     },
+     {
+      "object": "Calendar",
+      "id": "en.portuguese#holiday@group.v.calendar.google.com",
+      "name": "Holidays in Portugal",
+      "is_read_only": true,
+      "is_owned_by_user": false,
+      "is_default": false,
+      "background_color": "#16a765"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100&offset=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": []
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars/lee%40acme.example/events?expand_recurring=true&limit=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "CalendarEvent",
+      "id": "5m8lnvb64dt2uuaq99k4681",
+      "calendar_id": "lee@acme.example",
+      "ical_uid": "5m8lnvb64dt2uuaq99k4681@google.com",
+      "created_at": "2026-10-28T08:00:00Z",
+      "updated_at": "2026-11-02T08:00:00.000Z",
+      "title": "Payroll review 1",
+      "body": "Agenda: the January run.",
+      "location": "Meets",
+      "is_cancelled": false,
+      "is_all_day": false,
+      "is_attendees_list_hidden": false,
+      "attendees": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park",
+        "is_organizer": true,
+        "is_self": true,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "yes"
+       },
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis",
+        "is_organizer": false,
+        "is_self": false,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "maybe"
+       }
+      ],
+      "start": {
+       "type": "datetime",
+       "date_time": "2026-11-02T14:30:00+01:00",
+       "timezone": "Europe/Paris"
+      },
+      "end": {
+       "type": "datetime",
+       "date_time": "2026-11-02T15:00:00+01:00",
+       "timezone": "Europe/Paris"
+      },
+      "timezone": "Europe/Paris",
+      "organizer": {
+       "email": "lee@acme.example",
+       "display_name": "Lee Park"
+      },
+      "conference": {
+       "provider": "google_meet",
+       "hosting": "native",
+       "conference_id": "abc-defg-hij",
+       "url": "https://meet.google.com/abc-defg-hij"
+      },
+      "visibility": "public",
+      "transparency": "opaque",
+      "event_type": "default"
+     },
+     {
+      "object": "CalendarEvent",
+      "id": "5m8lnvb64dt2uuaq99k4682",
+      "calendar_id": "lee@acme.example",
+      "ical_uid": "5m8lnvb64dt2uuaq99k4682@google.com",
+      "created_at": "2026-10-28T08:00:00Z",
+      "updated_at": "2026-11-04T08:00:00.000Z",
+      "title": "Payroll review 2",
+      "body": "Agenda: the January run.",
+      "location": "Meets",
+      "is_cancelled": false,
+      "is_all_day": false,
+      "is_attendees_list_hidden": false,
+      "attendees": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park",
+        "is_organizer": true,
+        "is_self": true,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "yes"
+       },
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis",
+        "is_organizer": false,
+        "is_self": false,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "maybe"
+       }
+      ],
+      "start": {
+       "type": "datetime",
+       "date_time": "2026-11-04T14:30:00+01:00",
+       "timezone": "Europe/Paris"
+      },
+      "end": {
+       "type": "datetime",
+       "date_time": "2026-11-04T15:00:00+01:00",
+       "timezone": "Europe/Paris"
+      },
+      "timezone": "Europe/Paris",
+      "organizer": {
+       "email": "lee@acme.example",
+       "display_name": "Lee Park"
+      },
+      "conference": {
+       "provider": "google_meet",
+       "hosting": "native",
+       "conference_id": "abc-defg-hij",
+       "url": "https://meet.google.com/abc-defg-hij"
+      },
+      "visibility": "public",
+      "transparency": "opaque",
+      "event_type": "default"
+     }
+    ],
+    "next_cursor": "all-2"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Calendar",
+      "id": "lee@acme.example",
+      "name": "Lee Park",
+      "is_read_only": false,
+      "is_owned_by_user": true,
+      "is_default": true,
+      "background_color": "#9fe1e7",
+      "timezone": "Europe/Paris"
+     },
+     {
+      "object": "Calendar",
+      "id": "en.portuguese#holiday@group.v.calendar.google.com",
+      "name": "Holidays in Portugal",
+      "is_read_only": true,
+      "is_owned_by_user": false,
+      "is_default": false,
+      "background_color": "#16a765"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100&offset=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": []
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars/lee%40acme.example/events?limit=2&cursor=all-2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "CalendarEvent",
+      "id": "5m8lnvb64dt2uuaq99k4683",
+      "calendar_id": "lee@acme.example",
+      "ical_uid": "5m8lnvb64dt2uuaq99k4683@google.com",
+      "created_at": "2026-10-28T08:00:00Z",
+      "updated_at": "2026-11-06T08:00:00.000Z",
+      "title": "Payroll review 3",
+      "body": "Agenda: the January run.",
+      "location": "Meets",
+      "is_cancelled": false,
+      "is_all_day": true,
+      "is_attendees_list_hidden": false,
+      "attendees": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park",
+        "is_organizer": true,
+        "is_self": true,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "yes"
+       },
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis",
+        "is_organizer": false,
+        "is_self": false,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "no"
+       }
+      ],
+      "start": {
+       "type": "date",
+       "date": "2026-11-06"
+      },
+      "end": {
+       "type": "date",
+       "date": "2026-11-07"
+      },
+      "organizer": {
+       "email": "lee@acme.example",
+       "display_name": "Lee Park"
+      },
+      "visibility": "public",
+      "transparency": "opaque",
+      "event_type": "default"
+     },
+     {
+      "object": "CalendarEvent",
+      "id": "5m8lnvb64dt2uuaq99k4684",
+      "calendar_id": "lee@acme.example",
+      "ical_uid": "5m8lnvb64dt2uuaq99k4684@google.com",
+      "created_at": "2026-10-28T08:00:00Z",
+      "updated_at": "2026-11-08T08:00:00.000Z",
+      "title": "Payroll review 4",
+      "body": "Agenda: the January run.",
+      "location": "Meets",
+      "is_cancelled": false,
+      "is_all_day": false,
+      "is_attendees_list_hidden": false,
+      "attendees": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park",
+        "is_organizer": true,
+        "is_self": true,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "yes"
+       },
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis",
+        "is_organizer": false,
+        "is_self": false,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "maybe"
+       }
+      ],
+      "start": {
+       "type": "datetime",
+       "date_time": "2026-11-08T14:30:00+01:00",
+       "timezone": "Europe/Paris"
+      },
+      "end": {
+       "type": "datetime",
+       "date_time": "2026-11-08T15:00:00+01:00",
+       "timezone": "Europe/Paris"
+      },
+      "timezone": "Europe/Paris",
+      "organizer": {
+       "email": "lee@acme.example",
+       "display_name": "Lee Park"
+      },
+      "conference": {
+       "provider": "google_meet",
+       "hosting": "native",
+       "conference_id": "abc-defg-hij",
+       "url": "https://meet.google.com/abc-defg-hij"
+      },
+      "visibility": "private",
+      "transparency": "opaque",
+      "event_type": "default"
+     }
+    ],
+    "next_cursor": "all-4"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Calendar",
+      "id": "lee@acme.example",
+      "name": "Lee Park",
+      "is_read_only": false,
+      "is_owned_by_user": true,
+      "is_default": true,
+      "background_color": "#9fe1e7",
+      "timezone": "Europe/Paris"
+     },
+     {
+      "object": "Calendar",
+      "id": "en.portuguese#holiday@group.v.calendar.google.com",
+      "name": "Holidays in Portugal",
+      "is_read_only": true,
+      "is_owned_by_user": false,
+      "is_default": false,
+      "background_color": "#16a765"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100&offset=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": []
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars/lee%40acme.example/events?limit=2&cursor=all-4",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "CalendarEvent",
+      "id": "5m8lnvb64dt2uuaq99k4685",
+      "calendar_id": "lee@acme.example",
+      "ical_uid": "5m8lnvb64dt2uuaq99k4685@google.com",
+      "created_at": "2026-10-28T08:00:00Z",
+      "updated_at": "2026-11-10T08:00:00.000Z",
+      "title": "Payroll review 5",
+      "body": "Agenda: the January run.",
+      "location": "Meets",
+      "is_cancelled": false,
+      "is_all_day": false,
+      "is_attendees_list_hidden": false,
+      "attendees": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park",
+        "is_organizer": true,
+        "is_self": true,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "yes"
+       },
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis",
+        "is_organizer": false,
+        "is_self": false,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "maybe"
+       }
+      ],
+      "start": {
+       "type": "datetime",
+       "date_time": "2026-11-10T14:30:00",
+       "timezone": "Europe/Paris"
+      },
+      "end": {
+       "type": "datetime",
+       "date_time": "2026-11-10T15:00:00",
+       "timezone": "Europe/Paris"
+      },
+      "timezone": "Europe/Paris",
+      "organizer": {
+       "email": "lee@acme.example",
+       "display_name": "Lee Park"
+      },
+      "conference": {
+       "provider": "google_meet",
+       "hosting": "native",
+       "conference_id": "abc-defg-hij",
+       "url": "https://meet.google.com/abc-defg-hij"
+      },
+      "visibility": "public",
+      "transparency": "opaque",
+      "event_type": "default"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Calendar",
+      "id": "lee@acme.example",
+      "name": "Lee Park",
+      "is_read_only": false,
+      "is_owned_by_user": true,
+      "is_default": true,
+      "background_color": "#9fe1e7",
+      "timezone": "Europe/Paris"
+     },
+     {
+      "object": "Calendar",
+      "id": "en.portuguese#holiday@group.v.calendar.google.com",
+      "name": "Holidays in Portugal",
+      "is_read_only": true,
+      "is_owned_by_user": false,
+      "is_default": false,
+      "background_color": "#16a765"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100&offset=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": []
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars/lee%40acme.example/events?expand_recurring=true&updated_after=2026-11-05T00%3A00%3A00.000Z&limit=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "CalendarEvent",
+      "id": "5m8lnvb64dt2uuaq99k4683",
+      "calendar_id": "lee@acme.example",
+      "ical_uid": "5m8lnvb64dt2uuaq99k4683@google.com",
+      "created_at": "2026-10-28T08:00:00Z",
+      "updated_at": "2026-11-06T08:00:00.000Z",
+      "title": "Payroll review 3",
+      "body": "Agenda: the January run.",
+      "location": "Meets",
+      "is_cancelled": false,
+      "is_all_day": true,
+      "is_attendees_list_hidden": false,
+      "attendees": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park",
+        "is_organizer": true,
+        "is_self": true,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "yes"
+       },
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis",
+        "is_organizer": false,
+        "is_self": false,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "no"
+       }
+      ],
+      "start": {
+       "type": "date",
+       "date": "2026-11-06"
+      },
+      "end": {
+       "type": "date",
+       "date": "2026-11-07"
+      },
+      "organizer": {
+       "email": "lee@acme.example",
+       "display_name": "Lee Park"
+      },
+      "visibility": "public",
+      "transparency": "opaque",
+      "event_type": "default"
+     },
+     {
+      "object": "CalendarEvent",
+      "id": "5m8lnvb64dt2uuaq99k4684",
+      "calendar_id": "lee@acme.example",
+      "ical_uid": "5m8lnvb64dt2uuaq99k4684@google.com",
+      "created_at": "2026-10-28T08:00:00Z",
+      "updated_at": "2026-11-08T08:00:00.000Z",
+      "title": "Payroll review 4",
+      "body": "Agenda: the January run.",
+      "location": "Meets",
+      "is_cancelled": false,
+      "is_all_day": false,
+      "is_attendees_list_hidden": false,
+      "attendees": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park",
+        "is_organizer": true,
+        "is_self": true,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "yes"
+       },
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis",
+        "is_organizer": false,
+        "is_self": false,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "maybe"
+       }
+      ],
+      "start": {
+       "type": "datetime",
+       "date_time": "2026-11-08T14:30:00+01:00",
+       "timezone": "Europe/Paris"
+      },
+      "end": {
+       "type": "datetime",
+       "date_time": "2026-11-08T15:00:00+01:00",
+       "timezone": "Europe/Paris"
+      },
+      "timezone": "Europe/Paris",
+      "organizer": {
+       "email": "lee@acme.example",
+       "display_name": "Lee Park"
+      },
+      "conference": {
+       "provider": "google_meet",
+       "hosting": "native",
+       "conference_id": "abc-defg-hij",
+       "url": "https://meet.google.com/abc-defg-hij"
+      },
+      "visibility": "private",
+      "transparency": "opaque",
+      "event_type": "default"
+     }
+    ],
+    "next_cursor": "since-2"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Calendar",
+      "id": "lee@acme.example",
+      "name": "Lee Park",
+      "is_read_only": false,
+      "is_owned_by_user": true,
+      "is_default": true,
+      "background_color": "#9fe1e7",
+      "timezone": "Europe/Paris"
+     },
+     {
+      "object": "Calendar",
+      "id": "en.portuguese#holiday@group.v.calendar.google.com",
+      "name": "Holidays in Portugal",
+      "is_read_only": true,
+      "is_owned_by_user": false,
+      "is_default": false,
+      "background_color": "#16a765"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars?limit=100&offset=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": []
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/calendars/lee%40acme.example/events?limit=2&cursor=since-2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "CalendarEvent",
+      "id": "5m8lnvb64dt2uuaq99k4685",
+      "calendar_id": "lee@acme.example",
+      "ical_uid": "5m8lnvb64dt2uuaq99k4685@google.com",
+      "created_at": "2026-10-28T08:00:00Z",
+      "updated_at": "2026-11-10T08:00:00.000Z",
+      "title": "Payroll review 5",
+      "body": "Agenda: the January run.",
+      "location": "Meets",
+      "is_cancelled": false,
+      "is_all_day": false,
+      "is_attendees_list_hidden": false,
+      "attendees": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park",
+        "is_organizer": true,
+        "is_self": true,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "yes"
+       },
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis",
+        "is_organizer": false,
+        "is_self": false,
+        "is_optional": false,
+        "is_resource": false,
+        "type": "required",
+        "response_status": "maybe"
+       }
+      ],
+      "start": {
+       "type": "datetime",
+       "date_time": "2026-11-10T14:30:00",
+       "timezone": "Europe/Paris"
+      },
+      "end": {
+       "type": "datetime",
+       "date_time": "2026-11-10T15:00:00",
+       "timezone": "Europe/Paris"
+      },
+      "timezone": "Europe/Paris",
+      "organizer": {
+       "email": "lee@acme.example",
+       "display_name": "Lee Park"
+      },
+      "conference": {
+       "provider": "google_meet",
+       "hosting": "native",
+       "conference_id": "abc-defg-hij",
+       "url": "https://meet.google.com/abc-defg-hij"
+      },
+      "visibility": "public",
+      "transparency": "opaque",
+      "event_type": "default"
+     }
+    ]
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/accounts/kit-account",
+   "status": 401,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "object": "Error",
+    "type": "api/missing_authorization",
+    "status": 401,
+    "title": "Hosted Auth Session is missing in the request",
+    "req_id": "req_synthetic"
+   }
+  }
+ ]
+}

@@ -1,0 +1,372 @@
+{
+ "provider": "notion",
+ "synthetic": true,
+ "source": "Built from Notion's documented examples: the bot user of https://developers.notion.com/reference/user with the workspace_id and workspace_limits example values its table gives; the page object of https://developers.notion.com/reference/page, five copies with their own id, title and times, its Due date and Status properties dropped as filter_properties=title answers, is_archived and is_locked added and its parent named as 2026-03-11 does (https://developers.notion.com/reference/parent-object); the list envelope from the schema of https://developers.notion.com/reference/post-search, which prints no example; the 401 body from https://developers.notion.com/reference/status-codes. Cursors are made up.",
+ "recordedAt": "2026-11-10",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.notion.com/v1/users/me",
+   "status": 200,
+   "response": {
+    "object": "user",
+    "id": "9188c6a5-7381-452f-b3dc-d4865aa89bdf",
+    "name": "Test Connection",
+    "avatar_url": null,
+    "type": "bot",
+    "bot": {
+     "owner": {
+      "type": "workspace",
+      "workspace": true
+     },
+     "workspace_id": "17ab3186-873d-418f-b899-c3f6a43f68de",
+     "workspace_name": "Ada Lovelace’s Notion",
+     "workspace_limits": {
+      "max_file_upload_size_in_bytes": 5242880
+     }
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.notion.com/v1/search?filter_properties=title",
+   "body": {
+    "filter": {
+     "property": "object",
+     "value": "page"
+    },
+    "sort": {
+     "timestamp": "last_edited_time",
+     "direction": "descending"
+    },
+    "page_size": 2
+   },
+   "status": 200,
+   "response": {
+    "object": "list",
+    "results": [
+     {
+      "object": "page",
+      "id": "6d1c9a07-24b5-4c1e-9f7e-0b2a7d1c5e93",
+      "created_time": "2026-10-20T08:00:00.000Z",
+      "last_edited_time": "2026-11-06T09:30:00.000Z",
+      "created_by": {
+       "object": "user",
+       "id": "c2f20311-9e54-4d11-8c79-7398424ae41e"
+      },
+      "last_edited_by": {
+       "object": "user",
+       "id": "ee5f0f84-409a-440f-983a-a5315961c6e4"
+      },
+      "cover": null,
+      "icon": {
+       "type": "emoji",
+       "emoji": "📄"
+      },
+      "parent": {
+       "type": "workspace",
+       "workspace": true
+      },
+      "in_trash": false,
+      "is_archived": false,
+      "is_locked": false,
+      "properties": {
+       "title": {
+        "id": "title",
+        "type": "title",
+        "title": [
+         {
+          "type": "text",
+          "text": {
+           "content": "Lumen renewal plan",
+           "link": null
+          },
+          "annotations": {
+           "bold": false,
+           "italic": false,
+           "strikethrough": false,
+           "underline": false,
+           "code": false,
+           "color": "default"
+          },
+          "plain_text": "Lumen renewal plan",
+          "href": null
+         }
+        ]
+       }
+      },
+      "url": "https://app.notion.com/p/Lumen-renewal-plan-6d1c9a0724b54c1e9f7e0b2a7d1c5e93",
+      "public_url": null
+     },
+     {
+      "object": "page",
+      "id": "be633bf1-dfa0-436d-b259-571129a590e5",
+      "created_time": "2022-10-24T22:54:00.000Z",
+      "last_edited_time": "2026-11-05T16:00:00.000Z",
+      "created_by": {
+       "object": "user",
+       "id": "c2f20311-9e54-4d11-8c79-7398424ae41e"
+      },
+      "last_edited_by": {
+       "object": "user",
+       "id": "ee5f0f84-409a-440f-983a-a5315961c6e4"
+      },
+      "cover": null,
+      "icon": {
+       "type": "emoji",
+       "emoji": "🐞"
+      },
+      "parent": {
+       "type": "data_source_id",
+       "data_source_id": "1f5a8b2c-3d4e-4f60-8a7b-9c0d1e2f3a4b",
+       "database_id": "a1d8501e-1ac1-43e9-a6bd-ea9fe6c8822b"
+      },
+      "in_trash": false,
+      "is_archived": false,
+      "is_locked": false,
+      "properties": {
+       "Title": {
+        "id": "title",
+        "type": "title",
+        "title": [
+         {
+          "type": "text",
+          "text": {
+           "content": "Bug bash",
+           "link": null
+          },
+          "annotations": {
+           "bold": false,
+           "italic": false,
+           "strikethrough": false,
+           "underline": false,
+           "code": false,
+           "color": "default"
+          },
+          "plain_text": "Bug bash",
+          "href": null
+         }
+        ]
+       }
+      },
+      "url": "https://app.notion.com/p/Bug-bash-be633bf1dfa0436db259571129a590e5",
+      "public_url": null
+     }
+    ],
+    "next_cursor": "e6c6f5ff-c70e-4bed-a9c6-2bfbd7ae8be0",
+    "has_more": true,
+    "type": "page_or_data_source",
+    "page_or_data_source": {}
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.notion.com/v1/search?filter_properties=title",
+   "body": {
+    "filter": {
+     "property": "object",
+     "value": "page"
+    },
+    "sort": {
+     "timestamp": "last_edited_time",
+     "direction": "descending"
+    },
+    "page_size": 2,
+    "start_cursor": "e6c6f5ff-c70e-4bed-a9c6-2bfbd7ae8be0"
+   },
+   "status": 200,
+   "response": {
+    "object": "list",
+    "results": [
+     {
+      "object": "page",
+      "id": "c7a3e1f4-8b2d-4e6a-9c5f-1d0b3a7e2f48",
+      "created_time": "2026-11-03T09:00:00.000Z",
+      "last_edited_time": "2026-11-03T10:00:00.000Z",
+      "created_by": {
+       "object": "user",
+       "id": "c2f20311-9e54-4d11-8c79-7398424ae41e"
+      },
+      "last_edited_by": {
+       "object": "user",
+       "id": "ee5f0f84-409a-440f-983a-a5315961c6e4"
+      },
+      "cover": null,
+      "icon": {
+       "type": "emoji",
+       "emoji": "📄"
+      },
+      "parent": {
+       "type": "page_id",
+       "page_id": "59833787-2cf9-4fdf-8782-e53db20768a5"
+      },
+      "in_trash": false,
+      "is_archived": false,
+      "is_locked": false,
+      "properties": {
+       "title": {
+        "id": "title",
+        "type": "title",
+        "title": []
+       }
+      },
+      "url": "https://app.notion.com/p/Untitled-c7a3e1f48b2d4e6a9c5f1d0b3a7e2f48",
+      "public_url": null
+     },
+     {
+      "object": "page",
+      "id": "6df2c07b-fc6b-4c46-815a-d205d132e22d",
+      "created_time": "2026-11-02T15:00:00.000Z",
+      "last_edited_time": "2026-11-02T18:00:00.000Z",
+      "created_by": {
+       "object": "user",
+       "id": "c2f20311-9e54-4d11-8c79-7398424ae41e"
+      },
+      "last_edited_by": {
+       "object": "user",
+       "id": "ee5f0f84-409a-440f-983a-a5315961c6e4"
+      },
+      "cover": null,
+      "icon": {
+       "type": "emoji",
+       "emoji": "📄"
+      },
+      "parent": {
+       "type": "page_id",
+       "page_id": "59833787-2cf9-4fdf-8782-e53db20768a5"
+      },
+      "in_trash": false,
+      "is_archived": false,
+      "is_locked": false,
+      "properties": {
+       "title": {
+        "id": "title",
+        "type": "title",
+        "title": [
+         {
+          "type": "text",
+          "text": {
+           "content": "Discovery call notes Acme",
+           "link": null
+          },
+          "annotations": {
+           "bold": false,
+           "italic": false,
+           "strikethrough": false,
+           "underline": false,
+           "code": false,
+           "color": "default"
+          },
+          "plain_text": "Discovery call notes Acme",
+          "href": null
+         }
+        ]
+       }
+      },
+      "url": "https://app.notion.com/p/Discovery-call-notes-Acme-6df2c07bfc6b4c46815ad205d132e22d",
+      "public_url": null
+     }
+    ],
+    "next_cursor": "3f9d7a51-0b6e-4c2a-8e4d-6a1b9c3e7f20",
+    "has_more": true,
+    "type": "page_or_data_source",
+    "page_or_data_source": {}
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.notion.com/v1/search?filter_properties=title",
+   "body": {
+    "filter": {
+     "property": "object",
+     "value": "page"
+    },
+    "sort": {
+     "timestamp": "last_edited_time",
+     "direction": "descending"
+    },
+    "page_size": 2,
+    "start_cursor": "3f9d7a51-0b6e-4c2a-8e4d-6a1b9c3e7f20"
+   },
+   "status": 200,
+   "response": {
+    "object": "list",
+    "results": [
+     {
+      "object": "page",
+      "id": "0ef104cd-477e-80e1-8571-cfd10e92339a",
+      "created_time": "2026-09-01T10:00:00.000Z",
+      "last_edited_time": "2026-10-28T12:00:00.000Z",
+      "created_by": {
+       "object": "user",
+       "id": "c2f20311-9e54-4d11-8c79-7398424ae41e"
+      },
+      "last_edited_by": {
+       "object": "user",
+       "id": "ee5f0f84-409a-440f-983a-a5315961c6e4"
+      },
+      "cover": null,
+      "icon": {
+       "type": "emoji",
+       "emoji": "📄"
+      },
+      "parent": {
+       "type": "page_id",
+       "page_id": "59833787-2cf9-4fdf-8782-e53db20768a5"
+      },
+      "in_trash": false,
+      "is_archived": false,
+      "is_locked": false,
+      "properties": {
+       "title": {
+        "id": "title",
+        "type": "title",
+        "title": [
+         {
+          "type": "text",
+          "text": {
+           "content": "Pricing FAQ",
+           "link": null
+          },
+          "annotations": {
+           "bold": false,
+           "italic": false,
+           "strikethrough": false,
+           "underline": false,
+           "code": false,
+           "color": "default"
+          },
+          "plain_text": "Pricing FAQ",
+          "href": null
+         }
+        ]
+       }
+      },
+      "url": "https://app.notion.com/p/Pricing-FAQ-0ef104cd477e80e18571cfd10e92339a",
+      "public_url": null
+     }
+    ],
+    "next_cursor": null,
+    "has_more": false,
+    "type": "page_or_data_source",
+    "page_or_data_source": {}
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://api.notion.com/v1/users/me",
+   "status": 401,
+   "response": {
+    "object": "error",
+    "status": 401,
+    "code": "unauthorized",
+    "message": "API token is invalid."
+   }
+  }
+ ]
+}

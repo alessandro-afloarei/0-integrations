@@ -1,0 +1,994 @@
+{
+ "provider": "attio",
+ "synthetic": true,
+ "source": "Built from Attio's documented examples (https://api.attio.com/openapi/api: GET /v2/self 'Workspace access token' example, the record envelope and per-type value bodies from https://docs.attio.com/rest-api/attribute-types): five companies with their own record_id and created_at. An unknown token's /self answer is the documented 200 {active:false}.",
+ "recordedAt": "2026-11-10",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.attio.com/v2/self",
+   "status": 200,
+   "response": {
+    "active": true,
+    "scope": "object_configuration:read record_permission:read note:read user_management:read",
+    "client_id": "3b9d6c14-72af-4e08-8d5b-0a7f2e91c463",
+    "token_type": "Bearer",
+    "exp": null,
+    "iat": 1672585200,
+    "sub": "14beef7a-99f7-4534-a87e-70b564330a4c",
+    "aud": "3b9d6c14-72af-4e08-8d5b-0a7f2e91c463",
+    "iss": "attio.com",
+    "token_level": "workspace",
+    "authorized_by_workspace_member_id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b",
+    "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+    "workspace_name": "Salarya",
+    "workspace_slug": "salarya",
+    "workspace_logo_url": null
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.attio.com/v2/objects/companies/records/query",
+   "body": {
+    "sorts": [
+     {
+      "direction": "asc",
+      "attribute": "created_at"
+     },
+     {
+      "direction": "asc",
+      "attribute": "record_id"
+     }
+    ],
+    "limit": 2,
+    "offset": 0
+   },
+   "status": 200,
+   "response": {
+    "data": [
+     {
+      "id": {
+       "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+       "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+       "record_id": "bf071e1f-6035-429d-b874-d83ea64ea100"
+      },
+      "created_at": "2026-11-01T13:22:49.061281000Z",
+      "web_url": "https://app.attio.com/salarya/company/bf071e1f-6035-429d-b874-d83ea64ea100",
+      "values": {
+       "name": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Salarya"
+        }
+       ],
+       "domains": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "domain",
+         "domain": "salarya.com",
+         "root_domain": "salarya.com"
+        }
+       ],
+       "description": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Salarya builds software for finance teams."
+        }
+       ],
+       "categories": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "select",
+         "option": {
+          "id": {
+           "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+           "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+           "attribute_id": "41252299-f8c7-4b5e-99c9-4ff8321d2f96",
+           "option_id": "08c2c59a-c18e-40c6-8dc4-95415313b2ea"
+          },
+          "title": "B2B",
+          "is_archived": false
+         }
+        }
+       ],
+       "primary_location": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "location",
+         "line_1": "1 Infinite Loop",
+         "line_2": null,
+         "line_3": null,
+         "line_4": null,
+         "locality": "Cupertino",
+         "region": "CA",
+         "postcode": "95014",
+         "country_code": "US",
+         "latitude": "37.331741",
+         "longitude": "-122.030333"
+        }
+       ],
+       "team": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "record-reference",
+         "target_object": "people",
+         "target_record_id": "891dcbfc-9141-415d-9b2a-2238a6cc012d"
+        }
+       ]
+      }
+     },
+     {
+      "id": {
+       "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+       "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+       "record_id": "bf071e1f-6035-429d-b874-d83ea64ea101"
+      },
+      "created_at": "2026-11-02T13:22:49.061281000Z",
+      "web_url": "https://app.attio.com/salarya/company/bf071e1f-6035-429d-b874-d83ea64ea101",
+      "values": {
+       "name": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Northwind"
+        }
+       ],
+       "domains": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "domain",
+         "domain": "northwind.com",
+         "root_domain": "northwind.com"
+        }
+       ],
+       "description": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Northwind builds software for finance teams."
+        }
+       ],
+       "categories": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "select",
+         "option": {
+          "id": {
+           "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+           "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+           "attribute_id": "41252299-f8c7-4b5e-99c9-4ff8321d2f96",
+           "option_id": "08c2c59a-c18e-40c6-8dc4-95415313b2ea"
+          },
+          "title": "B2B",
+          "is_archived": false
+         }
+        }
+       ],
+       "primary_location": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "location",
+         "line_1": "1 Infinite Loop",
+         "line_2": null,
+         "line_3": null,
+         "line_4": null,
+         "locality": "Cupertino",
+         "region": "CA",
+         "postcode": "95014",
+         "country_code": "US",
+         "latitude": "37.331741",
+         "longitude": "-122.030333"
+        }
+       ],
+       "team": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "record-reference",
+         "target_object": "people",
+         "target_record_id": "891dcbfc-9141-415d-9b2a-2238a6cc012d"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.attio.com/v2/objects/companies/records/query",
+   "body": {
+    "sorts": [
+     {
+      "direction": "asc",
+      "attribute": "created_at"
+     },
+     {
+      "direction": "asc",
+      "attribute": "record_id"
+     }
+    ],
+    "limit": 2,
+    "offset": 2
+   },
+   "status": 200,
+   "response": {
+    "data": [
+     {
+      "id": {
+       "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+       "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+       "record_id": "bf071e1f-6035-429d-b874-d83ea64ea102"
+      },
+      "created_at": "2026-11-03T13:22:49.061281000Z",
+      "web_url": "https://app.attio.com/salarya/company/bf071e1f-6035-429d-b874-d83ea64ea102",
+      "values": {
+       "name": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Lumen Payroll"
+        }
+       ],
+       "domains": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "domain",
+         "domain": "lumenpayroll.com",
+         "root_domain": "lumenpayroll.com"
+        }
+       ],
+       "description": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Lumen Payroll builds software for finance teams."
+        }
+       ],
+       "categories": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "select",
+         "option": {
+          "id": {
+           "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+           "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+           "attribute_id": "41252299-f8c7-4b5e-99c9-4ff8321d2f96",
+           "option_id": "08c2c59a-c18e-40c6-8dc4-95415313b2ea"
+          },
+          "title": "B2B",
+          "is_archived": false
+         }
+        }
+       ],
+       "primary_location": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "location",
+         "line_1": "1 Infinite Loop",
+         "line_2": null,
+         "line_3": null,
+         "line_4": null,
+         "locality": "Cupertino",
+         "region": "CA",
+         "postcode": "95014",
+         "country_code": "US",
+         "latitude": "37.331741",
+         "longitude": "-122.030333"
+        }
+       ],
+       "team": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "record-reference",
+         "target_object": "people",
+         "target_record_id": "891dcbfc-9141-415d-9b2a-2238a6cc012d"
+        }
+       ]
+      }
+     },
+     {
+      "id": {
+       "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+       "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+       "record_id": "bf071e1f-6035-429d-b874-d83ea64ea103"
+      },
+      "created_at": "2026-11-04T13:22:49.061281000Z",
+      "web_url": "https://app.attio.com/salarya/company/bf071e1f-6035-429d-b874-d83ea64ea103",
+      "values": {
+       "name": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Acme Robotics"
+        }
+       ],
+       "domains": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "domain",
+         "domain": "acmerobotics.com",
+         "root_domain": "acmerobotics.com"
+        }
+       ],
+       "description": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Acme Robotics builds software for finance teams."
+        }
+       ],
+       "categories": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "select",
+         "option": {
+          "id": {
+           "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+           "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+           "attribute_id": "41252299-f8c7-4b5e-99c9-4ff8321d2f96",
+           "option_id": "08c2c59a-c18e-40c6-8dc4-95415313b2ea"
+          },
+          "title": "B2B",
+          "is_archived": false
+         }
+        }
+       ],
+       "primary_location": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "location",
+         "line_1": "1 Infinite Loop",
+         "line_2": null,
+         "line_3": null,
+         "line_4": null,
+         "locality": "Cupertino",
+         "region": "CA",
+         "postcode": "95014",
+         "country_code": "US",
+         "latitude": "37.331741",
+         "longitude": "-122.030333"
+        }
+       ],
+       "team": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "record-reference",
+         "target_object": "people",
+         "target_record_id": "891dcbfc-9141-415d-9b2a-2238a6cc012d"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.attio.com/v2/objects/companies/records/query",
+   "body": {
+    "sorts": [
+     {
+      "direction": "asc",
+      "attribute": "created_at"
+     },
+     {
+      "direction": "asc",
+      "attribute": "record_id"
+     }
+    ],
+    "limit": 2,
+    "offset": 4
+   },
+   "status": 200,
+   "response": {
+    "data": [
+     {
+      "id": {
+       "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+       "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+       "record_id": "bf071e1f-6035-429d-b874-d83ea64ea104"
+      },
+      "created_at": "2026-11-05T13:22:49.061281000Z",
+      "web_url": "https://app.attio.com/salarya/company/bf071e1f-6035-429d-b874-d83ea64ea104",
+      "values": {
+       "name": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Globex"
+        }
+       ],
+       "domains": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "domain",
+         "domain": "globex.com",
+         "root_domain": "globex.com"
+        }
+       ],
+       "description": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Globex builds software for finance teams."
+        }
+       ],
+       "categories": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "select",
+         "option": {
+          "id": {
+           "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+           "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+           "attribute_id": "41252299-f8c7-4b5e-99c9-4ff8321d2f96",
+           "option_id": "08c2c59a-c18e-40c6-8dc4-95415313b2ea"
+          },
+          "title": "B2B",
+          "is_archived": false
+         }
+        }
+       ],
+       "primary_location": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "location",
+         "line_1": "1 Infinite Loop",
+         "line_2": null,
+         "line_3": null,
+         "line_4": null,
+         "locality": "Cupertino",
+         "region": "CA",
+         "postcode": "95014",
+         "country_code": "US",
+         "latitude": "37.331741",
+         "longitude": "-122.030333"
+        }
+       ],
+       "team": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "record-reference",
+         "target_object": "people",
+         "target_record_id": "891dcbfc-9141-415d-9b2a-2238a6cc012d"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.attio.com/v2/objects/companies/records/query",
+   "body": {
+    "filter": {
+     "created_at": {
+      "$gt": "2026-11-03T00:00:00Z"
+     }
+    },
+    "sorts": [
+     {
+      "direction": "asc",
+      "attribute": "created_at"
+     },
+     {
+      "direction": "asc",
+      "attribute": "record_id"
+     }
+    ],
+    "limit": 2,
+    "offset": 0
+   },
+   "status": 200,
+   "response": {
+    "data": [
+     {
+      "id": {
+       "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+       "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+       "record_id": "bf071e1f-6035-429d-b874-d83ea64ea102"
+      },
+      "created_at": "2026-11-03T13:22:49.061281000Z",
+      "web_url": "https://app.attio.com/salarya/company/bf071e1f-6035-429d-b874-d83ea64ea102",
+      "values": {
+       "name": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Lumen Payroll"
+        }
+       ],
+       "domains": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "domain",
+         "domain": "lumenpayroll.com",
+         "root_domain": "lumenpayroll.com"
+        }
+       ],
+       "description": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Lumen Payroll builds software for finance teams."
+        }
+       ],
+       "categories": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "select",
+         "option": {
+          "id": {
+           "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+           "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+           "attribute_id": "41252299-f8c7-4b5e-99c9-4ff8321d2f96",
+           "option_id": "08c2c59a-c18e-40c6-8dc4-95415313b2ea"
+          },
+          "title": "B2B",
+          "is_archived": false
+         }
+        }
+       ],
+       "primary_location": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "location",
+         "line_1": "1 Infinite Loop",
+         "line_2": null,
+         "line_3": null,
+         "line_4": null,
+         "locality": "Cupertino",
+         "region": "CA",
+         "postcode": "95014",
+         "country_code": "US",
+         "latitude": "37.331741",
+         "longitude": "-122.030333"
+        }
+       ],
+       "team": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "record-reference",
+         "target_object": "people",
+         "target_record_id": "891dcbfc-9141-415d-9b2a-2238a6cc012d"
+        }
+       ]
+      }
+     },
+     {
+      "id": {
+       "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+       "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+       "record_id": "bf071e1f-6035-429d-b874-d83ea64ea103"
+      },
+      "created_at": "2026-11-04T13:22:49.061281000Z",
+      "web_url": "https://app.attio.com/salarya/company/bf071e1f-6035-429d-b874-d83ea64ea103",
+      "values": {
+       "name": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Acme Robotics"
+        }
+       ],
+       "domains": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "domain",
+         "domain": "acmerobotics.com",
+         "root_domain": "acmerobotics.com"
+        }
+       ],
+       "description": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Acme Robotics builds software for finance teams."
+        }
+       ],
+       "categories": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "select",
+         "option": {
+          "id": {
+           "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+           "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+           "attribute_id": "41252299-f8c7-4b5e-99c9-4ff8321d2f96",
+           "option_id": "08c2c59a-c18e-40c6-8dc4-95415313b2ea"
+          },
+          "title": "B2B",
+          "is_archived": false
+         }
+        }
+       ],
+       "primary_location": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "location",
+         "line_1": "1 Infinite Loop",
+         "line_2": null,
+         "line_3": null,
+         "line_4": null,
+         "locality": "Cupertino",
+         "region": "CA",
+         "postcode": "95014",
+         "country_code": "US",
+         "latitude": "37.331741",
+         "longitude": "-122.030333"
+        }
+       ],
+       "team": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "record-reference",
+         "target_object": "people",
+         "target_record_id": "891dcbfc-9141-415d-9b2a-2238a6cc012d"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "POST",
+   "url": "https://api.attio.com/v2/objects/companies/records/query",
+   "body": {
+    "filter": {
+     "created_at": {
+      "$gt": "2026-11-03T00:00:00Z"
+     }
+    },
+    "sorts": [
+     {
+      "direction": "asc",
+      "attribute": "created_at"
+     },
+     {
+      "direction": "asc",
+      "attribute": "record_id"
+     }
+    ],
+    "limit": 2,
+    "offset": 2
+   },
+   "status": 200,
+   "response": {
+    "data": [
+     {
+      "id": {
+       "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+       "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+       "record_id": "bf071e1f-6035-429d-b874-d83ea64ea104"
+      },
+      "created_at": "2026-11-05T13:22:49.061281000Z",
+      "web_url": "https://app.attio.com/salarya/company/bf071e1f-6035-429d-b874-d83ea64ea104",
+      "values": {
+       "name": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Globex"
+        }
+       ],
+       "domains": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "domain",
+         "domain": "globex.com",
+         "root_domain": "globex.com"
+        }
+       ],
+       "description": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "text",
+         "value": "Globex builds software for finance teams."
+        }
+       ],
+       "categories": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "select",
+         "option": {
+          "id": {
+           "workspace_id": "14beef7a-99f7-4534-a87e-70b564330a4c",
+           "object_id": "97052eb9-e65e-443f-a297-f2d9a4a7f795",
+           "attribute_id": "41252299-f8c7-4b5e-99c9-4ff8321d2f96",
+           "option_id": "08c2c59a-c18e-40c6-8dc4-95415313b2ea"
+          },
+          "title": "B2B",
+          "is_archived": false
+         }
+        }
+       ],
+       "primary_location": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "location",
+         "line_1": "1 Infinite Loop",
+         "line_2": null,
+         "line_3": null,
+         "line_4": null,
+         "locality": "Cupertino",
+         "region": "CA",
+         "postcode": "95014",
+         "country_code": "US",
+         "latitude": "37.331741",
+         "longitude": "-122.030333"
+        }
+       ],
+       "team": [
+        {
+         "active_from": "2023-04-03T15:21:06.447000000Z",
+         "active_until": null,
+         "created_by_actor": {
+          "type": "workspace-member",
+          "id": "50cf242c-7fa3-4cad-87d0-75b1af71c57b"
+         },
+         "attribute_type": "record-reference",
+         "target_object": "people",
+         "target_record_id": "891dcbfc-9141-415d-9b2a-2238a6cc012d"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://api.attio.com/v2/self",
+   "status": 200,
+   "response": {
+    "active": false
+   }
+  }
+ ]
+}

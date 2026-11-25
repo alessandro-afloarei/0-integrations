@@ -1,0 +1,484 @@
+{
+ "provider": "google-calendar",
+ "synthetic": true,
+ "source": "Synthetic, played from the library's fake (src/google/fake.ts), which answers in the shapes Google documents for users.getProfile, users.messages.list and get (format=metadata), calendars.get and events.list (developers.google.com/gmail/api/reference/rest, /calendar/api/v3/reference): pageToken paging, RFC 3339 times with their offset, and the 401 UNAUTHENTICATED body. Replaced by a recording from a test mailbox (src/record.test.ts) before release.",
+ "recordedAt": "2026-11-12",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "emailAddress": "lee@lumen.test",
+    "messagesTotal": 11,
+    "threadsTotal": 11,
+    "historyId": "1"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://www.googleapis.com/calendar/v3/calendars/primary",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "kind": "calendar#calendar",
+    "id": "calendar-lee",
+    "summary": "Calendar",
+    "timeZone": "UTC"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://www.googleapis.com/calendar/v3/calendars/calendar-lee/events?timeMin=2026-10-01T00%3A00%3A00.000Z&timeMax=2027-01-01T00%3A00%3A00.000Z&singleEvents=true&orderBy=startTime&maxResults=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "kind": "calendar#events",
+    "items": [
+     {
+      "kind": "calendar#event",
+      "id": "event-1",
+      "status": "confirmed",
+      "created": "2026-11-01T08:00:00.000Z",
+      "updated": "2026-11-01T08:00:00.000Z",
+      "summary": "Call 1",
+      "description": "<p>Agenda</p>",
+      "location": "",
+      "iCalUID": "uid-1@northstar.test",
+      "start": {
+       "dateTime": "2026-11-01T10:00:00.000Z",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-01T10:30:00.000Z",
+       "timeZone": "UTC"
+      },
+      "organizer": {
+       "email": "lee@lumen.test",
+       "displayName": "Lee Park",
+       "self": true
+      },
+      "attendees": [
+       {
+        "email": "lee@lumen.test",
+        "displayName": "Lee Park",
+        "organizer": true,
+        "self": true,
+        "responseStatus": "accepted"
+       },
+       {
+        "email": "rui@northstar.test",
+        "displayName": "Rui Costa",
+        "responseStatus": "accepted"
+       }
+      ],
+      "eventType": "singleInstance",
+      "transparency": "opaque"
+     },
+     {
+      "kind": "calendar#event",
+      "id": "event-2",
+      "status": "confirmed",
+      "created": "2026-11-01T08:00:00.000Z",
+      "updated": "2026-11-02T08:00:00.000Z",
+      "summary": "Call 2",
+      "description": "<p>Agenda</p>",
+      "location": "",
+      "iCalUID": "uid-2@northstar.test",
+      "start": {
+       "dateTime": "2026-11-02T10:00:00.000Z",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-02T10:30:00.000Z",
+       "timeZone": "UTC"
+      },
+      "organizer": {
+       "email": "lee@lumen.test",
+       "displayName": "Lee Park",
+       "self": true
+      },
+      "attendees": [
+       {
+        "email": "lee@lumen.test",
+        "displayName": "Lee Park",
+        "organizer": true,
+        "self": true,
+        "responseStatus": "accepted"
+       },
+       {
+        "email": "rui@northstar.test",
+        "displayName": "Rui Costa",
+        "responseStatus": "accepted"
+       }
+      ],
+      "eventType": "singleInstance",
+      "transparency": "opaque"
+     }
+    ],
+    "nextPageToken": "2"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://www.googleapis.com/calendar/v3/calendars/primary",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "kind": "calendar#calendar",
+    "id": "calendar-lee",
+    "summary": "Calendar",
+    "timeZone": "UTC"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://www.googleapis.com/calendar/v3/calendars/calendar-lee/events?timeMin=2026-10-01T00%3A00%3A00.000Z&timeMax=2027-01-01T00%3A00%3A00.000Z&singleEvents=true&orderBy=startTime&maxResults=2&pageToken=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "kind": "calendar#events",
+    "items": [
+     {
+      "kind": "calendar#event",
+      "id": "event-3",
+      "status": "confirmed",
+      "created": "2026-11-01T08:00:00.000Z",
+      "updated": "2026-11-03T08:00:00.000Z",
+      "summary": "Call 3",
+      "description": "<p>Agenda</p>",
+      "location": "",
+      "iCalUID": "uid-3@northstar.test",
+      "start": {
+       "dateTime": "2026-11-03T10:00:00.000Z",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-03T10:30:00.000Z",
+       "timeZone": "UTC"
+      },
+      "organizer": {
+       "email": "lee@lumen.test",
+       "displayName": "Lee Park",
+       "self": true
+      },
+      "attendees": [
+       {
+        "email": "lee@lumen.test",
+        "displayName": "Lee Park",
+        "organizer": true,
+        "self": true,
+        "responseStatus": "accepted"
+       },
+       {
+        "email": "rui@northstar.test",
+        "displayName": "Rui Costa",
+        "responseStatus": "accepted"
+       }
+      ],
+      "eventType": "singleInstance",
+      "transparency": "opaque"
+     },
+     {
+      "kind": "calendar#event",
+      "id": "event-4",
+      "status": "confirmed",
+      "created": "2026-11-01T08:00:00.000Z",
+      "updated": "2026-11-04T08:00:00.000Z",
+      "summary": "Call 4",
+      "description": "<p>Agenda</p>",
+      "location": "",
+      "iCalUID": "uid-4@northstar.test",
+      "start": {
+       "dateTime": "2026-11-04T10:00:00.000Z",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-04T10:30:00.000Z",
+       "timeZone": "UTC"
+      },
+      "organizer": {
+       "email": "lee@lumen.test",
+       "displayName": "Lee Park",
+       "self": true
+      },
+      "attendees": [
+       {
+        "email": "lee@lumen.test",
+        "displayName": "Lee Park",
+        "organizer": true,
+        "self": true,
+        "responseStatus": "accepted"
+       },
+       {
+        "email": "rui@northstar.test",
+        "displayName": "Rui Costa",
+        "responseStatus": "accepted"
+       }
+      ],
+      "eventType": "singleInstance",
+      "transparency": "opaque"
+     }
+    ],
+    "nextPageToken": "4"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://www.googleapis.com/calendar/v3/calendars/primary",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "kind": "calendar#calendar",
+    "id": "calendar-lee",
+    "summary": "Calendar",
+    "timeZone": "UTC"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://www.googleapis.com/calendar/v3/calendars/calendar-lee/events?timeMin=2026-10-01T00%3A00%3A00.000Z&timeMax=2027-01-01T00%3A00%3A00.000Z&singleEvents=true&orderBy=startTime&maxResults=2&pageToken=4",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "kind": "calendar#events",
+    "items": [
+     {
+      "kind": "calendar#event",
+      "id": "event-5",
+      "status": "confirmed",
+      "created": "2026-11-01T08:00:00.000Z",
+      "updated": "2026-11-05T08:00:00.000Z",
+      "summary": "Call 5",
+      "description": "<p>Agenda</p>",
+      "location": "",
+      "iCalUID": "uid-5@northstar.test",
+      "start": {
+       "dateTime": "2026-11-05T10:00:00.000Z",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-05T10:30:00.000Z",
+       "timeZone": "UTC"
+      },
+      "organizer": {
+       "email": "lee@lumen.test",
+       "displayName": "Lee Park",
+       "self": true
+      },
+      "attendees": [
+       {
+        "email": "lee@lumen.test",
+        "displayName": "Lee Park",
+        "organizer": true,
+        "self": true,
+        "responseStatus": "accepted"
+       },
+       {
+        "email": "rui@northstar.test",
+        "displayName": "Rui Costa",
+        "responseStatus": "accepted"
+       }
+      ],
+      "eventType": "singleInstance",
+      "transparency": "opaque"
+     },
+     {
+      "kind": "calendar#event",
+      "id": "event-6",
+      "status": "confirmed",
+      "created": "2026-11-01T08:00:00.000Z",
+      "updated": "2026-11-06T08:00:00.000Z",
+      "summary": "Call 6",
+      "description": "<p>Agenda</p>",
+      "location": "",
+      "iCalUID": "uid-6@northstar.test",
+      "start": {
+       "dateTime": "2026-11-06T10:00:00.000Z",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-06T10:30:00.000Z",
+       "timeZone": "UTC"
+      },
+      "organizer": {
+       "email": "lee@lumen.test",
+       "displayName": "Lee Park",
+       "self": true
+      },
+      "attendees": [
+       {
+        "email": "lee@lumen.test",
+        "displayName": "Lee Park",
+        "organizer": true,
+        "self": true,
+        "responseStatus": "accepted"
+       },
+       {
+        "email": "rui@northstar.test",
+        "displayName": "Rui Costa",
+        "responseStatus": "accepted"
+       }
+      ],
+      "eventType": "singleInstance",
+      "transparency": "opaque"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://www.googleapis.com/calendar/v3/calendars/primary",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "kind": "calendar#calendar",
+    "id": "calendar-lee",
+    "summary": "Calendar",
+    "timeZone": "UTC"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://www.googleapis.com/calendar/v3/calendars/calendar-lee/events?timeMin=2026-11-05T00%3A00%3A00.000Z&timeMax=2027-01-01T00%3A00%3A00.000Z&singleEvents=true&orderBy=startTime&maxResults=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "kind": "calendar#events",
+    "items": [
+     {
+      "kind": "calendar#event",
+      "id": "event-5",
+      "status": "confirmed",
+      "created": "2026-11-01T08:00:00.000Z",
+      "updated": "2026-11-05T08:00:00.000Z",
+      "summary": "Call 5",
+      "description": "<p>Agenda</p>",
+      "location": "",
+      "iCalUID": "uid-5@northstar.test",
+      "start": {
+       "dateTime": "2026-11-05T10:00:00.000Z",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-05T10:30:00.000Z",
+       "timeZone": "UTC"
+      },
+      "organizer": {
+       "email": "lee@lumen.test",
+       "displayName": "Lee Park",
+       "self": true
+      },
+      "attendees": [
+       {
+        "email": "lee@lumen.test",
+        "displayName": "Lee Park",
+        "organizer": true,
+        "self": true,
+        "responseStatus": "accepted"
+       },
+       {
+        "email": "rui@northstar.test",
+        "displayName": "Rui Costa",
+        "responseStatus": "accepted"
+       }
+      ],
+      "eventType": "singleInstance",
+      "transparency": "opaque"
+     },
+     {
+      "kind": "calendar#event",
+      "id": "event-6",
+      "status": "confirmed",
+      "created": "2026-11-01T08:00:00.000Z",
+      "updated": "2026-11-06T08:00:00.000Z",
+      "summary": "Call 6",
+      "description": "<p>Agenda</p>",
+      "location": "",
+      "iCalUID": "uid-6@northstar.test",
+      "start": {
+       "dateTime": "2026-11-06T10:00:00.000Z",
+       "timeZone": "UTC"
+      },
+      "end": {
+       "dateTime": "2026-11-06T10:30:00.000Z",
+       "timeZone": "UTC"
+      },
+      "organizer": {
+       "email": "lee@lumen.test",
+       "displayName": "Lee Park",
+       "self": true
+      },
+      "attendees": [
+       {
+        "email": "lee@lumen.test",
+        "displayName": "Lee Park",
+        "organizer": true,
+        "self": true,
+        "responseStatus": "accepted"
+       },
+       {
+        "email": "rui@northstar.test",
+        "displayName": "Rui Costa",
+        "responseStatus": "accepted"
+       }
+      ],
+      "eventType": "singleInstance",
+      "transparency": "opaque"
+     }
+    ]
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+   "status": 401,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "error": {
+     "code": 401,
+     "message": "Request had invalid authentication credentials.",
+     "errors": [
+      {
+       "message": "Request had invalid authentication credentials.",
+       "domain": "global",
+       "reason": "authError"
+      }
+     ],
+     "status": "UNAUTHENTICATED"
+    }
+   }
+  }
+ ]
+}

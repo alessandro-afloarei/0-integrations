@@ -1,0 +1,39 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  publish:
+    # npm trusted publishing (OIDC) accepts only GitHub-hosted runners.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - name: No declaration file names zod, which stays private to the library
+        run: |
+          test -d dist
+          ! grep -rlE "[\"']zod(/[^\"']*)?[\"']" dist --include='*.d.ts'
+      - name: Check tag matches package version
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const pkg = JSON.parse(fs.readFileSync("package.json", "utf8")); if (process.env.GITHUB_REF_NAME !== "v" + pkg.version) process.exit(1);'
+      # Trusted publishing (OIDC, configured on npmjs.com) needs npm 11.5.1+;
+      # Node 22 bundles npm 10. The trusted publisher may only stage: the
+      # version waits on npmjs.com until a maintainer approves it with 2FA.
+      # --provenance links the package to this public repository and the workflow run that built it.
+      - name: Stage the release on npm
+        run: |
+          npm install --global npm@11
+          npm stage publish --provenance

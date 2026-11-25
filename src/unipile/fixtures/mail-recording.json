@@ -1,0 +1,694 @@
+{
+ "provider": "unipile-mail",
+ "synthetic": true,
+ "source": "Synthetic: built from Unipile V2's API reference (getAccount, getEmailSenders, getFoldersList, getEmailsList), every object's key set checked against live V2 answers on 2026-11-23 (keys and counts only, no value kept). The values are invented; no real mailbox's data is in this file.",
+ "recordedAt": "2026-11-23",
+ "exchanges": [
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/accounts/kit-account",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "object": "Account",
+    "id": "kit-account",
+    "user_id": "lee@acme.example",
+    "name": "lee@acme.example",
+    "created_at": "2026-10-28T08:00:00.000Z",
+    "application_id": "app_synthetic",
+    "account_scope_id": null,
+    "status": "running",
+    "is_locked": false,
+    "provider": "google",
+    "oauth_scope": "https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/calendar.readonly",
+    "metadata": {
+     "allow_country_fallback": true,
+     "products_connection_status": {
+      "emails": "running",
+      "calendar": "running"
+     }
+    }
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/email-senders",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "EmailSender",
+      "email": "lee@acme.example",
+      "is_primary": true,
+      "is_default": true,
+      "verification_status": "verified"
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/emails?limit=2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Email",
+      "id": "18c2f0a1b2c3d4e4",
+      "message_id": "<m5@lumen.example>",
+      "thread_id": "18c2f0a1b2c3d4e0",
+      "date": "2026-11-10T09:14:00.000Z",
+      "folders": [
+       "INBOX",
+       "CATEGORY_UPDATES"
+      ],
+      "subject": "Payroll 5",
+      "snippet": "About the January payroll run",
+      "body": "<p>About the January payroll run.</p>",
+      "body_plain": "About the January payroll run.",
+      "from": [
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis"
+       }
+      ],
+      "to": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park"
+       }
+      ],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "headers": [
+       {
+        "name": "Message-ID",
+        "value": "<m5@lumen.example>"
+       },
+       {
+        "name": "Subject",
+        "value": "Payroll 5"
+       },
+       {
+        "name": "From",
+        "value": "Ana Reis <ana@lumen.example>"
+       },
+       {
+        "name": "To",
+        "value": "Lee Park <lee@acme.example>"
+       },
+       {
+        "name": "In-Reply-To",
+        "value": "<m4@lumen.example>"
+       },
+       {
+        "name": "References",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "Received",
+        "value": "from mail.lumen.example (192.0.2.10)"
+       }
+      ],
+      "attachments": [],
+      "is_unread": true
+     },
+     {
+      "object": "Email",
+      "id": "18c2f0a1b2c3d4e3",
+      "message_id": "<m4@lumen.example>",
+      "thread_id": "18c2f0a1b2c3d4e0",
+      "date": "2026-11-08T09:13:00.000Z",
+      "folders": [
+       "INBOX",
+       "CATEGORY_UPDATES"
+      ],
+      "subject": "Payroll 4",
+      "snippet": "About the January payroll run",
+      "body": "<p>About the January payroll run.</p>",
+      "body_plain": "About the January payroll run.",
+      "from": [
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis"
+       }
+      ],
+      "to": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park"
+       }
+      ],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "headers": [
+       {
+        "name": "Message-ID",
+        "value": "<m4@lumen.example>"
+       },
+       {
+        "name": "Subject",
+        "value": "Payroll 4"
+       },
+       {
+        "name": "From",
+        "value": "Ana Reis <ana@lumen.example>"
+       },
+       {
+        "name": "To",
+        "value": "Lee Park <lee@acme.example>"
+       },
+       {
+        "name": "In-Reply-To",
+        "value": "<m3@lumen.example>"
+       },
+       {
+        "name": "References",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "Received",
+        "value": "from mail.lumen.example (192.0.2.10)"
+       }
+      ],
+      "attachments": [],
+      "is_unread": false
+     }
+    ],
+    "next_cursor": "all-2"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/folders?limit=100",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "EmailFolder",
+      "id": "INBOX",
+      "name": "INBOX",
+      "role": "INBOX",
+      "total_count": 0,
+      "unread_count": 0,
+      "is_system": true
+     },
+     {
+      "object": "EmailFolder",
+      "id": "SENT",
+      "name": "SENT",
+      "role": "SENT",
+      "total_count": 0,
+      "unread_count": 0,
+      "is_system": true
+     },
+     {
+      "object": "EmailFolder",
+      "id": "DRAFT",
+      "name": "DRAFT",
+      "role": "DRAFTS",
+      "total_count": 0,
+      "unread_count": 0,
+      "is_system": true
+     },
+     {
+      "object": "EmailFolder",
+      "id": "TRASH",
+      "name": "TRASH",
+      "role": "TRASH",
+      "total_count": 0,
+      "unread_count": 0,
+      "is_system": true
+     },
+     {
+      "object": "EmailFolder",
+      "id": "SPAM",
+      "name": "SPAM",
+      "role": "SPAM",
+      "total_count": 0,
+      "unread_count": 0,
+      "is_system": true
+     },
+     {
+      "object": "EmailFolder",
+      "id": "CATEGORY_UPDATES",
+      "name": "CATEGORY_UPDATES",
+      "total_count": 0,
+      "unread_count": 0,
+      "is_system": true
+     }
+    ],
+    "total_count": 6
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/emails?limit=2&cursor=all-2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Email",
+      "id": "18c2f0a1b2c3d4e2",
+      "message_id": "<m3@lumen.example>",
+      "thread_id": "18c2f0a1b2c3d4e0",
+      "date": "2026-11-06T09:12:00.000Z",
+      "folders": [
+       "SENT"
+      ],
+      "subject": "Payroll 3",
+      "snippet": "About the January payroll run",
+      "body": "<p>About the January payroll run.</p>",
+      "body_plain": "About the January payroll run.",
+      "from": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park"
+       }
+      ],
+      "to": [
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis"
+       }
+      ],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "headers": [
+       {
+        "name": "Message-ID",
+        "value": "<m3@lumen.example>"
+       },
+       {
+        "name": "Subject",
+        "value": "Payroll 3"
+       },
+       {
+        "name": "From",
+        "value": "Ana Reis <ana@lumen.example>"
+       },
+       {
+        "name": "To",
+        "value": "Lee Park <lee@acme.example>"
+       },
+       {
+        "name": "In-Reply-To",
+        "value": "<m2@lumen.example>"
+       },
+       {
+        "name": "References",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "Received",
+        "value": "from mail.lumen.example (192.0.2.10)"
+       }
+      ],
+      "attachments": [],
+      "is_unread": false
+     },
+     {
+      "object": "Email",
+      "id": "18c2f0a1b2c3d4e1",
+      "message_id": "<m2@lumen.example>",
+      "thread_id": "18c2f0a1b2c3d4e0",
+      "date": "2026-11-04T09:11:00.000Z",
+      "folders": [
+       "INBOX",
+       "CATEGORY_UPDATES"
+      ],
+      "subject": "Payroll 2",
+      "snippet": "About the January payroll run",
+      "body": "<p>About the January payroll run.</p>",
+      "body_plain": "About the January payroll run.",
+      "from": [
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis"
+       }
+      ],
+      "to": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park"
+       }
+      ],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "headers": [
+       {
+        "name": "Message-ID",
+        "value": "<m2@lumen.example>"
+       },
+       {
+        "name": "Subject",
+        "value": "Payroll 2"
+       },
+       {
+        "name": "From",
+        "value": "Ana Reis <ana@lumen.example>"
+       },
+       {
+        "name": "To",
+        "value": "Lee Park <lee@acme.example>"
+       },
+       {
+        "name": "In-Reply-To",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "References",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "Received",
+        "value": "from mail.lumen.example (192.0.2.10)"
+       }
+      ],
+      "attachments": [],
+      "is_unread": false
+     }
+    ],
+    "next_cursor": "all-4"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/emails?limit=2&cursor=all-4",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Email",
+      "id": "18c2f0a1b2c3d4e0",
+      "message_id": "<m1@lumen.example>",
+      "thread_id": "18c2f0a1b2c3d4e0",
+      "date": "2026-11-02T09:10:00.000Z",
+      "folders": [
+       "INBOX",
+       "CATEGORY_UPDATES"
+      ],
+      "subject": "Payroll 1",
+      "snippet": "About the January payroll run",
+      "body": "<p>About the January payroll run.</p>",
+      "body_plain": "About the January payroll run.",
+      "from": [
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis"
+       }
+      ],
+      "to": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park"
+       }
+      ],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "headers": [
+       {
+        "name": "Message-ID",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "Subject",
+        "value": "Payroll 1"
+       },
+       {
+        "name": "From",
+        "value": "Ana Reis <ana@lumen.example>"
+       },
+       {
+        "name": "To",
+        "value": "Lee Park <lee@acme.example>"
+       },
+       {
+        "name": "Received",
+        "value": "from mail.lumen.example (192.0.2.10)"
+       }
+      ],
+      "attachments": [],
+      "is_unread": false
+     }
+    ]
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/emails?limit=2&after=2026-11-05T00%3A00%3A00.000Z",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Email",
+      "id": "18c2f0a1b2c3d4e4",
+      "message_id": "<m5@lumen.example>",
+      "thread_id": "18c2f0a1b2c3d4e0",
+      "date": "2026-11-10T09:14:00.000Z",
+      "folders": [
+       "INBOX",
+       "CATEGORY_UPDATES"
+      ],
+      "subject": "Payroll 5",
+      "snippet": "About the January payroll run",
+      "body": "<p>About the January payroll run.</p>",
+      "body_plain": "About the January payroll run.",
+      "from": [
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis"
+       }
+      ],
+      "to": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park"
+       }
+      ],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "headers": [
+       {
+        "name": "Message-ID",
+        "value": "<m5@lumen.example>"
+       },
+       {
+        "name": "Subject",
+        "value": "Payroll 5"
+       },
+       {
+        "name": "From",
+        "value": "Ana Reis <ana@lumen.example>"
+       },
+       {
+        "name": "To",
+        "value": "Lee Park <lee@acme.example>"
+       },
+       {
+        "name": "In-Reply-To",
+        "value": "<m4@lumen.example>"
+       },
+       {
+        "name": "References",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "Received",
+        "value": "from mail.lumen.example (192.0.2.10)"
+       }
+      ],
+      "attachments": [],
+      "is_unread": true
+     },
+     {
+      "object": "Email",
+      "id": "18c2f0a1b2c3d4e3",
+      "message_id": "<m4@lumen.example>",
+      "thread_id": "18c2f0a1b2c3d4e0",
+      "date": "2026-11-08T09:13:00.000Z",
+      "folders": [
+       "INBOX",
+       "CATEGORY_UPDATES"
+      ],
+      "subject": "Payroll 4",
+      "snippet": "About the January payroll run",
+      "body": "<p>About the January payroll run.</p>",
+      "body_plain": "About the January payroll run.",
+      "from": [
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis"
+       }
+      ],
+      "to": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park"
+       }
+      ],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "headers": [
+       {
+        "name": "Message-ID",
+        "value": "<m4@lumen.example>"
+       },
+       {
+        "name": "Subject",
+        "value": "Payroll 4"
+       },
+       {
+        "name": "From",
+        "value": "Ana Reis <ana@lumen.example>"
+       },
+       {
+        "name": "To",
+        "value": "Lee Park <lee@acme.example>"
+       },
+       {
+        "name": "In-Reply-To",
+        "value": "<m3@lumen.example>"
+       },
+       {
+        "name": "References",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "Received",
+        "value": "from mail.lumen.example (192.0.2.10)"
+       }
+      ],
+      "attachments": [],
+      "is_unread": false
+     }
+    ],
+    "next_cursor": "since-2"
+   }
+  },
+  {
+   "key": "good",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/kit-account/emails?limit=2&cursor=since-2",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "data": [
+     {
+      "object": "Email",
+      "id": "18c2f0a1b2c3d4e2",
+      "message_id": "<m3@lumen.example>",
+      "thread_id": "18c2f0a1b2c3d4e0",
+      "date": "2026-11-06T09:12:00.000Z",
+      "folders": [
+       "SENT"
+      ],
+      "subject": "Payroll 3",
+      "snippet": "About the January payroll run",
+      "body": "<p>About the January payroll run.</p>",
+      "body_plain": "About the January payroll run.",
+      "from": [
+       {
+        "email": "lee@acme.example",
+        "display_name": "Lee Park"
+       }
+      ],
+      "to": [
+       {
+        "email": "ana@lumen.example",
+        "display_name": "Ana Reis"
+       }
+      ],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "headers": [
+       {
+        "name": "Message-ID",
+        "value": "<m3@lumen.example>"
+       },
+       {
+        "name": "Subject",
+        "value": "Payroll 3"
+       },
+       {
+        "name": "From",
+        "value": "Ana Reis <ana@lumen.example>"
+       },
+       {
+        "name": "To",
+        "value": "Lee Park <lee@acme.example>"
+       },
+       {
+        "name": "In-Reply-To",
+        "value": "<m2@lumen.example>"
+       },
+       {
+        "name": "References",
+        "value": "<m1@lumen.example>"
+       },
+       {
+        "name": "Received",
+        "value": "from mail.lumen.example (192.0.2.10)"
+       }
+      ],
+      "attachments": [],
+      "is_unread": false
+     }
+    ]
+   }
+  },
+  {
+   "key": "bad",
+   "method": "GET",
+   "url": "https://api.unipile.com/v2/accounts/kit-account",
+   "status": 401,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": {
+    "object": "Error",
+    "type": "api/missing_authorization",
+    "status": 401,
+    "title": "Hosted Auth Session is missing in the request",
+    "req_id": "req_synthetic"
+   }
+  }
+ ]
+}

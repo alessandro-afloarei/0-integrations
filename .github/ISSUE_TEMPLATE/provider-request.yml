@@ -1,0 +1,44 @@
+name: Provider request
+description: Ask for a provider the library does not cover yet.
+labels: [provider-request]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      placeholder: Linear
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: Docs URL
+      description: The provider's API documentation.
+      placeholder: https://
+    validations:
+      required: true
+  - type: dropdown
+    id: auth
+    attributes:
+      label: Auth kind
+      options:
+        - OAuth 2
+        - API key or token
+        - Basic auth
+        - Other or not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: needs
+    attributes:
+      label: What you need
+      options:
+        - label: Sign-in
+        - label: Reads
+        - label: Writes
+        - label: Webhooks
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: The reads, writes or webhook events you need, and what you build with them.
