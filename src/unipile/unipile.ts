@@ -8,6 +8,7 @@ import { headerValue, keptHeaders, type MailboxCalendar, type MailboxEmail, type
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { unipile } from '../providers.js';
+import { datetime, orNull, pageSize, utc } from '../shapes.js';
 
 export type LinkedInCompany = { id: string; name: string; tagline: string; description: string; industry: string[];
   headcount: number | null; city: string | null; profileUrl: string };
@@ -65,9 +66,7 @@ const postsSchema = z.object({ data: z.array(z.object({ share_url: z.string(), t
 /** Unipile's account kinds that hold a mailbox: their address is read from the account's senders. */
 const MAILBOXES = new Set(['google', 'outlook', 'imap']);
 
-const datetime = z.iso.datetime({ offset: true });
 const text = z.string().nullish().transform(value => value ?? '');
-const orNull = z.string().nullish().transform(value => value ?? null);
 // Unipile sends an empty master_event_id or display name where there is none.
 const emptyAsNull = z.string().nullish().transform(value => value || null);
 
@@ -79,7 +78,7 @@ const recipients = z.array(attendee).nullish().transform(list => (list ?? []).fi
 // Every key it does not name is dropped: bcc, reply-to, attachments and the other headers never leave the client. A message
 // with no sender, or one that is not an e-mail address, is unreadable: skipped.
 const emailSchema = z.object({
-  id: z.string(), thread_id: orNull, message_id: z.string(), date: datetime, folders: z.array(z.string()), subject: z.string(),
+  id: z.string(), thread_id: orNull(z.string()), message_id: z.string(), date: datetime, folders: z.array(z.string()), subject: z.string(),
   body_plain: text, body: text, from: z.tuple([attendee.refine(isEmailAddress)], attendee), to: recipients, cc: recipients,
   headers: z.array(z.object({ name: z.string(), value: z.string() })).nullish().transform(list => list ?? []),
 }).transform(({ from: [sender], to, cc, headers, ...email }) => {
@@ -104,24 +103,12 @@ const eventSchema = z.object({
   attendees: z.array(z.object({ email: z.string(), display_name: emptyAsNull, is_organizer: z.boolean(), is_resource: z.boolean(),
     response_status: z.enum(['yes', 'no', 'maybe', 'noreply']) })).nullish().transform(list => list ?? []),
   organizer: z.object({ email: z.string(), display_name: emptyAsNull }),
-  conference: z.object({ provider: z.string(), url: orNull }).nullish().transform(conference => conference ?? null),
+  conference: z.object({ provider: z.string(), url: orNull(z.string()) }).nullish().transform(conference => conference ?? null),
   event_type: z.string(), transparency: z.string(),
   // Required: an event that does not say whether it is private is skipped, never taken as public.
   visibility: z.enum(['public', 'private']),
 });
 const listSchema = z.object({ data: z.array(z.unknown()), next_cursor: z.string().nullish(), total_count: z.number().nullish() });
-
-function pageSize(limit = 100): number {
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new TypeError('limit_invalid');
-  return limit;
-}
-
-/** Unipile takes a date only as `YYYY-MM-DDTHH:MM:SS.sssZ`: an ISO time with its offset, written in UTC; anything else is
- *  refused before a request, never read in the server's own time zone. */
-function utc(value: string): string {
-  if (!datetime.safeParse(value).success) throw new TypeError('date_invalid');
-  return new Date(value).toISOString();
-}
 
 /** A wall-clock time in an IANA zone as the instant it names, in UTC; null when either is not one. */
 function inZone(local: string, zone: string): string | null {
@@ -254,7 +241,7 @@ export function unipileClient(input: { apiKey: string; fetch: typeof fetch }): U
     },
     async emails(accountId, { after, cursor, limit, metaOnly }) {
       // A next page names its cursor alone: the cursor holds the first page's filters, and Unipile refuses them beside it.
-      const query = cursor ? { limit: String(pageSize(limit)), cursor } : { limit: String(pageSize(limit)),
+      const query = cursor ? { limit: String(pageSize(limit, 100)), cursor } : { limit: String(pageSize(limit, 100)),
         ...(metaOnly ? { meta_only: 'true' } : {}), ...(after ? { after: utc(after) } : {}) };
       return mailPage(accountId, http.json(on(accountId, '/emails'), { query }).then(answer => {
         const page = parseAnswer(listSchema, answer);
@@ -276,7 +263,7 @@ export function unipileClient(input: { apiKey: string; fetch: typeof fetch }): U
       return listPage(on(accountId, `/calendars/${encodeURIComponent(calendarId)}/events`), { expand_recurring: 'true',
         ...(start ? { start: utc(start) } : {}), ...(end ? { end: utc(end) } : {}),
         ...(updatedAfter ? { updated_after: utc(updatedAfter) } : {}) },
-      eventRead, pageSize(limit), cursor);
+      eventRead, pageSize(limit, 100), cursor);
     },
     async deleteAccount(accountId) {
       try {

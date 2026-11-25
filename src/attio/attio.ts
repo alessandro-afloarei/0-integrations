@@ -4,6 +4,7 @@ import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { attio } from '../providers.js';
+import { datetime } from '../shapes.js';
 
 // Attio's own field names: an app stores records and notes and reads them back with its own schema.
 export type AttioWorkspace = { workspace_id: string; workspace_name: string; workspace_slug: string; scope: string };
@@ -26,7 +27,6 @@ export type AttioClient = {
 };
 
 const id = z.string().min(1).max(200);
-const datetime = z.iso.datetime({ offset: true });
 const workspaceSchema = z.object({ active: z.literal(true), workspace_id: id, workspace_name: z.string(),
   workspace_slug: z.string(), scope: z.string() });
 const valueSchema = z.looseObject({ attribute_type: z.string(), active_until: z.string().nullable() });

@@ -7,13 +7,13 @@ import { decodeWords, headerValue, keptHeaders, parseAddressList, type MailboxEm
 import { revokeGrant } from '../oauth.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { GOOGLE_CALENDAR_BASE, google } from '../providers.js';
+import { datetime, pageSize } from '../shapes.js';
 
 /** A member's own mail and calendar, read-only. Gmail's is a restricted scope: Google verifies the app before it serves
  * more than its test users. */
 export const GOOGLE_SCOPES: readonly string[] = ['https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/calendar.readonly'];
 
-const datetime = z.iso.datetime({ offset: true });
 const header = z.object({ name: z.string(), value: z.string() });
 type Part = { mimeType?: string | null | undefined; filename?: string | null | undefined;
   headers?: { name: string; value: string }[] | null | undefined;
@@ -53,11 +53,6 @@ const ROLES: [label: string, role: string][] = [['DRAFT', 'drafts'], ['TRASH', '
 const RESPONSES: Record<string, MailboxEvent['attendees'][number]['response_status']> = { accepted: 'yes', declined: 'no', tentative: 'maybe' };
 /** Message details read at a time, inside Gmail's per-user quota. */
 const CONCURRENCY = 5;
-
-function pageSize(limit = 100, max = 500): number {
-  if (!Number.isInteger(limit) || limit < 1 || limit > max) throw new TypeError('limit_invalid');
-  return limit;
-}
 
 /** Gmail's `after:` takes seconds; a time without its offset would be read in Google's own zone, so it is refused. */
 function seconds(value: string): number {
@@ -148,7 +143,7 @@ export function googleMailbox(input: { token: (rejected?: string) => Promise<str
     async messages({ after, cursor, limit }) {
       const q = [after === undefined ? null : `after:${String(seconds(after))}`, '-in:drafts'].filter(Boolean).join(' ');
       const listed = parseAnswer(listSchema, await gmail.json('/users/me/messages', { query: { q,
-        maxResults: String(pageSize(limit)), ...(cursor ? { pageToken: cursor } : {}) } }));
+        maxResults: String(pageSize(limit, 500)), ...(cursor ? { pageToken: cursor } : {}) } }));
       // A message deleted since the listing is gone, not unreadable.
       const details = await inTurn(listed.messages ?? [], CONCURRENCY, async ({ id }) => {
         try {

@@ -3,6 +3,7 @@ import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { fathom } from '../providers.js';
+import { datetime } from '../shapes.js';
 
 // Fathom's own field names: an app stores these values and reads them back with its own schema.
 export type FathomUser = { name: string; email: string; team: string | null };
@@ -31,7 +32,6 @@ export type FathomClient = {
   transcript(recordingId: number): Promise<FathomTranscriptItem[]>;
 };
 
-const datetime = z.iso.datetime({ offset: true });
 const userSchema = z.object({ name: z.string(), email: z.string(), team: z.string().nullable() });
 // Every key it does not name is dropped, so Fathom's summary, action items and CRM matches never leave the client.
 const meetingSchema = z.object({

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createClient } from '../http.js';
 import { parseAnswer } from '../parse.js';
 import { apollo } from '../providers.js';
+import { orNull, text } from '../shapes.js';
 
 // Apollo's own field names: an app stores these values and reads them back with its own schema.
 /** The key's owner: Apollo acts as the workspace's longest-standing admin, whatever person made the key. */
@@ -33,9 +34,6 @@ export type ApolloClient = {
   organization(domain: string): Promise<ApolloOrganization | null>;
 };
 
-/** A value Apollo may leave out or null: read as null. */
-const orNull = <T extends z.ZodType>(schema: T) => schema.nullish().transform(value => value ?? null);
-const text = orNull(z.string());
 const count = orNull(z.number());
 const profileSchema = z.object({ id: z.string().min(1), team_id: z.string().min(1), first_name: text, last_name: text, email: text });
 // Every key it does not name is dropped: emails, phones, employment history and Apollo's CRM contact never leave the client.

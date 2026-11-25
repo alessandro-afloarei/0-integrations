@@ -5,6 +5,7 @@ import { responseJson } from '../http-response.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { github } from '../providers.js';
+import { datetime } from '../shapes.js';
 
 // GitHub's own field names: an app stores these values and reads them back with its own schema.
 export type GitHubUser = { id: number; login: string; name: string | null };
@@ -36,7 +37,6 @@ export type GitHubClient = {
 const API_VERSION = '2026-03-10';
 const PAGE = /^[1-9]\d*$/u;
 
-const datetime = z.iso.datetime({ offset: true });
 const userSchema = z.object({ id: z.number().int(), login: z.string(), name: z.string().nullable() });
 const repoSchema = z.object({ id: z.number().int(), name: z.string(), full_name: z.string(), owner: z.object({ login: z.string() }),
   html_url: z.string(), has_issues: z.boolean(), archived: z.boolean() });

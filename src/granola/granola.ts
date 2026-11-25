@@ -4,6 +4,7 @@ import { createClient } from '../http.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { granola } from '../providers.js';
+import { datetime } from '../shapes.js';
 
 // Granola's own field names: an app stores these values and reads them back with its own schema.
 export type GranolaUser = { name: string | null; email: string };
@@ -27,7 +28,6 @@ export type GranolaClient = {
   note(id: string): Promise<{ note: GranolaNote; transcriptCut: boolean }>;
 };
 
-const datetime = z.iso.datetime({ offset: true });
 const userSchema = z.object({ name: z.string().nullable(), email: z.string() });
 const summarySchema = z.object({ id: z.string().min(1).max(200), title: z.string().nullable(), owner: userSchema,
   created_at: datetime, updated_at: datetime, deleted_at: z.string().nullable() });

@@ -4,6 +4,7 @@ import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { notion } from '../providers.js';
+import { datetime } from '../shapes.js';
 
 // Notion's own field names, except `title`, which the client reads out of the page's title property.
 export type NotionBot = { id: string; workspace_id: string | null; workspace_name: string | null };
@@ -25,7 +26,6 @@ export type NotionClient = {
 const NOTION_VERSION = '2026-03-11';
 
 const id = z.string().min(1).max(200);
-const datetime = z.iso.datetime({ offset: true });
 // The schema requires both workspace fields, yet Notion's own example of a bot omits its workspace id.
 const botSchema = z.object({ id, type: z.literal('bot'), bot: z.object({ workspace_id: z.string().optional(),
   workspace_name: z.string().nullable().optional() }) });
