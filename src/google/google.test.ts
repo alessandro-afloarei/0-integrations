@@ -102,7 +102,7 @@ test("reads events with their own offset, a Meet link, an all-day date and the m
 test('signs a mailbox in with PKCE, keeps its refresh token, and revokes the grant once, then again harmlessly', async () => {
   const fake = fakeFetch(kitGoogle());
   const started = await startConnect(google, { clientId: KIT_CLIENT.clientId, redirectUri: KIT_REDIRECT, state: 'state-1' });
-  if (started.kind !== 'redirect' || !started.codeVerifier) throw new Error('expected a PKCE redirect');
+  if (!started.codeVerifier) throw new Error('expected a PKCE verifier');
   expect(new URL(started.url).searchParams.get('access_type')).toBe('offline');
   const consent = await fake.fetch(started.url, { redirect: 'manual' });
   const code = new URL(consent.headers.get('location') ?? '').searchParams.get('code') ?? '';

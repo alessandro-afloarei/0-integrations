@@ -1,13 +1,16 @@
 import { createHash } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defineProvider } from './catalogue.js';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { Account } from './account.js';
+import { defineProvider, type Entry } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
+import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
 import { google } from './catalogue/google.js';
 import { slack } from './catalogue/slack.js';
-import { finishConnect, startConnect } from './connect.js';
+import { finishConnect, startConnect, type Connected, type ConnectStart } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import { fakeGoogle } from './google/fake.js';
+import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
 import { fakeFetch, type Route } from './testing.js';
 
@@ -18,9 +21,7 @@ const data = { redirectUri: callback, team: { id: 'T1', name: 'Acme' }, botUserI
 const tokenUrl = 'https://slack.com/api/oauth.v2.access';
 const revokeUrl = 'https://slack.com/api/auth.revoke';
 async function authorize(http: ReturnType<typeof fakeFetch>): Promise<string> {
-  const begun = await startConnect(slack, start);
-  if (begun.kind !== 'redirect') throw new Error('expected_redirect');
-  const response = await http.fetch(begun.url);
+  const response = await http.fetch((await startConnect(slack, start)).url);
   const code = new URL(response.headers.get('location') ?? '').searchParams.get('code');
   if (!code) throw new Error('expected_code');
   http.calls.length = 0;
@@ -57,17 +58,17 @@ describe('connect', () => {
   });
 
   it('rejects a refused grant before identity', async () => {
+    // Slack's own identity needs no request; this one asks `auth.test`, so an identify would show in the calls.
+    const asking = defineProvider({ ...slack, identify: { request: { path: '/auth.test' }, id: 'team_id' } });
     const http = fakeFetch(fakeSlack(data));
-    await expect(finishConnect(slack, { client, code: 'fixture-denied', redirectUri: callback, fetch: http.fetch, onRevokeFailed: vi.fn() }))
+    await expect(finishConnect(asking, { client, code: 'fixture-denied', redirectUri: callback, fetch: http.fetch, onRevokeFailed: vi.fn() }))
       .rejects.toMatchObject({ detail: 'invalid_code' });
     expect(http.calls.map(call => call.url)).toEqual([tokenUrl]);
   });
 
   it('fake consent keeps the redirect URI and state identical at both ends', async () => {
     const http = fakeFetch(fakeSlack(data));
-    const begun = await startConnect(slack, start);
-    if (begun.kind !== 'redirect') throw new Error('expected_redirect');
-    const response = await http.fetch(begun.url);
+    const response = await http.fetch((await startConnect(slack, start)).url);
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get('location') ?? '');
     expect(location.origin + location.pathname).toBe(callback);
@@ -77,7 +78,7 @@ describe('connect', () => {
 
   it('supports PKCE without owning state', async () => {
     const begun = await startConnect(pkceSlack, start);
-    if (begun.kind !== 'redirect' || !begun.codeVerifier) throw new Error('expected_pkce');
+    if (!begun.codeVerifier) throw new Error('expected_pkce');
     const params = new URL(begun.url).searchParams;
     expect(params.get('state')).toBe('state');
     expect(params.get('code_challenge')).toBe(createHash('sha256').update(begun.codeVerifier).digest('base64url'));
@@ -104,10 +105,21 @@ describe('connect', () => {
     expect(http.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('12:token').toString('base64')}`);
   });
 
-  it.each([{}, { apiToken: '' }])('refuses a key entry without its secret (%j) before anything is sent', async secret => {
+  it.each([{}, { apiToken: '' }, { apiToken: '  ' }, { apiId: 'token' }])('refuses a key entry without its secret (%j) before anything is sent', async secret => {
     const http = fakeFetch([]);
-    await expect(finishConnect(aircall, { secret, values: { apiId: '12' }, fetch: http.fetch })).rejects.toThrow(new TypeError('connect_secret_required'));
+    await expect(finishConnect(aircall, { secret, values: { apiId: '12', apiToken: 'token' }, fetch: http.fetch }))
+      .rejects.toThrow(new TypeError('connect_field_required: apiToken'));
     expect(http.calls).toHaveLength(0);
+  });
+
+  it('keeps and sends only the fields the entry declares, each in its own record', async () => {
+    const http = fakeFetch([{ url: 'https://api.aircall.io/v1/company', respond: () => Response.json({ company: { name: 'Lumen' } }) }]);
+    const form = { apiId: '12', apiToken: 'plain-copy', note: 'extra' };
+    const result = await finishConnect(aircall, { secret: { apiToken: 'token', apiId: 'secret-copy', other: 'extra' }, values: form, fetch: http.fetch });
+    expect(result).toEqual({ secret: { apiToken: 'token' }, values: { apiId: '12' }, account: { id: '12', name: 'Lumen' } });
+    expect(http.calls).toHaveLength(1);
+    expect(JSON.stringify(http.calls)).not.toMatch(/extra|plain-copy|secret-copy/u);
+    expect(http.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('12:token').toString('base64')}`);
   });
 
   it('refuses a key entry that declares no secret field', async () => {
@@ -115,11 +127,44 @@ describe('connect', () => {
     await expect(finishConnect(bare, { secret: { apiKey: 'key' }, fetch: fakeFetch([]).fetch })).rejects.toThrow(new TypeError('connect_secret_required'));
   });
 
-  it.each([undefined, {}, { apiId: '' }])('refuses a key entry without a plain field (%j) before anything is sent', async values => {
+  it.each([undefined, {}, { apiId: '' }, { apiId: ' ' }])('refuses a key entry without a plain field (%j) before anything is sent', async values => {
     const http = fakeFetch([]);
     await expect(finishConnect(aircall, { secret: { apiToken: 'token' }, ...(values ? { values } : {}), fetch: http.fetch }))
       .rejects.toThrow(new TypeError('connect_field_required: apiId'));
     expect(http.calls).toHaveLength(0);
+  });
+});
+
+
+describe('connect types', () => {
+  const oauth = (fetch: typeof globalThis.fetch, code: string) => ({ client, code, redirectUri: callback, fetch, onRevokeFailed: vi.fn() });
+  const attioFetch = fakeFetch([{ url: 'https://api.attio.com/v2/self', respond: () => Response.json({ workspace_id: 'w1', workspace_name: 'Account' }) }]).fetch;
+
+  it('finishes either kind through a widened entry, or a union an app picks by id, with no cast', async () => {
+    const pick = (id: string): typeof hubspot | typeof attio => (id === 'attio' ? attio : hubspot);
+    const widened: Entry = slack;
+    const http = fakeFetch(fakeSlack(data));
+    expect((await finishConnect(widened, oauth(http.fetch, await authorize(http)))).account).toEqual({ id: 'T1', name: 'Acme' });
+    expect((await finishConnect(pick('attio'), { secret: { apiKey: 'k' }, fetch: attioFetch })).account).toEqual({ id: 'w1', name: 'Account' });
+    // Either input type-checks for both: the runtime refuses a mismatch (`oauth_options_required`, `connect_field_required`).
+    for (const input of [oauth(http.fetch, 'code'), { secret: { apiKey: 'k' }, fetch: attioFetch }]) {
+      expectTypeOf(input).toExtend<Parameters<typeof finishConnect<Entry>>[1]>();
+      expectTypeOf(input).toExtend<Parameters<typeof finishConnect<typeof hubspot | typeof attio>>[1]>();
+    }
+    const widenedStart = await startConnect(widened, start);
+    expectTypeOf(widenedStart).toEqualTypeOf<ConnectStart>();
+    expectTypeOf(await startConnect(slack, start)).toHaveProperty('url').toEqualTypeOf<string>();
+  });
+
+  it('types each result from its entry', () => {
+    expectTypeOf<Connected<typeof apollo>['account']>().toEqualTypeOf<Account | null>();
+    expectTypeOf<Connected<typeof slack>['account']>().toEqualTypeOf<Account>();
+    expectTypeOf<Connected<typeof attio>['secret']>().toEqualTypeOf<Readonly<Record<'apiKey', string>>>();
+    expectTypeOf<Connected<typeof aircall>['values']['apiId']>().toEqualTypeOf<string>();
+    expectTypeOf<Connected<typeof slack>['values']['botUserId']>().toEqualTypeOf<unknown>();
+    // @ts-expect-error -- a misspelt name is no key of Slack's values
+    expectTypeOf<Connected<typeof slack>['values']['botUserID']>().toBeUnknown();
+    expectTypeOf<Connected['values']>().toEqualTypeOf<Readonly<Record<string, unknown>>>();
   });
 });
 
@@ -130,6 +175,7 @@ describe('connect review regressions', () => {
   });
 
   it('refuses an OAuth sign-in started or finished without its options', async () => {
+    // @ts-expect-error -- an OAuth entry is started with the app's client id, redirect URI and state
     await expect(startConnect(slack)).rejects.toThrow('oauth_options_required');
     // @ts-expect-error -- an OAuth entry is finished with the code, not a secret
     await expect(finishConnect(slack, { secret: {}, fetch: fakeFetch([]).fetch })).rejects.toThrow('oauth_options_required');
@@ -177,13 +223,23 @@ describe('connect review regressions', () => {
     const http = fakeFetch(fakeGoogle({ client, redirectUri, signIn: () => 'lee@lumen.test', mailboxes: () => null,
       granted: () => ['https://www.googleapis.com/auth/gmail.readonly'] }));
     const begun = await startConnect(google, { clientId: client.clientId, redirectUri, state: 'state-1' });
-    if (begun.kind !== 'redirect' || !begun.codeVerifier) throw new Error('expected_pkce');
+    if (!begun.codeVerifier) throw new Error('expected_pkce');
     const code = new URL((await http.fetch(begun.url, { redirect: 'manual' })).headers.get('location') ?? '').searchParams.get('code') ?? '';
     const onRevokeFailed = vi.fn();
     await expect(finishConnect(google, { client, code, redirectUri, codeVerifier: begun.codeVerifier, fetch: http.fetch, onRevokeFailed }))
       .rejects.toEqual(new ProviderHttpError('rejected', null, 'scope_missing'));
     expect(http.calls.map(call => call.url.split('?')[0]).slice(1)).toEqual(['https://oauth2.googleapis.com/token', 'https://oauth2.googleapis.com/revoke']);
     expect(onRevokeFailed).not.toHaveBeenCalled();
+  });
+
+  it("compares the granted scopes split on the entry's separator", async () => {
+    const commas = defineProvider({ id: 'commas', name: 'Commas', http: { baseUrl: 'https://api.commas.test' },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://commas.test/authorize', tokenUrl: 'https://commas.test/token', pkce: false, scopeSeparator: ',' }],
+      scopes: { default: ['read', 'write'], requireGranted: true } });
+    const granting = (scope: string) => fakeFetch([{ url: 'https://commas.test/token', respond: () => Response.json({ access_token: 'a', token_type: 'bearer', scope }) }]);
+    const finish = (scope: string) => finishConnect(commas, { client, code: 'c', redirectUri: callback, fetch: granting(scope).fetch, onRevokeFailed: vi.fn() });
+    await expect(finish('read,write')).resolves.toEqual({ secret: { accessToken: 'a', refreshToken: null, expiresAt: null }, values: {}, account: null });
+    await expect(finish('read')).rejects.toEqual(new ProviderHttpError('rejected', null, 'scope_missing'));
   });
 
   it.each([undefined, '/relative', 'https://attacker.test/callback', 'javascript:alert(1)', 'data:text/plain,hello'])

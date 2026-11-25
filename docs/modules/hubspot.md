@@ -50,9 +50,8 @@ import { fakeFetch } from '0-integrations/testing';
 
 const redirectUri = 'https://app.test/api/integrations/hubspot/callback';
 const http = fakeFetch(fakeHubSpot({ ...portalData, client, redirectUri }));
-const begun = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
-if (begun.kind !== 'redirect') throw new Error('expected_redirect');
-const consent = await http.fetch(begun.url, { redirect: 'manual' });
+const { url } = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
+const consent = await http.fetch(url, { redirect: 'manual' });
 const back = new URL(consent.headers.get('location') ?? '');
 if (back.searchParams.get('state') !== state) throw new Error('state_mismatch');
 const code = back.searchParams.get('code');

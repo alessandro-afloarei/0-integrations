@@ -14,7 +14,7 @@ the reader puts it on their attendee entry. A next page is Graph's `@odata.nextL
 Sign a member in with `startConnect(google, …)` or `startConnect(microsoft, …)` (the entries at
 `0-integrations/catalogue/<id>`; PKCE, the verifier for the app to keep with its state) and finish with `finishConnect`.
 Google's account is the Gmail address, lowercased. Microsoft's is the user's immutable Graph `id`, lowercased, named by
-its address (`mail`, else `userPrincipalName`, else the id): a tenant's admin can set a user's `mail` to any address,
+`mail` when Graph answers one (else `userPrincipalName`), lowercased, and by the id when that name is blank: a tenant's admin can set a user's `mail` to any address,
 another organization's included, so the address never says who signed in (nOAuth). A Microsoft user with no address
 signs in; the mailbox reader refuses it (`no_mailbox`) at its first read. Microsoft rotates the refresh token on every
 refresh (`accessToken` stores the successor) and has no endpoint that revokes one app's delegated grant, so its entry

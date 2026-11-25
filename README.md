@@ -36,9 +36,8 @@ import { fakeFetch } from '0-integrations/testing';
 
 const redirectUri = 'https://app.test/api/integrations/hubspot/callback';
 const http = fakeFetch(fakeHubSpot({ ...portalData, client, redirectUri }));
-const begun = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
-if (begun.kind !== 'redirect') throw new Error('expected_redirect');
-const consent = await http.fetch(begun.url, { redirect: 'manual' });
+const { url } = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
+const consent = await http.fetch(url, { redirect: 'manual' });
 const back = new URL(consent.headers.get('location') ?? '');
 if (back.searchParams.get('state') !== state) throw new Error('state_mismatch');
 const code = back.searchParams.get('code');
@@ -51,7 +50,7 @@ const { secret, account } = await finishConnect(hubspot, {
 
 The example uses app-owned `portalData`, OAuth `client`, a fresh stored `state`, and an `onRevokeFailed` observer.
 In the app, consume and validate that state once; keep the returned secret on the server.
-In an app you redirect the browser to `begun.url`, read `code` and `state` in your callback, check the state, and pass
+In an app you redirect the browser to `url`, read `code` and `state` in your callback, check the state, and pass
 your real (guarded) `fetch` to `finishConnect`.
 
 ## Modules

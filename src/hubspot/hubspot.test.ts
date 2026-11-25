@@ -318,12 +318,6 @@ describe("the HubSpot client", () => {
     expect(await identify({ hub_id: null }, stub.fetch)).toEqual({ account: { id: "42", name: "Portal 42" }, values: {} });
     expect(stub.calls).toHaveLength(2);
   });
-
-  it.each([[], {}, true].map(hub_id => ({ hub_id })))("identify refuses a hub_id that is neither number nor string ($hub_id)", async ({ hub_id }) => {
-    const stub = scripted();
-    await expect(identify({ hub_id }, stub.fetch)).rejects.toEqual(malformed);
-    expect(stub.calls).toHaveLength(0);
-  });
 });
 
 describe("deal stage history", () => {

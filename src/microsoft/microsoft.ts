@@ -33,7 +33,7 @@ const eventSchema = z.object({
   sensitivity: z.string(),
 });
 const listSchema = z.object({ value: z.array(z.unknown()), '@odata.nextLink': z.string().nullish() });
-const meSchema = z.object({ id: z.string().min(1), mail: z.string().nullish(), userPrincipalName: z.string().nullish() });
+const meSchema = z.object({ mail: z.string().nullish(), userPrincipalName: z.string().nullish() });
 const calendarSchema = z.object({ id: z.string(), name: z.string().nullish() });
 const folderSchema = z.object({ id: z.string() });
 
@@ -80,15 +80,12 @@ function conference(event: z.infer<typeof eventSchema>): MailboxEvent['conferenc
   return { provider, url };
 }
 
-/**
- * The signed-in user: Graph's immutable `id`, and the mailbox address (`mail`, else the sign-in name), lowercased. Only the id
- * says who they are: a tenant's admin can set `mail` to any address, another organization's included (nOAuth).
- */
-async function graphUser(http: HttpClient): Promise<{ id: string; email: string }> {
-  const { id, mail, userPrincipalName } = parseAnswer(meSchema, await http.json('/me', { query: { $select: 'id,mail,userPrincipalName' } }));
+/** The mailbox address (`mail`, else the sign-in name), lowercased: a reader needs one to match its owner in a meeting. */
+async function graphUser(http: HttpClient): Promise<{ email: string }> {
+  const { mail, userPrincipalName } = parseAnswer(meSchema, await http.json('/me', { query: { $select: 'id,mail,userPrincipalName' } }));
   const email = (mail ?? userPrincipalName ?? '').trim().toLowerCase();
   if (!email.includes('@')) throw new ProviderHttpError('invalid_response', null, 'no_mailbox');
-  return { id, email };
+  return { email };
 }
 
 /** An address on Graph under the member's own `/me`, as the path after Graph's base; null for anywhere else. */
@@ -108,7 +105,7 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
   let folders: Promise<Map<string, string>> | undefined;
 
   const identify = () => {
-    me ??= graphUser(http).then(({ email }) => ({ email })).catch((error: unknown) => { me = undefined; throw error; });
+    me ??= graphUser(http).catch((error: unknown) => { me = undefined; throw error; });
     return me;
   };
 

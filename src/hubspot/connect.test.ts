@@ -16,9 +16,7 @@ const revokeUrl = `${tokenUrl}/revoke`;
 const accountUrl = 'https://api.hubapi.com/account-info/2026-09/details';
 
 async function authorize(http: ReturnType<typeof fakeFetch>): Promise<string> {
-  const begun = await startConnect(hubspot, start);
-  if (begun.kind !== 'redirect') throw new Error('expected_redirect');
-  const response = await http.fetch(begun.url, { redirect: 'manual' });
+  const response = await http.fetch((await startConnect(hubspot, start)).url, { redirect: 'manual' });
   expect(response.status).toBe(302);
   const back = new URL(response.headers.get('location') ?? '');
   expect(back.origin + back.pathname).toBe(callback);

@@ -3,13 +3,25 @@ import type { Entry, Field, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { authorizeUrl, exchangeCode, pkcePair, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
 
-export type ConnectStart = { kind: 'redirect'; url: string; codeVerifier?: string } | { kind: 'form'; fields: readonly Field[] };
-type Kind<E extends Entry> = E['auth'][0]['kind'];
+type Redirect = { kind: 'redirect'; url: string; codeVerifier?: string };
+type Form = { kind: 'form'; fields: readonly Field[] };
+export type ConnectStart = Redirect | Form;
+/** `OAuth` for an OAuth 2 entry, `Key` for a key entry, either for an entry whose kind is not known (a union, `Entry`). */
+type ByKind<E extends Entry, OAuth, Key> = [E['auth'][0]['kind']] extends ['oauth2'] ? OAuth
+  : [E['auth'][0]['kind']] extends ['key'] ? Key : OAuth | Key;
+/** The entry's declared fields, one union member each. */
+type Fields<E extends Entry> = NonNullable<E['fields']>[number];
+/** A record keyed by `K`, or by any string when the entry is not a literal and its names are unknown. */
+type Keyed<E extends Entry, K extends string, V> = string extends E['id'] ? Readonly<Record<string, V>> : Readonly<Record<K, V>>;
+/** The names `save` keeps, when the entry declares any. */
+type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : never;
 /** A finished sign-in: the secret to seal, the plain values to keep, and the account. */
 export type Connected<E extends Entry = Entry> = {
-  secret: [Kind<E>] extends ['oauth2'] ? Grant : [Kind<E>] extends ['key'] ? Readonly<Record<string, string>>
-    : Grant | Readonly<Record<string, string>>;
-  values: Values;
+  /** The grant, or a key entry's secret fields by name. */
+  secret: ByKind<E, Grant, Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>>;
+  /** The plain fields entered, by name, and what `save` kept (present only when the provider answered it). */
+  values: string extends E['id'] ? Values
+    : Readonly<Record<Exclude<Fields<E>, { secret: true }>['name'], string>> & { readonly [K in Saved<E>]?: unknown };
   account: E['identify'] extends { id: Value } ? Account : Account | null;
 };
 type OAuthStart = { clientId: string; redirectUri: string; state: string };
@@ -18,6 +30,8 @@ type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; cod
 type FormFinish = { secret: Readonly<Record<string, string>>; values?: Values; fetch: typeof fetch };
 
 /** A form of the entry's fields, or the provider's authorization URL (with the PKCE verifier for the app to keep). */
+export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart], []>):
+  Promise<ByKind<E, Redirect, Form>>;
 export async function startConnect(entry: Entry, options?: OAuthStart): Promise<ConnectStart> {
   const [auth] = entry.auth;
   if (auth.kind === 'key') return { kind: 'form', fields: entry.fields ?? [] };
@@ -27,29 +41,28 @@ export async function startConnect(entry: Entry, options?: OAuthStart): Promise<
     ...(pkce ? { codeChallenge: pkce.challenge } : {}) }).toString(), ...(pkce ? { codeVerifier: pkce.verifier } : {}) };
 }
 
-export function finishConnect<const E extends Entry>(entry: E, input: [Kind<E>] extends ['oauth2'] ? OAuthFinish : FormFinish):
-  Promise<Connected<E>>;
+export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish, FormFinish>): Promise<Connected<E>>;
 export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
   const [auth] = entry.auth;
   if (auth.kind === 'key') {
-    const secret = 'secret' in input ? input.secret : {};
-    const values = 'values' in input ? input.values ?? {} : {};
-    // Every declared field, before anything is sent: an entry's templates read them.
-    for (const field of entry.fields ?? []) {
-      const value = field.secret ? secret[field.name] : values[field.name];
-      if (typeof value !== 'string' || value === '') {
-        throw new TypeError(field.secret ? 'connect_secret_required' : `connect_field_required: ${field.name}`);
-      }
-    }
-    const name = entry.fields?.find(field => field.secret)?.name;
-    const token = name === undefined ? undefined : secret[name];
+    const { secret: secrets = {}, values: plain = {} }: Partial<FormFinish> = 'secret' in input ? input : {};
+    // Only the declared fields, each filled, all checked before anything is sent: an entry's templates read them.
+    const fields = entry.fields ?? [];
+    const read = (field: Field) => {
+      const value = (field.secret ? secrets : plain)[field.name];
+      if (typeof value !== 'string' || value.trim() === '') throw new TypeError(`connect_field_required: ${field.name}`);
+      return [field.name, value] as const;
+    };
+    const secret = Object.fromEntries(fields.filter(field => field.secret).map(read));
+    const values = Object.fromEntries(fields.filter(field => !field.secret).map(read));
+    const token = Object.values(secret)[0];
     if (token === undefined) throw new TypeError('connect_secret_required');
     return { secret, ...await identifyAccount(entry, { fetch: input.fetch, token, values }) };
   }
   if (!('code' in input)) throw new TypeError('oauth_options_required');
   const { grant, extras } = await exchangeCode(entry, input.client, input);
   try {
-    const granted = new Set(typeof extras.scope === 'string' ? extras.scope.split(' ') : []);
+    const granted = new Set(typeof extras.scope === 'string' ? extras.scope.split(auth.scopeSeparator ?? ' ') : []);
     if (entry.scopes?.requireGranted && !entry.scopes.default.every(scope => granted.has(scope))) {
       throw new ProviderHttpError('rejected', null, 'scope_missing');
     }
@@ -57,10 +70,9 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
   } catch (error) {
     // A reused grant may belong to a live connection; only the app can decide ownership.
     if (auth.reusesGrant) throw error;
-    // Cleanup must not hide the original refusal. The OAuth app goes only to an RFC 7009 revoke, which sends it.
+    // Cleanup must not hide the original refusal.
     try {
-      await revokeGrant(entry, { ...grant, fetch: input.fetch,
-        ...(entry.revoke !== undefined && 'url' in entry.revoke ? { client: input.client } : {}) });
+      await revokeGrant(entry, { ...grant, client: input.client, fetch: input.fetch });
     } catch (revokeError) { input.onRevokeFailed(revokeError); }
     throw error;
   }

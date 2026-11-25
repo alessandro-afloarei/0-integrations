@@ -111,7 +111,7 @@ test("follows a next page only on Graph and under the member's own /me, in whate
 test('signs a mailbox in with PKCE, keys it by its immutable user id, and rotates its refresh token', async () => {
   const fake = fakeFetch(kitMicrosoft());
   const started = await startConnect(microsoft, { clientId: KIT_CLIENT.clientId, redirectUri: KIT_REDIRECT, state: 'state-1' });
-  if (started.kind !== 'redirect' || !started.codeVerifier) throw new Error('expected a PKCE redirect');
+  if (!started.codeVerifier) throw new Error('expected a PKCE verifier');
   const consent = await fake.fetch(started.url, { redirect: 'manual' });
   const back = new URL(consent.headers.get('location') ?? '');
   expect(back.searchParams.get('state')).toBe('state-1');

@@ -46,9 +46,11 @@
   slack: `identify` is gone; the entry's `identify` and `save` read the token answer.
 - `finishConnect` returns `{ secret, values, account }`, typed from the entry: `values` replaces `details`. HubSpot's
   `portalId` is `account.id`, Slack's `botUserId` is `values.botUserId` (absent, not `null`, when Slack names none), and
-  Google's and Microsoft's address is `account.name`. A key entry's secret is its secret fields by name (`{ apiKey }`),
-  and every declared field must be given before anything is sent (`connect_secret_required`,
-  `connect_field_required: <name>`).
+  Google's and Microsoft's address is `account.name`. A key entry's secret is its secret fields by name (`{ apiKey }`)
+  and its values its plain fields: only declared fields are kept, and each must be given, not blank, before anything is
+  sent (`connect_field_required: <name>`). `startConnect` requires an OAuth entry's options.
+- An account id may be a positive integer for every provider (Slack, Google and Microsoft required a string).
+- slack: `botUserId` is saved as Slack answers it (it was kept only when a string, else `null`).
 - A malformed identity is `invalid_response` with detail `missing_fields` and the answer's status for every provider
   (HubSpot's carried status and detail `null`).
 - hubspot: a portal id is any non-empty string or positive integer (a string had to match `^[1-9]\d*$`), and a `null`
