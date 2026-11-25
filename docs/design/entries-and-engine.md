@@ -218,7 +218,7 @@ classified in this order, and the first step that decides wins:
 2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code. The error carries only
    `Retry-After`, else the body's wait: never a rate limit's.
 3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is
-   `Retry-After`, else the matching rule's `resetAt`, else `rateLimit.defaultWaitMs`.
+   `Retry-After`, else the matching rule's `resetAt`, else `rateLimit.defaultWaitMs`, else the body's wait.
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -230,7 +230,7 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 - Only a 429 is retried, as today, on reads, up to `retry.limit`. The wait is `Retry-After`, else `waitFromBody`, else
   `retry.defaultWaitMs`, capped by `maxWaitMs`. An answer that step 3 reclassifies is reported, not retried.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
-  1 second. A `limit` of 0 means no retry and no waits.
+  1 second. A `limit` of 0 means no retry; an error still carries the wait the provider names.
 - The error taxonomy does not change.
 
 ### `paging`
@@ -420,6 +420,5 @@ OAuth 1, JWT and service-account sign-in, and multipart bodies wait for the firs
 
 ## Left to the builder
 
-- The exact defaults of `retry`, chosen so the 17 providers behave exactly as today.
 - Whether a module's simplest calls move onto declared operations in this phase or stay hand-written.
 - The names of internal helpers.
