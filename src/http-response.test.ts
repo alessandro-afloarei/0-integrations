@@ -171,22 +171,22 @@ test('Lusha: the v3 message is request_failed, any other 403 rejected', () => {
 });
 
 /** A key sent bare in a header, and the provider's code at `type` (`provider/insufficient_permissions`). */
-const hosted = defineProvider({ id: 'hosted', name: 'Hosted', auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
+const headerKey = defineProvider({ id: 'header-key', name: 'Header key', auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: BASE, errors: { detail: 'type' } });
 
 test("Breakcold's body wait in milliseconds and code at error.code; a slash in a code made a dot", () => {
   expect(fail(breakcold, 429, { error: { code: 'usage_limit', retryAfterMs: 12.1 } })).toMatchObject({ code: 'rate_limited', detail: 'usage_limit', retryAfterMs: 13 });
   expect(fail(breakcold, 402, { error: { code: 7 } })).toMatchObject({ code: 'request_failed', detail: null });
-  expect(fail(hosted, 403, { type: 'provider/insufficient_permissions' })).toMatchObject({ code: 'rejected', detail: 'provider.insufficient_permissions' });
+  expect(fail(headerKey, 403, { type: 'provider/insufficient_permissions' })).toMatchObject({ code: 'rejected', detail: 'provider.insufficient_permissions' });
 });
 
 test("an answer's code holding the credential its request sent is no detail", async () => {
   const key = 'uk_live.Abc-123';
   const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type: key }, { status: 403 }) }]);
-  const client = createClient(hosted, { token: () => Promise.resolve(key), fetch: fake.fetch });
+  const client = createClient(headerKey, { token: () => Promise.resolve(key), fetch: fake.fetch });
   const answer = await client.request('/accounts');
-  expect(classify(hosted, answer)).toMatchObject({ code: 'rejected', detail: null });
-  expect(fail(hosted, 403, { type: key })).toMatchObject({ code: 'rejected', detail: key });
+  expect(classify(headerKey, answer)).toMatchObject({ code: 'rejected', detail: null });
+  expect(fail(headerKey, 403, { type: key })).toMatchObject({ code: 'rejected', detail: key });
 });
 
 test('Google: a numeric error.code is no code, so the reason decides', () => {

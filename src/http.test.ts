@@ -21,8 +21,8 @@ function script(entry: Entry, ...responses: (() => Response)[]) {
   return { ...fake, token, client };
 }
 /** A key sent bare in a header, and the provider's code at `type`: a code that may echo the key. */
-const hosted = defineProvider({ id: 'hosted', name: 'Hosted', auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
-  http: { baseUrl: 'https://api.hosted.test/v2' }, errors: { detail: 'type' } });
+const headerKey = defineProvider({ id: 'header-key', name: 'Header key', auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
+  http: { baseUrl: 'https://api.header-key.test/v2' }, errors: { detail: 'type' } });
 const ok = () => Response.json({ ok: true });
 const limited = () => Response.json({}, { status: 429 });
 
@@ -161,11 +161,11 @@ test('request hands back a 500 body for the caller to read', async () => {
 });
 
 test("uses the app's baseUrl and headers", async () => {
-  const fake = fakeFetch([{ url: 'https://api1.hosted.test:13111/api/v1/users', respond: ok }]);
-  const client = createClient(hosted, { token: () => Promise.resolve('k'), fetch: fake.fetch,
-    baseUrl: 'https://api1.hosted.test:13111/api/v1', headers: { 'user-agent': 'integrations-test' } });
+  const fake = fakeFetch([{ url: 'https://api1.header-key.test:13111/api/v1/users', respond: ok }]);
+  const client = createClient(headerKey, { token: () => Promise.resolve('k'), fetch: fake.fetch,
+    baseUrl: 'https://api1.header-key.test:13111/api/v1', headers: { 'user-agent': 'integrations-test' } });
   await client.json('/users');
-  expect(fake.calls[0]?.url).toBe('https://api1.hosted.test:13111/api/v1/users');
+  expect(fake.calls[0]?.url).toBe('https://api1.header-key.test:13111/api/v1/users');
   expect(fake.calls[0]?.headers).toMatchObject({ 'user-agent': 'integrations-test', 'x-api-key': 'k' });
 });
 
@@ -352,7 +352,7 @@ test('a provider code holding the credential the request sent is not carried', a
   const key = 'uk_live.Abc-123';
   for (const [type, detail] of [[key, null], [`errors/${key}`, null], ['errors/disconnected_account', 'errors.disconnected_account']]) {
     const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type }, { status: 403 }) }]);
-    const client = createClient(hosted, { token: () => Promise.resolve(key), fetch: fake.fetch });
+    const client = createClient(headerKey, { token: () => Promise.resolve(key), fetch: fake.fetch });
     await expect(client.json('/accounts')).rejects.toMatchObject({ code: 'rejected', detail });
     expect(fake.calls[0]?.headers['x-api-key']).toBe(key);
   }
@@ -362,7 +362,7 @@ test('a credential is matched as a detail reads: trimmed as sent, a slash read a
   for (const [key, type, detail] of [['  uk_live.Abc-123  ', 'uk_live.Abc-123', null], ['abc/def', 'abc/def', null],
     ['  uk_live.Abc-123  ', 'errors/disconnected_account', 'errors.disconnected_account']] as const) {
     const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type }, { status: 403 }) }]);
-    const client = createClient(hosted, { token: () => Promise.resolve(key), fetch: fake.fetch });
+    const client = createClient(headerKey, { token: () => Promise.resolve(key), fetch: fake.fetch });
     await expect(client.json('/accounts')).rejects.toMatchObject({ code: 'rejected', detail });
     expect(fake.calls[0]?.headers['x-api-key']).toBe(key.trim());
   }
@@ -393,7 +393,7 @@ test('a code that echoes the renewed token is no detail', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({}, { status: 401 }),
     () => Response.json({ type: 'renewed_key' }, { status: 403 })) }]);
   const token = vi.fn<(rejected?: string) => Promise<string>>().mockResolvedValueOnce('old_key').mockResolvedValue('renewed_key');
-  await expect(createClient(hosted, { token, fetch: fake.fetch, minIntervalMs: 0 }).json('/x'))
+  await expect(createClient(headerKey, { token, fetch: fake.fetch, minIntervalMs: 0 }).json('/x'))
     .rejects.toMatchObject({ code: 'rejected', status: 403, detail: null });
   expect(fake.calls.map(call => call.headers['x-api-key'])).toEqual(['old_key', 'renewed_key']);
 });

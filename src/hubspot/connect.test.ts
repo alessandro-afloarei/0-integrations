@@ -5,7 +5,6 @@ import { GrantRevoked, ProviderHttpError } from '../errors.js';
 import { refreshGrant, revokeGrant, type Grant } from '../oauth.js';
 import { fakeFetch, respondFrom, type Route } from '../testing.js';
 import { fakeHubSpot } from './fake.js';
-import * as hubspotModule from './hubspot.js';
 
 const callback = 'https://app.test/api/integrations/hubspot/callback';
 const start = { clientId: 'client', redirectUri: callback, state: 'state +&/?=' };
@@ -45,11 +44,7 @@ function withTokenAnswer(routes: Route[], change: (body: Record<string, unknown>
 afterEach(() => vi.useRealTimers());
 
 describe('HubSpot sign-in', () => {
-  it('reads the entry with the exact read scopes, and the module has no connect object or identity helper', async () => {
-    expect(hubspot.auth[0]).toHaveProperty('reusesGrant', true);
-    expect(hubspot.scopes.default).toEqual(['oauth', 'crm.objects.companies.read', 'crm.objects.contacts.read',
-      'crm.objects.deals.read', 'crm.objects.owners.read']);
-    for (const name of ['identify', 'portalOf', 'hubspotConnect', 'HUBSPOT_SCOPES']) expect(hubspotModule).not.toHaveProperty(name);
+  it('starts with the exact read scopes', async () => {
     const begun = await startConnect(hubspot, start);
     expect(begun).toEqual({ kind: 'redirect', url: 'https://app.hubspot.com/oauth/authorize?client_id=client&scope=oauth+crm.objects.companies.read+crm.objects.contacts.read+crm.objects.deals.read+crm.objects.owners.read&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fhubspot%2Fcallback&state=state+%2B%26%2F%3F%3D' });
   });

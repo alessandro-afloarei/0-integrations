@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest';
 import { identifyAccount } from './account.js';
 import { aircall } from './catalogue/aircall.js';
+import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
+import { github } from './catalogue/github.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { microsoft } from './catalogue/microsoft.js';
@@ -63,13 +65,11 @@ test("Microsoft's account is the Graph id, named by the mail address, else the s
 });
 
 test("a bare `id` path reads the answer (GitHub's), never the id being looked for", async () => {
-  const { github } = await import('./catalogue/github.js');
   const fake = fakeFetch([{ url: 'https://api.github.com/user', respond: json({ id: 7, login: 'octocat' }) }]);
   expect((await identifyAccount(github, { fetch: fake.fetch, token: 't' })).account).toEqual({ id: '7', name: 'octocat' });
 });
 
 test('a credential check sends its request at once and returns no account', async () => {
-  const { apollo } = await import('./catalogue/apollo.js');
   const fake = fakeFetch([{ url: 'https://api.apollo.io/api/v1/users/api_profile', respond: json({ id: 'u' }) }]);
   expect(await identifyAccount(apollo, { fetch: fake.fetch, token: 't' })).toEqual({ account: null, values: {} });
   expect(fake.calls).toHaveLength(1);
