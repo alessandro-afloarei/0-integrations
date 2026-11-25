@@ -1,5 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/{errors,providers,vault,oauth,credentials,http,webhooks,testing,catalogue}.ts", "src/**/*.test.ts", "src/providers.legacy.test-support.ts", "src/catalogue/*.ts"],
+  "entry": ["src/{errors,providers,vault,oauth,credentials,http,webhooks,testing,catalogue}.ts", "src/**/*.test.ts", "src/providers.legacy.test-support.ts"],
   "project": ["src/**/*.ts"]
 }

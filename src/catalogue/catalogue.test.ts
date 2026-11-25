@@ -114,3 +114,8 @@ test.each([
   ['compares with neither header nor path', { equals: 'denied' }],
   ['wants a header to equal a non-string', { header: 'x-ratelimit-remaining', equals: 0 }],
 ])('a condition that %s fails the schema', (_, bad) => { expect(when.safeParse(bad).success).toBe(false); });
+
+test.each([
+  ['compares a header to a string', { header: 'x-ratelimit-remaining', equals: '0' }],
+  ['compares a path to a boolean', { path: 'active', equals: false }],
+])('a condition that %s matches the schema', (_, good) => { expect(when.safeParse(good).success).toBe(true); });
