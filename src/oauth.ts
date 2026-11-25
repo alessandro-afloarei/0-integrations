@@ -1,7 +1,7 @@
 import * as oauth from 'oauth4webapi';
+import { lookupNames, sendCall } from './account.js';
 import type { Auth, Entry } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { lookupNames, sendCall } from './account.js';
 import { createClient } from './http.js';
 import { classify, codeOf, safeDetail } from './http-response.js';
 import { holds } from './rules.js';
