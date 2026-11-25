@@ -15,16 +15,19 @@
   and `provider/…` types were, so `errors/…` types are now carried too.
 - Every provider that reads an error code or a wait from the body skips an empty-string code and reads the next path,
   and a path also reads an own dotted key (`{ "error.code": … }`, `{ "error.retryAfterMs": … }`) and an object keyed
-  `0` (`{ "errors": { "0": … } }`): apollo, breakcold, google and microsoft read such bodies differently than before.
+  `0` (`{ "errors": { "0": … } }`): apollo, breakcold, fireflies, google and microsoft read such bodies differently than
+  before.
 - `createClient(entry, { token, fetch, values?, … })` takes a catalogue entry; Aircall's credential is built from
   `values: { apiId }` and the API token.
 - `createClient` takes the entry first, and an entry always has a base URL (`base_url_required` is gone).
 - slack: a code outside 2xx is read too: a 401 `invalid_auth` (or another revoked code) is `GrantRevoked`, and a 429
   carries Slack's `error` (`ratelimited`) as its detail.
 - slack: an answer is refused when its `ok` is false; a 200 that carries no `ok` is read by its data.
-- lusha: an account without v3 access keeps the answer's `Retry-After` in `retryAfterMs` (it was always `null`).
-- fireflies: an empty-string GraphQL code is skipped and the next path read (`errors.0.extensions.code`), and a 200
-  that is no JSON is `invalid_response` with status 200 (it was `null`).
+- lusha: an account without v3 access carries the answer's status (it was always 403) and its `Retry-After` in
+  `retryAfterMs` (it was always `null`).
+- fireflies: a 2xx that is no JSON is `invalid_response` with the answer's status (it was `null`) and its `Retry-After`
+  in `retryAfterMs`. A non-2xx whose first GraphQL code is an empty string and that has no `extensions.code` is
+  `unavailable` (it was `request_failed`).
 - unipile: `unipileConnect` is gone: call `client.authLink(link)` for the sign-in URL and
   `client.account(accountId, signal)` for the account.
 
