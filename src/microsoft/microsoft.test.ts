@@ -8,7 +8,7 @@ import { fakeFetch, sequence } from '../testing.js';
 import calendarRecording from './fixtures/calendar-recording.json' with { type: 'json' };
 import mailRecording from './fixtures/mail-recording.json' with { type: 'json' };
 import { fakeMicrosoft, userId } from './fake.js';
-import { graphMailbox, microsoftConnect } from './microsoft.js';
+import { graphMailbox } from './microsoft.js';
 import type { FakeMailbox } from '../mailbox/fake.js';
 import { KIT_MAILBOX, kitMailbox } from '../mailbox/kit.test-support.js';
 import { graphCalendarScenario, graphMailScenario, KIT_CLIENT, KIT_REDIRECT, kitMicrosoft } from './scenario.test-support.js';
@@ -110,23 +110,28 @@ test("follows a next page only on Graph and under the member's own /me, in whate
 
 test('signs a mailbox in with PKCE, keys it by its immutable user id, and rotates its refresh token', async () => {
   const fake = fakeFetch(kitMicrosoft());
-  const started = await startConnect(microsoftConnect, { clientId: KIT_CLIENT.clientId, redirectUri: KIT_REDIRECT, state: 'state-1' });
+  const started = await startConnect(microsoft, { clientId: KIT_CLIENT.clientId, redirectUri: KIT_REDIRECT, state: 'state-1' });
   if (started.kind !== 'redirect' || !started.codeVerifier) throw new Error('expected a PKCE redirect');
   const consent = await fake.fetch(started.url, { redirect: 'manual' });
   const back = new URL(consent.headers.get('location') ?? '');
   expect(back.searchParams.get('state')).toBe('state-1');
-  const connected = await finishConnect(microsoftConnect, { client: KIT_CLIENT, code: back.searchParams.get('code') ?? '',
+  const connected = await finishConnect(microsoft, { client: KIT_CLIENT, code: back.searchParams.get('code') ?? '',
     redirectUri: KIT_REDIRECT, codeVerifier: started.codeVerifier, fetch: fake.fetch, onRevokeFailed: () => undefined });
   // The account is the user's immutable id: a tenant's admin can set any address as `mail` (nOAuth).
   expect(connected.account).toEqual({ id: userId(KIT_MAILBOX), name: KIT_MAILBOX });
-  expect(connected.details).toEqual({ email: KIT_MAILBOX });
+  expect(connected.values).toEqual({});
   const first = connected.secret.refreshToken ?? '';
   const renewed = await refreshGrant(microsoft, KIT_CLIENT, first, { fetch: fake.fetch });
   expect(renewed.refreshToken).not.toBe(first);
   await expect(refreshGrant(microsoft, KIT_CLIENT, first, { fetch: fake.fetch })).rejects.toBeInstanceOf(GrantRevoked);
   // The same code twice, or one without its verifier, is refused.
-  await expect(finishConnect(microsoftConnect, { client: KIT_CLIENT, code: back.searchParams.get('code') ?? '', redirectUri: KIT_REDIRECT,
+  await expect(finishConnect(microsoft, { client: KIT_CLIENT, code: back.searchParams.get('code') ?? '', redirectUri: KIT_REDIRECT,
     codeVerifier: started.codeVerifier, fetch: fake.fetch, onRevokeFailed: () => undefined })).rejects.toBeInstanceOf(GrantRevoked);
+});
+
+test('refuses a mailbox whose user has no address at its first read', async () => {
+  const me = fakeFetch([{ url: `${GRAPH}/me`, respond: () => Response.json({ id: 'user-1', mail: null, userPrincipalName: null }) }]);
+  await expect(reader(me.fetch).identify()).rejects.toMatchObject({ code: 'invalid_response', detail: 'no_mailbox' });
 });
 
 test("reads every sensitivity label but normal as private, personal included, and skips an event that names none", async () => {

@@ -29,23 +29,24 @@ WithLock: run work under a named lock, or return "busy".
 This example runs against the HubSpot fake, so it needs no account or network.
 
 ```ts
+import { hubspot } from '0-integrations/catalogue/hubspot';
 import { startConnect, finishConnect } from '0-integrations/connect';
-import { hubspotConnect } from '0-integrations/hubspot';
 import { fakeHubSpot } from '0-integrations/hubspot/fake';
 import { fakeFetch } from '0-integrations/testing';
 
 const redirectUri = 'https://app.test/api/integrations/hubspot/callback';
 const http = fakeFetch(fakeHubSpot({ ...portalData, client, redirectUri }));
-const begun = await startConnect(hubspotConnect, { clientId: client.clientId, redirectUri, state });
+const begun = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
 if (begun.kind !== 'redirect') throw new Error('expected_redirect');
 const consent = await http.fetch(begun.url, { redirect: 'manual' });
 const back = new URL(consent.headers.get('location') ?? '');
 if (back.searchParams.get('state') !== state) throw new Error('state_mismatch');
 const code = back.searchParams.get('code');
 if (!code) throw new Error('missing_code');
-const connected = await finishConnect(hubspotConnect, {
+const { secret, account } = await finishConnect(hubspot, {
   client, code, redirectUri, fetch: http.fetch, onRevokeFailed,
 });
+// secret: the OAuth grant to seal; account: { id: '42', name: 'Portal 42' }
 ```
 
 The example uses app-owned `portalData`, OAuth `client`, a fresh stored `state`, and an `onRevokeFailed` observer.
@@ -62,7 +63,7 @@ your real (guarded) `fetch` to `finishConnect`.
 | [`catalogue`](docs/design/entries-and-engine.md) | `defineProvider` and the entry types; `catalogue/<id>` is one provider's entry as plain data, `catalogue.json` all 17 as JSON |
 | [`vault`](docs/modules/vault.md) | Seals JSON secrets under per-tenant data keys |
 | [`oauth`](docs/modules/oauth.md) | Consent URLs, code exchange, refresh and revoke, with PKCE |
-| [`connect`](docs/modules/connect.md) | `startConnect` and `finishConnect`: one flow for OAuth, key forms and hosted sign-in |
+| [`connect`](docs/modules/connect.md) | `startConnect` and `finishConnect`: one flow for OAuth and key forms, run from a catalogue entry |
 | [`credentials`](docs/modules/credentials.md) | Reads API keys and refreshes OAuth tokens under a lock |
 | [`http`](docs/modules/http.md) | An authenticated client with timeouts, pacing and capped 429 waits |
 | [`webhooks`](docs/modules/webhooks.md) | HMAC signature checks over the raw body bytes |

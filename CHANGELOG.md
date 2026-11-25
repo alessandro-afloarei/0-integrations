@@ -34,11 +34,29 @@
   is refused inside a 200 when the entry's `auth.failed` holds, with the code `errors.detail` reads (Slack's as before).
 - `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke, by RFC 7009 or by the entry's
   request, and replaces `revokeGrant(definition, client, token, …)`; an entry without `revoke` is done, and only an
-  RFC 7009 revoke needs `client` (`oauth_client_required` without it). The connect objects' `revoke` call it.
+  RFC 7009 revoke needs `client` (`oauth_client_required` without it).
 - slack: `slackClient(…).revoke()` is gone: call `revokeGrant(slack, { accessToken, fetch })`. A 404, or a 2xx that is
   no JSON, from `auth.revoke` is now done (it was `not_found` and `invalid_response`).
 - `verifyWebhook` takes `entry.webhook`; new `deliveryId(entry.webhook, request)` reads the delivery id an entry declares.
 - breakcold: `parseWebhook` is gone: read `deliveryId(breakcold.webhook, request)`.
+- `startConnect(entry, options?)` and `finishConnect(entry, input)` run any catalogue entry. `OAuthConnect`,
+  `DirectConnect`, `ConnectIdentity`, `ConnectResult`, `ConnectField` and the connect objects `googleConnect`,
+  `microsoftConnect`, `hubspotConnect` and `slackConnect` are gone; `ConnectStart` has no `hosted` kind, and a form's
+  fields are the entry's (`title`, not `label`; `secret` is `true` or absent).
+- `GOOGLE_SCOPES`, `MICROSOFT_SCOPES`, `HUBSPOT_SCOPES` and `SLACK_SCOPES` are gone: read `<entry>.scopes.default`.
+  slack: `identify` is gone; the entry's `identify` and `save` read the token answer.
+- `finishConnect` returns `{ secret, values, account }`, typed from the entry: `values` replaces `details`. HubSpot's
+  `portalId` is `account.id`, Slack's `botUserId` is `values.botUserId` (absent, not `null`, when Slack names none), and
+  Google's and Microsoft's address is `account.name`. A key entry's secret is its secret fields by name (`{ apiKey }`),
+  and every declared field must be given before anything is sent (`connect_secret_required`,
+  `connect_field_required: <name>`).
+- A malformed identity is `invalid_response` with detail `missing_fields` and the answer's status for every provider
+  (HubSpot's carried status and detail `null`).
+- hubspot: a portal id is any non-empty string or positive integer (a string had to match `^[1-9]\d*$`), and a `null`
+  `hub_id` reads account-info (it was refused).
+- microsoft: the account id is Graph's `id` lowercased (Graph ids are lowercase GUIDs). A user with no address (neither
+  `mail` nor `userPrincipalName`, or one without `@`) now signs in, named by its address if any, else its id; the
+  mailbox reader still refuses it as `no_mailbox` at its first read.
 
 ## 0.12.0
 

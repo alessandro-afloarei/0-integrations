@@ -4,7 +4,6 @@ import type { MailboxEmail, MailboxEvent, MailboxEventTime } from '../mailbox/ma
 import type { OAuthClient } from '../oauth.js';
 import { microsoft } from '../catalogue/microsoft.js';
 import type { Route } from '../testing.js';
-import { MICROSOFT_SCOPES } from './microsoft.js';
 
 export type MicrosoftFakeData = {
   client: OAuthClient;
@@ -119,7 +118,7 @@ export function fakeMicrosoft(data: MicrosoftFakeData): Route[] {
     const [access, refresh] = [`fake-ms-access-${randomUUID()}`, `fake-ms-refresh-${randomUUID()}`];
     accessTokens.set(access, address);
     refreshTokens.set(refresh, address);
-    return Response.json({ token_type: 'Bearer', scope: MICROSOFT_SCOPES.join(' '), expires_in: 3600, ext_expires_in: 3600,
+    return Response.json({ token_type: 'Bearer', scope: microsoft.scopes.default.join(' '), expires_in: 3600, ext_expires_in: 3600,
       access_token: access, refresh_token: refresh });
   };
   const invalidGrant = () => Response.json({ error: 'invalid_grant', error_description: 'AADSTS70000: The provided grant is invalid.' }, { status: 400 });
@@ -148,7 +147,7 @@ export function fakeMicrosoft(data: MicrosoftFakeData): Route[] {
       const [state, challenge] = [params.get('state') ?? '', params.get('code_challenge') ?? ''];
       if (params.get('client_id') !== data.client.clientId || params.get('redirect_uri') !== data.redirectUri
         || params.get('response_type') !== 'code' || params.get('code_challenge_method') !== 'S256' || !challenge || !state.trim()
-        || !MICROSOFT_SCOPES.every(scope => scopes.has(scope))) {
+        || !microsoft.scopes.default.every(scope => scopes.has(scope))) {
         return new Response('AADSTS50011: The request is not valid for the application.', { status: 400 });
       }
       const back = new URL(data.redirectUri);

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { hubspot } from '../catalogue/hubspot.js';
 import type { Route } from '../testing.js';
-import { HUBSPOT_SCOPES, type HubSpotObject, type HubSpotRecord, type HubSpotStageRevision } from './hubspot.js';
+import type { HubSpotObject, HubSpotRecord, HubSpotStageRevision } from './hubspot.js';
 
 /** A deal's one company, or its companies in HubSpot's answer order; listed links carry association types. */
 type DealCompanies = Readonly<Record<string, string | readonly { id: string; primary?: boolean }[]>>;
@@ -66,7 +66,7 @@ export function fakeHubSpot(input: HubSpotFakeData | (() => HubSpotFakeData)): R
       const state = params.get('state');
       const scopes = new Set((params.get('scope') ?? '').split(/\s+/u));
       if (params.get('redirect_uri') !== redirectUri || clientId !== data.client.clientId || !state?.trim()
-        || !HUBSPOT_SCOPES.every(scope => scopes.has(scope))) {
+        || !hubspot.scopes.default.every(scope => scopes.has(scope))) {
         return new Response(null, { status: 400 });
       }
       const code = `fixture-code-${namespace}-${String(++nextCode)}`;

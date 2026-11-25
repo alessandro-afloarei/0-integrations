@@ -26,8 +26,13 @@ test('Slack reads the token answer only, falls back to the id for a blank name, 
   const fake = fakeFetch([]);
   expect(await identifyAccount(slack, { fetch: fake.fetch, token: 't', tokenAnswer: { team: { id: 'T1', name: '' }, bot_user_id: 'U1', authed_user: { access_token: 'x' } } }))
     .toEqual({ account: { id: 'T1', name: 'T1' }, values: { botUserId: 'U1' } });
-  await expect(identifyAccount(slack, { fetch: fake.fetch, token: 't', tokenAnswer: { team: { id: '' } } }))
-    .rejects.toEqual(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
+  expect(await identifyAccount(slack, { fetch: fake.fetch, token: 't', tokenAnswer: { team: { id: 'T1', name: 'Acme' } } }))
+    .toEqual({ account: { id: 'T1', name: 'Acme' }, values: {} });
+  for (const tokenAnswer of [{}, { team: null }, { team: { name: 'Acme' } }, { team: { id: '' } }]) {
+    await expect(identifyAccount(slack, { fetch: fake.fetch, token: 't', tokenAnswer }))
+      .rejects.toEqual(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
+  }
+  expect(fake.calls).toHaveLength(0);
 });
 
 test("Attio's 200 { active: false } and its 400 are a bad credential", async () => {
@@ -51,6 +56,10 @@ test("Microsoft's account is the Graph id, named by the mail address, else the s
   expect(mail.calls[0]?.url).toBe('https://graph.microsoft.com/v1.0/me?%24select=id%2Cmail%2CuserPrincipalName');
   const upn = fakeFetch([{ url, respond: json({ id: '2b9db1d5-0981', mail: null, userPrincipalName: 'Lee@Lumen.test' }) }]);
   expect((await identifyAccount(microsoft, { fetch: upn.fetch, token: 't' })).account?.name).toBe('lee@lumen.test');
+  // Graph ids are lowercase GUIDs: one is kept lowercase. A user with no address is named by its id; the mailbox reader
+  // refuses it (`no_mailbox`) at its first read.
+  const none = fakeFetch([{ url, respond: json({ id: '2B9DB1D5-0981', mail: null }) }]);
+  expect((await identifyAccount(microsoft, { fetch: none.fetch, token: 't' })).account).toEqual({ id: '2b9db1d5-0981', name: '2b9db1d5-0981' });
 });
 
 test("a bare `id` path reads the answer (GitHub's), never the id being looked for", async () => {

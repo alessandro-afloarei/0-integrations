@@ -1,6 +1,4 @@
 import { z } from "zod";
-import type { OAuthConnect } from "../connect.js";
-import { revokeGrant } from "../oauth.js";
 import { createClient } from "../http.js";
 import { hubspot } from "../catalogue/hubspot.js";
 import { parseAnswer } from "../parse.js";
@@ -41,24 +39,6 @@ const accountSchema = z.object({ portalId: portalIdSchema });
 const pipelinesSchema = z.object({ results: z.array(z.object({ stages: z.array(z.object({ id: z.string(), label: z.string() })) })) });
 const ownersSchema = z.object({ results: z.array(z.object({ email: z.string().optional(), firstName: z.string().optional(),
   lastName: z.string().optional() })), paging: z.object({ next: z.object({ after: z.string() }).optional() }).optional() });
-
-export const HUBSPOT_SCOPES: readonly string[] = hubspot.scopes.default;
-
-export const hubspotConnect: OAuthConnect<{ portalId: string }> = {
-  kind: "oauth2", provider: hubspot, reusesGrant: true,
-  scopes: HUBSPOT_SCOPES,
-  async identify({ grant, extras, fetch }) {
-    const portalId = await portalOf(hubspotClient({ token: () => Promise.resolve(grant.accessToken), fetch }), extras);
-    return { account: { id: portalId, name: `Portal ${portalId}` }, details: { portalId } };
-  },
-  revoke: input => revokeGrant(hubspot, { ...input.grant, client: input.client, fetch: input.fetch }),
-};
-
-/** The token answer names the portal when available; older answers need account-info. */
-async function portalOf(client: HubSpotClient, extras: Record<string, unknown>): Promise<string> {
-  if (extras.hub_id === undefined) return client.portalId();
-  return String(parseAnswer(portalIdSchema, extras.hub_id));
-}
 
 export function hubspotClient(input: {
   /** The run's access token; asked again once, naming the token HubSpot answered 401 to, so a refresh replaces it. */

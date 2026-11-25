@@ -5,11 +5,11 @@ import { GrantRevoked } from '../errors.js';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import type { FakeMailbox } from '../mailbox/fake.js';
 import { KIT_MAILBOX, kitMailbox } from '../mailbox/kit.test-support.js';
-import { refreshGrant } from '../oauth.js';
+import { refreshGrant, revokeGrant } from '../oauth.js';
 import { fakeFetch, sequence } from '../testing.js';
 import calendarRecording from './fixtures/calendar-recording.json' with { type: 'json' };
 import mailRecording from './fixtures/mail-recording.json' with { type: 'json' };
-import { googleConnect, googleMailbox } from './google.js';
+import { googleMailbox } from './google.js';
 import { fakeGoogle } from './fake.js';
 import { googleCalendarScenario, googleMailScenario, KIT_CLIENT, KIT_REDIRECT, kitGoogle } from './scenario.test-support.js';
 
@@ -101,32 +101,19 @@ test("reads events with their own offset, a Meet link, an all-day date and the m
 
 test('signs a mailbox in with PKCE, keeps its refresh token, and revokes the grant once, then again harmlessly', async () => {
   const fake = fakeFetch(kitGoogle());
-  const started = await startConnect(googleConnect, { clientId: KIT_CLIENT.clientId, redirectUri: KIT_REDIRECT, state: 'state-1' });
+  const started = await startConnect(google, { clientId: KIT_CLIENT.clientId, redirectUri: KIT_REDIRECT, state: 'state-1' });
   if (started.kind !== 'redirect' || !started.codeVerifier) throw new Error('expected a PKCE redirect');
   expect(new URL(started.url).searchParams.get('access_type')).toBe('offline');
   const consent = await fake.fetch(started.url, { redirect: 'manual' });
   const code = new URL(consent.headers.get('location') ?? '').searchParams.get('code') ?? '';
-  const connected = await finishConnect(googleConnect, { client: KIT_CLIENT, code, redirectUri: KIT_REDIRECT,
+  const connected = await finishConnect(google, { client: KIT_CLIENT, code, redirectUri: KIT_REDIRECT,
     codeVerifier: started.codeVerifier, fetch: fake.fetch, onRevokeFailed: () => undefined });
   expect(connected.account).toEqual({ id: KIT_MAILBOX, name: KIT_MAILBOX });
   const refresh = connected.secret.refreshToken ?? '';
   expect((await refreshGrant(google, KIT_CLIENT, refresh, { fetch: fake.fetch })).refreshToken).toBe(refresh);
-  await googleConnect.revoke({ grant: connected.secret, client: KIT_CLIENT, fetch: fake.fetch });
+  await revokeGrant(google, { ...connected.secret, client: KIT_CLIENT, fetch: fake.fetch });
   await expect(refreshGrant(google, KIT_CLIENT, refresh, { fetch: fake.fetch })).rejects.toBeInstanceOf(GrantRevoked);
-  await expect(googleConnect.revoke({ grant: connected.secret, client: KIT_CLIENT, fetch: fake.fetch })).resolves.toBeUndefined();
-});
-
-test('refuses and revokes a grant a member left a scope unticked on, so a mailbox without its calendar never connects', async () => {
-  const fake = fakeFetch(fakeGoogle({ client: KIT_CLIENT, redirectUri: KIT_REDIRECT, signIn: () => KIT_MAILBOX,
-    mailboxes: address => (address === KIT_MAILBOX ? kitMailbox : null),
-    granted: () => ['https://www.googleapis.com/auth/gmail.readonly'] }));
-  const started = await startConnect(googleConnect, { clientId: KIT_CLIENT.clientId, redirectUri: KIT_REDIRECT, state: 'state-1' });
-  if (started.kind !== 'redirect' || !started.codeVerifier) throw new Error('expected a PKCE redirect');
-  const consent = await fake.fetch(started.url, { redirect: 'manual' });
-  const code = new URL(consent.headers.get('location') ?? '').searchParams.get('code') ?? '';
-  await expect(finishConnect(googleConnect, { client: KIT_CLIENT, code, redirectUri: KIT_REDIRECT, codeVerifier: started.codeVerifier,
-    fetch: fake.fetch, onRevokeFailed: () => undefined })).rejects.toMatchObject({ code: 'rejected', detail: 'scope_missing' });
-  expect(fake.calls.some(call => call.url === 'https://oauth2.googleapis.com/revoke')).toBe(true);
+  await expect(revokeGrant(google, { ...connected.secret, client: KIT_CLIENT, fetch: fake.fetch })).resolves.toBeUndefined();
 });
 
 test("never reads an attachment's parts as the body, a text part inside an attached message included", async () => {

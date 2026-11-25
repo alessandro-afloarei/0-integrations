@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { slack } from '../catalogue/slack.js';
-import { GrantRevoked, ProviderHttpError } from '../errors.js';
+import { GrantRevoked } from '../errors.js';
 import { revokeGrant } from '../oauth.js';
 import { fakeFetch } from '../testing.js';
 import { fakeSlack } from './fake.js';
-import { identify, slackClient } from './slack.js';
+import { slackClient } from './slack.js';
 
 const data = { redirectUri: 'https://app.test/api/integrations/slack/callback', team: { id: 'T1', name: 'Acme' }, botUserId: 'U1', channels: [
   { id: 'C1', name: 'general', isPrivate: false }, { id: 'G1', name: 'deals', isPrivate: true },
@@ -85,17 +85,6 @@ describe('Slack client', () => {
       { id: 'C1', name: 'general', isPrivate: false }, { id: 'G1', name: 'private', isPrivate: true },
     ], skipped: ['bad'], channelsCut: false });
     expect(http.calls).toHaveLength(1);
-  });
-
-  it('identifies only the team and bot user', () => {
-    expect(identify({ extras: { team: { id: 'T1', name: 'Acme' }, bot_user_id: 'U1', authed_user: { access_token: 'discard' } } }))
-      .toEqual({ account: { id: 'T1', name: 'Acme' }, details: { botUserId: 'U1' } });
-    expect(identify({ extras: { team: { id: 'T1', name: '' } } }))
-      .toEqual({ account: { id: 'T1', name: 'T1' }, details: { botUserId: null } });
-  });
-
-  it.each([{}, { team: null }, { team: { name: 'Acme' } }, { team: { id: '' } }])('refuses missing team identity %j', extras => {
-    expect(() => identify({ extras })).toThrow(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
   });
 });
 

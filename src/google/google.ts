@@ -1,17 +1,11 @@
 import { z } from 'zod';
-import type { OAuthConnect } from '../connect.js';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { decodeWords, headerValue, keptHeaders, parseAddressList, type MailboxEmail, type MailboxEvent, type MailboxEventTime,
   type MailboxReader } from '../mailbox/mailbox.js';
-import { revokeGrant } from '../oauth.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { google } from '../catalogue/google.js';
 import { datetime, pageSize } from '../shapes.js';
-
-/** A member's own mail and calendar, read-only. Gmail's is a restricted scope: Google verifies the app before it serves
- * more than its test users. */
-export const GOOGLE_SCOPES: readonly string[] = google.scopes.default;
 
 const header = z.object({ name: z.string(), value: z.string() });
 type Part = { mimeType?: string | null | undefined; filename?: string | null | undefined;
@@ -204,19 +198,3 @@ export function googleMailbox(input: { token: (rejected?: string) => Promise<str
     },
   };
 }
-
-/**
- * The member's sign-in: the grant reads their Gmail, whose address is the account. Google's consent screen lets them untick
- * a scope, so a grant short of either is refused (`scope_missing`), and `finishConnect` revokes it: a mailbox without its
- * calendar would fail every read. Disconnect revokes the grant.
- */
-export const googleConnect: OAuthConnect<{ email: string }> = {
-  kind: 'oauth2', provider: google, scopes: GOOGLE_SCOPES,
-  async identify({ grant, extras, fetch }) {
-    const granted = new Set(typeof extras.scope === 'string' ? extras.scope.split(' ') : []);
-    if (!GOOGLE_SCOPES.every(scope => granted.has(scope))) throw new ProviderHttpError('rejected', null, 'scope_missing');
-    const { email } = await googleMailbox({ token: () => Promise.resolve(grant.accessToken), fetch }).identify();
-    return { account: { id: email, name: email }, details: { email } };
-  },
-  revoke: input => revokeGrant(google, { ...input.grant, client: input.client, fetch: input.fetch }),
-};
