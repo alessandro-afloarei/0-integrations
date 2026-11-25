@@ -59,7 +59,6 @@ your real (guarded) `fetch` to `finishConnect`.
 | Module | What it does |
 |---|---|
 | [`errors`](docs/modules/errors.md) | Coded errors such as `ProviderHttpError` and `GrantRevoked`, never carrying provider bodies or secrets |
-| [`providers`](docs/modules/providers.md) | The provider definitions that OAuth and HTTP calls take |
 | [`catalogue`](docs/design/entries-and-engine.md) | `defineProvider` and the entry types; `catalogue/<id>` is one provider's entry as plain data, `catalogue.json` all 17 as JSON |
 | [`vault`](docs/modules/vault.md) | Seals JSON secrets under per-tenant data keys |
 | [`oauth`](docs/modules/oauth.md) | Consent URLs, code exchange, refresh and revoke, with PKCE |

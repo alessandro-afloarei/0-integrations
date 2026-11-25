@@ -62,7 +62,7 @@ export function bodyWaitOf(retry: Retry | undefined, body: unknown, now: number)
 }
 
 /** A rate limit the entry declares beyond a 429: the first rule that holds, waiting its reset, else the default. */
-export function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined } | undefined {
+function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined } | undefined {
   const rule = http.rateLimit?.when.find(item => holds(item, answer));
   if (rule === undefined) return undefined;
   const reset = rule.resetAt === undefined ? Number.NaN : Number(answer.headers.get(rule.resetAt.header));

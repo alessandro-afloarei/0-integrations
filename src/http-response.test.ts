@@ -8,7 +8,7 @@ import { hubspot } from './catalogue/hubspot.js';
 import { lusha } from './catalogue/lusha.js';
 import { slack } from './catalogue/slack.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { bodyWaitOf, classify, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
+import { bodyWaitOf, classify, codeOf, retryPolicy, safeDetail } from './http-response.js';
 import { createClient } from './http.js';
 import { fakeFetch } from './testing.js';
 
@@ -90,7 +90,7 @@ test('a declared rate limit waits its reset, Retry-After first, else the default
   expect(fail(limits, 403, { error: { code: 'quota' } })).toMatchObject({ code: 'rate_limited', detail: 'quota', retryAfterMs: 60_000 });
   expect(fail(limits, 403, { error: { code: 403 } })).toMatchObject({ code: 'rejected', detail: null, retryAfterMs: null });
   expect(fail(limits, 429, {})).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
-  expect(rateLimitOf(limits.http, { status: 403, headers: new Headers(), body: {} }, NOW)).toBeUndefined();
+  expect(fail(limits, 403, {})).toMatchObject({ code: 'rejected', retryAfterMs: null });
 });
 
 test('a rule with no status holds on any status and names its own detail', () => {

@@ -4,7 +4,6 @@
 
 - New: `0-integrations/catalogue` (`defineProvider` and the entry types), one entry per provider at
   `0-integrations/catalogue/<id>`, and `0-integrations/catalogue.json`, all 17 providers as plain data.
-  `0-integrations/providers` is unchanged and now derived from the entries.
 - A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
   by the retry wait. The retry wait no longer accepts forms such as `2e3`, `+2`, `0x10` or `Infinity`: they fall back to
   the body's wait or the default.
@@ -57,6 +56,8 @@
 - microsoft: the account id is Graph's `id` lowercased (Graph ids are lowercase GUIDs). A user with no address (neither
   `mail` nor `userPrincipalName`, or one without `@`) now signs in, named by its address if any, else its id; the
   mailbox reader still refuses it as `no_mailbox` at its first read.
+- Breaking: `0-integrations/providers` and its types (`ProviderDefinition`, `OAuth2Definition`, `RetryPolicy`,
+  `HmacScheme`) are gone: import the entry from `0-integrations/catalogue/<id>`.
 
 ## 0.12.0
 
