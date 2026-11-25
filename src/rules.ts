@@ -31,7 +31,7 @@ export function fill(template: Template, lookup: (name: string) => unknown, wher
 
 export type Answer = { status: number; headers: Headers; body: unknown; code?: string | undefined };
 
-/** Whether every part `when` states holds for the answer. */
+/** Whether every part `when` states holds for the answer; `header` or `path` (one of them, not both) selects the value compared. */
 export function holds(when: When, answer: Answer): boolean {
   const { status, header, path, detail, equals, in: among, startsWith, contains } = when;
   if (status === 'error' ? answer.status >= 200 && answer.status < 300 : status !== undefined && status !== answer.status) {

@@ -7,8 +7,9 @@ export type Path = string;
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /** A connection's plain values: JSON only. */
 export type Values = Readonly<Record<string, unknown>>;
-/** Every stated part must hold. `status: 'error'` is any answer outside 2xx; `header` or `path` selects the value the
- * comparison reads (with no comparison it only has to be there); `detail` tests the provider's own code. */
+/** Every stated part must hold. `status: 'error'` is any answer outside 2xx. One of `header` or `path`, never both,
+ * selects the value compared; a comparison (`equals`, `in`, `startsWith`, `contains`) needs one of them, and with no
+ * comparison the value only has to be there. `detail` tests the provider's own code. */
 export type When = { status?: number | 'error'; header?: string; path?: Path; detail?: string | true;
   equals?: string | number | boolean; in?: readonly string[]; startsWith?: string; contains?: string };
 export type Field = { name: string; title: string; secret?: true };
