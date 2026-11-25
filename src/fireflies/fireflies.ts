@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
+import { safeDetail } from '../http-response.js';
 import { fireflies } from '../providers.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
@@ -98,7 +99,7 @@ export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; si
     const { code, retryAfter } = graphqlError(body);
     const now = Date.now();
     const metadata = { retryAfterMs: retryAfterMs(headers, now, retryAfter === undefined ? undefined : Math.max(0, retryAfter - now)) };
-    const detail = code !== null && /^[\w.-]{1,64}$/u.test(code) ? code : null;
+    const detail = code === null ? null : safeDetail(code);
     if (code === 'auth_failed' || status === 401) throw new ProviderHttpError('rejected', status, detail, metadata);
     if (code === 'too_many_requests' || status === 429) throw new ProviderHttpError('rate_limited', status, detail, metadata);
     if (code === 'object_not_found') throw new ProviderHttpError('not_found', status, detail, metadata);

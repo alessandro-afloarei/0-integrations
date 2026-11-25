@@ -336,3 +336,13 @@ test('a provider code that is not a short token is not carried', async () => {
     await expect(fake.client.json('/records')).rejects.toMatchObject({ code: 'request_failed', detail: null });
   }
 });
+
+test('the retry waits an HTTP-date Retry-After, read as the error reads it', async () => {
+  const fake = script(hubspot, () => Response.json({}, { status: 429,
+    headers: { 'Retry-After': new Date(Date.now() + 3000).toUTCString() } }), ok);
+  const result = fake.client.json('/items');
+  await vi.advanceTimersByTimeAsync(2999);
+  expect(fake.calls).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await result).toEqual({ ok: true });
+});

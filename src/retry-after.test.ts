@@ -36,7 +36,7 @@ describe('provider wait metadata', () => {
     ['Tuesday, 02-Nov-76 12:00:00 GMT', 0],
     ['9007199254740', 9_007_199_254_740_000],
     [undefined, null], ['', null], [' ', null], ['later', null], ['-1', null], ['Infinity', null],
-    ['NaN', null], ['9007199254741', null], ['1.5', null], ['+2', null], ['2e3', null], ['0x10', null],
+    ['NaN', null], ['9007199254741', null], ['1.5', 1500], ['+2', null], ['2e3', null], ['0x10', null],
     ['2026-11-02', null], ['Sun, 99 Nov 2026 12:00:03 GMT', null],
     ['Sundayy, 01-Nov-26 12:00:03 GMT', null], ['Sun, 01-Nov-26 12:00:03 GMT', null],
   ] as const)('retains only a valid Retry-After header %j as %j milliseconds without a retry', async (value, retryAfterMs) => {

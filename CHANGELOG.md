@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A `/` in a provider's error code becomes `.` in `detail` for every provider (Unipile's `errors/…` codes are now
+  carried), OAuth refusals carry codes the HTTP errors already carried (`.` and `-` allowed), and a fractional or
+  HTTP-date `Retry-After` is honoured by the retry wait.
+
 ## 0.12.0
 
 - The package is now `0-integrations`, on npm and at github.com/alessandro-afloarei/0-integrations.
