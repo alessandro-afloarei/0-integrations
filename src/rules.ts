@@ -11,15 +11,6 @@ export function readPath(value: unknown, path: Path): unknown {
   return Object.hasOwn(record, head) ? readPath(record[head], path.slice(dot + 1)) : undefined;
 }
 
-/** The first value found that is neither undefined nor null. */
-export function firstPresent(value: unknown, paths: Path | readonly Path[]): unknown {
-  for (const path of typeof paths === 'string' ? [paths] : paths) {
-    const found = readPath(value, path);
-    if (found !== undefined && found !== null) return found;
-  }
-  return undefined;
-}
-
 /** A `{name}`: no braces inside, never empty. */
 const PLACEHOLDER = /\{([^{}]+)\}/gu;
 

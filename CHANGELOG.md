@@ -25,6 +25,8 @@
 - lusha: an account without v3 access keeps the answer's `Retry-After` in `retryAfterMs` (it was always `null`).
 - fireflies: an empty-string GraphQL code is skipped and the next path read (`errors.0.extensions.code`), and a 200
   that is no JSON is `invalid_response` with status 200 (it was `null`).
+- unipile: `unipileConnect` is gone: call `client.authLink(link)` for the sign-in URL and
+  `client.account(accountId, signal)` for the account.
 
 ## 0.12.0
 

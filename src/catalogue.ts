@@ -18,15 +18,14 @@ export type Send = { header: string } | { basic: readonly [Template, Template] }
 export type Auth =
   | { kind: 'key'; send?: Send }
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; pkce?: false; clientAuth?: 'basic'; scopeSeparator?: ',';
-    authorizeParams?: Readonly<Record<string, string>>; tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true }
-  | { kind: 'hosted'; send?: Send };
-export type Request = { method?: Method; path?: Template; query?: Readonly<Record<string, string>>; graphql?: string };
+    authorizeParams?: Readonly<Record<string, string>>; tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true };
+export type Call = { method?: Method; path?: Template; query?: Readonly<Record<string, string>>; graphql?: string };
 /** A path, the first present of several paths, or a template (a string with braces) over the same lookup. */
 export type Value = Path | readonly Path[];
-export type Identify = { request?: Request; id?: Value; name?: Value; lowercase?: true;
+export type Identify = { request?: Call; id?: Value; name?: Value; lowercase?: true;
   /** Answers that mean a bad credential whatever their status; `detail` is the detail the error reports. */
   rejectWhen?: readonly (Omit<When, 'detail'> & { detail?: string })[] };
-export type Revoke = ({ url: string; token: readonly ('refresh' | 'access')[] } | { request: Request })
+export type Revoke = ({ url: string; token: readonly ('refresh' | 'access')[] } | { request: Call })
   & { goneErrors?: readonly string[] };
 export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number;
   waitFromBody?: { path: Path; unit: 'ms' | 'epochMs' } };

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { DirectConnect } from '../connect.js';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { headerValue, keptHeaders, type MailboxCalendar, type MailboxEmail, type MailboxEmailAddress, type MailboxEvent,
@@ -272,14 +271,6 @@ export function unipileClient(input: { apiKey: string; fetch: typeof fetch }): U
       }
     },
   };
-}
-
-/** The account id is the secret; the app decides ownership, acceptable creation age and persistence. */
-export function unipileConnect(input: { client: UnipileClient; link: HostedSignIn; signal?: AbortSignal }):
-DirectConnect<string, UnipileAccount> {
-  return { kind: 'hosted', authorize: () => input.client.authLink(input.link),
-    identify: async accountId => ({ account: { id: accountId, name: accountId },
-      details: await input.client.account(accountId, input.signal) }) };
 }
 
 /** One account of the workspace as a mailbox reader: its mail by metadata, a thread whole, its main calendar and events. */

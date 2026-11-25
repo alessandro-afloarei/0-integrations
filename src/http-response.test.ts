@@ -171,7 +171,7 @@ test('Lusha: the v3 message is request_failed, any other 403 rejected', () => {
 });
 
 /** A key sent bare in a header, and the provider's code at `type` (`provider/insufficient_permissions`). */
-const hosted = defineProvider({ id: 'hosted', name: 'Hosted', auth: [{ kind: 'hosted', send: { header: 'x-api-key' } }],
+const hosted = defineProvider({ id: 'hosted', name: 'Hosted', auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: BASE, errors: { detail: 'type' } });
 
 test("Breakcold's body wait in milliseconds and code at error.code; a slash in a code made a dot", () => {

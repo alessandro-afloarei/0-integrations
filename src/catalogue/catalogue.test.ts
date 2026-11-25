@@ -7,7 +7,7 @@ import type { Entry } from '../catalogue.js';
 import { placeholders } from '../rules.js';
 
 /** Every entry in this folder: no list to edit when one is added. */
-const FILES = globSync('src/catalogue/*.ts').filter(file => !/\.(test|quirks)\.ts$/u.test(file)).sort();
+const FILES = globSync('src/catalogue/*.ts').filter(file => !file.endsWith('.test.ts')).sort();
 const entries: [string, Entry][] = await Promise.all(FILES.map(async file => {
   const id = basename(file, '.ts');
   const found = Object.values(await import(pathToFileURL(file).href) as Record<string, unknown>)
@@ -46,7 +46,6 @@ const entrySchema = z.strictObject({
       clientAuth: z.literal('basic').optional(), scopeSeparator: z.literal(',').optional(),
       authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() }),
-    z.strictObject({ kind: z.literal('hosted'), send: send.optional() }),
   ])).length(1), // one sign-in each until a provider needs two
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
   identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
@@ -80,11 +79,9 @@ function functionsIn(value: unknown, at = ''): string[] {
 }
 
 describe.each(entries)('%s', (id, entry) => {
-  /** The entry's data: a provider's quirks are code beside it, never data. */
-  const data: unknown = Object.fromEntries(Object.entries(entry).filter(([key]) => key !== 'quirks'));
-  test('matches the entry types', () => { expect(entrySchema.safeParse(data).error).toBeUndefined(); });
-  test('holds no function', () => { expect(functionsIn(data)).toEqual([]); });
-  test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(data))).toEqual(data); });
+  test('matches the entry types', () => { expect(entrySchema.safeParse(entry).error).toBeUndefined(); });
+  test('holds no function', () => { expect(functionsIn(entry)).toEqual([]); });
+  test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(entry))).toEqual(entry); });
   test('names only what each place allows in its templates', () => {
     const fields = (entry.fields ?? []).map(field => field.name);
     const auth = entry.auth[0];
@@ -95,11 +92,12 @@ describe.each(entries)('%s', (id, entry) => {
     const connection = [...(entry.fields ?? []).filter(field => field.secret !== true).map(field => field.name),
       ...Object.keys(entry.save ?? {})].map(name => `connection.${name}`);
     const reads = [entry.identify?.id, entry.identify?.name, ...Object.values(entry.save ?? {})].flat().filter(item => item !== undefined);
-    const lookups = [...reads.flatMap(read => (read.includes('{') ? placeholders(read) : [read])), ...placeholders(entry.identify?.request?.path ?? '')];
-    for (const name of lookups) {
+    for (const name of reads.flatMap(read => (read.includes('{') ? placeholders(read) : [read]))) {
       if (name.startsWith('connection.')) expect(connection).toContain(name);
       else expect(name).toMatch(/^[\w@$-]+(\.[\w@$-]+)*$/u);
     }
+    // identify's request path holds none until a provider needs one.
+    expect(placeholders(entry.identify?.request?.path ?? '')).toEqual([]);
     for (const name of placeholders(entry.webhook?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 });

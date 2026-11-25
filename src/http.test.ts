@@ -21,7 +21,7 @@ function script(entry: Entry, ...responses: (() => Response)[]) {
   return { ...fake, token, client };
 }
 /** A key sent bare in a header, and the provider's code at `type`: a code that may echo the key. */
-const hosted = defineProvider({ id: 'hosted', name: 'Hosted', auth: [{ kind: 'hosted', send: { header: 'x-api-key' } }],
+const hosted = defineProvider({ id: 'hosted', name: 'Hosted', auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: { baseUrl: 'https://api.hosted.test/v2' }, errors: { detail: 'type' } });
 const ok = () => Response.json({ ok: true });
 const limited = () => Response.json({}, { status: 429 });

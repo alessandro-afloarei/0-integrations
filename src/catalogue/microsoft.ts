@@ -10,4 +10,7 @@ export const microsoft = defineProvider({
   http: { baseUrl: 'https://graph.microsoft.com/v1.0', headers: { accept: 'application/json' },
     retry: { limit: 2, maxWaitMs: 30_000, defaultWaitMs: 5000 } },
   errors: { detail: ['error.code', 'error.errors.0.reason', 'error.status'] },
+  // The address names the account; only the immutable id says who it is.
+  identify: { request: { path: '/me', query: { $select: 'id,mail,userPrincipalName' } }, id: 'id',
+    name: ['mail', 'userPrincipalName'], lowercase: true },
 });
