@@ -69,17 +69,18 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   const { status, headers, data: body } = response;
   const ok = status >= 200 && status < 300;
   const errors = entry.errors ?? {};
-  // Steps 1 to 3 read only an answer that is an error: outside 2xx, or a 2xx `failed` marks.
-  const failed = ok && errors.failed !== undefined && holds(errors.failed, { status, headers, body });
-  if (ok && !failed) return null;
   const code = codeOf(errors, body);
   const answer = { status, headers, body, code };
+  // Steps 1 to 3 read only an answer that is an error: outside 2xx, or a 2xx `failed` marks.
+  if (ok && (errors.failed === undefined || !holds(errors.failed, answer))) return null;
   const detail = code === undefined ? null : safeDetail(code);
   if (code !== undefined && errors.revoked?.includes(code)) return new GrantRevoked(detail);
-  const limit = rateLimitOf(entry.http, answer, now);
-  const metadata = { retryAfterMs: retryAfterMs(headers, now, limit?.waitMs ?? bodyWaitOf(entry.http.retry, body, now)) };
+  const bodyWait = bodyWaitOf(entry.http.retry, body, now);
+  // An error a rule decides is no declared rate limit, so it never carries that limit's wait.
   const rule = errors.rules?.find(item => holds(item.when, answer));
-  if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, metadata);
+  if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, { retryAfterMs: retryAfterMs(headers, now, bodyWait) });
+  const limit = rateLimitOf(entry.http, answer, now);
+  const metadata = { retryAfterMs: retryAfterMs(headers, now, limit?.waitMs ?? bodyWait) };
   if (limit) return new ProviderHttpError('rate_limited', status, detail, metadata);
   return new ProviderHttpError(ok ? 'request_failed' : statusCode(status), status, detail, metadata);
 }

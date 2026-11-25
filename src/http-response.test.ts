@@ -195,3 +195,37 @@ test('Slack: ok:false inside a 200 is request_failed, a gone token is GrantRevok
   expect(gone).toMatchObject({ detail: 'token_revoked' });
   expect(classify(slack, response(200, { ok: true }))).toBeNull();
 });
+
+test('a `failed` condition reads the provider code: `detail: true` marks a 200 that names one', () => {
+  const coded: Rules = { http: BASE, errors: { detail: 'error', failed: { detail: true } } };
+  expect(fail(coded, 200, { error: 'stale' })).toEqual({ code: 'request_failed', status: 200, detail: 'stale', retryAfterMs: null });
+  expect(classify(coded, response(200, {}))).toBeNull();
+});
+
+test("an error a rule decides carries Retry-After, never the declared rate limit's wait", () => {
+  const both: Rules = { http: { ...BASE, rateLimit: { defaultWaitMs: 60_000, when: [{ status: 403 }] } },
+    errors: { rules: [{ when: { status: 403 }, code: 'rejected' }] } };
+  expect(fail(both, 403, {})).toMatchObject({ code: 'rejected', retryAfterMs: null });
+  expect(fail(both, 403, {}, { 'Retry-After': '30' })).toMatchObject({ code: 'rejected', retryAfterMs: 30_000 });
+});
+
+test.each(['a b', 'a@b.test', 'error\nprivate', 'x'.repeat(65)])('an unsafe provider code %j is no detail', code => {
+  expect(fail({ http: BASE, errors: { detail: 'error' } }, 400, { error: code })).toMatchObject({ code: 'request_failed', detail: null });
+  const gone = classify({ http: BASE, errors: { detail: 'error', revoked: [code] } }, response(400, { error: code }));
+  expect(gone).toBeInstanceOf(GrantRevoked);
+  expect(gone).toMatchObject({ detail: null });
+});
+
+test('a reset already past waits 0; one beyond the safe range once in milliseconds, and a negative body wait, none', () => {
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: 0 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(Number.MAX_SAFE_INTEGER) }))
+    .toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+  const chat: Rules = { http: { ...BASE, retry: { waitFromBody: { path: 'waitMs', unit: 'ms' } } } };
+  expect(fail(chat, 429, { waitMs: -5 })).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+});
+
+test('codeOf: an earlier code that `allow` refuses hides a later allowed one', () => {
+  expect(codeOf({ detail: ['a', 'b'], allow: ['KNOWN'] }, { a: 'OTHER', b: 'KNOWN' })).toBeUndefined();
+  expect(codeOf({ detail: ['a', 'b'], allow: ['KNOWN'] }, { a: '', b: 'KNOWN' })).toBe('KNOWN');
+  expect(codeOf({ detail: ['a', 'b'], allow: ['KNOWN'] }, { b: 'KNOWN' })).toBe('KNOWN');
+});

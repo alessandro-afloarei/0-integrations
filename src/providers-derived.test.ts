@@ -27,7 +27,9 @@ const BODIES: unknown[] = [undefined, null, 'text', 7, {}, [], { error: 'usage_l
 const ANSWERS: [number, Record<string, string>][] = [[400, {}], [401, {}], [403, {}], [404, {}], [429, {}], [500, {}],
   [403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1793534490' }], [429, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1793534490' }],
   [403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': 'soon' }], [403, { 'retry-after': '30' }],
-  [403, { 'x-ratelimit-remaining': '0' }], [429, { 'x-ratelimit-remaining': '12', 'x-ratelimit-reset': '1793534490' }]];
+  [403, { 'x-ratelimit-remaining': '0' }], [429, { 'x-ratelimit-remaining': '12', 'x-ratelimit-reset': '1793534490' }],
+  [503, { 'retry-after': '30' }], [404, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1793534490' }],
+  [403, { 'x-ratelimit-remaining': '4800' }]];
 
 test.each(IDS)("%s's definition is today's", id => {
   const now = derived[id];
