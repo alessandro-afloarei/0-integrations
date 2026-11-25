@@ -1,3 +1,14 @@
+import type { Entry, Errors } from './catalogue.js';
+import { aircall as aircallEntry } from './catalogue/aircall.js';
+import { attio as attioEntry } from './catalogue/attio.js';
+import { exa as exaEntry } from './catalogue/exa.js';
+import { fathom as fathomEntry } from './catalogue/fathom.js';
+import { firecrawl as firecrawlEntry } from './catalogue/firecrawl.js';
+import { granola as granolaEntry } from './catalogue/granola.js';
+import { notion as notionEntry } from './catalogue/notion.js';
+import { bodyWaitOf, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
+import { holds } from './rules.js';
+
 export type RetryPolicy = {
   limit: number;
   maxWaitMs: number;
@@ -45,6 +56,36 @@ export type ProviderDefinition = {
   rateLimit?: (status: number, headers: Headers, body: unknown) => { waitMs: number } | undefined;
 };
 
+/** Today's definition of a provider, read from its entry; 0.13.0 removes `ProviderDefinition` and this with it. */
+function definitionOf(entry: Entry): ProviderDefinition {
+  const { http, errors = {} } = entry;
+  const [auth] = entry.auth;
+  // Tasks 6 and 7 derive these with their first entries.
+  if (auth.kind === 'oauth2' || entry.webhook) throw new TypeError('derivation_missing');
+  // Slack and Fireflies read their errors inside a 200 in their own modules: their definitions carried no function.
+  const inBody = errors.failed !== undefined;
+  const waitFromBody = !inBody && http.retry?.waitFromBody !== undefined;
+  return {
+    id: entry.id, baseUrl: http.baseUrl, timeoutMs: http.timeoutMs ?? 30_000, minIntervalMs: http.minIntervalMs ?? 0,
+    ...('send' in auth ? { auth: 'basic' in auth.send ? { header: 'authorization', prefix: 'Basic ' } : { header: auth.send.header, prefix: '' } } : {}),
+    retry: { ...retryPolicy(http.retry), ...(waitFromBody ? { waitFromBody: (body: unknown) => bodyWaitOf(http.retry, body, Date.now()) } : {}) },
+    ...(!inBody && (errors.detail !== undefined || errors.rules?.some(rule => rule.detail !== undefined))
+      ? { errorDetail: (body: unknown) => detailOf(errors, body) } : {}),
+    ...(http.rateLimit ? { rateLimit: (status: number, headers: Headers, body: unknown) => {
+      const limit = rateLimitOf(http, { status, headers, body, code: codeOf(errors, body) }, Date.now());
+      return limit && { waitMs: limit.waitMs ?? 0 };
+    } } : {}),
+  };
+}
+
+/** A rule's detail when it reads the body alone (today's errorDetail saw no status or header), else the provider's code. */
+function detailOf(errors: Errors, body: unknown): string | undefined {
+  const answer = { status: 0, headers: new Headers(), body, code: codeOf(errors, body) };
+  const rule = errors.rules?.find(item => item.detail !== undefined && item.when.status === undefined
+    && item.when.header === undefined && holds(item.when, answer));
+  return rule?.detail ?? (answer.code === undefined ? undefined : safeDetail(answer.code) ?? undefined);
+}
+
 export const hubspot: ProviderDefinition = {
   id: 'hubspot', baseUrl: 'https://api.hubapi.com', timeoutMs: 30000, minIntervalMs: 250,
   retry: { limit: 1, maxWaitMs: 10000, defaultWaitMs: 1000 },
@@ -77,38 +118,15 @@ export const fireflies: ProviderDefinition = {
   webhook: { signed: '{body}', signatureHeader: 'x-hub-signature', prefix: 'sha256=', encoding: 'hex' },
 };
 
-export const granola: ProviderDefinition = {
-  id: 'granola', baseUrl: 'https://public-api.granola.ai/v1', timeoutMs: 30000, minIntervalMs: 200,
-  retry: { limit: 0, maxWaitMs: 0, defaultWaitMs: 0 },
-};
+export const granola = definitionOf(granolaEntry);
 
-/** Fathom's External API: 60 calls a minute per account, a transcript 30 (Fathom may lower it to 5). */
-export const fathom: ProviderDefinition = {
-  id: 'fathom', baseUrl: 'https://api.fathom.ai/external/v1', auth: { header: 'x-api-key', prefix: '' },
-  timeoutMs: 30000, minIntervalMs: 1000,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 5000 },
-};
+export const fathom = definitionOf(fathomEntry);
 
-/** Attio: 100 reads a second, list notes 10; a 429 names a date (usually the next second), which the default wait covers. */
-export const attio: ProviderDefinition = {
-  id: 'attio', baseUrl: 'https://api.attio.com/v2', timeoutMs: 30000, minIntervalMs: 100,
-  retry: { limit: 1, maxWaitMs: 10000, defaultWaitMs: 1000 },
-};
+export const attio = definitionOf(attioEntry);
 
-/** Aircall: 120 requests a minute per company, and an overrun blocks the key for 60 seconds. Basic auth: `aircallClient`
- * sends base64(`api_id:api_token`) as the token. */
-export const aircall: ProviderDefinition = {
-  id: 'aircall', baseUrl: 'https://api.aircall.io/v1', auth: { header: 'authorization', prefix: 'Basic ' },
-  timeoutMs: 30000, minIntervalMs: 500,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 60000 },
-};
+export const aircall = definitionOf(aircallEntry);
 
-/** Notion: 180 requests a minute per connection (600 on Business and Enterprise) in a fixed window, plus a budget every
- * connection of the workspace shares. A 429 names its wait in Retry-After, at most a minute for the connection's own limit. */
-export const notion: ProviderDefinition = {
-  id: 'notion', baseUrl: 'https://api.notion.com/v1', timeoutMs: 30000, minIntervalMs: 350,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 1000 },
-};
+export const notion = definitionOf(notionEntry);
 
 /** GitHub: 5,000 requests an hour per person, shared with their other tokens and apps, and calling on while limited can get
  * an integration banned: no retry. A limit answers 403 or 429. The hourly one has `x-ratelimit-remaining: 0` and lasts until
@@ -229,12 +247,6 @@ export const unipile: ProviderDefinition = {
   },
 };
 
-export const firecrawl: ProviderDefinition = {
-  id: 'firecrawl', baseUrl: 'https://api.firecrawl.dev', timeoutMs: 120000, minIntervalMs: 0,
-  retry: { limit: 3, maxWaitMs: 60000, defaultWaitMs: 30000 },
-};
+export const firecrawl = definitionOf(firecrawlEntry);
 
-export const exa: ProviderDefinition = {
-  id: 'exa', baseUrl: 'https://api.exa.ai', auth: { header: 'x-api-key', prefix: '' }, timeoutMs: 30000, minIntervalMs: 0,
-  retry: { limit: 3, maxWaitMs: 60000, defaultWaitMs: 30000 },
-};
+export const exa = definitionOf(exaEntry);
