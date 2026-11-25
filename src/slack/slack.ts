@@ -6,6 +6,7 @@ import { responseJson } from '../http-response.js';
 import { oauthRefusal } from '../oauth-error.js';
 import { paginate } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
+import { slack as slackEntry } from '../catalogue/slack.js';
 import { slack } from '../providers.js';
 import { retryAfterMs } from '../retry-after.js';
 
@@ -25,7 +26,7 @@ const metadataSchema = z.object({ next_cursor: z.string() });
 const channelsSchema = z.object({ channels: z.array(z.unknown()) });
 const teamSchema = z.object({ id: z.string().min(1) });
 
-export const SLACK_SCOPES = ['chat:write', 'chat:write.public', 'channels:read', 'groups:read'] as const;
+export const SLACK_SCOPES = slackEntry.scopes.default;
 export const slackConnect: OAuthConnect<{ botUserId: string | null }> = {
   kind: 'oauth2', provider: slack, scopes: SLACK_SCOPES, identify: input => Promise.resolve(identify(input)),
   revoke: input => slackClient({ token: input.grant.accessToken, fetch: input.fetch }).revoke(),

@@ -3,6 +3,7 @@ import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
+import { notion as notionEntry } from '../catalogue/notion.js';
 import { notion } from '../providers.js';
 import { datetime } from '../shapes.js';
 
@@ -21,9 +22,6 @@ export type NotionClient = {
    * shared with the connection). */
   text(pageId: string): Promise<{ markdown: string; cut: boolean }>;
 };
-
-/** The latest version: it names a trashed page `in_trash` (`archived` is gone). */
-const NOTION_VERSION = '2026-03-11';
 
 const id = z.string().min(1).max(200);
 // The schema requires both workspace fields, yet Notion's own example of a bot omits its workspace id.
@@ -49,7 +47,7 @@ const markdownSchema = z.object({ markdown: z.string(), truncated: z.boolean() }
 /** `pageSize` is for tests: Notion answers at most 100 a page. */
 export function notionClient(input: { apiKey: string; fetch: typeof fetch; minIntervalMs?: number; pageSize?: number }): NotionClient {
   const http = createClient({ provider: notion, token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
-    headers: { 'notion-version': NOTION_VERSION },
+    headers: notionEntry.http.headers,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   return {
     async bot() {

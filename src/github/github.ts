@@ -4,8 +4,9 @@ import { createClient } from '../http.js';
 import { responseJson } from '../http-response.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
+import { github as githubEntry } from '../catalogue/github.js';
 import { github } from '../providers.js';
-import { datetime } from '../shapes.js';
+import { datetime, orNull } from '../shapes.js';
 
 // GitHub's own field names: an app stores these values and reads them back with its own schema.
 export type GitHubUser = { id: number; login: string; name: string | null };
@@ -33,8 +34,6 @@ export type GitHubClient = {
   issues(query: { owner: string; repo: string; since?: string | undefined; cursor?: string | undefined }): Promise<Page<GitHubIssue>>;
 };
 
-/** The latest version: it drops `assignee` and `merge_commit_sha`, which the client never reads. */
-const API_VERSION = '2026-03-10';
 const PAGE = /^[1-9]\d*$/u;
 
 const userSchema = z.object({ id: z.number().int(), login: z.string(), name: z.string().nullable() });
@@ -43,14 +42,14 @@ const repoSchema = z.object({ id: z.number().int(), name: z.string(), full_name:
 // Every key it does not name is dropped: assignees, milestones, reactions and the API links never leave the client.
 const issueSchema = z.object({
   id: z.number().int(), number: z.number().int().positive(), title: z.string(),
-  body: z.string().nullable().optional().transform(body => body ?? null), state: z.enum(['open', 'closed']),
-  state_reason: z.string().nullable().optional().transform(reason => reason ?? null), html_url: z.string(),
+  body: orNull(z.string()), state: z.enum(['open', 'closed']),
+  state_reason: orNull(z.string()), html_url: z.string(),
   user: z.object({ login: z.string() }).nullable(),
   // A label is an object, or in GitHub's schema also a bare name.
   labels: z.array(z.union([z.string(), z.object({ name: z.string() })]))
     .transform(labels => labels.map(label => ({ name: typeof label === 'string' ? label : label.name }))),
   comments: z.number().int(), created_at: datetime, updated_at: datetime, closed_at: datetime.nullable(),
-  pull_request: z.object({ merged_at: datetime.nullable().optional().transform(merged => merged ?? null) }).optional(),
+  pull_request: z.object({ merged_at: orNull(datetime) }).optional(),
 });
 
 /** The page GitHub's `rel="next"` link names, or null on the last page. */
@@ -64,10 +63,8 @@ function nextPage(link: string | null): string | null {
 
 /** `pageSize` is for tests: GitHub answers at most 100 a page. */
 export function githubClient(input: { token: string; fetch: typeof fetch; minIntervalMs?: number; pageSize?: number }): GitHubClient {
-  // GitHub refuses a request without a User-Agent.
   const http = createClient({ provider: github, token: () => Promise.resolve(input.token), fetch: input.fetch,
-    headers: { accept: 'application/vnd.github+json', 'x-github-api-version': API_VERSION,
-      'user-agent': '0-integrations' },
+    headers: githubEntry.http.headers,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   /** GitHub pages by number and names the next one in its Link header, which `request` reads. */
   async function paged<T>(path: string, schema: z.ZodType<T>, cursor: string | undefined,

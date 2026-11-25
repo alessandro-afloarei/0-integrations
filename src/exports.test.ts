@@ -8,7 +8,7 @@ const target = (path: string) => ({ types: `./dist/${path}.d.ts`, default: `./di
 
 test('package exports name every public source file and nothing else', () => {
   const paths = globSync('src/**/*.ts').map(file => file.slice('src/'.length, -'.ts'.length))
-    .filter(path => !/\.test(-support)?$/u.test(path) && !/\.test\./u.test(path) && !path.startsWith('catalogue/') && !INTERNAL.has(path));
+    .filter(path => !/\.test(-support)?$/u.test(path) && !path.startsWith('catalogue/') && !INTERNAL.has(path));
   const expected: Record<string, unknown> = Object.fromEntries(paths.map(path => {
     const [dir = '', file] = path.split('/');
     return [`./${file === dir ? dir : path}`, target(path)];

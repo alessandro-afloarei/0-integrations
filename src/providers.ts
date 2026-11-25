@@ -17,7 +17,7 @@ import { notion as notionEntry } from './catalogue/notion.js';
 import { slack as slackEntry } from './catalogue/slack.js';
 import { unipile as unipileEntry } from './catalogue/unipile.js';
 import { bodyWaitOf, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
-import { holds } from './rules.js';
+import { holds, placeholders } from './rules.js';
 
 export type RetryPolicy = {
   limit: number;
@@ -106,12 +106,13 @@ function oauth2Of(entry: Entry, auth: Extract<Auth, { kind: 'oauth2' }>): OAuth2
 /** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted. */
 function tokenAnswerKeys(entry: Entry): string[] {
   const reads = [entry.identify?.id, entry.identify?.name, ...Object.values(entry.save ?? {})].flat().filter(read => read !== undefined);
-  const paths = reads.flatMap(read => (read.includes('{') ? [...read.matchAll(/\{([^{}]+)\}/gu)].map(match => match[1] ?? '') : [read]));
+  const paths = reads.flatMap(read => (read.includes('{') ? placeholders(read) : [read]));
   const keys = paths.filter(path => path.startsWith('tokenAnswer.')).map(path => path.split('.')[1] ?? '');
   return [...new Set([...keys, ...(entry.scopes?.requireGranted ? ['scope'] : [])])];
 }
 
-/** An entry's webhook as today's scheme: SHA-256 over the raw body, hex, a five-minute tolerance unless it says otherwise. */
+/** An entry's webhook as today's scheme: SHA-256 over the entry's `signed` template (the raw body by default), hex, a
+ * five-minute tolerance unless it says otherwise. */
 function schemeOf(webhook: Webhook): HmacScheme {
   return { signed: webhook.signed ?? '{body}', signatureHeader: webhook.header, prefix: webhook.prefix ?? '',
     encoding: webhook.encoding ?? 'hex',

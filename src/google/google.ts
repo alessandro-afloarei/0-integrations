@@ -6,13 +6,13 @@ import { decodeWords, headerValue, keptHeaders, parseAddressList, type MailboxEm
   type MailboxReader } from '../mailbox/mailbox.js';
 import { revokeGrant } from '../oauth.js';
 import { parseAnswer, parseEntries } from '../parse.js';
+import { google as googleEntry } from '../catalogue/google.js';
 import { GOOGLE_CALENDAR_BASE, google } from '../providers.js';
 import { datetime, pageSize } from '../shapes.js';
 
 /** A member's own mail and calendar, read-only. Gmail's is a restricted scope: Google verifies the app before it serves
  * more than its test users. */
-export const GOOGLE_SCOPES: readonly string[] = ['https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/calendar.readonly'];
+export const GOOGLE_SCOPES: readonly string[] = googleEntry.scopes.default;
 
 const header = z.object({ name: z.string(), value: z.string() });
 type Part = { mimeType?: string | null | undefined; filename?: string | null | undefined;

@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type { Entry } from '../catalogue.js';
+import { placeholders } from '../rules.js';
 
 /** Every entry in this folder: no list to edit when one is added. */
 const FILES = globSync('src/catalogue/*.ts').filter(file => !/\.(test|quirks)\.ts$/u.test(file)).sort();
@@ -35,7 +36,7 @@ const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ b
 const value = z.union([z.string(), z.array(z.string())]);
 const request = z.strictObject({ method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional(), path: template.optional(),
   query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional() });
-/** The entry types as a schema. Tests only: no published declaration may name zod. Tasks 15 and 24 add paging and operations. */
+/** The entry types as a schema. Tests only: no published declaration may name zod. Paging and operations join it when they join the types. */
 const entrySchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9-]*$/u), name: z.string().min(1),
   fields: z.array(z.strictObject({ name: z.string(), title: z.string(), secret: z.literal(true).optional() })).optional(),
@@ -46,7 +47,7 @@ const entrySchema = z.strictObject({
       authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() }),
     z.strictObject({ kind: z.literal('hosted'), send: send.optional() }),
-  ])).length(1), // one sign-in each until a provider needs two (Design gaps)
+  ])).length(1), // one sign-in each until a provider needs two
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
   identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
     lowercase: z.literal(true).optional(),
@@ -77,10 +78,9 @@ function functionsIn(value: unknown, at = ''): string[] {
   if (typeof value !== 'object' || value === null) return [];
   return Object.entries(value).flatMap(([key, item]) => functionsIn(item, at ? `${at}.${key}` : key));
 }
-const names = (text: string) => [...text.matchAll(/\{([^}]*)\}/gu)].map(match => match[1] ?? '');
 
 describe.each(entries)('%s', (id, entry) => {
-  /** The entry's data: Task 14's `quirks` are code beside it, never data. */
+  /** The entry's data: a provider's quirks are code beside it, never data. */
   const data: unknown = Object.fromEntries(Object.entries(entry).filter(([key]) => key !== 'quirks'));
   test('matches the entry types', () => { expect(entrySchema.safeParse(data).error).toBeUndefined(); });
   test('holds no function', () => { expect(functionsIn(data)).toEqual([]); });
@@ -89,23 +89,23 @@ describe.each(entries)('%s', (id, entry) => {
     const fields = (entry.fields ?? []).map(field => field.name);
     const auth = entry.auth[0];
     // auth.send: every field by its name, and the token.
-    if ('send' in auth && 'basic' in auth.send) for (const name of auth.send.basic.flatMap(names)) expect([...fields, 'token']).toContain(name);
+    if ('send' in auth && 'basic' in auth.send) for (const name of auth.send.basic.flatMap(placeholders)) expect([...fields, 'token']).toContain(name);
     // identify and save read one lookup: the id found, the token answer, a connection value (a plain field the user
     // entered, or a value `save` keeps), or a path into the identify answer. A value without braces is itself a path.
     const connection = [...(entry.fields ?? []).filter(field => field.secret !== true).map(field => field.name),
       ...Object.keys(entry.save ?? {})].map(name => `connection.${name}`);
     const reads = [entry.identify?.id, entry.identify?.name, ...Object.values(entry.save ?? {})].flat().filter(item => item !== undefined);
-    const lookups = [...reads.flatMap(read => (read.includes('{') ? names(read) : [read])), ...names(entry.identify?.request?.path ?? '')];
+    const lookups = [...reads.flatMap(read => (read.includes('{') ? placeholders(read) : [read])), ...placeholders(entry.identify?.request?.path ?? '')];
     for (const name of lookups) {
       if (name.startsWith('connection.')) expect(connection).toContain(name);
       else expect(name).toMatch(/^[\w@$-]+(\.[\w@$-]+)*$/u);
     }
-    for (const name of names(entry.webhook?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
+    for (const name of placeholders(entry.webhook?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 });
 
-test('ids are unique and the catalogue is not empty', () => {
-  expect(entries.length).toBeGreaterThanOrEqual(7);
+test('ids are unique and all 17 entries are found', () => {
+  expect(entries.length).toBe(17);
   expect(new Set(entries.map(([id]) => id)).size).toBe(entries.length);
 });
 

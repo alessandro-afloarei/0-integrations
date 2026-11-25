@@ -20,9 +20,17 @@ export function firstPresent(value: unknown, paths: Path | readonly Path[]): unk
   return undefined;
 }
 
+/** A `{name}`: no braces inside, never empty. */
+const PLACEHOLDER = /\{([^{}]+)\}/gu;
+
+/** The names a template's placeholders hold, in order: the ones `fill` replaces. */
+export function placeholders(template: Template): string[] {
+  return [...template.matchAll(PLACEHOLDER)].map(match => match[1] ?? '');
+}
+
 /** Replaces each `{name}` with a string or a finite number; anything else throws, naming `where` and the key. */
 export function fill(template: Template, lookup: (name: string) => unknown, where: string): string {
-  return template.replaceAll(/\{([^{}]+)\}/gu, (_, name: string) => {
+  return template.replaceAll(PLACEHOLDER, (_, name: string) => {
     const value = lookup(name);
     if (typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))) return String(value);
     throw new TypeError(`template_missing: ${where} {${name}}`);

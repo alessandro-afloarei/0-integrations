@@ -6,11 +6,12 @@ import { headerValue, keptHeaders, type MailboxEmail, type MailboxEmailAddress, 
   type MailboxReader } from '../mailbox/mailbox.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
+import { microsoft as microsoftEntry } from '../catalogue/microsoft.js';
 import { microsoft } from '../providers.js';
 import { datetime, pageSize, utc } from '../shapes.js';
 
 /** A member's own mailbox and calendar, read-only; `offline_access` gives the refresh token. */
-export const MICROSOFT_SCOPES: readonly string[] = ['offline_access', 'User.Read', 'Mail.Read', 'Calendars.Read'];
+export const MICROSOFT_SCOPES: readonly string[] = microsoftEntry.scopes.default;
 
 const GRAPH = microsoft.baseUrl ?? '';
 const text = z.string().nullish().transform(value => value ?? '');

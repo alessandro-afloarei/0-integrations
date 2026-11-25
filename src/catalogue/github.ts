@@ -7,6 +7,8 @@ import { defineProvider } from '../catalogue.js';
 export const github = defineProvider({
   id: 'github', name: 'GitHub', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   auth: [{ kind: 'key' }],
+  // The latest API version: it drops `assignee` and `merge_commit_sha`, which the client never reads. GitHub refuses a
+  // request without a User-Agent.
   http: { baseUrl: 'https://api.github.com', minIntervalMs: 250,
     headers: { accept: 'application/vnd.github+json', 'x-github-api-version': '2026-03-10', 'user-agent': '0-integrations' },
     rateLimit: { defaultWaitMs: 60_000, when: [
