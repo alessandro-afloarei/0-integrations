@@ -3,7 +3,10 @@ import type { Entry } from './catalogue.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
+import { google } from './catalogue/google.js';
+import { hubspot } from './catalogue/hubspot.js';
 import { lusha } from './catalogue/lusha.js';
+import { slack } from './catalogue/slack.js';
 import { unipile } from './catalogue/unipile.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { bodyWaitOf, classify, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
@@ -169,4 +172,26 @@ test("Breakcold's body wait in milliseconds and code at error.code; Unipile's sl
   expect(fail(breakcold, 429, { error: { code: 'usage_limit', retryAfterMs: 12.1 } })).toMatchObject({ code: 'rate_limited', detail: 'usage_limit', retryAfterMs: 13 });
   expect(fail(breakcold, 402, { error: { code: 7 } })).toMatchObject({ code: 'request_failed', detail: null });
   expect(fail(unipile, 403, { type: 'provider/insufficient_permissions' })).toMatchObject({ code: 'rejected', detail: 'provider.insufficient_permissions' });
+});
+
+test('Google: a numeric error.code is no code, so the reason decides', () => {
+  expect(fail(google, 403, { error: { code: 403, status: 'PERMISSION_DENIED', errors: [{ reason: 'userRateLimitExceeded' }] } }))
+    .toMatchObject({ code: 'rate_limited', detail: 'userRateLimitExceeded', retryAfterMs: 60_000 });
+  expect(fail(google, 403, { error: { code: 403, errors: [{ reason: 'insufficientPermissions' }] } }))
+    .toMatchObject({ code: 'rejected', detail: 'insufficientPermissions', retryAfterMs: null });
+  expect(fail(google, 401, { error: { status: 'UNAUTHENTICATED' } })).toMatchObject({ code: 'rejected', detail: 'UNAUTHENTICATED' });
+});
+
+test('HubSpot: only an allowed category is a detail', () => {
+  expect(fail(hubspot, 403, { category: 'MISSING_SCOPES' })).toMatchObject({ code: 'rejected', detail: 'MISSING_SCOPES' });
+  expect(fail(hubspot, 403, { category: 'UNKNOWN_CATEGORY' })).toMatchObject({ detail: null });
+  expect(fail(hubspot, 403, { category: { category: 'MISSING_SCOPES' } })).toMatchObject({ detail: null });
+});
+
+test('Slack: ok:false inside a 200 is request_failed, a gone token is GrantRevoked', () => {
+  expect(fail(slack, 200, { ok: false, error: 'channel_not_found' })).toMatchObject({ code: 'request_failed', status: 200, detail: 'channel_not_found' });
+  const gone = classify(slack, response(200, { ok: false, error: 'token_revoked' }));
+  expect(gone).toBeInstanceOf(GrantRevoked);
+  expect(gone).toMatchObject({ detail: 'token_revoked' });
+  expect(classify(slack, response(200, { ok: true }))).toBeNull();
 });

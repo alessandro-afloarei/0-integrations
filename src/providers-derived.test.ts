@@ -6,9 +6,8 @@ import * as legacy from './providers.legacy.test-support.js';
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(Date.parse('2026-11-01T12:00:00Z')); });
 afterEach(() => vi.useRealTimers());
 
-/** Grows to all 17 in Tasks 6 and 7. */
 const IDS = ['exa', 'firecrawl', 'fathom', 'granola', 'attio', 'notion', 'aircall',
-  'apollo', 'lusha', 'breakcold', 'fireflies', 'github', 'unipile'] as const;
+  'apollo', 'lusha', 'breakcold', 'fireflies', 'github', 'unipile', 'hubspot', 'slack', 'google', 'microsoft'] as const;
 const data = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown; // drops the function fields
 /** What reaches an error: today's code and the derived one both pass the one sanitiser. */
 const detail = (code: string | undefined) => (code === undefined ? null : safeDetail(code));
@@ -16,6 +15,8 @@ const BODIES: unknown[] = [undefined, null, 'text', 7, {}, [], { error: 'usage_l
   { error: { code: 'organization_moved', retryAfterMs: 1500 } }, { error: { retryAfterMs: '1' } },
   { error: { code: 'InvalidAuthenticationToken' } }, { error: { code: 403, status: 'PERMISSION_DENIED', errors: [{ reason: 'userRateLimitExceeded' }] } },
   { error: { errors: [{ reason: 'insufficientPermissions' }] } }, { error: { status: 'UNAUTHENTICATED' } },
+  { error: { errors: [{ reason: 'rateLimitExceeded' }] } }, { error: { code: 403, errors: [{ reason: 'quotaExceeded' }] } },
+  { error: { code: 403, status: 'PERMISSION_DENIED' } },
   { category: 'MISSING_SCOPES' }, { category: 'VALIDATION_ERROR' }, { category: 'UNKNOWN' }, { category: { category: 'MISSING_SCOPES' } },
   { error_details: { code: 'AUTH.AUTHENTICATION.API_KEY_INVALID' } }, { error_details: { code: '' } }, { error: { code: '' } },
   { message: 'V3 API access is not enabled for this account' }, { message: 'Account inactive' },
@@ -42,6 +43,8 @@ test.each(IDS)("%s's definition is today's", id => {
     }
   }
 });
+
+test('the calendar base', () => { expect(derived.GOOGLE_CALENDAR_BASE).toBe(legacy.GOOGLE_CALENDAR_BASE); });
 
 test("Unipile's other refusal types are now carried, slash made a dot (the design's change)", () => {
   expect(detail(derived.unipile.errorDetail?.({ type: 'errors/disconnected_account' }))).toBe('errors.disconnected_account');
