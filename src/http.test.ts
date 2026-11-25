@@ -348,6 +348,16 @@ test('a provider code holding the credential the request sent is not carried', a
   }
 });
 
+test('a credential is matched as a detail reads: trimmed as sent, a slash read as a dot', async () => {
+  for (const [key, type, detail] of [['  uk_live.Abc-123  ', 'uk_live.Abc-123', null], ['abc/def', 'abc/def', null],
+    ['  uk_live.Abc-123  ', 'errors/disconnected_account', 'errors.disconnected_account']] as const) {
+    const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type }, { status: 403 }) }]);
+    const client = createClient({ provider: unipile, token: () => Promise.resolve(key), fetch: fake.fetch });
+    await expect(client.json('/accounts')).rejects.toMatchObject({ code: 'rejected', detail });
+    expect(fake.calls[0]?.headers['x-api-key']).toBe(key.trim());
+  }
+});
+
 test('the retry waits an HTTP-date Retry-After, read as the error reads it', async () => {
   const fake = script(hubspot, () => Response.json({}, { status: 429,
     headers: { 'Retry-After': new Date(Date.now() + 3000).toUTCString() } }), ok);

@@ -21,6 +21,7 @@ test.each([
   ['errors/disconnected_account', [], 'errors.disconnected_account'],
   ['x'.repeat(65), [], null], ['usage limit; email=a@b.test', [], null], ['', [], null], ['error\nprivate', [], null],
   ['xoxb_token', ['xoxb_token'], null], ['bad_code', ['', 'other'], 'bad_code'], ['fixture/key', ['fixture.key'], null],
+  ['abc.def', ['abc/def'], null], ['key', [' key '], null], ['a_code', ['  '], 'a_code'],
 ] as const)('safeDetail(%j, %j) is %j', (code, secrets, detail) => {
   expect(safeDetail(code, secrets)).toBe(detail);
 });

@@ -16,7 +16,9 @@ function statusCode(status: number): ProviderErrorCode {
 /** A provider's error code as a short token (a slash read as a dot), or null when it could carry a body or a secret. */
 export function safeDetail(code: string, secrets: readonly string[] = []): string | null {
   const detail = code.replaceAll('/', '.');
-  const holdsSecret = secrets.some(secret => secret.length > 0 && (code.includes(secret) || detail.includes(secret)));
+  // A secret is also matched as a detail reads and as a header sends it: trimmed, a slash read as a dot.
+  const holdsSecret = secrets.flatMap(secret => [secret, secret.trim().replaceAll('/', '.')])
+    .some(secret => secret.trim() !== '' && (code.includes(secret) || detail.includes(secret)));
   return /^[\w.-]{1,64}$/u.test(detail) && !holdsSecret ? detail : null;
 }
 
