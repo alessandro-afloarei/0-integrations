@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { safeDetail } from './http-response.js';
 import * as derived from './providers.js';
 import * as legacy from './providers.legacy.test-support.js';
 
@@ -9,8 +8,9 @@ afterEach(() => vi.useRealTimers());
 const IDS = ['exa', 'firecrawl', 'fathom', 'granola', 'attio', 'notion', 'aircall',
   'apollo', 'lusha', 'breakcold', 'fireflies', 'github', 'unipile', 'hubspot', 'slack', 'google', 'microsoft'] as const;
 const data = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown; // drops the function fields
-/** What reaches an error: today's code and the derived one both pass the one sanitiser. */
-const detail = (code: string | undefined) => (code === undefined ? null : safeDetail(code));
+/** Bodies whose `errorDetail` the design changed on purpose, each pinned below with legacy's answer beside today's. */
+const CHANGED_DETAIL = new Set(['unipile {"type":"errors/disconnected_account"}', 'apollo {"error_details":{"code":""}}',
+  'breakcold {"error":{"code":""}}', 'google {"error":{"code":""}}', 'microsoft {"error":{"code":""}}']);
 const BODIES: unknown[] = [undefined, null, 'text', 7, {}, [], { error: 'usage_limit' }, { error: { code: 7 } },
   { error: { code: 'organization_moved', retryAfterMs: 1500 } }, { error: { retryAfterMs: '1' } },
   { error: { code: 'InvalidAuthenticationToken' } }, { error: { code: 403, status: 'PERMISSION_DENIED', errors: [{ reason: 'userRateLimitExceeded' }] } },
@@ -40,8 +40,7 @@ test.each(IDS)("%s's definition is today's", id => {
   expect([typeof now.errorDetail, typeof now.rateLimit, typeof now.retry.waitFromBody])
     .toEqual([typeof then.errorDetail, typeof then.rateLimit, typeof then.retry.waitFromBody]);
   for (const body of BODIES) {
-    if (id === 'unipile' && JSON.stringify(body) === '{"type":"errors/disconnected_account"}') continue;
-    expect(detail(now.errorDetail?.(body))).toBe(detail(then.errorDetail?.(body)));
+    if (!CHANGED_DETAIL.has(`${id} ${JSON.stringify(body)}`)) expect(now.errorDetail?.(body)).toBe(then.errorDetail?.(body));
     expect(now.retry.waitFromBody?.(body)).toBe(then.retry.waitFromBody?.(body));
     for (const [status, headers] of ANSWERS) {
       expect(now.rateLimit?.(status, new Headers(headers), body)).toEqual(then.rateLimit?.(status, new Headers(headers), body));
@@ -52,13 +51,15 @@ test.each(IDS)("%s's definition is today's", id => {
 test('the calendar base', () => { expect(derived.GOOGLE_CALENDAR_BASE).toBe(legacy.GOOGLE_CALENDAR_BASE); });
 
 test("Unipile's other refusal types are now carried, slash made a dot (the design's change)", () => {
-  expect(detail(derived.unipile.errorDetail?.({ type: 'errors/disconnected_account' }))).toBe('errors.disconnected_account');
+  expect(derived.unipile.errorDetail?.({ type: 'errors/disconnected_account' })).toBe('errors.disconnected_account');
   expect(legacy.unipile.errorDetail?.({ type: 'errors/disconnected_account' })).toBeUndefined();
 });
 
-/** The design's change for Google and Microsoft: an empty code is no code, so the next path is read, and a path's whole
- * rest is tried as one key first. No real answer has these shapes. Legacy's detail, today's, and Google's 403 wait now. */
+/** The design's change for every provider reading a code or a wait from the body: an empty code is no code, so the next
+ * path is read, and a path's whole rest is tried as one key first. No real answer has these shapes. Legacy's detail,
+ * today's, and Google's 403 wait now. */
 test.each([
+  [{ error: { code: '' } }, '', undefined, undefined],
   [{ error: { code: '', errors: [{ reason: 'rateLimitExceeded' }], status: 'X' } }, '', 'rateLimitExceeded', 60_000],
   [{ error: { errors: [{ reason: '' }], status: 'RESOURCE_EXHAUSTED' } }, '', 'RESOURCE_EXHAUSTED', undefined],
   [{ error: { errors: { 0: { reason: 'rateLimitExceeded' } } } }, undefined, 'rateLimitExceeded', 60_000],
@@ -71,4 +72,19 @@ test.each([
   }
   expect(legacy.google.rateLimit?.(403, new Headers(), body)).toBeUndefined();
   expect(derived.google.rateLimit?.(403, new Headers(), body)).toEqual(waitMs === undefined ? undefined : { waitMs });
+});
+
+test.each([
+  ['apollo', { error_details: { code: '' } }, '', undefined],
+  ['apollo', { 'error_details.code': 'AUTH.AUTHENTICATION.API_KEY_INVALID' }, undefined, 'AUTH.AUTHENTICATION.API_KEY_INVALID'],
+  ['breakcold', { error: { code: '' } }, '', undefined],
+  ['breakcold', { 'error.code': 'usage_limit' }, undefined, 'usage_limit'],
+] as const)('%s reads %j as the design says (the design\'s change)', (id, body, then, now) => {
+  expect(legacy[id].errorDetail?.(body)).toBe(then);
+  expect(derived[id].errorDetail?.(body)).toBe(now);
+});
+
+test("Breakcold reads a flat 'error.retryAfterMs' wait (the design's change)", () => {
+  expect(legacy.breakcold.retry.waitFromBody?.({ 'error.retryAfterMs': 1500 })).toBeUndefined();
+  expect(derived.breakcold.retry.waitFromBody?.({ 'error.retryAfterMs': 1500 })).toBe(1500);
 });

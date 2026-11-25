@@ -13,8 +13,9 @@
   or `-`, in any position. A code holding the credential its request sent, before or after that `.`, is no detail.
 - unipile: any refusal `type` that passes the sanitiser is carried as the detail, `/` read as `.`; before, only `api/…`
   and `provider/…` types were, so `errors/…` types are now carried too.
-- google, microsoft: an empty-string error code is skipped and the next one is read. A path also reads an own dotted
-  key (`{ "error.code": … }`) and an object keyed `0` (`{ "errors": { "0": … } }`).
+- Every provider that reads an error code or a wait from the body skips an empty-string code and reads the next path,
+  and a path also reads an own dotted key (`{ "error.code": … }`, `{ "error.retryAfterMs": … }`) and an object keyed
+  `0` (`{ "errors": { "0": … } }`): apollo, breakcold, google and microsoft read such bodies differently than before.
 
 ## 0.12.0
 
