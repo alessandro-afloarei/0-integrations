@@ -200,11 +200,11 @@ test('revokeGrant: Slack revokes by request with the access token and no OAuth a
   expect(fake.calls[0]?.headers.authorization).toBe('Bearer a');
 });
 
-test('revokeGrant: a request revoke reads its answer as any call does: a 404 is no gone token, a 2xx without JSON is done', async () => {
+test('revokeGrant: a request revoke reads its answer as any JSON call does: a 404 is no gone token, a 2xx without JSON fails', async () => {
   const missing = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => new Response('', { status: 404 }) }]);
   await expect(revokeGrant(slack, { accessToken: 'a', fetch: missing.fetch })).rejects.toMatchObject({ code: 'not_found', status: 404 });
   const plain = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => new Response('ok') }]);
-  await expect(revokeGrant(slack, { accessToken: 'a', fetch: plain.fetch })).resolves.toBeUndefined();
+  await expect(revokeGrant(slack, { accessToken: 'a', fetch: plain.fetch })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
 });
 
 test('revokeGrant: an entry with no revoke (Microsoft) sends nothing', async () => {
@@ -222,4 +222,20 @@ test("a token answer refused inside a 200 is read through the entry's own condit
     errors: { detail: 'reason' } });
   await expect(exchangeCode(strict, client, { ...exchange, fetch: endpoint({ ...token, error: 'refused', reason: 'code_used' }).fetch }))
     .rejects.toMatchObject({ code: 'request_failed', detail: 'code_used' });
+});
+
+test('an error never carries the Basic client credential the request sent, form-encoded as on the wire', async () => {
+  // `id:abcdef` encodes to base64 without padding, so an echo of it would pass the detail pattern.
+  const basicClient = { clientId: 'id', clientSecret: 'abcdef' };
+  const sent = Buffer.from('id:abcdef').toString('base64');
+  const basic = defineProvider({ id: 'basic', name: 'Basic', auth: [{ kind: 'oauth2', authorizeUrl: 'https://basic.test/authorize',
+    tokenUrl: 'https://basic.test/token', pkce: false, clientAuth: 'basic' }], scopes: { default: [] },
+    revoke: { url: 'https://basic.test/revoke', token: ['refresh'] }, http: { baseUrl: 'https://api.basic.test' } });
+  const echo = endpoint({ error: sent }, 400);
+  for (const run of [
+    () => exchangeCode(basic, basicClient, { ...exchange, fetch: echo.fetch }),
+    () => refreshGrant(basic, basicClient, 'r', { fetch: echo.fetch }),
+    () => revokeGrant(basic, { refreshToken: 'r', client: basicClient, fetch: echo.fetch }),
+  ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(`Basic ${sent}`));
 });

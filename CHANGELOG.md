@@ -11,7 +11,8 @@ Every line below breaks 0.12 unless it says otherwise.
   the body's wait or the default.
 - One sanitiser reads the detail of HTTP and OAuth errors, and a `/` in a provider's code becomes `.` in `detail` for
   every provider. An OAuth refusal's detail now follows the HTTP rule: 1 to 64 characters of letters, digits, `_`, `.`
-  or `-`, in any position. A code holding the credential its request sent, before or after that `.`, is no detail.
+  or `-`, in any position. A code holding the credential its request sent, before or after that `.`, is no detail; for
+  OAuth Basic client authentication that includes the encoded `Authorization` value.
 - unipile: any refusal `type` that passes the sanitiser is carried as the detail, `/` read as `.`; before, only `api/…`
   and `provider/…` types were, so `errors/…` types are now carried too.
 - Every provider that reads an error code or a wait from the body skips an empty-string code and reads the next path,
@@ -37,8 +38,7 @@ Every line below breaks 0.12 unless it says otherwise.
 - `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke, by RFC 7009 or by the entry's
   request, and replaces `revokeGrant(definition, client, token, …)`; an entry without `revoke` is done, and only an
   RFC 7009 revoke needs `client` (`oauth_client_required` without it).
-- slack: `slackClient(…).revoke()` is gone: call `revokeGrant(slack, { accessToken, fetch })`. A 2xx that is no JSON
-  from `auth.revoke` is now done (it was `invalid_response`); a 404 is still `not_found`.
+- slack: `slackClient(…).revoke()` is gone: call `revokeGrant(slack, { accessToken, fetch })`.
 - `verifyWebhook` takes `entry.webhook`; new `deliveryId(entry.webhook, request)` reads the delivery id an entry declares.
 - breakcold: `parseWebhook` is gone: read `deliveryId(breakcold.webhook, request)`.
 - `startConnect(entry, options?)` and `finishConnect(entry, input)` run any catalogue entry. `OAuthConnect`,

@@ -3,7 +3,7 @@ import { lookupNames, sendCall } from './account.js';
 import type { Auth, Entry } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { createClient } from './http.js';
-import { classify, codeOf, safeDetail } from './http-response.js';
+import { codeOf, responseJson, safeDetail } from './http-response.js';
 import { holds } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
@@ -49,9 +49,14 @@ function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThi
   const config = oauth2(entry);
   const as: oauth.AuthorizationServer = { issuer: new URL(config.tokenUrl).origin, token_endpoint: config.tokenUrl,
     ...(entry.revoke && 'url' in entry.revoke ? { revocation_endpoint: entry.revoke.url } : {}) };
+  const client = { client_id: credentials.clientId };
+  const auth = config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret);
+  // The Basic value as sent (the id and secret form-encoded first), so no error detail echoes it.
+  const sent = new Headers();
+  void auth(as, client, new URLSearchParams(), sent);
+  const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
-    config, as, client: { client_id: credentials.clientId },
-    auth: config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret),
+    config, as, client, auth, secrets: [credentials.clientSecret, ...(basic === undefined ? [] : [basic])],
     options: { [oauth.customFetch]: fetch, signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
     processing: { recognizedTokenTypes: Object.fromEntries((config.tokenTypes ?? []).map(type => [type.toLowerCase(), () => undefined])) },
   };
@@ -107,7 +112,7 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
   const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });
   if (input.codeVerifier) params.set('code_verifier', input.codeVerifier);
-  const secrets = [client.clientSecret, input.code, input.codeVerifier ?? ''];
+  const secrets = [...c.secrets, input.code, input.codeVerifier ?? ''];
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options));
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
@@ -121,7 +126,7 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
 export async function refreshGrant(entry: Entry, client: OAuthClient, refreshToken: string,
   input: { fetch: typeof fetch }): Promise<Grant> {
   const c = context(entry, client, input.fetch);
-  const secrets = [client.clientSecret, refreshToken];
+  const secrets = [...c.secrets, refreshToken];
   const response = await send(c, entry, secrets, () => oauth.refreshTokenGrantRequest(c.as, c.client, c.auth, refreshToken, c.options));
   try {
     return grant(await oauth.processRefreshTokenResponse(c.as, c.client, response, c.processing), refreshToken);
@@ -132,7 +137,7 @@ export async function refreshGrant(entry: Entry, client: OAuthClient, refreshTok
 
 async function revokeToken(entry: Entry, client: OAuthClient, token: string, input: { fetch: typeof fetch }): Promise<void> {
   const c = context(entry, client, input.fetch);
-  const secrets = [client.clientSecret, token];
+  const secrets = [...c.secrets, token];
   const response = await send(c, entry, secrets, () => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options));
   // Any 2xx, as providers answer a revoke with 200 or 204; oauth4webapi accepts only 200.
   if (response.ok || response.status === 404) return;
@@ -163,8 +168,7 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
     const { accessToken } = input;
     if (accessToken === undefined) return;
     const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch });
-    const error = classify(entry, await sendCall(http, revoke.request));
-    if (error) throw error;
+    responseJson(entry, await sendCall(http, revoke.request));
   } catch (error) {
     const gone = error instanceof GrantRevoked || (error instanceof ProviderHttpError && error.detail !== null
       && (revoke.goneErrors ?? []).includes(error.detail));
