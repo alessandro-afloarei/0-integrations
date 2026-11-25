@@ -8,6 +8,7 @@ export const google = defineProvider({
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token',
     authorizeParams: { response_type: 'code', access_type: 'offline', prompt: 'consent' } }],
   scopes: { default: ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/calendar.readonly'], requireGranted: true },
+  // Google answers a token already revoked as `invalid_token`.
   revoke: { url: 'https://oauth2.googleapis.com/revoke', token: ['refresh', 'access'], goneErrors: ['invalid_token'] },
   http: { baseUrl: 'https://gmail.googleapis.com/gmail/v1', bases: { calendar: 'https://www.googleapis.com/calendar/v3' },
     headers: { accept: 'application/json' }, retry: { limit: 2, maxWaitMs: 30_000, defaultWaitMs: 5000 },

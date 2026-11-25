@@ -124,8 +124,6 @@ export function changedTranscripts(client: FirefliesClient, query: TranscriptQue
   return paginate(cursor => client.transcripts({ ...query, cursor: cursor ?? query.cursor }));
 }
 
-export function identify(client: FirefliesClient): Promise<FirefliesUser> { return client.user(); }
-
 const webhookSchema = z.object({
   meeting_id: z.string().min(1), event: z.string().min(1), timestamp: z.union([z.string(), z.number()]),
 });

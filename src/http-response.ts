@@ -30,11 +30,6 @@ export function sentWith(response: ProviderResponse, sent: readonly string[]): P
   return response;
 }
 
-/** A provider's code as an answer's detail: never one holding a credential its request sent. */
-function answerDetail(response: ProviderResponse, code: string): string | null {
-  return safeDetail(code, credentials.get(response) ?? []);
-}
-
 /** An answer as its data, or the error the entry's rules make of it; a 2xx without JSON is `invalid_response`. */
 export function responseJson(entry: Pick<Entry, 'http' | 'errors'>, response: ProviderResponse): unknown {
   const error = classify(entry, response);
@@ -84,7 +79,8 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   const answer = { status, headers, body, code };
   // Steps 1 to 3 read only an answer that is an error: outside 2xx, or a 2xx `failed` marks.
   if (ok && (errors.failed === undefined || !holds(errors.failed, answer))) return null;
-  const detail = code === undefined ? null : answerDetail(response, code);
+  // Never a code holding a credential the request sent.
+  const detail = code === undefined ? null : safeDetail(code, credentials.get(response) ?? []);
   if (code !== undefined && errors.revoked?.includes(code)) return new GrantRevoked(detail);
   const bodyWait = bodyWaitOf(entry.http.retry, body, now);
   // An error a rule decides is no declared rate limit, so it never carries that limit's wait.

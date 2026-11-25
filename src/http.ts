@@ -1,13 +1,13 @@
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
-import type { Entry, Values } from './catalogue.js';
+import type { Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { fill } from './rules.js';
+import { fill, parseJson } from './rules.js';
 
 export type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method?: Method;
   query?: Readonly<Record<string, string>>;
   json?: unknown;
   form?: Readonly<Record<string, string>>;
@@ -19,14 +19,6 @@ export type HttpClient = {
   json(path: string, options?: RequestOptions): Promise<unknown>;
   request(path: string, options?: RequestOptions): Promise<ProviderResponse>;
 };
-
-function parse(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return undefined;
-  }
-}
 
 async function retryBody(response: Response, timeoutMs: number): Promise<string> {
   const reader = response.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -120,7 +112,7 @@ export function createClient(entry: Entry, input: {
   async function waitFor(response: Response): Promise<number> {
     const header = retryAfterMs(response.headers, Date.now());
     if (header !== null && header > 0) return header;
-    const fromBody = bodyWaitOf(entry.http.retry, parse(await retryBody(response, timeoutMs)), Date.now());
+    const fromBody = bodyWaitOf(entry.http.retry, parseJson(await retryBody(response, timeoutMs)), Date.now());
     return fromBody !== undefined && Number.isFinite(fromBody) && fromBody >= 0 ? fromBody : retry.defaultWaitMs;
   }
 
@@ -159,11 +151,11 @@ export function createClient(entry: Entry, input: {
         },
       });
       const response = await pending;
-      return { status: response.status, headers: response.headers, data: parse(await pending.text()) };
+      return { status: response.status, headers: response.headers, data: parseJson(await pending.text()) };
     } catch (error) {
       if (error instanceof HTTPError) {
         return { status: error.response.status, headers: error.response.headers,
-          data: typeof error.data === 'string' ? parse(error.data) : error.data };
+          data: typeof error.data === 'string' ? parseJson(error.data) : error.data };
       }
       if (isNetworkError(error) || isTimeoutError(error) || options.signal?.aborted) throw new ProviderHttpError('unavailable', null);
       throw error;

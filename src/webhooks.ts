@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { Webhook } from './catalogue.js';
-import { readPath } from './rules.js';
+import { parseJson, readPath } from './rules.js';
 
 export type WebhookRequest = { method: string; url: string; headers: Headers; rawBody: Uint8Array };
 
@@ -29,12 +29,7 @@ export function deliveryId(webhook: Webhook, request: WebhookRequest): string | 
   const source = webhook.deliveryId;
   if (source === undefined) return null;
   if ('header' in source) return request.headers.get(source.header) || null;
-  let body: unknown;
-  try {
-    body = JSON.parse(Buffer.from(request.rawBody).toString('utf8')) as unknown;
-  } catch {
-    return null;
-  }
+  const body = parseJson(Buffer.from(request.rawBody).toString('utf8'));
   const parts = source.body.map(path => readPath(body, path));
   return parts.every((part): part is string | number => (typeof part === 'string' && part !== '') || typeof part === 'number')
     ? parts.join(':') : null;

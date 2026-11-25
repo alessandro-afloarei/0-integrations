@@ -21,6 +21,7 @@
 - `createClient` takes the entry first, and an entry always has a base URL (`base_url_required` is gone).
 - slack: a code outside 2xx is read too: a 401 `invalid_auth` (or another revoked code) is `GrantRevoked`, and a 429
   carries Slack's `error` (`ratelimited`) as its detail.
+- fireflies: `identify(client)` is gone: call `client.user()`.
 - slack: an answer is refused when its `ok` is false; a 200 that carries no `ok` is read by its data.
 - lusha: an account without v3 access carries the answer's status (it was always 403) and its `Retry-After` in
   `retryAfterMs` (it was always `null`).

@@ -1,5 +1,14 @@
 import type { Path, Template, When } from './catalogue.js';
 
+/** The text as JSON, or undefined when it is none. */
+export function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Reads a dotted path; at each level the whole rest is tried as one own key first, so `@odata.nextLink` is one key. */
 export function readPath(value: unknown, path: Path): unknown {
   if (typeof value !== 'object' || value === null) return undefined;
