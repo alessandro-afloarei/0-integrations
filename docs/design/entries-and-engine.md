@@ -357,7 +357,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 
 - An operation's key is its id (`'issues.create'`). `kind` defaults from the method: GET is a read, DELETE a delete,
   anything else a write. A GraphQL operation is a POST, so a write unless it says `kind: 'read'`. A search sent as POST
-  says `kind: 'read'`, and reads are the calls the engine retries.
+  says `kind: 'read'`: the engine retries only a call marked idempotent, a GET by default and an operation of
+  `kind: 'read'`.
 - A shape key ending in `?` may be missing or null, and is read as absent.
 - `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 204
   (the usual answer to DELETE, PUT and PATCH) answers `null`, which `unknown` already covers. Any other answer without

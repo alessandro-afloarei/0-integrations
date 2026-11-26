@@ -28,7 +28,9 @@ does not refuse a misspelled key at compile time (the catalogue test does, for t
 the key's name.
 
 `fetch` is optional in both: by default the global one, or `guardedFetch` for an entry whose host the person types
-(`http.host: '*'`, GitLab), which refuses private and metadata addresses ([client](client.md#the-address-guard)).
+(`http.host: '*'`, GitLab), which refuses private and metadata addresses ([client](client.md#the-address-guard)). An
+account id of a provider whose host is typed is local to that host (user 1 on gitlab.com is not user 1 on a company's
+GitLab), so an app keys such a connection by host and account id.
 
 The result is `{ secret, values, account }`, typed from the entry: the secret to seal (the grant, or the secret fields by
 name), the plain values to keep (the plain fields by name, and what the entry's `save` keeps when the provider answers

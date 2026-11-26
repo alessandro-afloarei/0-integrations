@@ -24,9 +24,12 @@ const me = await api.json('/users/me');
   them (Aircall's `{apiId}`, Intercom's `{apiHost}`). Only `finishConnect` applies a field's `default`: a client never
   does, so it needs the connection's `values` (a GitLab client given none would otherwise send a self-managed token to
   gitlab.com). A value the entry names that is missing, blank or neither a string nor a finite number is
-  `TypeError('template_missing: <entry id> {<name>}')`, before the token is read or anything is sent. A base is filled
-  and checked on the first request (see [catalogue](catalogue.md)), not when the client is built.
-- `baseUrl` replaces the entry's, used as given: an app's own base is neither filled nor checked against `http.host`.
+  `TypeError('template_missing: <entry id> {<name>}')` before anything is sent (a base's value also before the token is
+  read). A base is filled and checked on the first request (see [catalogue](catalogue.md)), not when the client is
+  built.
+- `baseUrl` replaces the entry's, used as given: an app's own base is neither filled nor checked against `http.host`,
+  but like every base it may hold no username or password (`TypeError('base_host_refused: <entry id>')`, before the
+  token is read).
 - `minIntervalMs` replaces the entry's.
 - `headers` are merged with the entry's, a header of the same name winning, and the credential is set last.
 - `beforeRequest(url)` runs once per call before anything is sent (an app's metering). What it throws reaches the
