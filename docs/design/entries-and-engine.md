@@ -406,13 +406,13 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 2. `hmac` with `part` (Stripe's `t=…,v1=…,v1=…`): the header is split on `,`, each piece on its first `=`. Every value
    whose name is `part` is a signature, the other pieces (another scheme, debug entries) are ignored, and the request
    passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
-   beside it (an app's own entry with both compares `prefix` and the digest inside the piece), and a `part` name holds
-   no `,`, `=` or whitespace.
-3. `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in `signed` is
-   that value. `timestamp.part` needs `part`, and `{timestamp}` is in `signed` exactly when there is a `timestamp`: a
-   tolerance on a timestamp that is not signed would let a replay pass with a fresh one. `verifyWebhook` is `false` for
-   an app's own declaration whose `signed` lacks `{body}`, or lacks `{timestamp}` beside a timestamp; any other name in
-   `signed` is signed as written.
+   beside it (an app's own entry with both compares `prefix` and the digest inside the piece) and a `part` name holding
+   a `,`, `=` or whitespace.
+3. `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in
+   `signed` is that value. `timestamp.part` needs `part`, and `{timestamp}` is in `signed` exactly when there is a
+   `timestamp`: a tolerance on a timestamp that is not signed would let a replay pass with a fresh one. `verifyWebhook`
+   is `false` for an app's own declaration whose `signed` lacks `{body}`, or lacks `{timestamp}` beside a timestamp;
+   any other name in `signed` is signed as written.
 4. `ed25519` (Discord): the secret is the provider's public key as 64 hex characters; the header holds a
    128-hex-character signature over the filled `signed`. A bad key, a bad signature or a wrong length is `false`.
 5. `token` (Google Calendar push): the header must equal the secret, compared over the SHA-256 digests of both, so its

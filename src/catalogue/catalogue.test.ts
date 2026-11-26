@@ -187,6 +187,10 @@ const runnable = {
     || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || (entry.auth[0].kind === 'key' && name === secretField(entry))),
   "`auth.send` templates: name only the entry's fields and {token}": (entry: Entry) => sentTemplates(entry).flatMap(placeholders)
     .every(name => name === 'token' || (entry.fields ?? []).some(field => field.name === name)),
+  // `{token}` is the secret in a token request and the obtained token in `send`: a field of that name would mean both,
+  // and a plain one could never be sent.
+  "no field named `token` (name it for what it is, such as `apiToken`): `{token}` is the credential": (entry: Entry) =>
+    !(entry.fields ?? []).some(field => field.name === 'token'),
   // The secret field goes only to the token request: a call carries the token it gave.
   "a `token` entry's `send`: name no secret field": (entry: Entry) => entry.auth[0].kind !== 'token'
     || !sentTemplates(entry).flatMap(placeholders).some(name => name === secretField(entry)),
@@ -419,6 +423,9 @@ test.each<[Rule, Entry]>([
     "`auth.send` header `value` other than a default: not '{token}' (leave `value` out), not `authorization: Bearer {token}` (leave `send` out)",
     defineProvider({ ...key, fields: [secret], auth: [{ kind: 'key', send: sent }] })]),
   ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
+  ...([[{ name: 'token', title: 'Token', secret: true }], [secret, { name: 'token', title: 'Token' }]] as const).map((fields): [Rule, Entry] => [
+    "no field named `token` (name it for what it is, such as `apiToken`): `{token}` is the credential",
+    defineProvider({ ...key, auth: [{ kind: 'key' }], fields })]),
   ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
   ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...oauth2, scopes: { default: [] },

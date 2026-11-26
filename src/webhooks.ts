@@ -27,7 +27,7 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   const named = (name: string) => received.split(between).filter(piece => piece.startsWith(name + assign)).map(piece => piece.slice(name.length + 1));
   const stamp = scheme.timestamp;
   const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
-  // Plain seconds within the tolerance of now (so always a safe integer).
+  // Plain seconds within the tolerance of now. The header's text is what is signed, so a long one loses nothing.
   if (stamp && !(/^\d+$/.test(timestamp) && Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) <= (stamp.toleranceSeconds ?? 300))) return false;
   // A declaration that does not sign the body, or the timestamp it checks, can verify nothing safely.
   const signed = scheme.signed ?? '{body}';
