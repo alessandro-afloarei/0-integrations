@@ -55,14 +55,14 @@ test('sends no actions to a document', async () => {
 });
 
 test('reads a page as it loads when its render could not finish, never after a 402', async () => {
-  // A 5xx is retried three times; with no backoff nothing waits.
+  // A plain scrape is retried after a 5xx; with no backoff nothing waits. A scrape with a script is sent once.
   vi.spyOn(Math, 'random').mockReturnValue(0);
   const rendering = fakeFetch([{ url: SCRAPE, async respond(request) {
     const { actions } = await request.json() as { actions?: unknown };
     return actions ? Response.json({ success: false, error: 'Action(s) failed to complete' }, { status: 500 }) : page({ title: 'FAQ' });
   } }]);
   expect(await client(rendering).scrape('https://x.test/faq', WAIT)).toMatchObject({ title: 'FAQ', markdown: '# Hi' });
-  expect(bodies(rendering).map(body => 'actions' in body)).toEqual([true, true, true, true, false]);
+  expect(bodies(rendering).map(body => 'actions' in body)).toEqual([true, false]);
 
   const broke = fakeFetch([{ url: SCRAPE, respond: () => Response.json({ success: false, error: 'Payment required' }, { status: 402 }) }]);
   await expect(client(broke).scrape('https://x.test/faq', WAIT)).rejects.toEqual(new ProviderHttpError('request_failed', 402));
@@ -83,7 +83,28 @@ test('reads a page as it loads when its render could not finish, never after a 4
 
   const down = fakeFetch([{ url: SCRAPE, respond: () => new Response(null, { status: 503 }) }]);
   await expect(client(down).scrape('https://x.test/faq', WAIT)).rejects.toMatchObject({ code: 'unavailable' });
-  expect(down.calls).toHaveLength(8);
+  expect(bodies(down).map(body => 'actions' in body)).toEqual([true, false, false, false, false]);
+});
+
+test('a scrape that runs a script is sent once: never after a dropped connection, and its 429 carries the wait', async () => {
+  vi.useFakeTimers();
+  try {
+    const dropped = fakeFetch([{ url: SCRAPE, async respond(request) {
+      const { actions } = await request.json() as { actions?: unknown };
+      if (actions) throw new TypeError('fetch failed');
+      return page({ title: 'FAQ' });
+    } }]);
+    const read = client(dropped).scrape('https://x.test/faq', WAIT);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await read).toMatchObject({ title: 'FAQ' });
+    expect(bodies(dropped).map(body => 'actions' in body)).toEqual([true, false]);
+
+    const limited = fakeFetch([{ url: SCRAPE, respond: () => new Response(null, { status: 429, headers: { 'retry-after': '2' } }) }]);
+    await expect(client(limited).scrape('https://x.test/faq', WAIT)).rejects.toMatchObject({ code: 'rate_limited', retryAfterMs: 2000 });
+    expect(limited.calls).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("waits out a scrape's 429 and resends the same body", async () => {

@@ -18,8 +18,9 @@ Nothing here is released yet.
   full-jitter backoff from one second: the n-th retry waits a random share of at most 1, 2, 4 seconds and so on, capped
   by `maxWaitMs`, or a positive `Retry-After` (Microsoft, Google, Attio, HubSpot, Notion, Aircall, Breakcold and the
   other entries that declare `retry`). A timeout is not retried.
-- A 5xx on a read is now retried before a module's own fallback runs: Firecrawl's 500 "Action(s) failed" is sent again
-  up to three times before the page is read as it loads.
+- A Firecrawl scrape that runs a script (`actions`) is sent once and never re-sent: a 5xx or a dropped connection goes
+  straight to the plain read, and a 429 fails with the wait Firecrawl names (before, its 429 was retried). A plain
+  scrape and a map are retried as reads.
 
 ## 0.13.0
 
