@@ -9,10 +9,12 @@ export type ConnectStart = Redirect | Form;
 /** `OAuth` for an OAuth 2 entry, `Key` for a key entry, either for an entry whose kind is not known (a union, `Entry`). */
 type ByKind<E extends Entry, OAuth, Key> = [E['auth'][0]['kind']] extends ['oauth2'] ? OAuth
   : [E['auth'][0]['kind']] extends ['key'] ? Key : OAuth | Key;
-/** The entry's declared fields, one union member each. */
-type Fields<E extends Entry> = NonNullable<E['fields']>[number];
-/** A record keyed by `K`, or by any string when the entry is not a literal and its names are unknown. */
-type Keyed<E extends Entry, K extends string, V> = string extends E['id'] ? Readonly<Record<string, V>> : Readonly<Record<K, V>>;
+/** The entry's declared fields, one union member each; none for an entry that declares none. */
+type Fields<E extends Entry> = E extends { fields?: readonly (infer F)[] } ? F : never;
+/** Whether the types do not know the entry's field names (a widened `Entry`, or fields typed `readonly Field[]`). */
+type Unnamed<E extends Entry> = string extends Fields<E>['name'] ? true : false;
+/** A record keyed by `K`, or by any string when the entry's field names are unknown. */
+type Keyed<E extends Entry, K extends string, V> = Unnamed<E> extends true ? Readonly<Record<string, V>> : Readonly<Record<K, V>>;
 /** The names `save` keeps, when the entry declares any. */
 type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : never;
 /** A key entry's secret fields, and its plain fields, by name. */
@@ -23,15 +25,15 @@ export type Connected<E extends Entry = Entry> = E extends Entry ? {
   /** The grant, or a key entry's secret fields by name. */
   secret: ByKind<E, Grant, Secrets<E>>;
   /** The plain fields entered, by name, and what `save` kept (present only when the provider answered it). */
-  values: string extends E['id'] ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
+  values: Unnamed<E> extends true ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
   account: E['identify'] extends { id: Value } ? Account : Account | null;
 } : never;
 type OAuthStart = { clientId: string; redirectUri: string; state: string };
 type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string; fetch: typeof fetch;
   onRevokeFailed: (error: unknown) => void };
 /** A key entry's finish: its secret fields by name, and its plain fields, required when it has any. */
-type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch: typeof fetch } & (string extends E['id']
-  ? { values?: Values } : Partial<Plain<E>> extends Plain<E> ? { values?: Plain<E> } : { values: Plain<E> }) : never;
+type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch: typeof fetch } & (Unnamed<E> extends true
+  ? { values?: Values } : Partial<Plain<E>> extends Plain<E> ? { values?: never } : { values: Plain<E> }) : never;
 
 /** A form of the entry's fields, or the provider's authorization URL (with the PKCE verifier for the app to keep). */
 export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart], []>):

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { Account } from './account.js';
-import { defineProvider, type Entry } from './catalogue.js';
+import { defineProvider, type Entry, type Field } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
@@ -185,7 +185,15 @@ describe('connect types', () => {
     expectTypeOf({ secret: { apiToken: 't' }, values: { apiId: '1' }, fetch }).toExtend<AircallFinish>();
     expectTypeOf({ secret: { apiKey: 'k' }, values: { apiId: '1' }, fetch }).not.toExtend<AircallFinish>();
     expectTypeOf({ secret: { apiToken: 't' }, fetch }).not.toExtend<AircallFinish>();
-    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<typeof attio>>[1]>();
+    type AttioFinish = Parameters<typeof finishConnect<typeof attio>>[1];
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<AttioFinish>();
+    // @ts-expect-error -- Attio has no plain field, so there are no values to pass
+    expectTypeOf({ secret: { apiKey: 'k' }, values: 'plain', fetch }).toExtend<AttioFinish>();
+    // The field names decide, not the id: names typed `readonly Field[]` take any record, known names are required.
+    type Unnamed = Omit<typeof attio, 'fields'> & { fields: readonly Field[] };
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<Unnamed>>[1]>();
+    type WideAircall = Omit<typeof aircall, 'id'> & { id: string };
+    expectTypeOf({ secret: { apiToken: 't' }, fetch }).not.toExtend<Parameters<typeof finishConnect<WideAircall>>[1]>();
   });
 });
 
