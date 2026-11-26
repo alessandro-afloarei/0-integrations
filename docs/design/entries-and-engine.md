@@ -608,7 +608,7 @@ other people must use OAuth, the key's `help` says the key is for the person's o
   limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
   limit answer. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
   the credential that signs the calls: a limit that varies by plan, or that the credential shares with its
-  organization, is left out (Fathom keeps one: 60 calls a minute for each key, on every plan).
+  organization, is left out.
 - `errors.detail` only for a documented machine code, never a human message.
 - `paging`: one named shape per way the declared lists page. A list the engine cannot page is declared unpaged, its
   paging parameters ordinary parameters and its paging fields in its `result`.

@@ -30,19 +30,19 @@ Nothing here is released yet.
 - PayPal sends `Accept: application/json` on every call and on its token request.
 - Slack identifies an org-level install by its organization (`enterprise.id`); it failed with `missing_fields`.
 - Breakcold waits before retrying a 429 that names no wait (one second); it retried at once.
-- Aircall, Apollo, Attio, GitHub, Granola, HubSpot, Lusha and Notion no longer declare `minIntervalMs`: each limit
-  depends on the plan or is shared by the account, workspace or the person's other tokens (their modules still take
-  one). Fathom keeps its 1,000 ms: 60 calls a minute for each key, on every plan.
-- Figma, GitLab, Granola, Intercom, Jira, PayPal, Slack, Stripe and Trello retry a read once after a 429 (waiting its
-  `Retry-After`, else one second, at most 60 seconds), a 408, a 5xx or a network failure (`retry: {}`); a write, and
-  PayPal's token request, are never retried.
+- Aircall, Apollo, Attio, Fathom, GitHub, Granola, HubSpot, Lusha and Notion no longer declare `minIntervalMs`: each
+  limit depends on the plan or is shared by the account, workspace or the person's other keys and tokens (their
+  modules still take one).
+- Granola, Intercom, Slack and Stripe declare `retry: {}`: an idempotent call (a GET, or a call marked idempotent) is
+  sent once more after a 429 (waiting its `Retry-After`, else one second, at most 60 seconds), or after a 408, 500, 502,
+  503 or 504 or a network failure.
 - `finishConnect` over a union of key or token entries takes each member's own secret fields; it asked for every
   member's at once (HubSpot's `accessToken` beside Attio's `apiKey`). An OAuth 2 member adds no form input.
 - `FirefliesUser`'s `email` and `name` are `string | null` (they were `string`): a Fireflies user without one no longer
   fails `user()` with `invalid_response`. The entry's `client(fireflies).user()` leaves out a null `email` or `name`.
 - For contributors: a key sign-in may name a `tokenAnswer.*` path in an identify `id` or `name` list ending on a path
-  of identify's requested answer, beside an OAuth 2 or token sign-in (HubSpot's `['tokenAnswer.hub_id', 'portalId']`); any other
-  `tokenAnswer.*` on a key sign-in is still refused.
+  of identify's requested answer, beside an OAuth 2 or token sign-in (HubSpot's `['tokenAnswer.hub_id', 'portalId']`);
+  any other `tokenAnswer.*` on a key sign-in is still refused.
 - New: an entry may list several sign-ins (OAuth 2, then a key); `signInWith(entry, kind)` from
   `0-integrations/catalogue` narrows it to one, and every call takes the narrowed entry. First used by Linear and
   ClickUp.
