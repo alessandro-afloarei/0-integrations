@@ -17,7 +17,7 @@ const acme = defineProvider({
       result: { id: 'string', 'assignee?': 'string', count: 'integer' } },
     'issues.create': { method: 'POST', path: '/issues', params: { title: { in: 'body', type: 'string', required: true },
       estimate: { in: 'body', type: { points: 'integer', 'unit?': 'string' } }, parent: { in: 'body', type: 'string', nullable: true },
-      note: { in: 'body', type: 'string' } } },
+      note: { in: 'body', type: 'string' }, status: { in: 'body', type: 'string', enum: ['open', 'closed'], nullable: true } } },
     'issues.search': { method: 'POST', kind: 'read', path: '/issues/search', params: { q: { in: 'body', type: 'string' } } },
     'issues.touch': { kind: 'write', path: '/touch' },
     'issues.delete': { method: 'DELETE', path: '/issues/{id}', params: { id: { in: 'path', type: 'string', required: true } } },
@@ -56,6 +56,14 @@ test('each parameter goes to its place; a path value is one encoded segment; an 
     ['POST', BASE, '{"query":"query Viewer($first: Int) { viewer { id } }","variables":{}}'],
   ]);
   expect(fake.calls[0]?.headers.authorization).toBe('Bearer k');
+});
+
+test('a nullable argument with an enum sends null, and is held to its enum otherwise', async () => {
+  const { fake, api } = setup(json({}));
+  await api.issues.create({ title: 'Ship', status: null });
+  await api.issues.create({ title: 'Ship', status: 'open' });
+  await expect(untyped(api.issues.create)({ title: 'Ship', status: 'merged' })).rejects.toThrow(new TypeError('param_invalid: status'));
+  expect(fake.calls.map(call => call.body)).toEqual(['{"title":"Ship","status":null}', '{"title":"Ship","status":"open"}']);
 });
 
 test('an argument the request cannot carry is a TypeError before any request', async () => {
@@ -208,6 +216,15 @@ test('a base URL with a trailing slash sends and pages as one without', async ()
     'https://api.acme.test/v2/feed?page=2']));
 });
 
+test('a path that starts with neither / nor ? is refused before the token is read or anything is sent', async () => {
+  const token = vi.fn(() => Promise.resolve('k'));
+  const { fake, api } = setup(json({}), { token });
+  await expect(api.json('users')).rejects.toThrow(new TypeError('url_path_relative'));
+  const relative = client({ ...acme, operations: { users: { path: 'users' } } }, { token, fetch: fake.fetch });
+  await expect(relative.users()).rejects.toThrow(new TypeError('url_path_relative'));
+  expect([fake.calls, token.mock.calls]).toEqual([[], []]);
+});
+
 test('an operation id is nested by its dots beside the raw calls', () => {
   const { api } = setup(json({}));
   expect([typeof api.requests.list, typeof api.request, typeof api.issues.get]).toEqual(['function', 'function', 'function']);
@@ -231,6 +248,8 @@ test("an app's entry that would send a wrong request is refused when its client 
     [{ path: '/a', params: { id: { in: 'path', type: 'string' } } }, 'param_unplaced: op id'],
     [{ path: '/c', paging: 'none' }, 'paging_unknown: none'],
     [{ path: '/e', paging: 'cursor', records: 'items', result: { items: 'string' } }, 'records_unshaped: op'],
+    [{ path: '/f', params: { q: { in: 'body', type: 'string' } } }, 'param_unplaced: op q'],
+    [{ method: 'GET', path: '/f', params: { q: { in: 'body', type: 'string' } } }, 'param_unplaced: op q'],
   ] as const) expect(() => client(entry(op), { token: 'k' })).toThrow(new TypeError(message));
 });
 

@@ -201,6 +201,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     const url = new URL(baseUrl + path);
     // The credential never leaves the base's origin, the first request included (`https://api.x.test` + `@evil.test`).
     if (url.origin !== origin) throw new TypeError('url_outside_origin');
+    // A path is read after the base, so one without its `/` would run into the base's last segment (`/v1users`).
+    if (path !== '' && !path.startsWith('/') && !path.startsWith('?')) throw new TypeError('url_path_relative');
     for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value);
     await input.beforeRequest?.(new URL(url));
     const sendAs = (bearer: string) => follow(url, bearer, credentialOf(entry, bearer, input.values ?? {}), options);

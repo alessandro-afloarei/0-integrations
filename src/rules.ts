@@ -29,10 +29,11 @@ export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined
 }
 
 /** Whether a parameter has a place in its operation's request: GraphQL takes only variables; a path operation takes no
- * variables, and a path parameter only where its path names it. */
+ * variables, a path parameter only where its path names it, and a body parameter only when it is not a GET. */
 export function placed(op: Operation, name: string, param: Param): boolean {
   return 'graphql' in op ? param.in === 'variables'
-    : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name));
+    : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))
+      && (param.in !== 'body' || (op.method ?? 'GET') !== 'GET');
 }
 
 /** The first operation id a client cannot hold: one with an empty segment, a dotted prefix of another (`pages` beside

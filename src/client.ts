@@ -88,7 +88,7 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
     const checked = value === null ? null : shaped(param.type, value);
     const scalar = typeof checked === 'string' || typeof checked === 'number' || typeof checked === 'boolean';
     // A path value is one segment: never empty or a dot segment, which the URL would resolve away.
-    if (checked === INVALID || (param.enum !== undefined && !(typeof checked === 'string' && param.enum.includes(checked)))
+    if (checked === INVALID || (checked !== null && param.enum !== undefined && !(typeof checked === 'string' && param.enum.includes(checked)))
       || (param.in === 'path' || param.in === 'query') && !scalar
       || (param.in === 'path' && ['', '.', '..'].includes(String(checked)))) refuse(`param_invalid: ${name}`);
     at[param.in][name] = param.in === 'body' || param.in === 'variables' ? checked

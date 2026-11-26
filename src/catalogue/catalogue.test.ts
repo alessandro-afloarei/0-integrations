@@ -254,6 +254,7 @@ test.each<[Rule, Entry]>([
     ['operation ids a client can hold', { 'a..b': { path: '/a' } }],
     ['a place in the request for every parameter', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
     ['a place in the request for every parameter', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
+    ['a place in the request for every parameter', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
     ['a place in the request for every parameter', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
     ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
     ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],

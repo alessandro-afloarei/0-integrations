@@ -50,7 +50,9 @@ than `retry.maxWaitMs`. A GET is a read unless `idempotent` says otherwise. An e
 
 ## Raw calls
 
-Each takes a path after the base URL and `RequestOptions`: `method`, `query`, `json`, `form`, `idempotent`, `signal`.
+Each takes a path after the base URL and `RequestOptions`: `method`, `query`, `json`, `form`, `idempotent`, `signal`. A
+path starts with `/` (or `?`, or is empty for the base itself); any other is `TypeError('url_path_relative')`, before the
+token is read or anything is sent.
 
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
@@ -77,10 +79,10 @@ The client's own calls take some names. An operation id whose first dot-separate
 another (`pages` beside `pages.markdown`) are refused: the reserved names by `defineProvider` at compile time, and all of
 them by `client` as `TypeError('operation_clash: <id>')` for an app's own entry.
 
-A wrong entry throws when its client is built: besides a clashing id, a parameter with no place in the request
-(`param_unplaced: <id> <name>`), a paging shape the entry does not declare (`paging_unknown: <name>`) and a `records`
-path that leads to no list in the `result` (`records_unshaped: <id>`). A wrong value throws when the call is made,
-before anything is sent.
+A wrong entry throws when its client is built: besides a clashing id, a parameter with no place in the request, such
+as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging shape the entry does not declare
+(`paging_unknown: <name>`) and a `records` path that leads to no list in the `result` (`records_unshaped: <id>`). A
+wrong value throws when the call is made, before anything is sent.
 
 An app's own entry declares operations the same way:
 

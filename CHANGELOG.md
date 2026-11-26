@@ -57,6 +57,8 @@ Every line below breaks 0.12 unless it says otherwise.
 - A missing or blank token is refused with `TypeError('token_missing')` when a request needs it, before anything is
   sent: a token function that answers one, at first or on renewal, and a missing or blank string token, in every module
   and client (each was sent as an empty credential).
+- A request path that starts with neither `/` nor `?` (and is not empty) is refused with
+  `TypeError('url_path_relative')` before anything is sent: `json('users')` reached `/v1users`.
 - A base URL with a trailing slash (`https://x.test/v1/`) is read without it: a request went to `/v1//a`, and a next
   link under it was read wrongly.
 - A request whose URL leaves its base's origin (`https://api.x.test` + `@evil.test/y`) is refused with
