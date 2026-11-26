@@ -4,16 +4,23 @@
 
 Nothing here is released yet.
 
-- The 28 entries written before the fact protocol are checked against their providers' pages.
+- The 28 entries written before every value had to be cited from the provider's documentation are checked against
+  their providers' pages.
+- Exa's and Firecrawl's `docs` links point to their current pages.
 - Attio lists OAuth 2 first; its API key is `signInWith(attio, 'key')`.
 - GitHub lists OAuth 2 first; its personal access token is `signInWith(github, 'key')`.
 - GitLab lists OAuth 2 first, on the host the person types; its personal access token is `signInWith(gitlab, 'key')`.
+  `client(gitlab, …)` on the whole entry now sends `Authorization: Bearer`; it sent `private-token`, as the key still
+  does.
 - HubSpot lists a key second, the static auth access token of an app installed in your own account:
   `signInWith(hubspot, 'key')`.
 - Figma adds a personal access token second, sent in `X-Figma-Token`: `signInWith(figma, 'key')`.
 - Figma's connect identifies with `GET /v1/me` (`id`), no longer the token answer's `user_id_string`, which a key has
   not; Figma does not state the two are equal, so an app that keyed Figma connections by account id should check one.
-  Its default scope is `current_user:read` alone: an app passes the scopes its own calls need.
+  Its default scope is `current_user:read` alone: for more, an app derives an entry,
+  `defineProvider({ ...figma, scopes: { default: ['current_user:read', …] } })`.
+- Aircall, Apollo, Fathom, Firecrawl, Intercom, Notion and Stripe's key fields gain a `help` naming which credential to
+  paste.
 - Notion sends `Content-Type: application/json` on every request, beside `Notion-Version`, as its authorization guide
   asks.
 - Discord's calls send `Content-Type: application/json` and `User-Agent: DiscordBot
@@ -32,7 +39,7 @@ Nothing here is released yet.
 - `finishConnect` over a union of key or token entries takes each member's own secret fields; it asked for every
   member's at once (HubSpot's `accessToken` beside Attio's `apiKey`).
 - `FirefliesUser`'s `email` and `name` are `string | null` (they were `string`): a Fireflies user without one no longer
-  fails `user()` with `invalid_response`.
+  fails `user()` with `invalid_response`. The entry's `client(fireflies).user()` leaves out a null `email` or `name`.
 - For contributors: a key sign-in may name a `tokenAnswer.*` path in an identify `id` or `name` list ending on
   identify's answer, beside an OAuth 2 or token sign-in (HubSpot's `['tokenAnswer.hub_id', 'portalId']`); any other
   `tokenAnswer.*` on a key sign-in is still refused.
