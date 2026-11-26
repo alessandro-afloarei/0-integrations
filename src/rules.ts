@@ -1,4 +1,4 @@
-import type { Operation, Param, Path, Shape, Template, When } from './catalogue.js';
+import type { Operation, Param, Path, Shape, Template, Values, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -61,7 +61,13 @@ export function fill(template: Template, lookup: (name: string) => unknown, wher
   });
 }
 
-export type Answer = { status: number; headers: Headers; body: unknown; code?: string | undefined };
+/** A connection's plain value as templates read it: a non-blank string or a finite number, else undefined. */
+export function plainValue(values: Values, name: string): string | number | undefined {
+  const value = values[name];
+  return (typeof value === 'string' && value.trim() !== '') || (typeof value === 'number' && Number.isFinite(value)) ? value : undefined;
+}
+
+export type Answer ={ status: number; headers: Headers; body: unknown; code?: string | undefined };
 
 /** Whether every part `when` states holds for the answer; `header` or `path` (one of them, not both) selects the value compared. */
 export function holds(when: When, answer: Answer): boolean {

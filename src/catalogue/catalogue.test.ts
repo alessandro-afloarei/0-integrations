@@ -56,7 +56,9 @@ const selectsOne = (item: Selects) => !(item.header !== undefined && item.path !
 const condition = <T extends Selects>(schema: z.ZodType<T>) =>
   schema.refine(selectsOne, 'a condition compares one header or one path, and a header only to a string');
 const when = condition(whenObject);
-const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ basic: z.tuple([template, template]) })]);
+const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ basic: z.tuple([template, template]) }),
+  z.strictObject({ query: z.record(z.string(), template) })])
+  .refine(item => !('query' in item) || Object.keys(item.query).length > 0, 'a query send names at least one parameter');
 const value = z.union([z.string(), z.array(z.string())]);
 const method = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const request = z.strictObject({ method: method.optional(), path: template.optional(),
@@ -71,7 +73,7 @@ const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
-  id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1),
+  id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1), docs: z.string().optional(),
   fields: z.array(z.strictObject({ name: z.string(), title: z.string(), secret: z.literal(true).optional() })).optional(),
   auth: z.array(z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('key'), send: send.optional() }),
@@ -124,6 +126,8 @@ const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name =
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
 const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
 const runnable = {
+  // Every claim an entry makes is checked against the provider's own page.
+  'an https docs page': (entry: Entry) => entry.docs?.startsWith('https://') === true,
   // The engine sends only that field as `{token}`.
   'one secret field, the only one a key entry has': (entry: Entry) => {
     const secrets = (entry.fields ?? []).filter(field => field.secret === true).length;
@@ -170,7 +174,9 @@ describe.each(entries)('%s', (id, entry) => {
     const fields = (entry.fields ?? []).map(field => field.name);
     const auth = entry.auth[0];
     // auth.send: every field by its name, and the token.
-    if ('send' in auth && 'basic' in auth.send) for (const name of auth.send.basic.flatMap(placeholders)) expect([...fields, 'token']).toContain(name);
+    const sent = !('send' in auth) || 'header' in auth.send ? []
+      : 'basic' in auth.send ? auth.send.basic : Object.values(auth.send.query);
+    for (const name of sent.flatMap(placeholders)) expect([...fields, 'token']).toContain(name);
     // identify and save read one lookup: the id found, the token answer, a connection value (a plain field the user
     // entered, or a value `save` keeps), or a path into the identify answer. A value without braces is itself a path.
     const connection = [...(entry.fields ?? []).filter(field => field.secret !== true).map(field => field.name),
@@ -233,10 +239,12 @@ test.each([
   ['compares a path to a boolean', { path: 'active', equals: false }],
 ])('a condition that %s matches the schema', (_, good) => { expect(when.safeParse(good).success).toBe(true); });
 
-const key = { id: 'k', name: 'K', http: { baseUrl: 'https://api.k.test' } } as const;
+const key = { id: 'k', name: 'K', docs: 'https://k.test/docs', http: { baseUrl: 'https://api.k.test' } } as const;
 const oauth2 = { ...key, auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }] } as const;
 const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
 test.each<[Rule, Entry]>([
+  ['an https docs page', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
+  ['an https docs page', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
   ['one secret field, the only one a key entry has', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
   ['one secret field, the only one a key entry has', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
@@ -283,6 +291,11 @@ test.each<[Rule, Entry]>([
   ['operation ids a client can hold', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { then: { path: '/then' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
+
+test('a query send that names no parameter fails the schema, with what to fix', () => {
+  const bad = { ...key, auth: [{ kind: 'key', send: { query: {} } }], fields: [secret] };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(['a query send names at least one parameter']);
+});
 
 test('an entry whose operations keep every rule passes them all', () => {
   const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],

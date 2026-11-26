@@ -23,8 +23,9 @@ That is a whole provider: the connect form, the credential check, the account, p
 
 | Field | What it declares |
 |---|---|
+| `docs` | The provider's own page that states what the entry declares, https. Every entry in the library has one. |
 | `fields` | What a person enters to connect: `{ name, title, secret? }`. A key entry has exactly one secret field: the credential. |
-| `auth` | One sign-in: `{ kind: 'key' }` or `{ kind: 'oauth2', authorizeUrl, tokenUrl, … }`. `send` says how a key travels: Bearer by default, `{ header }` for a bare token, `{ basic: ['{apiId}', '{apiToken}'] }`. |
+| `auth` | One sign-in: `{ kind: 'key' }` or `{ kind: 'oauth2', authorizeUrl, tokenUrl, … }`. `send` says how a key travels: Bearer by default, `{ header }` for a bare token, `{ basic: ['{apiId}', '{apiToken}'] }`, or `{ query: { key: '{apiKey}', token: '{apiToken}' } }` for parameters set on every request's URL. A plain value that is blank fills no template: `template_missing`, before anything is sent. |
 | `scopes` | `{ default, requireGranted? }`: the scopes asked for, and whether a grant short of one is refused. |
 | `identify` | The request that checks the credential and the paths of the account's `id` and `name`; `rejectWhen` names answers that mean a bad credential whatever their status. |
 | `save` | Values kept on the connection after sign-in, read from the token answer, the identify answer or the plain fields. A saved value never replaces an entered field of the same name. |

@@ -4,7 +4,7 @@ import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { fill, parseJson } from './rules.js';
+import { fill, parseJson, plainValue } from './rules.js';
 
 export type RequestOptions = {
   method?: Method;
@@ -75,16 +75,20 @@ function redirectTarget(url: URL, method: string, response: ProviderResponse): U
   }
 }
 
-/** The header a request's credential travels in: Bearer by default, a header's bare token, or Basic from a template. */
-function credentialOf(entry: Entry, token: string, values: Values): [header: string, value: string] {
+/** What a request's credential adds: a header, or query parameters set on every hop. */
+type Credential = { header?: [name: string, value: string]; query?: [name: string, value: string][] };
+
+/** Bearer by default, a header's bare token, Basic from a template, or the query's parameters from templates. */
+function credentialOf(entry: Entry, token: string, values: Values): Credential {
   const [auth] = entry.auth;
   const send = 'send' in auth ? auth.send : undefined;
-  if (send === undefined) return ['authorization', `Bearer ${token}`];
-  if ('header' in send) return [send.header, token];
+  if (send === undefined) return { header: ['authorization', `Bearer ${token}`] };
+  if ('header' in send) return { header: [send.header, token] };
   const secret = entry.fields?.find(field => field.secret === true)?.name;
-  const lookup = (name: string) => (name === 'token' || name === secret ? token : values[name]);
+  const lookup = (name: string) => (name === 'token' || name === secret ? token : plainValue(values, name));
+  if ('query' in send) return { query: Object.entries(send.query).map(([name, template]) => [name, fill(template, lookup, entry.id)]) };
   const pair = `${fill(send.basic[0], lookup, entry.id)}:${fill(send.basic[1], lookup, entry.id)}`;
-  return ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`];
+  return { header: ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`] };
 }
 
 export type HttpOptions = {
@@ -145,7 +149,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     if (wait > 0) await new Promise<void>(resolve => { setTimeout(resolve, wait); });
   }
 
-  async function send(url: URL, [name, value]: [string, string], options: RequestOptions): Promise<ProviderResponse> {
+  async function send(url: URL, credential: [string, string] | undefined, options: RequestOptions): Promise<ProviderResponse> {
     const method = options.method ?? 'GET';
     // A GET is a read unless the caller says otherwise (an operation declared a write).
     const limit = (options.idempotent ?? method === 'GET') && !options.signal ? retry.limit : 0;
@@ -153,7 +157,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     try {
       headers = new Headers(entry.http.headers);
       for (const [key, header] of Object.entries(input.headers ?? {})) headers.set(key, header);
-      headers.set(name, value);
+      if (credential) headers.set(...credential);
     } catch {
       throw new ProviderHttpError('request_failed', null);
     }
@@ -186,13 +190,15 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     }
   }
 
-  async function follow(start: URL, bearer: string, credential: [string, string], options: RequestOptions): Promise<ProviderResponse> {
-    const [, value] = credential;
+  async function follow(start: URL, bearer: string, { header, query = [] }: Credential, options: RequestOptions): Promise<ProviderResponse> {
     let url = start;
     for (let hop = 0; ; hop++) {
-      const response = await send(url, credential, options);
+      // Set on every hop, replacing the caller's or a Location's value; `url` itself never holds it.
+      const sent = new URL(url);
+      for (const [name, value] of query) sent.searchParams.set(name, value);
+      const response = await send(sent, header, options);
       const next = hop < MAX_REDIRECTS ? redirectTarget(url, options.method ?? 'GET', response) : null;
-      if (next === null) return sentWith(response, [bearer, value.slice(value.indexOf(' ') + 1)]);
+      if (next === null) return sentWith(response, header ? [bearer, header[1].slice(header[1].indexOf(' ') + 1)] : [bearer]);
       url = next;
     }
   }

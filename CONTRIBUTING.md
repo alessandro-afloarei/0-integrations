@@ -26,6 +26,7 @@ entry:
 
 - matches the entry types with no unknown key (the compiler accepts a misspelled one; this test does not), holds no
   function, prints to JSON unchanged, and has an id that is unique and equals its file name;
+- cites in `docs` the https page of the provider that states what the entry declares;
 - names in each template only what that place allows;
 - is one the engine can run: a key entry has exactly one secret field and reads no token answer, scopes or RFC 7009
   revoke; an OAuth entry declares scopes; a value read from identify's answer has a request to read it from; no `save`

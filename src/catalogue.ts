@@ -13,8 +13,9 @@ export type Values = Readonly<Record<string, unknown>>;
 export type When = { status?: number | 'error'; header?: string; path?: Path; detail?: string | true;
   equals?: string | number | boolean; in?: readonly string[]; startsWith?: string; contains?: string };
 export type Field = { name: string; title: string; secret?: true };
-/** How the credential travels. None: `authorization: Bearer {token}`. A header alone: the bare `{token}`. */
-export type Send = { header: string } | { basic: readonly [Template, Template] };
+/** How the credential travels. None: `authorization: Bearer {token}`. A header alone: the bare `{token}`. `query`:
+ * each parameter's template, set on the URL of every request and redirect hop. */
+export type Send = { header: string } | { basic: readonly [Template, Template] } | { query: Readonly<Record<string, Template>> };
 export type Auth =
   | { kind: 'key'; send?: Send }
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; pkce?: false; clientAuth?: 'basic'; scopeSeparator?: ',';
@@ -52,7 +53,7 @@ export type Operation = ({ method?: Method; path: Template } | { graphql: string
   kind?: 'read' | 'write' | 'delete'; params?: Readonly<Record<string, Param>>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null' };
 /** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. */
-export type Entry = { id: string; name: string; fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
+export type Entry = { id: string; name: string; docs?: string; fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
   scopes?: { default: readonly string[]; requireGranted?: true }; identify?: Identify;
   save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook;
   paging?: Readonly<Record<string, Paging>>; operations?: Readonly<Record<string, Operation>> };

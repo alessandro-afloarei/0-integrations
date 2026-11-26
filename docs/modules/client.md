@@ -20,10 +20,13 @@ const me = await api.json('/users/me');
   blank token is `TypeError('token_missing')`, thrown when a request needs it, before anything is sent.
 - `fetch`: the global one by default. In production pass the app's own guarded `fetch`: the library does not refuse
   private addresses yet.
-- `values`: the connection's plain values, for a credential built from them (Aircall's `{apiId}`).
+- `values`: the connection's plain values, for a credential built from them (Aircall's `{apiId}`, Trello's `{apiKey}`).
+  A value the credential names that is missing, blank or neither a string nor a finite number is
+  `TypeError('template_missing: <entry id> {<name>}')`, before anything is sent.
 - `baseUrl` and `minIntervalMs` replace the entry's. `headers` are merged with the entry's, a header of the same name
   winning, and the credential is set last.
 - `beforeRequest(url)` runs once per call before anything is sent (an app's metering). What it throws reaches the caller.
+  The URL it sees never holds a credential sent in the query.
 
 An OAuth connection passes a function that reads the grant and refreshes it under a lock:
 
@@ -42,11 +45,13 @@ const gmail = client(google, {
 ## Every call
 
 The credential travels as the entry says and never leaves the base URL's origin: a path that would leave it is
-`TypeError('url_outside_origin')`, and a redirect is followed only on the same origin, at most five hops. A call times
-out after the entry's `timeoutMs` (30 seconds by default) and is paced `minIntervalMs` apart. A 429 is waited out and
-sent again only on a read, only when the entry declares `http.retry`, never with a caller's `signal`, and never longer
-than `retry.maxWaitMs`. A GET is a read unless `idempotent` says otherwise. An error answer is a `ProviderHttpError` or a
-`GrantRevoked` ([errors](errors.md)), classified by the entry's rules.
+`TypeError('url_outside_origin')`, and a redirect is followed only on the same origin, at most five hops. A credential
+sent in the query (Trello's `key` and `token`) is set on every hop, replacing a value of the same name from the caller
+or the redirect, and no error the library builds holds the URL. A call times out after the entry's `timeoutMs` (30
+seconds by default) and is paced `minIntervalMs` apart. A 429 is waited out and sent again only on a read, only when
+the entry declares `http.retry`, never with a caller's `signal`, and never longer than `retry.maxWaitMs`. A GET is a
+read unless `idempotent` says otherwise. An error answer is a `ProviderHttpError` or a `GrantRevoked`
+([errors](errors.md)), classified by the entry's rules.
 
 ## Raw calls
 

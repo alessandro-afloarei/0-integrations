@@ -407,6 +407,79 @@ test("Aircall's Basic credential is filled from a plain value and the secret, an
   expect(fake.calls).toHaveLength(1);
 });
 
+/** Trello's shape: a plain key and the secret token, both sent in the query. */
+const queryKey = defineProvider({ id: 'querykey', name: 'Query key',
+  fields: [{ name: 'apiKey', title: 'API key' }, { name: 'apiToken', title: 'Token', secret: true }],
+  auth: [{ kind: 'key', send: { query: { key: '{apiKey}', token: '{apiToken}' } } }],
+  http: { baseUrl: 'https://api.x.test' }, errors: { detail: 'error' } });
+const queryClient = (fetch: typeof globalThis.fetch, beforeRequest?: (url: URL) => void) =>
+  createClient(queryKey, { token: () => Promise.resolve('t'), values: { apiKey: 'k' }, fetch, minIntervalMs: 0,
+    ...(beforeRequest ? { beforeRequest } : {}) });
+const moved = (location: string) => () => new Response(null, { status: 307, headers: { location } });
+
+test('a query send sets each parameter on the URL, after the caller\'s query, and adds no authorization header', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await queryClient(fake.fetch).json('/a');
+  await queryClient(fake.fetch).json('/a', { query: { token: 'evil', q: 'x' } });
+  expect(fake.calls.map(call => [call.url, call.headers.authorization])).toEqual([
+    ['https://api.x.test/a?key=k&token=t', undefined], ['https://api.x.test/a?token=t&q=x&key=k', undefined]]);
+});
+
+test('a query credential is set again on every same-origin hop, replacing a Location\'s value', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(moved('/next'), moved('/last?token=x'), ok) }]);
+  expect(await queryClient(fake.fetch).json('/a')).toEqual({ ok: true });
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.x.test/a?key=k&token=t',
+    'https://api.x.test/next?key=k&token=t', 'https://api.x.test/last?token=t&key=k']);
+});
+
+test("a query credential never reaches another origin's Location", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: moved('https://evil.test/steal') }]);
+  await expect(queryClient(fake.fetch).json('/a')).rejects.toMatchObject({ code: 'request_failed', status: 307 });
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.x.test/a?key=k&token=t']);
+});
+
+test("beforeRequest never sees a query send's credential", async () => {
+  const seen: string[] = [];
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await queryClient(fake.fetch, url => { seen.push(url.toString()); }).json('/a', { query: { q: '1' } });
+  expect(seen).toEqual(['https://api.x.test/a?q=1']);
+});
+
+test('a code that is the token sent in the query is no detail', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ error: 't' }, { status: 400 }) }]);
+  await expect(queryClient(fake.fetch).json('/a')).rejects.toMatchObject({ code: 'request_failed', detail: null });
+});
+
+test('no error thrown on a query send holds the URL or its credential', async () => {
+  const failures = [() => { throw new TypeError('fetch failed'); }, () => new Promise<Response>(() => undefined)];
+  for (const respond of failures) {
+    const fake = fakeFetch([{ url: /https:/, respond }]);
+    const result = createClient(queryKey, { token: () => Promise.resolve('secret-token'), values: { apiKey: 'k' }, fetch: fake.fetch })
+      .json('/a').catch((caught: unknown) => caught);
+    await vi.advanceTimersByTimeAsync(30_000);
+    const error = await result;
+    expect(error).toMatchObject({ code: 'unavailable', status: null });
+    if (!(error instanceof Error)) throw new Error('expected_error');
+    const encoded = JSON.stringify({ fields: Object.fromEntries(Object.entries(error)), message: error.message, cause: String(error.cause) });
+    expect(encoded).not.toContain('secret-token');
+    expect(encoded).not.toContain('api.x.test');
+  }
+});
+
+test('a blank plain value fills no template: nothing is sent; a number is', async () => {
+  const basic = defineProvider({ id: 'basicpair', name: 'Basic pair',
+    fields: [{ name: 'apiId', title: 'API ID' }, { name: 'apiToken', title: 'API token', secret: true }],
+    auth: [{ kind: 'key', send: { basic: ['{apiId}', '{apiToken}'] } }], http: { baseUrl: 'https://api.basic.test' } });
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  for (const apiId of ['', '  ']) {
+    await expect(createClient(basic, { token: () => Promise.resolve('t'), values: { apiId }, fetch: fake.fetch }).json('/a'))
+      .rejects.toThrow(new TypeError('template_missing: basicpair {apiId}'));
+  }
+  expect(fake.calls).toHaveLength(0);
+  await createClient(basic, { token: () => Promise.resolve('t'), values: { apiId: 7 }, fetch: fake.fetch }).json('/a');
+  expect(fake.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('7:t').toString('base64')}`);
+});
+
 test('a code that echoes the Basic header is no detail', async () => {
   const keyed = defineProvider({ id: 'keyed', name: 'Keyed', fields: [{ name: 'user', title: 'User' }, { name: 'key', title: 'Key', secret: true }],
     auth: [{ kind: 'key', send: { basic: ['{user}', '{key}'] } }], http: { baseUrl: 'https://api.keyed.test' }, errors: { detail: 'code' } });
