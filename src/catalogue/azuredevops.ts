@@ -28,7 +28,7 @@ export const azuredevops = defineProvider({
   scopes: { default: ['499b84ac-1321-427f-aa17-267ca6975798/.default', 'offline_access'] },
   // A 429 sends Retry-After: https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rate-limits
   http: { baseUrl: 'https://dev.azure.com/{organization}', bases: { profile: 'https://app.vssps.visualstudio.com' },
-    retry: {} },
+    retry: { wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   // https://learn.microsoft.com/en-us/rest/api/azure/devops/profile/profiles/get?view=azure-devops-rest-7.1
   identify: { request: { base: 'profile', path: '/_apis/profile/profiles/me', query: { 'api-version': '7.1' } }, id: 'id',
     name: ['displayName', 'emailAddress'] },
