@@ -11,6 +11,7 @@ const upserted = { 'success?': 'boolean', data: { _id: 'string', 'ownerId?': 'st
 const written = { firstName: { in: 'body', type: 'string' }, lastName: { in: 'body', type: 'string' },
   jobTitle: { in: 'body', type: 'string' }, linkedinUrl: { in: 'body', type: 'string' }, phone: { in: 'body', type: 'string' },
   companyDomain: { in: 'body', type: 'string' } } as const;
+const oneOf = 'At least one identifier is required: `email`, `linkedinUrl` or `linkedinUrlSalesNav` (`contactId` only updates).';
 const ref = 'https://developer.lemlist.com/api-reference/endpoints';
 
 export const lemlist = defineProvider({
@@ -34,9 +35,10 @@ export const lemlist = defineProvider({
     'contacts.get': { docs: `${ref}/contacts/get-contact`, path: '/contacts/{idOrEmail}', notFound: 'null',
       params: { idOrEmail: { in: 'path', type: 'string', required: true } }, result: contact },
     'contacts.create': { docs: `${ref}/contacts/upsert-contact`, method: 'POST', path: '/contacts',
-      params: { email: { in: 'body', type: 'string', required: true,
-        description: 'The contact\'s unique key: a contact with this email (or LinkedIn URL) already there is updated instead.' },
-      ...written }, result: upserted },
+      params: { ...written, email: { in: 'body', type: 'string', description: `The primary email, the main unique key. ${oneOf}` },
+        linkedinUrl: { in: 'body', type: 'string', description: `The LinkedIn profile URL. ${oneOf}` },
+        linkedinUrlSalesNav: { in: 'body', type: 'string', description: `The LinkedIn Sales Navigator profile URL. ${oneOf}` } },
+      result: upserted },
     'contacts.update': { docs: `${ref}/contacts/upsert-contact`, method: 'POST', path: '/contacts',
       params: { contactId: { in: 'body', type: 'string', required: true }, email: { in: 'body', type: 'string' }, ...written },
       result: upserted },
