@@ -1,8 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Salesflare: an API key as Bearer; a 429 when there are too many requests. The answers of the lists, of a contact and
- * of a write are not described (https://api.salesflare.com/openapi.json), so they are read as they come and each list
- * answers one page: an app pages with `limit` and `offset` itself. */
+ * of an update are placeholders (`type: string`) in https://api.salesflare.com/openapi.json, and the create's schema (a
+ * list) and its prose (an object for one contact) disagree, so all are read as they come; each list answers one page:
+ * an app pages with `limit` and `offset` itself. */
 const ref = 'https://api.salesflare.com/docs#operation';
 const paged = { limit: { in: 'query', type: 'number', description: 'At least 1.' },
   offset: { in: 'query', type: 'number' } } as const;
