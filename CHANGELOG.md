@@ -13,6 +13,9 @@ Nothing here is released yet.
 - New: `guardedFetch` (from `0-integrations/client`) refuses private, loopback, link-local, unique-local and metadata
   addresses; an entry whose host is typed (`http.host: '*'`, first GitLab) uses it unless the app passes its own `fetch`.
 - `finishConnect`'s `fetch` is optional.
+- An entry with `retry` now also retries 408, 500, 502, 503 and 504 answers and network failures on reads, with
+  full-jitter backoff (Microsoft, Google, Attio, HubSpot, Notion, Aircall, Breakcold and the other entries that declare
+  `retry`).
 
 ## 0.13.0
 

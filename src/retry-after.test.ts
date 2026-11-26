@@ -80,8 +80,9 @@ describe('provider wait metadata', () => {
   });
 
   test('carries a retry hint on a non-rate-limit HTTP error without changing its code', async () => {
-    const fake = scripted(() => Response.json({}, { status: 503, headers: { 'Retry-After': '2' } }));
-    await expect(http(hubspot, fake.fetch).json('/items')).rejects.toMatchObject({ code: 'unavailable', status: 503, retryAfterMs: 2000 });
+    // 501 is never retried, so the hint is the error's to carry.
+    const fake = scripted(() => Response.json({}, { status: 501, headers: { 'Retry-After': '2' } }));
+    await expect(http(hubspot, fake.fetch).json('/items')).rejects.toMatchObject({ code: 'unavailable', status: 501, retryAfterMs: 2000 });
     expect(fake.calls).toHaveLength(1);
   });
 });

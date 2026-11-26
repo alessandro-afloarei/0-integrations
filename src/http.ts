@@ -4,7 +4,7 @@ import type { Call, Entry, Method, Values } from './catalogue.js';
 import { isIP } from 'node:net';
 import { ProviderHttpError } from './errors.js';
 import { blockedAddress, guardedFetch } from './guard.js';
-import { bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
+import { backoffMs, bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
 import { fill, parseJson, placeholders, plainValue } from './rules.js';
 
@@ -58,6 +58,8 @@ async function retryBody(response: Response, timeoutMs: number): Promise<string>
 }
 
 const MAX_REDIRECTS = 5;
+/** The statuses a read is retried after: a rate limit, a timeout and the passing server failures (never 501). */
+const RETRIED = [408, 429, 500, 502, 503, 504];
 
 /**
  * The redirect to follow, as fetch would: only to the same origin, since the credential must not reach another host,
@@ -170,10 +172,12 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     return renewal;
   }
 
-  /** Waits: a positive Retry-After, else the wait the body names, else the provider's default. */
-  async function waitFor(response: Response): Promise<number> {
+  /** A 429's wait: a positive Retry-After, else the wait the body names, else the provider's default, with no jitter. A
+   * 408's or a 5xx's: a positive Retry-After, else the backoff. */
+  async function waitFor(response: Response, retryCount: number): Promise<number> {
     const header = retryAfterMs(response.headers, Date.now());
     if (header !== null && header > 0) return header;
+    if (response.status !== 429) return backoffMs(retry, retryCount);
     // The body is read only for a wait the entry says it names: a slow body must not hold up the retry.
     const fromBody = entry.http.retry?.waitFromBody === undefined ? undefined
       : bodyWaitOf(entry.http.retry, parseJson(await retryBody(response, timeoutMs)), Date.now());
@@ -205,13 +209,15 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
         ...(options.signal ? { signal: options.signal } : {}),
         ...(options.json !== undefined ? { json: options.json } : {}),
         ...(options.form ? { body: new URLSearchParams(options.form) } : {}),
-        // Only a 429 is retried, by the hook below; ky's own status and network retries stay off.
-        retry: { limit, statusCodes: [], shouldRetry: () => false },
+        // A status is retried by the hook below; ky retries only a network failure or a timeout, after the backoff, on
+        // the request's own method (`limit` already says whether it is a read).
+        retry: { limit, methods: [method], statusCodes: [], delay: attempt => backoffMs(retry, attempt - 1),
+          shouldRetry: ({ error }) => isNetworkError(error) || isTimeoutError(error) },
         hooks: {
           beforeRequest: [pace], beforeRetry: [pace],
           afterResponse: [async ({ response, retryCount }) => {
-            if (response.status !== 429 || retryCount >= limit) return;
-            return ky.retry({ delay: Math.min(await waitFor(response), retry.maxWaitMs) });
+            if (!RETRIED.includes(response.status) || retryCount >= limit) return;
+            return ky.retry({ delay: Math.min(await waitFor(response, retryCount), retry.maxWaitMs) });
           }],
         },
       });

@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { defineProvider, type Entry } from './catalogue.js';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { defineProvider, type Entry, type Retry } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { exa } from './catalogue/exa.js';
@@ -129,7 +129,7 @@ test('a 401 asks once for a fresh token', async () => {
 
 test('403 is rejected, 404 not_found, 500 unavailable, 400 request_failed', async () => {
   for (const [status, code] of [[403, 'rejected'], [404, 'not_found'], [500, 'unavailable'], [400, 'request_failed'], [503, 'unavailable'], [408, 'unavailable']] as const) {
-    const fake = script(hubspot, () => Response.json({}, { status }));
+    const fake = script(headerKey, () => Response.json({}, { status }));
     await expect(fake.client.json('/items')).rejects.toMatchObject({ code, status });
     expect(fake.calls).toHaveLength(1);
   }
@@ -137,7 +137,7 @@ test('403 is rejected, 404 not_found, 500 unavailable, 400 request_failed', asyn
 
 test("times out at the provider's timeoutMs", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => new Promise<Response>(() => {}) }]);
-  const client = createClient(hubspot, { token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const client = createClient(headerKey, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   let settled = false;
   const result = client.json('/items').catch((e: unknown) => { settled = true; return e; });
   await vi.advanceTimersByTimeAsync(29999);
@@ -184,7 +184,7 @@ test('invalid JSON is unavailable as data and invalid_response through json', as
 
 test('network failures and caller aborts are unavailable', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => { throw new TypeError('fetch failed'); } }]);
-  const client = createClient(hubspot, { token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const client = createClient(headerKey, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   await expect(client.json('/items')).rejects.toMatchObject({ code: 'unavailable', status: null });
   const controller = new AbortController();
   controller.abort();
@@ -335,7 +335,9 @@ test("a refusal carries the provider's own error code", async () => {
   usage.token.mockResolvedValue('bk_test'); // 't' is in 'usage_limit', and a code holding the credential is no detail
   await expect(usage.client.json('/records')).rejects.toMatchObject({ code: 'request_failed', status: 402, detail: 'usage_limit' });
   const bare = script(breakcold, () => new Response('gateway', { status: 502 }));
-  await expect(bare.client.json('/records')).rejects.toMatchObject({ code: 'unavailable', detail: null });
+  const gateway = bare.client.json('/records').catch((e: unknown) => e);
+  await vi.advanceTimersByTimeAsync(0); // Breakcold's backoff is 0: its one retry
+  expect(await gateway).toMatchObject({ code: 'unavailable', detail: null });
   const elsewhere = script(hubspot, () => Response.json({ error: { code: 'usage_limit' } }, { status: 402 }));
   await expect(elsewhere.client.json('/x')).rejects.toMatchObject({ detail: null });
 });
@@ -697,4 +699,139 @@ test('client() and finishConnect on GitLab with no fetch send through guardedFet
     expect(guarded.mock.calls.map(([input]) => (input instanceof Request ? input.url : String(input))))
       .toEqual(['https://gitlab.example.test/api/v4/user', 'https://gitlab.example.test/api/v4/user']);
   } finally { guarded.mockRestore(); }
+});
+
+/** An entry that declares `retry`, and an answer with a status and headers. */
+const retrying = (retry: Retry, extra: Partial<Entry> = {}) => defineProvider({ id: 'retrying', name: 'Retrying',
+  auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.retrying.test', retry }, ...extra });
+const answer = (status: number, headers: Record<string, string> = {}) => () => Response.json({}, { status, headers });
+const offline = () => { throw new TypeError('fetch failed'); };
+
+describe('a read is retried after a 5xx, a 408, a network failure or a timeout, waiting with full jitter', () => {
+  beforeEach(() => { vi.spyOn(Math, 'random').mockReturnValue(0.5); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  test('503 then 200: two calls and the answer, after half the default wait', async () => {
+    const fake = script(retrying({}), answer(503), ok);
+    const result = fake.client.json('/a');
+    await vi.advanceTimersByTimeAsync(499);
+    expect(fake.calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toEqual({ ok: true });
+    expect(fake.calls).toHaveLength(2);
+  });
+
+  test.each([408, 500, 502, 503, 504])('%i is retried', async status => {
+    const fake = script(retrying({}), answer(status), ok);
+    const result = fake.client.json('/a');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await result).toEqual({ ok: true });
+    expect(fake.calls).toHaveLength(2);
+  });
+
+  test('500 three times with limit 2: three calls, and the last answer is unavailable', async () => {
+    const fake = script(retrying({ limit: 2 }), answer(500));
+    const result = fake.client.json('/a').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(await result).toMatchObject({ code: 'unavailable', status: 500 });
+    expect(fake.calls).toHaveLength(3);
+  });
+
+  test('a network failure once, then 200: two calls; failing every time it is unavailable', async () => {
+    const once = script(retrying({}), offline, ok);
+    const result = once.client.json('/a');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await result).toEqual({ ok: true });
+    expect(once.calls).toHaveLength(2);
+    const always = script(retrying({}), offline);
+    const failed = always.client.json('/a').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await failed).toMatchObject({ code: 'unavailable', status: null });
+    expect(always.calls).toHaveLength(2);
+  });
+
+  test('a positive Retry-After is waited, capped by maxWaitMs', async () => {
+    for (const [retry, after, wait] of [[{}, '2', 2000], [{ maxWaitMs: 10_000 }, '120', 10_000]] as const) {
+      const fake = script(retrying(retry), answer(503, { 'retry-after': after }), ok);
+      const result = fake.client.json('/a');
+      await vi.advanceTimersByTimeAsync(wait - 1);
+      expect(fake.calls).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toEqual({ ok: true });
+    }
+  });
+
+  test('the n-th retry waits a random share of the default wait doubled n times, capped by maxWaitMs', async () => {
+    const fake = script(retrying({ limit: 3, defaultWaitMs: 1000, maxWaitMs: 3000 }), answer(500), answer(500), answer(500), ok);
+    const result = fake.client.json('/a');
+    await vi.advanceTimersByTimeAsync(500 + 1000);
+    expect(fake.calls).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(1499);
+    expect(fake.calls).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toEqual({ ok: true });
+    expect(fake.calls).toHaveLength(4);
+  });
+
+  test('a 429 still waits its default with no jitter, and shares the limit', async () => {
+    const fake = script(retrying({ limit: 2 }), limited, answer(503), ok);
+    const result = fake.client.json('/a');
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fake.calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fake.calls).toHaveLength(2);
+    // The second retry: 0.5 × 1000 × 2.
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toEqual({ ok: true });
+    expect(fake.calls).toHaveLength(3);
+  });
+
+  test('a timeout is retried', async () => {
+    let hangs = true;
+    const fake = fakeFetch([{ url: /https:/, respond: () => (hangs ? ((hangs = false), new Promise<Response>(() => undefined)) : ok()) }]);
+    const client = createClient(retrying({}), { token: () => Promise.resolve('t'), fetch: fake.fetch });
+    const result = client.json('/a');
+    await vi.advanceTimersByTimeAsync(30_000 + 500);
+    expect(await result).toEqual({ ok: true });
+    expect(fake.calls).toHaveLength(2);
+  });
+
+  const failedOk = retrying({}, { errors: { failed: { path: 'ok', equals: false } } });
+  test.each([
+    ['a POST', retrying({}), answer(503), { method: 'POST' as const, json: {} }],
+    ['a GET that is not idempotent', retrying({}), answer(503), { idempotent: false }],
+    ["a GET with the caller's signal", retrying({}), answer(503), { signal: new AbortController().signal }],
+    ['a limit of 0', retrying({ limit: 0 }), answer(503), {}],
+    ['a 501', retrying({}), answer(501), {}],
+    ['a 400', retrying({}), answer(400), {}],
+    ['a 2xx that errors.failed marks', failedOk, () => Response.json({ ok: false }), {}],
+    ['a network failure with no retry declared', headerKey, offline, {}],
+  ])('%s is sent once', async (_name, entry, respond, options) => {
+    const fake = script(entry, respond, ok);
+    const result = fake.client.json('/a', options).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await result).toBeInstanceOf(ProviderHttpError);
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  test('an address_blocked refusal is never retried', async () => {
+    const typed = { ...gitlab, http: { ...gitlab.http, retry: {} } };
+    const refusing = vi.fn<typeof fetch>().mockRejectedValue(addressBlocked);
+    const result = createClient(typed, { token: () => Promise.resolve('t'), values: { host: 'gitlab.example.test' }, fetch: refusing })
+      .json('/user').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await result).toBe(addressBlocked);
+    expect(refusing).toHaveBeenCalledTimes(1);
+    const literal = filled(typed, { host: '127.0.0.1' });
+    await expect(literal.client.json('/user')).rejects.toEqual(addressBlocked);
+    expect(literal.calls).toHaveLength(0);
+  });
+
+  test('Fireflies (limit 0) on a 500 is sent once, unavailable by its rules', async () => {
+    const fake = script(fireflies, answer(500), ok);
+    const result = fake.client.json('').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await result).toMatchObject({ code: 'unavailable', status: 500 });
+    expect(fake.calls).toHaveLength(1);
+  });
 });

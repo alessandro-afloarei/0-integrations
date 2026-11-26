@@ -70,6 +70,12 @@ export function retryPolicy(retry: Retry | undefined): { limit: number; maxWaitM
   return { limit: retry.limit ?? 1, maxWaitMs: retry.maxWaitMs ?? 60_000, defaultWaitMs: retry.defaultWaitMs ?? 1000 };
 }
 
+/** The n-th retry's wait (n from 0) after a 5xx, a network failure or a timeout: full jitter, uniform below the default
+ * wait doubled n times, capped by `maxWaitMs`. */
+export function backoffMs(policy: ReturnType<typeof retryPolicy>, n: number): number {
+  return Math.random() * Math.min(policy.maxWaitMs, policy.defaultWaitMs * 2 ** n);
+}
+
 /** An entry's answer as an error, or null: revoked codes, then `errors.rules`, then a declared rate limit, then the status. */
 export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: ProviderResponse, now = Date.now()): Error | null {
   const { status, headers, data: body } = response;

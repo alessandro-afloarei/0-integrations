@@ -76,8 +76,9 @@ describe("the HubSpot client", () => {
     expect(await run(json({ status: "error" }, 401), json({ status: "error" }, 401))).toMatchObject({ code: "rejected" });
     expect(await run(json({ status: "error" }, 403))).toMatchObject({ code: "rejected" });
     expect(await run(json({}, 429, { "retry-after": "1" }), json({}, 429))).toMatchObject({ code: "rate_limited" });
-    expect(await run(json({}, 503))).toMatchObject({ code: "unavailable" });
-    expect(await run(new TypeError("fetch failed"))).toMatchObject({ code: "unavailable" });
+    // An outage outlasts the one retry a read gets.
+    expect(await run(json({}, 503), json({}, 503))).toMatchObject({ code: "unavailable" });
+    expect(await run(new TypeError("fetch failed"), new TypeError("fetch failed"))).toMatchObject({ code: "unavailable" });
     expect(await run(json({ status: "error", category: "VALIDATION_ERROR" }, 400))).toMatchObject({ code: "request_failed" });
     expect(await run(json({ nothing: true }))).toMatchObject({ code: "invalid_response" });
   });

@@ -11,6 +11,8 @@ export const google = defineProvider({
   scopes: { default: ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/calendar.readonly'], requireGranted: true },
   // Google answers a token already revoked as `invalid_token`.
   revoke: { url: 'https://oauth2.googleapis.com/revoke', token: ['refresh', 'access'], goneErrors: ['invalid_token'] },
+  // Gmail asks a 5xx to be retried with exponential backoff
+  // (https://developers.google.com/workspace/gmail/api/guides/handle-errors), as its reads are.
   http: { baseUrl: 'https://gmail.googleapis.com/gmail/v1', bases: { calendar: 'https://www.googleapis.com/calendar/v3' },
     headers: { accept: 'application/json' }, retry: { limit: 2, maxWaitMs: 30_000, defaultWaitMs: 5000 },
     rateLimit: { defaultWaitMs: 60_000, when: [{ status: 429 }, { status: 403, detail: 'rateLimitExceeded' },

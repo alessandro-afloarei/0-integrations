@@ -52,12 +52,14 @@ test('sends no actions to a document', async () => {
 });
 
 test('reads a page as it loads when its render could not finish, never after a 402', async () => {
+  // A 5xx is retried three times; with no backoff nothing waits.
+  vi.spyOn(Math, 'random').mockReturnValue(0);
   const rendering = fakeFetch([{ url: SCRAPE, async respond(request) {
     const { actions } = await request.json() as { actions?: unknown };
     return actions ? Response.json({ success: false, error: 'Action(s) failed to complete' }, { status: 500 }) : page({ title: 'FAQ' });
   } }]);
   expect(await client(rendering).scrape('https://x.test/faq', WAIT)).toMatchObject({ title: 'FAQ', markdown: '# Hi' });
-  expect(bodies(rendering).map(body => 'actions' in body)).toEqual([true, false]);
+  expect(bodies(rendering).map(body => 'actions' in body)).toEqual([true, true, true, true, false]);
 
   const broke = fakeFetch([{ url: SCRAPE, respond: () => Response.json({ success: false, error: 'Payment required' }, { status: 402 }) }]);
   await expect(client(broke).scrape('https://x.test/faq', WAIT)).rejects.toEqual(new ProviderHttpError('request_failed', 402));
@@ -78,7 +80,8 @@ test('reads a page as it loads when its render could not finish, never after a 4
 
   const down = fakeFetch([{ url: SCRAPE, respond: () => new Response(null, { status: 503 }) }]);
   await expect(client(down).scrape('https://x.test/faq', WAIT)).rejects.toMatchObject({ code: 'unavailable' });
-  expect(down.calls).toHaveLength(2);
+  expect(down.calls).toHaveLength(8);
+  vi.restoreAllMocks();
 });
 
 test("waits out a scrape's 429 and resends the same body", async () => {
@@ -100,17 +103,21 @@ test("waits out a scrape's 429 and resends the same body", async () => {
   }
 });
 
-test('ends a stalled map at 120 seconds', async () => {
+test('ends a stalled map at 120 seconds an attempt, after its three retries', async () => {
   vi.useFakeTimers();
+  vi.spyOn(Math, 'random').mockReturnValue(0);
   try {
     const fake = fakeFetch([{ url: 'https://api.firecrawl.dev/v2/map', respond: () => new Promise<Response>(() => undefined) }]);
     let settled = false;
     const pending = client(fake).map('https://x.test', 5).catch((error: unknown) => error).finally(() => { settled = true; });
-    await vi.advanceTimersByTimeAsync(119_999);
+    await vi.advanceTimersByTimeAsync(4 * 120_000 - 1);
     expect(settled).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
+    // Each of the three retries waits a zero backoff, which a timer still counts as a millisecond.
+    await vi.advanceTimersByTimeAsync(4);
     expect(await pending).toMatchObject({ code: 'unavailable' });
+    expect(fake.calls).toHaveLength(4);
   } finally {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   }
 });

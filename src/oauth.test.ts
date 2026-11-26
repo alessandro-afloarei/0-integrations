@@ -89,11 +89,12 @@ test('invalid_grant is GrantRevoked', async () => {
     .rejects.toBeInstanceOf(GrantRevoked);
 });
 
-test('a 502 proxy page is unavailable', async () => {
+test('a 502 proxy page is unavailable, and the token endpoint is never retried', async () => {
   for (const body of ['<html>bad gateway</html>', '']) {
     const fake = fakeFetch([{ url: /https:/, respond: () => new Response(body, { status: 502 }) }]);
     await expect(refreshGrant(hubspot, client, 'old', { fetch: fake.fetch }))
       .rejects.toMatchObject({ code: 'unavailable', status: 502 });
+    expect(fake.calls).toHaveLength(1);
   }
 });
 
@@ -101,6 +102,7 @@ test('a network failure is unavailable', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => { throw new TypeError('fetch failed'); } }]);
   await expect(refreshGrant(hubspot, client, 'old', { fetch: fake.fetch }))
     .rejects.toMatchObject({ code: 'unavailable', status: null });
+  expect(fake.calls).toHaveLength(1);
 });
 
 test('revoke treats 404 and invalid_grant as done', async () => {
