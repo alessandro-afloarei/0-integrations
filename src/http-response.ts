@@ -99,7 +99,8 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   const rule = errors.rules?.find(item => holds(item.when, answer));
   if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, { retryAfterMs: retryAfterMs(headers, now, stated) });
   const limit = rateLimitOf(entry.http, answer, now);
-  const metadata = { retryAfterMs: retryAfterMs(headers, now, limit?.waitMs ?? stated) };
+  // The wait the retry read first (`statedWait`); the rate limit's only when the answer states none.
+  const metadata = { retryAfterMs: retryAfterMs(headers, now, stated ?? limit?.waitMs) };
   if (limit) return new ProviderHttpError('rate_limited', status, detail, metadata);
   return new ProviderHttpError(ok ? 'request_failed' : statusCode(status), status, detail, metadata);
 }

@@ -222,14 +222,16 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     return renewal;
   }
 
-  /** The wait an answer states: a positive Retry-After, else the entry's declared `wait`. */
+  /** The wait an answer states, as its error reads it (`retryAfterMs`): a positive Retry-After, else the entry's
+   * declared `wait`; a 0 states none. */
   async function statedWait(response: Response): Promise<number | undefined> {
-    const header = retryAfterMs(response.headers, Date.now());
-    if (header !== null && header > 0) return header;
+    const { status, headers } = response;
+    const now = Date.now();
     const wait = entry.http.retry?.wait;
-    // The body is read only for a wait the entry says it names: a slow body must not hold up the retry.
-    const body = wait && 'path' in wait ? parseJson(await retryBody(response, timeoutMs)) : undefined;
-    return declaredWait(wait, { status: response.status, headers: response.headers, body }, Date.now());
+    // The body is read only for a wait the entry says it names, past no positive Retry-After: a slow body must not
+    // hold up the retry.
+    const body = !retryAfterMs(headers, now) && wait && 'path' in wait ? parseJson(await retryBody(response, timeoutMs)) : undefined;
+    return retryAfterMs(headers, now, declaredWait(wait, { status, headers, body }, now)) || undefined;
   }
 
   async function pace(): Promise<void> {
@@ -270,7 +272,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
             if (stated === undefined ? onlyStated : stated > retry.maxWaitMs) return;
             // Without a stated wait, a 429 waits the provider's default, with no jitter, any other status the backoff.
             const fallback = response.status === 429 ? retry.defaultWaitMs : backoffMs(retry.maxWaitMs, retryCount);
-            return ky.retry({ delay: Math.min(stated === undefined ? fallback : Math.ceil(stated), retry.maxWaitMs) });
+            return ky.retry({ delay: Math.min(stated ?? fallback, retry.maxWaitMs) });
           }],
         },
       });

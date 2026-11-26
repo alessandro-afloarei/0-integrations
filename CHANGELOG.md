@@ -13,7 +13,9 @@ Nothing here is released yet.
 - A retry never comes before the provider's stated wait, its `Retry-After` or the entry's `retry.wait`: an answer whose
   stated wait is longer than the entry's `maxWaitMs` is not retried, whatever its status, and its error carries that
   wait. Breaking: such an answer was retried at the cap (HubSpot's hour-long `Retry-After` after 10 seconds); an app
-  now gets `rate_limited` with `retryAfterMs` and waits it itself.
+  now gets `rate_limited` with `retryAfterMs` and waits it itself. Every error's `retryAfterMs` is that stated wait: a
+  `Retry-After` of 0 no longer hides Breakcold's or Fireflies' body wait, and a rate limit's own wait counts only when
+  none is stated.
 - New: `retry.wait` reads a wait from a header (seconds, milliseconds or an epoch time; of several headers, the longest
   present; counted on a 429 only) or a body field (on any answer that holds it), and `retry.onlyStated` retries only an
   answer that states its wait, and no network failure. A wait already past, or 0, counts as none (Breakcold's body 0

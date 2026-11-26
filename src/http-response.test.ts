@@ -101,6 +101,14 @@ test('a declared rate limit waits its reset, Retry-After first, else the default
   expect(fail(limits, 403, {})).toMatchObject({ code: 'rejected', retryAfterMs: null });
 });
 
+test("a declared rate limit's error carries the stated wait first: Retry-After, else retry.wait, else the rule's", () => {
+  const both: Rules = { http: { ...BASE, retry: { limit: 0, wait: { path: 'waitMs', unit: 'ms' } },
+    rateLimit: { when: [{ status: 429, wait: { header: 'x-reset', unit: 's' } }] } } };
+  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 5000 });
+  expect(fail(both, 429, {}, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 9000 });
+  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9', 'Retry-After': '2' })).toMatchObject({ retryAfterMs: 2000 });
+});
+
 test('a rule with no status holds on any status and names its own detail', () => {
   const plan: Rules = { http: BASE, errors: { rules: [{ when: { path: 'message', startsWith: 'Feature off' },
     code: 'request_failed', detail: 'feature_off' }] } };

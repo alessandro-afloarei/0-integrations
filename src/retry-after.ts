@@ -26,17 +26,16 @@ function httpDate(value: string, nowMs: number): number | null {
   return new Date(timestamp).toUTCString() === canonical ? timestamp : null;
 }
 
-/** The wait a response names: a valid Retry-After, else the declared wait given; no retry comes before it. */
+function headerWait(value: string | null, nowMs: number): number | null {
+  if (value === null) return null;
+  if (/^\d+(?:\.\d+)?$/u.test(value)) return delay(Number(value) * 1000);
+  const timestamp = httpDate(value, nowMs);
+  return timestamp === null ? null : delay(Math.max(0, timestamp - nowMs));
+}
+
+/** The wait a response states, the one rule of the retry and its error: a positive Retry-After, else the declared wait
+ * given, else a Retry-After of 0; no retry comes before it. */
 export function retryAfterMs(headers: Headers, nowMs: number, bodyWaitMs?: number): number | null {
-  const value = headers.get('retry-after');
-  if (value !== null) {
-    if (/^\d+(?:\.\d+)?$/u.test(value)) {
-      const milliseconds = delay(Number(value) * 1000);
-      if (milliseconds !== null) return milliseconds;
-    } else {
-      const timestamp = httpDate(value, nowMs);
-      if (timestamp !== null) return delay(Math.max(0, timestamp - nowMs)) ?? delay(bodyWaitMs);
-    }
-  }
-  return delay(bodyWaitMs);
+  const header = headerWait(headers.get('retry-after'), nowMs);
+  return header || (delay(bodyWaitMs) ?? header);
 }

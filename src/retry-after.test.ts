@@ -59,8 +59,8 @@ describe('provider wait metadata', () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test.each([['0', 0], ['2', 2000], ['invalid', 1500], ['-1', 1500], ['', 1500]] as const)
-  ('prefers a valid header %j over the body, otherwise falls back to the body', async (value, retryAfterMs) => {
+  test.each([['0', 1500], ['2', 2000], ['invalid', 1500], ['-1', 1500], ['', 1500]] as const)
+  ('prefers a positive header %j over the body, otherwise falls back to the body', async (value, retryAfterMs) => {
     const fake = scripted(() => Response.json({ error: { retryAfterMs: 1500 } }, { status: 429, headers: { 'Retry-After': value } }));
     await expect(http(breakcold, fake.fetch).json('/items', { method: 'POST' })).rejects.toMatchObject({ retryAfterMs });
   });
@@ -109,7 +109,7 @@ describe('Fireflies retry hints', () => {
     await expect(firefliesClient({ apiKey: 'fixture-key', fetch: fake.fetch }).user()).rejects.toMatchObject({ retryAfterMs });
   });
 
-  test.each([['2', 2000], ['0', 0], ['invalid', 4000]] as const)('prefers header %j over the Fireflies timestamp', async (value, retryAfterMs) => {
+  test.each([['2', 2000], ['0', 4000], ['invalid', 4000]] as const)('prefers a positive header %j over the Fireflies timestamp', async (value, retryAfterMs) => {
     const fake = scripted(() => Response.json({ errors: [{ code: 'too_many_requests',
       extensions: { metadata: { retryAfter: NOW + 4000 } } }] }, { headers: { 'Retry-After': value } }));
     await expect(firefliesClient({ apiKey: 'fixture-key', fetch: fake.fetch }).user()).rejects.toMatchObject({ retryAfterMs });

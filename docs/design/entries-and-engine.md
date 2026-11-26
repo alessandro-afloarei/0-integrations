@@ -393,10 +393,10 @@ classified in this order, and the first step that decides wins:
 
 1. `errors.revoked`: the provider's code is on the list, so the grant is gone (`GrantRevoked`).
 2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code. The error carries only
-   `Retry-After`, else `retry.wait` (a header's on a 429 only): never a rate limit's.
-3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is
-   `Retry-After`, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`, else `retry.wait` (a header's on a
-   429 only). The rule's `wait` is the error's alone: the retry never reads it.
+   the stated wait (below): never a rate limit's.
+3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is the
+   stated wait, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`. The rule's `wait` is the error's
+   alone: the retry never reads it.
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -419,10 +419,11 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   it, for the retry on every retried status. A declared wait that is not positive (an instant already past, a body
   `0`) states no wait, as a past `Retry-After` date does. The retry reads `Retry-After` and the entry's `retry.wait`;
   a rate-limit rule's own `wait` is carried by the error and is not read by the retry. A retry never comes before the
-  stated wait: an answer whose stated wait is longer than `maxWaitMs` is not retried, whatever its status, and its
-  error carries that wait. With `retry.onlyStated`, an answer that states no wait is not retried either, and neither
-  is a network failure (Jira: "Only retry if the API is idempotent and the response includes a Retry-After header");
-  so `onlyStated` and `defaultWaitMs` do not go together, and the table refuses the pair.
+  stated wait (rounded up to a whole millisecond): an answer whose stated wait is longer than `maxWaitMs` is not
+  retried, whatever its status, and its error carries that wait. An error carries the stated wait, else a `Retry-After`
+  of 0 when nothing else is stated. With `retry.onlyStated`, an answer that states no wait is not retried either, and
+  neither is a network failure (Jira: "Only retry if the API is idempotent and the response includes a Retry-After
+  header"); so `onlyStated` and `defaultWaitMs` do not go together, and the table refuses the pair.
 - Otherwise a 429 waits its stated wait, else `retry.defaultWaitMs`, with no jitter. The others wait a positive
   `Retry-After`; without one, the n-th retry (n from 0) waits a full-jitter backoff: a random share of
   `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. No wait is longer than `maxWaitMs`.
