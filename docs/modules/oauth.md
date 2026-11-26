@@ -11,9 +11,10 @@ checked as a base is: `authorizeUrl(entry, { …, values? })`, `exchangeCode(ent
 `refreshGrant(entry, client, refreshToken, { values?, fetch? })` and `revokeGrant` take the connection's `values`, and a
 URL that names a value not given is `template_missing` before anything is sent. An entry whose OAuth 2 URLs, base or
 `http.bases` mix a typed host with any other host is refused with `TypeError('host_split: <entry id>')` before
-anything is built or sent: a token goes only to the host that issued it. `exchangeCode`, `refreshGrant` and
-`revokeGrant` default `fetch` to `guardedFetch` for an entry whose host is typed, else the global one. No OAuth 2 request follows a
-redirect: a 3xx is `request_failed`.
+anything is built or sent: on a typed host a credential goes only to that host. `exchangeCode`, `refreshGrant` and
+`revokeGrant` default `fetch` to `guardedFetch` for an entry whose host is typed, else the global one. The exchange, a
+refresh and an RFC 7009 revoke never follow a redirect (a 3xx is `request_failed`); a revoke by request is an ordinary
+call, which follows a redirect only on the same origin, never to another host.
 
 `refreshGrant` posts to the entry's `refreshUrl` when it names one (Figma), else to `tokenUrl`; a refresh answer
 without a `refresh_token` keeps the one sent. With `json: true` (Atlassian) the exchange, the refresh and an RFC 7009
