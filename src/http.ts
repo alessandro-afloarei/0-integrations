@@ -184,8 +184,11 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   const based = () => {
     if (base) return base;
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
-    // An app's own base passes the same check as the entry's.
-    return (base = { url, origin: sendable(entry, url).origin });
+    // An app's own base passes the same check as the entry's; on a typed host it may move the path, never the origin.
+    const origin = sendable(entry, url).origin;
+    if (input.baseUrl !== undefined && placeholders(hostPart(entry.http.baseUrl) ?? '').length > 0
+      && origin !== new URL(filledBase(entry, input.values ?? {})).origin) throw new TypeError(`base_host_refused: ${entry.id}`);
+    return (base = { url, origin });
   };
   const [auth] = entry.auth;
   const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];

@@ -29,8 +29,9 @@ const me = await api.json('/users/me');
   `TypeError('template_missing: <entry id> {<name>}')` before anything is sent (a base's value also before the token is
   read). A base is filled and checked on the first request (see [catalogue](catalogue.md)), not when the client is
   built.
-- `baseUrl` replaces the entry's, used as given: an app's own base is neither filled nor checked against `http.host`,
-  but like every URL the library sends to it must parse and be https with no username or password
+- `baseUrl` replaces the entry's base, for a test server or another path or version on the provider's host: used as
+  given, neither filled nor checked against `http.host`, but like every URL the library sends to it must parse and be
+  https with no username or password, and for an entry whose host is typed it must keep the filled base's origin
   (`TypeError('base_host_refused: <entry id>')`, before the token is read).
 - `minIntervalMs` replaces the entry's.
 - `headers` are merged with the entry's, a header of the same name winning, and the credential is set last.
@@ -101,7 +102,7 @@ What the guard does not cover:
 - A proxy: `guardedFetch` dials through its own agent and never through a proxy, even when Node is told to follow
   `HTTPS_PROXY` (`NODE_USE_ENV_PROXY=1`); a proxy an app's own `fetch` sends through resolves and dials for it,
   unchecked.
-- An app's own `baseUrl`, used as given.
+- An app's own `baseUrl` on an entry whose host is fixed, used as given (on a typed host it keeps the filled origin).
 
 ## Raw calls
 

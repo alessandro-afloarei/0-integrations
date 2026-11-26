@@ -22,6 +22,8 @@ Nothing here is released yet.
   typed value to the host with no `http.host` check.
 - A `token` sign-in is under the host rule: a token request whose URL does not share the typed base's host is refused,
   `host_split`, before it is sent; the token it gave went to the host typed.
+- `client()`'s `baseUrl` on an entry whose host is typed must keep the filled base's origin, else `base_host_refused`
+  before anything is sent; it was used as given, so a grant from the host typed could go to another origin.
 - New entry: Azure DevOps (code; Microsoft Entra OAuth 2). Every entry is `declared`.
 - An OAuth 2 token answer that states no `token_type` is read as Bearer; it was `invalid_response`. One that states
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.

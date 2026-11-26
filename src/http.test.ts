@@ -750,14 +750,21 @@ test('a request revoke on a templated base, given no values, fails closed with n
   expect(fake.calls).toHaveLength(0);
 });
 
-test('a templated base is not filled when the client is built, and an app\'s own base is used as given', async () => {
+test('a templated base is not filled when the client is built', async () => {
   const fake = filled(regional, {});
   const built = client(regional, { token: 't', fetch: fake.fetch });
   await expect(built.json('/a')).rejects.toThrow(new TypeError('template_missing: regional {sub}'));
-  const own = createClient(regional, { token: () => Promise.resolve('t'), fetch: fake.fetch, baseUrl: 'https://proxy.test/regional/' });
-  expect(own.baseUrl).toBe('https://proxy.test/regional');
-  await own.json('/a');
-  expect(fake.calls.map(call => call.url)).toEqual(['https://proxy.test/regional/a']);
+  expect(fake.calls).toEqual([]);
+});
+
+test("on a typed host an app's own base may move the path, never the origin: another origin is refused, nothing sent", async () => {
+  const fake = filled(regional, {});
+  const elsewhere = client(regional, { token: 't', values: { sub: 'eu' }, fetch: fake.fetch, baseUrl: 'https://proxy.test/regional/' });
+  await expect(elsewhere.json('/a')).rejects.toThrow(new TypeError('base_host_refused: regional'));
+  expect(fake.calls).toEqual([]);
+  const moved = client(regional, { token: 't', values: { sub: 'eu' }, fetch: fake.fetch, baseUrl: 'https://eu.example.com/v2/' });
+  await moved.json('/a');
+  expect(fake.calls.map(call => call.url)).toEqual(['https://eu.example.com/v2/a']);
 });
 
 test("the credential never leaves the filled base's origin", async () => {
@@ -907,10 +914,11 @@ test("a typed host that is a name, or a public address, goes to the app's own fe
   }
 });
 
-test("an app's own base for a typed-host entry is used as given", async () => {
+test("an app's own base for a typed-host entry on another origin is refused, an address included, nothing sent", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
-  await createClient(gitlab, { token: () => Promise.resolve('t'), fetch: fake.fetch, baseUrl: 'https://10.0.0.1/api/v4' }).json('/user');
-  expect(fake.calls[0]?.url).toBe('https://10.0.0.1/api/v4/user');
+  await expect(createClient(gitlab, { token: () => Promise.resolve('t'), values: { host: 'gitlab.example.com' }, fetch: fake.fetch,
+    baseUrl: 'https://10.0.0.1/api/v4' }).json('/user')).rejects.toThrow(new TypeError('base_host_refused: gitlab'));
+  expect(fake.calls).toEqual([]);
 });
 
 test('an entry whose host is typed defaults to guardedFetch; any other to the global fetch', () => {
