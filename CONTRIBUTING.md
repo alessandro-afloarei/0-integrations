@@ -36,6 +36,11 @@ one takes five steps:
      non-null `!` in a published GraphQL schema), or it is the record's id; a non-nullable type or an example value is
      not enough; the envelope a list is read from stays required;
    - a parameter the docs' prose calls required is required;
+   - read what each page requires, not only what you declare: every parameter it marks required (path, query or body),
+     the scoping member of a "one of" group and a parameter that turns paging on are required, and an operation that
+     needs a header parameter stays out and waits;
+   - a call the docs say spends credits is `kind: 'write'`, whatever its method, and its leading comment names the
+     credit page;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;

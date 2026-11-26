@@ -587,9 +587,17 @@ way to list it). No `delete`.
 | `chat` | `<channels>.list`, `<messages>.list`, `<messages>.create`, `<users>.list` |
 | `code` | source control: `repositories.list`, `repositories.get`, `pullRequests.list`, `pullRequests.get`, `pullRequests.create`; CI and deploys: `<runs>.list`, `<runs>.get`, `<runs>.create`, `<projects>.list` |
 | `monitoring` | `<issues>.list`, `<issues>.get`, `<issues>.update`, `<projects>.list`; incident tools add `<incidents>.create` |
+| `crm` | `<contacts>.list` (or `.search`), `<contacts>.get`, `<contacts>.create`, `<contacts>.update`, `<companies>.list`, `<deals>.list` (contacts: contacts, people, persons, leads; companies: companies, organizations, accounts; deals: deals, opportunities) |
+| `sales` | engagement: `<sequences>.list`, `<prospects>.list`, `<prospects>.get`, `<prospects>.create`, `<prospects>.update`, `<enrollments>.create` (adds a prospect to a sequence, under the provider's noun); data: `<people>.search`, `<people>.get`, `<companies>.search`, `<companies>.get` |
 
 A category gains its template with the batch that first writes it. `<containers>.list` may instead be the list a
 create's required parameter is chosen from (incident.io's severities, Shortcut's workflows).
+
+A `search` beside `list` is the usual CRM case: an app finds a contact by email, so declare it when the docs give a
+search or filter endpoint for that object. A CRM that has no deals, or a data provider that has no companies, leaves
+those out and names them in the comment. A call the docs say spends credits is `kind: 'write'`, whatever its method:
+the engine never retries it, so a 5xx or a dropped connection never charges twice, and its leading comment names the
+credit page.
 
 **Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
 its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record
