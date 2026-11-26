@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0
 
 Every line below breaks 0.12 unless it says otherwise.
 
