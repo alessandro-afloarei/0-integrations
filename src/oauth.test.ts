@@ -449,3 +449,51 @@ test("a token entry's secret field never travels with a call, even when its send
   await expect(api.json('/users/me')).rejects.toThrow('template_missing: leaky {clientSecret}');
   expect(fake.calls).toHaveLength(0);
 });
+
+// Task 28's review: every URL the library fills or uses passes one check.
+const tokenAt = (url: string, extra: object = {}) => defineProvider({ ...zoom, id: 'at', ...extra,
+  fields: [...zoom.fields, { name: 'apiHost', title: 'Host' }],
+  auth: [{ kind: 'token', request: { ...zoom.auth[0].request, url } }] });
+
+test.each([['https://u:pw@zoom.us/oauth/token', {}], ['https://zoom.us:99999/oauth/token', {}], ['https://zo om.us/token', {}],
+  ['http://zoom.us/oauth/token', {}], ['https://x:y@{apiHost}/token', { http: { baseUrl: 'https://{apiHost}', host: '*.k.test' } }]])(
+  'a token URL %s is base_host_refused before any secret is read or sent', async (url, extra) => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    let read = false;
+    const secret = { get clientSecret() { read = true; return 's'; } };
+    await expect(requestToken(tokenAt(url, extra), { secret, values: { ...zoomValues, apiHost: 'api.k.test' }, fetch }))
+      .rejects.toThrow(new TypeError('base_host_refused: at'));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(read).toBe(false);
+  });
+
+test("an app's own base that is not https is base_host_refused, as an entry's is", async () => {
+  const fake = fakeFetch([{ url: /./, respond: () => Response.json({}) }]);
+  await expect(apiClient(zoom, { token: 't', baseUrl: 'http://api.zoom.us/v2', fetch: fake.fetch }).json('/users/me'))
+    .rejects.toThrow(new TypeError('base_host_refused: zoom'));
+  expect(fake.calls).toHaveLength(0);
+});
+
+test('a token URL never fills a secret field from the values', async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  const leaky = tokenAt('https://zoom.us/{clientSecret}/token');
+  await expect(requestToken(leaky, { secret: zoomSecret, values: { ...zoomValues, clientSecret: zoomSecret.clientSecret }, fetch }))
+    .rejects.toThrow('template_missing: at {clientSecret}');
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+test('a token that lives 60 seconds or less is used by the caller that requested it', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ access_token: 'short', expires_in: 30 }) }]);
+  const source = tokenSource(zoom, zoomInput(fake.fetch));
+  expect(await source()).toBe('short');
+  expect(fake.calls).toHaveLength(1);
+  // Concurrent callers that joined that request get it too.
+  const again = tokenSource(zoom, zoomInput(fake.fetch));
+  expect(await Promise.all([again(), again()])).toEqual(['short', 'short']);
+  expect(fake.calls).toHaveLength(2);
+});
+
+test.each([1e308, 1e20, Number.MAX_VALUE])('expires_in %j gives no safe time: no expiry', async expiresIn => {
+  const fake = endpoint({ access_token: 'at', expires_in: expiresIn });
+  expect(await requestToken(zoom, zoomInput(fake.fetch))).toMatchObject({ token: 'at', expiresAt: null });
+});

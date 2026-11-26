@@ -202,10 +202,11 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
   const values = input.values ?? {};
   const secretNames = new Set((entry.fields ?? []).filter(field => field.secret).map(field => field.name));
   const filled = (template: string) => fill(template, name => plainValue(secretNames.has(name) ? input.secret : values, name), entry.id);
-  const url = filledBase(entry, values, request.url);
+  // The URL is filled from plain values only: a secret field's name there is missing, whatever `values` holds.
+  const url = filledBase(entry, Object.fromEntries(Object.entries(values).filter(([name]) => !secretNames.has(name))), request.url);
   const body = Object.fromEntries(Object.entries(request.body).map(([name, template]) => [name, filled(template)]));
   const basic = request.basic && Buffer.from(`${filled(request.basic[0])}:${filled(request.basic[1])}`).toString('base64');
-  const secrets = [...[...secretNames].map(name => input.secret[name] ?? ''), basic ?? '', ...Object.entries(request.body)
+  const secrets = [...Object.values(input.secret), basic ?? '', ...Object.entries(request.body)
     .filter(([, template]) => placeholders(template).some(name => secretNames.has(name))).map(([name]) => body[name] ?? '')];
   const headers = new Headers(entry.http.headers);
   headers.set('content-type', request.json ? 'application/json' : 'application/x-www-form-urlencoded;charset=UTF-8');
@@ -229,8 +230,10 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
   if (error) throw error;
   const token = readPath(data, request.token ?? 'access_token');
   if (typeof token !== 'string' || token.trim() === '') throw new ProviderHttpError('invalid_response', status, 'missing_fields');
+  // A life that gives no safe time (`1e20` seconds) is none: kept until refused.
   const life = readPath(data, 'expires_in');
-  return { token, expiresAt: typeof life === 'number' && Number.isFinite(life) && life > 0 ? Date.now() + life * 1000 : null,
+  const expiresAt = typeof life === 'number' && life > 0 ? Date.now() + Math.round(life * 1000) : null;
+  return { token, expiresAt: expiresAt !== null && Number.isSafeInteger(expiresAt) ? expiresAt : null,
     extras: tokenAnswerOf(entry, data) };
 }
 
@@ -238,11 +241,19 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
  * is refused, and shares one request among concurrent callers. A failed request is not kept. */
 export function tokenSource(entry: Entry, input: TokenInput): (rejected?: string) => Promise<string> {
   let kept: Promise<{ token: string; expiresAt: number | null }> | undefined;
-  const request = () => (kept = requestToken(entry, input).catch((error: unknown) => { kept = undefined; throw error; }));
+  let settled = false;
+  const request = () => {
+    settled = false;
+    const pending = requestToken(entry, input).then(answer => { if (kept === pending) settled = true; return answer; },
+      (error: unknown) => { if (kept === pending) kept = undefined; throw error; });
+    return (kept = pending);
+  };
   return async rejected => {
+    // A token requested by this call, or still being requested when it came, is fresh for it, however short its life.
+    const fresh = kept === undefined || !settled;
     const held = kept ?? request();
     const { token, expiresAt } = await held;
-    if (token !== rejected && (expiresAt === null || expiresAt - Date.now() > 60_000)) return token;
+    if (token !== rejected && (fresh || expiresAt === null || expiresAt - Date.now() > 60_000)) return token;
     // The first caller to find it stale requests again; the others wait for that request.
     return (await (kept === held ? request() : kept ?? request())).token;
   };

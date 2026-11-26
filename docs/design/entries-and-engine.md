@@ -156,14 +156,16 @@ no `http.host`. Jira's is the first: `baseUrl: 'https://api.atlassian.com/ex/jir
 its `save` keeps.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
-  is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given.
+  is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
+  after the one check below that every URL the library sends to passes.
 - The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
   one) is `template_missing`. Only `finishConnect` applies a field's `default` (and returns it in `values`): a client,
   and a revoke, never do, so they need the connection's `values`. A value in the host that is not a host part (ASCII
   letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only the name) is
   `TypeError('base_value_invalid: <entry id> {<name>}')`.
-- The filled base must parse, be https with no user or password, and a templated host must match `http.host`, else
-  `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.
+- Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL) must parse and be https
+  with no user or password, and a templated host must match `http.host`, else
+  `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then never leaves the filled base's origin.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
   placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
   (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.
@@ -244,15 +246,17 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   answer is read as a form-bodied one is.
 - `token` turns what the person entered into a short-lived token with one request: client credentials (Zoom, PayPal) or
   a session sign-in (Metabase). It has no refresh: a new request is the refresh.
-  - The request's URL is filled by the base rule (a host placeholder's result must match `http.host`; a fixed URL is
-    used as written). Its body's templates and `basic` are filled from the plain values and the secret fields by name,
-    and it is posted as a form, or as one JSON object with `json: true`, with the entry's `http.headers`, redirects not
-    followed, through the entry's default `fetch` (`guardedFetch` for `http.host: '*'`) unless the app passes one.
+  - The request's URL is filled by the base rule from the plain values alone (a host placeholder's result must match
+    `http.host`; a fixed URL is used as written, after the same check). Its body's templates and `basic` are filled
+    from the plain values and the secret fields by name, and it is posted as a form, or as one JSON object with
+    `json: true`, with the entry's `http.headers`, redirects not followed, through the entry's default `fetch`
+    (`guardedFetch` for `http.host: '*'`) unless the app passes one.
   - Its answer: a 2xx whose `token` path (`access_token` by default) holds a non-empty string is the token, and a root
-    `expires_in` that is a positive finite number of seconds is its life (none: kept until refused). A 2xx without a
-    token is `invalid_response` (`missing_fields`); 400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the
-    answer's `error`; any other answer is classified as usual. No detail holds a secret field, a body value filled from
-    one, or the Basic value sent. The request is sent once, never retried: it is no read of the provider's API.
+    `expires_in` that is a positive number of seconds giving a safe-integer time is its life (none: kept until
+    refused); the caller that requested a token gets it, however short its life. A 2xx without a token is
+    `invalid_response` (`missing_fields`); 400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the answer's
+    `error`; any other answer is classified as usual. No detail holds a secret field, a body value filled from one, or
+    the Basic value sent. The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
     the token until 60 seconds before its expiry or until it is passed back as refused, concurrent calls share one
     request, and a failed request is not kept. It applies no field's `default`, so an app passes it, and `client`, the

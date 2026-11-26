@@ -101,12 +101,23 @@ function credentialOf(entry: Entry, token: string, values: Values): Credential {
  * `/`, `@`, `#`, space or empty label; no `i` flag, which would let the Kelvin sign and the long s pass as `k` and `s`. */
 const BASE_VALUE = /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/u;
 
+/** The one check of every URL the library sends to (an entry's base, an app's own, a token URL): it parses, is https and
+ * holds no username or password. Refused by entry id alone: Node's own errors name the URL (`ERR_INVALID_URL` keeps it
+ * in `input`) and its query key. No `URL.parse`: Node 22.1+. */
+function sendable(entry: Entry, url: string): URL {
+  const parsed = URL.canParse(url) ? new URL(url) : undefined;
+  if (parsed?.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '') {
+    throw new TypeError(`base_host_refused: ${entry.id}`);
+  }
+  return parsed;
+}
+
 /** The entry's base (or another URL of it: a token request's), its placeholders filled from plain or saved values: one
- * in the host a host name, one in the path one encoded segment. An https URL with no user, its host, when templated,
- * matching `http.host` (equal, `*.d` a name ending in `.d`, `*` any). Throws before anything is read or sent. */
+ * in the host a host name, one in the path one encoded segment; a URL with none is used as written. A `sendable` URL,
+ * its host, when templated, matching `http.host` (equal, `*.d` a name ending in `.d`, `*` any). Throws before anything
+ * is read or sent. */
 export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.baseUrl): string {
   const { host = '' } = entry.http;
-  if (placeholders(baseUrl).length === 0) return baseUrl;
   const pathAt = baseUrl.indexOf('/', baseUrl.indexOf('//') + 2);
   const [head, tail] = pathAt === -1 ? [baseUrl, ''] : [baseUrl.slice(0, pathAt), baseUrl.slice(pathAt)];
   const invalid = (name: string) => new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
@@ -121,10 +132,10 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
     if (value === '.' || value === '..' || !String(value).isWellFormed()) throw invalid(name);
     return encodeURIComponent(value);
   }, entry.id);
-  const url = URL.canParse(filled) ? new URL(filled) : undefined;
-  const hosted = url !== undefined && (placeholders(head).length === 0 || host === '*' || url.hostname === host
-    || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1))));
-  if (!hosted || url.protocol !== 'https:') throw new TypeError(`base_host_refused: ${entry.id}`);
+  const url = sendable(entry, filled);
+  const hosted = placeholders(head).length === 0 || host === '*' || url.hostname === host
+    || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1)));
+  if (!hosted) throw new TypeError(`base_host_refused: ${entry.id}`);
   // A typed host that is an address is checked here too, since an app's own fetch cannot be seen to dial; a name is
   // only checked by guardedFetch.
   if (host === '*' && blockedHost(url.hostname)) throw refusal();
@@ -160,11 +171,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   const based = () => {
     if (base) return base;
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
-    // A base parses and holds no username or password, an app's own included; refused by entry id alone, since Node's
-    // own errors name the URL (`ERR_INVALID_URL` keeps it in `input`) and its query key. No `URL.parse`: Node 22.1+.
-    const parsed = URL.canParse(url) ? new URL(url) : undefined;
-    if (parsed === undefined || parsed.username !== '' || parsed.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
-    return (base = { url, origin: parsed.origin });
+    // An app's own base passes the same check as the entry's.
+    return (base = { url, origin: sendable(entry, url).origin });
   };
   const [auth] = entry.auth;
   const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];

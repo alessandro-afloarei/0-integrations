@@ -29,6 +29,8 @@ Nothing here is released yet.
   `tokenSource(entry, { secret, values })` for `client()`. First used by Zoom Server-to-Server OAuth.
 - `startConnect` and `finishConnect` run a `token` entry (Metabase, PayPal, Zoom); a token URL may take its host from a
   field, and a typed host is address-guarded.
+- An app's own `baseUrl` must be https, as every URL the library sends to: one that is not, or that does not parse or
+  holds a username or password, is `base_host_refused`.
 
 ## 0.13.0
 
