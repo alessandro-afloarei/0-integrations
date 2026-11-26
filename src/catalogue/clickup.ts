@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** ClickUp: a personal API token, bare in `Authorization`. 100 requests a minute per token on FreeForever, Unlimited and
- * Business, a 429 past it (https://developer.clickup.com/docs/rate-limits). A webhook is signed: hex HMAC-SHA256 of the
- * body in `X-Signature` (https://developer.clickup.com/docs/webhooksignature). The error code is `ECODE`
- * (https://developer.clickup.com/reference/movefolder). Get Tasks leaves out subtasks and closed tasks unless asked. */
+/** ClickUp: a personal API token, bare in `Authorization`, or OAuth 2, its token as Bearer. 100 requests a minute per
+ * token on FreeForever, Unlimited and Business, a 429 past it (https://developer.clickup.com/docs/rate-limits). Webhooks
+ * sign the body, hex HMAC-SHA256 in `X-Signature` (https://developer.clickup.com/docs/webhooksignature). The error code
+ * is `ECODE` (https://developer.clickup.com/reference/movefolder). Get Tasks leaves out subtasks and closed tasks. */
 const task = { id: 'string', 'name?': 'string', 'status?': { 'status?': 'string' }, 'url?': 'string', 'date_created?': 'string',
   'date_updated?': 'string', 'parent?': 'string', 'list?': { 'id?': 'string' } } as const;
 const listId = { in: 'path', type: 'number', required: true } as const;
@@ -14,7 +14,10 @@ export const clickup = defineProvider({
   id: 'clickup', name: 'ClickUp', docs: 'https://developer.clickup.com/docs/authentication',
   categories: ['tasks'],
   fields: [{ name: 'apiToken', title: 'Personal API token', secret: true }],
-  auth: [{ kind: 'key', send: { header: 'authorization' } }],
+  auth: [{ kind: 'key', send: { header: 'authorization' } },
+    { kind: 'oauth2', authorizeUrl: 'https://app.clickup.com/api', tokenUrl: 'https://api.clickup.com/api/v2/oauth/token', pkce: false }],
+  // No scopes: the person picks the Workspaces the app may reach on ClickUp's consent screen.
+  scopes: { default: [] },
   http: { baseUrl: 'https://api.clickup.com/api/v2', minIntervalMs: 600, retry: {} },
   identify: { request: { path: '/user' }, id: 'user.id', name: ['user.username', 'user.email'] },
   paging: { page: { kind: 'page', send: { query: 'page' }, list: 'tasks', zeroBased: true } },

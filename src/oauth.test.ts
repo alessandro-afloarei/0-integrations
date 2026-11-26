@@ -79,6 +79,19 @@ test("Slack's ok:false is a refusal, not a token", async () => {
     .rejects.toBeInstanceOf(GrantRevoked);
 });
 
+test('a token answer that states no token_type is read as Bearer; one that states another type is refused unless listed', async () => {
+  expect((await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ access_token: 'a', refresh_token: 'r', expires_in: 1800 }).fetch }))
+    .grant).toMatchObject({ accessToken: 'a', refreshToken: 'r' });
+  // ClickUp's documented answer: the token alone.
+  expect(await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ access_token: 'only' }).fetch }))
+    .toEqual({ grant: { accessToken: 'only', refreshToken: null, expiresAt: null }, extras: {} });
+  expect(await refreshGrant(hubspot, client, 'old', { fetch: endpoint({ access_token: 'new' }).fetch }))
+    .toEqual({ accessToken: 'new', refreshToken: 'old', expiresAt: null });
+  expect((await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint(token).fetch })).grant.accessToken).toBe('a');
+  await expect(exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ ...token, token_type: 'mac' }).fetch }))
+    .rejects.toMatchObject({ code: 'invalid_response', status: 200 });
+});
+
 test('a refresh without a new refresh token keeps the old one', async () => {
   const fake = endpoint({ access_token: 'new', token_type: 'bearer' });
   expect(await refreshGrant(hubspot, client, 'old', { fetch: fake.fetch }))

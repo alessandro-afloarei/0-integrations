@@ -1,7 +1,7 @@
 # `connect`
 
 `connect` supplies `startConnect(entry, options?)` and `finishConnect(entry, input)` for any catalogue entry. Both are
-typed by the entry's sign-in: an OAuth 2 entry needs the start options and starts with a redirect, a key entry takes
+typed by the entry's sign-in, its first ([an entry with two sign-ins](#an-entry-with-two-sign-ins) picks another): an OAuth 2 entry needs the start options and starts with a redirect, a key entry takes
 none and starts with a form, and an entry whose kind is not known in the types (a union an app picks by id) takes either.
 
 - A key entry starts as a form of its `fields`. `finishConnect(entry, { secret, values?, fetch? })` reads only the
@@ -84,6 +84,37 @@ Build one source per connection and keep it for the process's life: a new source
 a new session; each process signs in its own).
 
 The [HubSpot page](hubspot.md) shows a whole OAuth connect against the HubSpot fake.
+
+## An entry with two sign-ins
+
+Linear and ClickUp offer a key and OAuth 2. Used whole, such an entry is its first sign-in, the key: a form, as above.
+To connect with OAuth 2, narrow it with `signInWith(entry, 'oauth2')` from `0-integrations/catalogue`. The narrowed
+entry has that sign-in alone, with the entry's `scopes` and `revoke`, and no secret field: the grant is the secret.
+Keep the kind with the connection and narrow again for every later `client`, `refreshGrant` or `revokeGrant`.
+`signInWith` refuses a kind the entry does not declare: `TypeError('sign_in_unknown: <entry id> <kind>')`.
+
+```ts
+import { signInWith } from '0-integrations/catalogue';
+import { linear } from '0-integrations/catalogue/linear';
+import { client } from '0-integrations/client';
+import { finishConnect, startConnect } from '0-integrations/connect';
+
+const oauth = signInWith(linear, 'oauth2');
+// Send the browser to `url`; keep `state` and `codeVerifier` on the server.
+const { url, codeVerifier } = await startConnect(oauth, { clientId: oauthClient.clientId, redirectUri, state });
+
+// In the callback, once the state matches:
+const { secret, account } = await finishConnect(oauth, { client: oauthClient, code, redirectUri, codeVerifier,
+  onRevokeFailed: report });
+// secret: the grant to seal, with `kind: 'oauth2'` kept beside it; account: the Linear user
+
+const api = client(oauth, { token: secret.accessToken });
+const issues = await api.issues.list({ teamId, first: 50 }); // one page: nodes and pageInfo
+```
+
+Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
+The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and
+refreshes with `refreshGrant(signInWith(linear, 'oauth2'), …)`, through [credentials](credentials.md).
 
 ## Google and Microsoft
 

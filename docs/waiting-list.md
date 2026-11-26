@@ -11,7 +11,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 
 | Mechanism | Providers waiting |
 |---|---|
-| A GraphQL cursor sent in the query's variables | Linear, Monday |
+| A GraphQL cursor sent in the query's variables (Linear's lists are declared one page each, `first` and `after` ordinary variables) | Linear, Monday |
 | `offset` paging | Outline, PagerDuty |
 | A next cursor that is a number | Vercel |
 | A next cursor read from the last record of a page | Render |
@@ -27,6 +27,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 | A placeholder in identify's request path | Twilio |
 | A `User-Agent` the app names, sent when it signs in | Basecamp |
 | A webhook signed as a JWT | Monday, Netlify |
+| A webhook timestamp in milliseconds (`Linear-Timestamp`, the body's `webhookTimestamp`), which is not signed | Linear |
 | A webhook handshake answered in a header (`X-Hook-Secret`) | Asana |
 | A webhook secret decoded from base64 before it signs | Airtable |
 

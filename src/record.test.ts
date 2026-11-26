@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { lookupNames } from './account.js';
-import { defineProvider, type Entry, type Value } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Value } from './catalogue.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { trello } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
@@ -82,7 +82,9 @@ const identityPaths = (value: Value | undefined) => (value === undefined ? [] : 
  * paths the entry reads, and `retry-after` alone of its headers; the key, each plain value given, every token issued,
  * the account identify names and the saved values are swapped for the kit's stand-ins. The result is replayed as the
  * table test replays it, and written only when both sign-ins end as they did live. */
-async function recordEntry(entry: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
+async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
+  // The first sign-in: the one an app gets when it does not choose, and the one a pasted key signs in with.
+  const entry: Entry = signInWith(whole, whole.auth[0].kind);
   const [auth] = entry.auth;
   if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
   const kit = kitValues(entry);
@@ -526,6 +528,17 @@ describe('recording an entry with no module, on its derived fake standing in for
   test('a provider with a module but no kit scenario of that name is refused before anything is sent', async () => {
     await expect(record('lusha', 'real-key-1', {})).rejects
       .toThrow('lusha has a module: it is recorded through a kit scenario in src/lusha/scenario.test-support.ts, and none is named lusha');
+  });
+
+  test('an entry with a key and OAuth 2 records its key: the file replays the key sign-in', async () => {
+    const both = defineProvider({ id: 'acme', name: 'Acme', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key', send: { header: 'authorization' } }, { kind: 'oauth2', authorizeUrl: 'https://acme.test/authorize',
+        tokenUrl: 'https://api.acme.test/token' }], scopes: { default: [] },
+      http: { baseUrl: 'https://api.acme.test' }, identify: { request: { path: '/me' }, id: 'id' } });
+    const { recording } = await recordOnFake(both, { key: 'real-key-9', account: { id: 'acct-55' } });
+    expect(recording?.exchanges.map(({ key, url, response }) => [key, url, response]))
+      .toEqual([['good', 'https://api.acme.test/me', { id: 'kit-account' }], ['bad', 'https://api.acme.test/me', {}]]);
+    expect(await replayProblem(both, { provider: 'acme', synthetic: false, source: '', recordedAt: '', exchanges: recording?.exchanges ?? [] })).toBeNull();
   });
 
   test('an entry that sends no request when it signs in is refused: nothing to record', async () => {

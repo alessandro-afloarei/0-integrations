@@ -23,9 +23,12 @@ one takes five steps:
 1. `pnpm new <id>` writes the entry's skeleton, a key entry whose every unknown is `TODO`. It never overwrites a file.
 2. Fill it from the provider's own documentation, and put the page that states what the entry declares in `docs`.
    State only what differs from the defaults: [catalogue](docs/modules/catalogue.md) lists every field, and the
-   design's [`auth` section](docs/design/entries-and-engine.md#auth) gives every sign-in rule. Start from the entry
-   of the same sign-in kind: a key, `src/catalogue/serpapi.ts`; an OAuth 2 grant, `src/catalogue/figma.ts` (drop the
-   skeleton's secret field: the grant is the secret); a token request, `src/catalogue/zoom.ts`. Write every header name
+   design's [`auth` section](docs/design/entries-and-engine.md#auth) gives every sign-in rule. Declare every sign-in
+   the provider documents in one pass: its key first, then its OAuth 2 grant when the grant reaches the same base and
+   the same `identify` ([sign-in alternatives](docs/design/entries-and-engine.md#sign-in-alternatives)). Start from the
+   entry of the same sign-ins: a key, `src/catalogue/serpapi.ts`; a key and OAuth 2, `src/catalogue/linear.ts`; an
+   OAuth 2 grant alone, `src/catalogue/figma.ts` (drop the skeleton's secret field: the grant is the secret); a token
+   request, `src/catalogue/zoom.ts`. Write every header name
    in lowercase (`x-api-key`). Pick one or two `categories`, the main one first; declare the operations of that
    category's template, each with its own `docs` page; follow the result-shape rules. A fact you cannot cite from the
    provider's page stays out. The design's [Breadth entries](docs/design/entries-and-engine.md#breadth-entries) gives
@@ -33,7 +36,7 @@ one takes five steps:
 3. `pnpm providers`, which writes the entry's row into [`docs/providers.md`](docs/providers.md), then `pnpm check`.
    The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake derived from it
    (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry has an identify
-   request or a token request. `pnpm check` also fails while the committed page differs from the entries.
+   request or a token request; an entry with two sign-ins runs the rules and the sign-in once for each. `pnpm check` also fails while the committed page differs from the entries.
 4. Optional: record it from a test account (below), read the file, and commit it. An entry the recorder can record (one
    with no module that sends a request when it signs in) becomes `recorded`.
 5. Add one line to `CHANGELOG.md` under `Unreleased`, then open a pull request.
@@ -55,7 +58,9 @@ entry:
   the entry's fields; a send's `value` holds no control character and never spells out a default (`'{token}'`, or
   `authorization: Bearer {token}`), and no field is named `token`;
 - names in each template only what that place allows;
-- is one the engine can run: a key or token entry has exactly one secret field, a key entry reads no token answer, and
+- lists one or more sign-ins, at most one of each kind and never a key beside a token, and beside two sign-ins reads
+  no plain field from only one sign-in's `send` or token request;
+- is one the engine can run, each sign-in on its own: a key or token entry has exactly one secret field, a key entry reads no token answer, and
   neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
   the token itself from `tokenAnswer.*`; a value read from identify's answer has a request to read it from; no `save`
   key is a field's name; each placeholder in the base names a plain field or a `save` key, either in its host, with
@@ -83,6 +88,7 @@ value (its `default`, else its first choice, else `kit-<name>`).
 To record an entry with no module from a test account, read the key at a prompt (bash and zsh) and run the recorder:
 `printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
 For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test account with your app's own OAuth client.
+An entry with a key and OAuth 2 is recorded with its key: the recorder records the first sign-in.
 The recorder refuses a provider with a module but no kit scenario of that name, and an entry that sends no request
 when it signs in. Otherwise it signs in with the key and with a bad key, and writes
 `src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request

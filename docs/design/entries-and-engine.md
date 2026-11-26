@@ -273,6 +273,37 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     whatever `values` holds.
 - A sign-in the provider hosts on its own page is not a kind: the entry is a `key` entry for the app's own key, and the
   provider's module offers the hosted link and the account lookup as calls.
+- A token answer that states no `token_type` is read as Bearer, as most OAuth clients read it (ClickUp's states none);
+  one that states another type is refused unless the entry lists it in `tokenTypes`.
+
+#### Sign-in alternatives
+
+`auth` is a list of sign-in alternatives, the first the default. Linear's is its personal key, sent bare in
+`authorization`, then OAuth 2, whose token goes as Bearer to the same GraphQL endpoint and the same `viewer` query.
+
+1. `signInWith(entry, kind)` (from `0-integrations/catalogue`) returns a new entry whose `auth` is the one sign-in of
+   that `kind`, else throws `TypeError('sign_in_unknown: <entry id> <kind>')`. Nothing else in the engine changes: every
+   engine function keeps reading `entry.auth[0]`, so a narrowed entry is a one-sign-in entry.
+2. An alternative is chosen by its `kind`. An entry holds at most one sign-in of each kind, and never `key` beside
+   `token`.
+3. An entry used whole is its first sign-in. Library entries list the key first, then OAuth 2: an app that does not
+   choose runs as every one-sign-in entry does, and the recorder can record it with a pasted key.
+4. Narrowed to `oauth2`, the entry drops its secret fields (the grant is the secret); narrowed to `key` or `token`, it
+   keeps every field. Plain fields are shared, so beside two sign-ins a plain field that only one sign-in's `send` or
+   token request reads (a Basic email) is refused by the table test.
+5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `identify`, `save`,
+   `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
+6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
+   per sign-in, on `signInWith(entry, kind)`, each test named with its kind when there are several. The replay runs on
+   the first sign-in only.
+7. The schema takes `auth` of one or more sign-ins with unique kinds, not `key` with `token`.
+8. `catalogue.json` holds the entry as declared, every sign-in in its order; the providers page's Sign-in column lists
+   their kinds in that order.
+9. The recorder records the first sign-in (`RECORD_KEY` is its key), and an entry is `recorded` when its first sign-in
+   is. An OAuth 2 alternative is proven by its derived fake, and by a recording once the recorder learns the OAuth
+   exchange.
+10. An app keeps the kind it chose with the connection (the secret's shape already differs: a grant, or the key's
+    fields) and narrows again for every later `client`, `refreshGrant` or `revokeGrant`.
 
 ### `identify` and `save`
 
@@ -507,14 +538,15 @@ page (a rate limit, regions, a webhook, an error format), the entry's leading co
 out: a smaller true entry beats a larger guessed one. What the engine cannot say is left out too, never forced into a
 wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
 
-**Sign-in.** The provider's personal key or token when it reaches the category's operations (`key`, its `send` as the
-docs show it); else its self-serve OAuth 2 authorization code grant (`oauth2`); else a documented one-request token
-(`token`).
+**Sign-in.** Every sign-in the provider documents, in one pass: its personal key or token (`key`, its `send` as the
+docs show it) first, then its self-serve OAuth 2 authorization code grant (`oauth2`) when it shares the key's base,
+`identify` and plain fields; a documented one-request token (`token`) takes the key's place when there is no key.
+[Sign-in alternatives](#sign-in-alternatives) gives the rules.
 
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
   credential or the base needs. A host the person types is `host` with `http.host: '*'`; a documented list of regional
   hosts on one domain is `choices` with `http.host: '*.<domain>'`.
-- `scopes`, on an `oauth2` entry only: what the declared operations and identify need, as the docs name them.
+- `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
 - `identify`: the documented request that answers who the credential is, `id` its id path, `name` its display name,
   then its email. With none, a credential check with no `id` on the cheapest read the credential can always make.
 - `http`: `headers` only for one the docs require on every request; `retry: {}` when the docs state a 429 or a
@@ -603,8 +635,8 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
 3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
    `./testing`) answers identify, a `token` entry's token request and each operation the app answers, filling the base
    and the credential with the engine's own functions, and comparing a token request with the one the engine sends for
-   the good key. Every entry that sends a request to sign in (an identify request, or a `token` entry's token request)
-   signs in on it with a good key and is `rejected` with a bad one, with no recording.
+   the good key. Every sign-in of an entry that sends a request to sign in (an identify request, or a `token` sign-in's
+   token request) signs in on it with a good key and is `rejected` with a bad one, with no recording.
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.
 
@@ -668,7 +700,8 @@ its docs, and engine tests as proof:
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
 code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
-authorize and token URLs (Shopify); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+authorize and token URLs (Shopify; Sentry, Outline and Mattermost for a host the person types); a base per sign-in
+(Confluence's and Wrike's OAuth 2 reach another base than their key); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
 (Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
 
 Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments

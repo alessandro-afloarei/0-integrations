@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
-import { defineProvider, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
+import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, replayProblem, signIn } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
@@ -63,6 +63,26 @@ const pageOnly = { error: (issue: { code: string; keys?: readonly string[] }) =>
   ? '`zeroBased` belongs to a `page` paging shape: leave it out' : undefined) };
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
+const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
+const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
+const SHARED_FIELDS = 'a plain field every sign-in reads, beside two sign-ins: one that only one sign-in\'s `send` or token request reads (a Basic email) has no place beside the other';
+/** The plain fields a sign-in fills: its `send`'s templates and a token request's. */
+function signInReads(auth: Entry['auth'][number]): string[] {
+  const send = 'send' in auth ? auth.send : undefined;
+  const sent = send === undefined ? [] : 'header' in send ? [send.value ?? ''] : 'basic' in send ? send.basic : Object.values(send.query);
+  const request = auth.kind === 'token' ? [auth.request.url, ...Object.values(auth.request.body), ...auth.request.basic ?? []] : [];
+  return [...sent, ...request].flatMap(placeholders);
+}
+/** Beside two sign-ins, a plain field one sign-in reads is read by every sign-in, or by what they share (the base, a
+ * lookup): the plain fields are shared. */
+function sharedFields(entry: Entry): boolean {
+  if (entry.auth.length < 2) return true;
+  const shared = [...placeholders(entry.http.baseUrl), ...lookupNames(entry).filter(name => name.startsWith('connection.'))
+    .map(name => name.slice('connection.'.length))];
+  const reads = entry.auth.map(signInReads);
+  return (entry.fields ?? []).filter(field => field.secret !== true).every(({ name }) =>
+    shared.includes(name) || reads.every(read => read.includes(name)) || !reads.some(read => read.includes(name)));
+}
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
@@ -83,7 +103,8 @@ const entrySchema = z.strictObject({
       body: z.record(z.string(), z.string("a token request's body is a flat record of templates")), json: z.literal(true).optional(), basic: z.tuple([template, template]).optional(),
       token: z.string().regex(/\S/u, "a token request's `token` is the token's path in the answer: give it, or leave it out")
         .optional() }) }),
-  ])).length(1), // one sign-in each until a provider needs two
+  ])).min(1).refine(auth => new Set(auth.map(item => item.kind)).size === auth.length, ONE_OF_EACH)
+    .refine(auth => !(auth.some(item => item.kind === 'key') && auth.some(item => item.kind === 'token')), KEY_OR_TOKEN),
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
   identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
     lowercase: z.literal(true).optional(),
@@ -129,7 +150,7 @@ const entrySchema = z.strictObject({
   ])).optional(),
   operations: z.record(z.string(), z.union([z.strictObject({ method: method.optional(), path: template, ...operationParts }),
     z.strictObject({ graphql: z.string(), ...operationParts })])).optional(),
-});
+}).refine(entry => sharedFields(entry as unknown as Entry), SHARED_FIELDS);
 
 /** Every function anywhere in a value, by its path. */
 function functionsIn(value: unknown, at = ''): string[] {
@@ -331,7 +352,22 @@ describe.each(entries)('%s', (id, entry) => {
   test('matches the entry types', () => { expect(entrySchema.safeParse(entry).error).toBeUndefined(); });
   test('holds no function', () => { expect(functionsIn(entry)).toEqual([]); });
   test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(entry))).toEqual(entry); });
-  test.each(Object.keys(runnable) as Rule[])('declares %s', rule => { expect(runnable[rule](entry)).toBe(true); });
+  // Each sign-in is an entry of its own once an app picks it: every rule and the derived fake run on each, named by its
+  // kind when there are several.
+  for (const { kind } of entry.auth) {
+    const one: Entry = signInWith(entry, kind);
+    const named = entry.auth.length > 1 ? ` (${kind})` : '';
+    test.each(Object.keys(runnable) as Rule[])(`declares %s${named}`, rule => { expect(runnable[rule](one)).toBe(true); });
+    // Every sign-in that sends identify, and every token sign-in, signs in on the fake derived from it: no recording needed.
+    if (one.identify?.request !== undefined || one.auth[0].kind === 'token') {
+      test.each(['good', 'bad'] as const)(`signs in on its derived fake with a %s key${named}`, async key => {
+        const { fetch } = fakeFetch(fakeProvider(one, { key: GOOD_KEY, values: kitValues(one) }));
+        const signedIn = signIn(one, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
+        if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
+        else expect((await signedIn).account === null).toBe(one.identify?.id === undefined);
+      });
+    }
+  }
   test('names only what each place allows in its templates', () => {
     // identify and save read one lookup: the id found, the token answer, a connection value (a plain field the user
     // entered, or a value `save` keeps), or a path into the identify answer. A value without braces is itself a path.
@@ -346,18 +382,9 @@ describe.each(entries)('%s', (id, entry) => {
     for (const name of placeholders(signing(entry)?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 
-  // Every entry that sends identify, and every token entry, signs in on the fake derived from it: no recording needed.
-  if (entry.identify?.request !== undefined || entry.auth[0].kind === 'token') {
-    test.each(['good', 'bad'] as const)('signs in on its derived fake with a %s key', async key => {
-      const { fetch } = fakeFetch(fakeProvider(entry, { key: GOOD_KEY, values: kitValues(entry) }));
-      const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
-      if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
-      else expect((await signedIn).account === null).toBe(entry.identify?.id === undefined);
-    });
-  }
-
-  // With a recording beside it, the sign-in replays a good and a bad key on its recordings' exchanges merged, through the
-  // check the recorder runs before it writes one: a file the recorder accepts, the table accepts.
+  // With a recording beside it, the first sign-in (the one the recorder records) replays a good and a bad key on its
+  // recordings' exchanges merged, through the check the recorder runs before it writes one: a file the recorder accepts,
+  // the table accepts.
   const [first, ...rest] = recordings.filter(({ file }) => file.startsWith(`${id}.`));
   if ((entry.identify?.request === undefined && entry.auth[0].kind !== 'token') || first === undefined) return;
   const recording = { ...first, provider: id, exchanges: [first, ...rest].flatMap(item => item.exchanges) };
@@ -577,6 +604,22 @@ test.each(['', '  '])('a token request whose `token` path is %j fails the schema
   const bad = { ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, token } }] };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
     .toEqual(["a token request's `token` is the token's path in the answer: give it, or leave it out"]);
+});
+
+test.each<[string, Record<string, unknown>, string]>([
+  ['two key sign-ins', { fields: [secret], auth: [{ kind: 'key' }, { kind: 'key', send: { header: 'x-api-key' } }] }, ONE_OF_EACH],
+  ['a key beside a token', { fields: [secret], auth: [{ kind: 'key' },
+    { kind: 'token', request: { url: 'https://k.test/token', body: { key: '{apiKey}' } } }] }, KEY_OR_TOKEN],
+  ['a Basic email beside OAuth 2', { fields: [secret, { name: 'email', title: 'Email' }], scopes: { default: [] },
+    auth: [{ kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }, oauth2.auth[0]] }, SHARED_FIELDS],
+])('an entry with %s fails the schema, with what to fix', (_, parts, message) => {
+  expect(entrySchema.safeParse({ ...key, ...parts }).error?.issues.map(issue => issue.message)).toEqual([message]);
+});
+
+test('a plain field in the base beside two sign-ins, and a key beside OAuth 2, match the schema', () => {
+  const good = { ...key, fields: [secret, { name: 'site', title: 'Site' }], scopes: { default: [] },
+    http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [{ kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }, oauth2.auth[0]] };
+  expect(entrySchema.safeParse(good).error).toBeUndefined();
 });
 
 test('a token request whose body holds an object fails the schema, with what to fix', () => {

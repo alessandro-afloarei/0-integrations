@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, type Webhook } from './catalogue.js';
+import { defineProvider, signInWith, type Webhook } from './catalogue.js';
 import { attio } from './catalogue/attio.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { stripe } from './catalogue/stripe.js';
@@ -7,6 +7,7 @@ import { discord } from './catalogue/discord.js';
 import { slack } from './catalogue/slack.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
+import { linear } from './catalogue/linear.js';
 import { notion } from './catalogue/notion.js';
 import { aircall } from './catalogue/aircall.js';
 import { gitlab } from './catalogue/gitlab.js';
@@ -96,6 +97,24 @@ async function connectKey(apiToken: string, apiId: string) {
   const { secret, values, account } = await finishConnect(aircall, { secret: { apiToken }, values: { apiId }, fetch });
   // secret: { apiToken } to seal; values: { apiId } to keep; account: { id: apiId, name: the company's name }
   return [fields, secret, values, account];
+}
+
+// docs/modules/connect.md › An entry with two sign-ins.
+async function connectTwoSignIns(oauthClient: OAuthClient, redirectUri: string, state: string, code: string,
+  report: (error: unknown) => void, teamId: string) {
+  const oauth = signInWith(linear, 'oauth2');
+  // Send the browser to `url`; keep `state` and `codeVerifier` on the server.
+  const { url, codeVerifier } = await startConnect(oauth, { clientId: oauthClient.clientId, redirectUri, state });
+
+  // In the callback, once the state matches:
+  const { secret, account } = await finishConnect(oauth, { client: oauthClient, code, redirectUri, codeVerifier,
+    onRevokeFailed: report });
+  // secret: the grant to seal, with `kind: 'oauth2'` kept beside it; account: the Linear user
+
+  const api = client(oauth, { token: secret.accessToken });
+  const issues = await api.issues.list({ teamId, first: 50 }); // one page: nodes and pageInfo
+  expectTypeOf(issues.data.issues.pageInfo.hasNextPage).toEqualTypeOf<boolean>();
+  return [url, account, issues];
 }
 
 // docs/modules/connect.md: "To ask for other scopes, derive an entry".
@@ -221,7 +240,7 @@ async function testingDerivedToken() {
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
+    connectTwoSignIns, connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
     webhooksReceiveCalls, webhooksDeclared, testingDerivedFake, testingDerivedOperation,
     testingDerivedToken].every(example => typeof example === 'function')).toBe(true);
 });
