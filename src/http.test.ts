@@ -7,7 +7,6 @@ import { exa } from './catalogue/exa.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
 import { gitlab } from './catalogue/gitlab.js';
-import { granola } from './catalogue/granola.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
@@ -153,8 +152,10 @@ test("times out at the provider's timeoutMs", async () => {
 });
 
 test('paces requests to minIntervalMs', async () => {
+  const paced = defineProvider({ id: 'paced', name: 'Paced', auth: [{ kind: 'key' }],
+    http: { baseUrl: 'https://api.paced.test/v1', minIntervalMs: 200 } });
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
-  const client = createClient(granola, { token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const client = createClient(paced, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   const first = client.json('/notes');
   const second = client.json('/notes');
   await vi.advanceTimersByTimeAsync(0);
