@@ -528,8 +528,12 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
    a good and a bad credential. The module kits run the first page, a walk to the end and a 429 on the same
    recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange and revoke, and webhook samples
    join the table's replay with the first entry that has them and no module.
-3. **Fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is held to
-   the recording.
+3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
+   `./testing`) answers identify, a `token` entry's token request and each operation the app answers, filling the base
+   and the credential with the engine's own functions. Every entry with an identify request, and every `token` entry,
+   signs in on it with a good key and is `rejected` with a bad one, with no recording.
+4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
+   held to the recording.
 
 A recording is a real capture from a real account, cleaned by the privacy check. A made-up one tests the code but
 leaves the entry `declared`. The module kits stay for what an entry cannot know, such as incremental reads.
@@ -576,7 +580,7 @@ its docs, and engine tests as proof:
 3. **More webhook schemes.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 and a header value
    template (Discord, Trello), shared tokens (Google), Standard Webhooks (GitLab), and a challenge handshake (Slack,
    Discord).
-4. **The kit.** A fake derived from any entry, the recorder for an entry with no module, a scaffolder (`pnpm new <id>`)
+4. **The kit.** A fake derived from any entry (in the code: `fakeProvider`), the recorder for an entry with no module, a scaffolder (`pnpm new <id>`)
    and a five-step guide to adding a provider.
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
