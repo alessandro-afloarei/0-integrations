@@ -9,12 +9,14 @@ Nothing here is released yet.
   ClickUp.
 - New: an OAuth 2 sign-in may read the entry's plain fields: `startConnect` takes and returns `values`, and
   `authorizeUrl`, `exchangeCode`, `finishConnect`, `refreshGrant` and `revokeGrant` take them; `Connected['values']`
-  holds the plain fields for every sign-in kind. Every OAuth 2 URL is filled and checked as a base is, and a token
-  never goes to a host other than the one that issued it: an entry whose OAuth 2 URLs, base and `http.bases` do not
-  share one host when any of them is typed is refused with `host_split` before anything is built or sent. First
+  holds the plain fields for every sign-in kind. Every OAuth 2 URL is filled and checked as a base is. On a typed host,
+  a credential goes only to that host: an entry whose base, `http.bases` and OAuth 2 URLs do not share one host when
+  any of them is typed is refused with `host_split` before anything is built or sent, for every sign-in. First
   used by Mattermost, which now lists OAuth 2 first; its personal access token is `signInWith(mattermost, 'key')`.
 - `exchangeCode`, `refreshGrant` and `revokeGrant` take `fetch` as an option, by default `guardedFetch` for an entry
   whose host is typed.
+- A named base (`http.bases`) with a placeholder is refused where a call chooses it (`base_templated`); it was sent
+  to a host spelt with braces.
 - New entry: Azure DevOps (code; Microsoft Entra OAuth 2). Every entry is `declared`.
 - An OAuth 2 token answer that states no `token_type` is read as Bearer; it was `invalid_response`. One that states
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.

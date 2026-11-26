@@ -37,7 +37,8 @@ async function readmeConnectKey(apiKey: string) {
 
 async function readmeConnectOAuth(oauthClient: OAuthClient, redirectUri: string, state: string, code: string,
   codeVerifier: string | undefined, report: (error: unknown) => void) {
-  // Send the browser to `start.url`; keep `state` and `start.codeVerifier` on the server.
+  // Send the browser to `start.url`; keep `state`, `start.codeVerifier`, and `start.values` when the entry has plain
+  // fields, on the server.
   const start = await startConnect(google, { clientId: oauthClient.clientId, redirectUri, state });
 
   // In the callback, once the state matches, with the verifier kept at the start:

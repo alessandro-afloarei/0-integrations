@@ -175,14 +175,15 @@ its `save` keeps.
 - Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled by this rule, from the plain fields alone:
   a secret field or a `save` key named there is `template_missing`, since neither exists before the exchange. A URL
   with no placeholder is used as written.
-- **A token goes only to the host that issued it.** When any OAuth 2 URL, the base or an `http.bases` value takes its
-  host from a value, every one of them has exactly the same host part (`https://{host}`): on a person's own server the
-  registration, the sign-in and the calls all belong to that server. So a cloud's fixed token URL never pairs with a
-  typed base (a cloud token would go to any host), nor a typed token URL with a fixed base. `hostSplit(entry)` is the
-  check: the engine refuses such an entry with `TypeError('host_split: <entry id>')` in `authorizeUrl` and
-  before every exchange, refresh and revoke, before anything is built or sent, and the table runs it as a rule. An entry
-  whose hosts are all fixed (a value only in the base's path) is unaffected. No value is ever read from the callback's
-  query: the callback is the person's browser.
+- **On a typed host, a credential goes only to that host.** When the base, an `http.bases` value or an OAuth 2 URL
+  takes its host from a value, every one of them has exactly the same host part (`https://{host}`): on a person's own
+  server the registration, the sign-in and the calls all belong to that server. So a cloud's fixed token URL never
+  pairs with a typed base (a cloud token would go to any host), nor a typed token URL with a fixed base, nor a key on a
+  typed host with a fixed second base. `hostSplit(entry)` is the check: the engine refuses such an entry with
+  `TypeError('host_split: <entry id>')` in `authorizeUrl`, before every exchange, refresh and revoke, and where a
+  call chooses a named base, before anything is built or sent, and the table runs it as a rule on every sign-in. An
+  entry whose hosts are all fixed (a value only in the base's path) is unaffected. No value is ever read from the
+  callback's query: the callback is the person's browser.
 
 #### The address guard
 
@@ -350,7 +351,8 @@ the same lookup, where `{id}` is the id already found: `'Portal {id}'`.
 - `rejectWhen` names answers that mean a bad credential despite their status. The error is `rejected`. A rule's
   `detail` is the detail reported, so a `rejectWhen` condition cannot test the provider's code.
 - A request's `base` names a key of `http.bases`: identify's request and a request revoke are sent to that base, and
-  the credential stays on its origin. An unknown name is `TypeError('base_unknown: <name>')` before anything is sent.
+  the credential stays on its origin. An unknown name is `TypeError('base_unknown: <name>')`, and a base with a
+  placeholder (never filled) `TypeError('base_templated: <name>')`, before anything is sent.
   Jira's identify goes to `api.atlassian.com` while its own base still waits for the `cloudId` it saves: a call on a
   second base never fills the entry's own. A request revoke on a second base needs no `values`; one on a templated
   own base needs the connection's `values`, which `revokeGrant` takes; without them it fails closed (`template_missing`)
@@ -750,8 +752,8 @@ its docs, and engine tests as proof:
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
 code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; a base per sign-in
-(Confluence's and Wrike's OAuth 2 reach another base than their key; an OAuth 2 sign-in on a cloud host beside a key
-on a typed host: Outline, Sentry); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+(an OAuth 2 sign-in whose base differs from its key's; the [waiting list](../waiting-list.md) names who waits and
+why); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
 (Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
 
 Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments

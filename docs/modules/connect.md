@@ -36,7 +36,7 @@ To ask for other scopes, derive an entry: `defineProvider({ ...google, scopes: {
 does not refuse a misspelled key at compile time (the catalogue test does, for the entries in this repository), so check
 the key's name.
 
-`fetch` is optional in both, and in `refreshGrant` and `revokeGrant`: by default the global one, or `guardedFetch` for an entry whose host the person types
+`fetch` is optional in both, and in `exchangeCode`, `refreshGrant` and `revokeGrant`: by default the global one, or `guardedFetch` for an entry whose host the person types
 (`http.host: '*'`, GitLab and Metabase), which refuses private and metadata addresses
 ([client](client.md#the-address-guard)); with an app's own `fetch`, a host that is a blocked address literal is refused
 before anything is sent, a token entry's password included. An account id of a provider whose host is typed is local to
@@ -132,11 +132,13 @@ refreshes with `refreshGrant(linear, …)`, through [credentials](credentials.md
 ## OAuth 2 on the person's own server
 
 Mattermost runs on each person's own server, and each server is its own OAuth 2 provider: its authorize and token URLs
-sit on the host the person types (`https://{host}/oauth/authorize`). Its OAuth 2 sign-in reads that host: pass it to
+sit on the host the person types (`https://{host}/oauth/authorize`). An OAuth 2 sign-in asks the person for the entry's
+fields that are not `secret`: Mattermost's `host`, never the key sign-in's `accessToken`. Pass the host to
 `startConnect` as `values`, keep the `values` it returns on the server with `state` and `codeVerifier`, and pass them
 to `finishConnect`, `refreshGrant`, `revokeGrant` and `client`. Never read a value from the callback's query: the
 callback is the person's browser, which can carry anything. Every OAuth 2 URL is filled and checked as a base is (a
-host name with no port, never a blocked address), and a token never goes to a host other than the one that issued it.
+host name with no port, never a blocked address), and the exchange, refresh, revoke and calls all go to the host the
+`values` name.
 The values and the grant are one record: a token is sent to whatever host the `values` name, and the library cannot
 know which host issued it. Keep the host with the sealed grant, never apart.
 

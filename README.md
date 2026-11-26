@@ -43,7 +43,8 @@ const { secret, account } = await finishConnect(attio, { secret: { apiKey }, fet
 import { google } from '0-integrations/catalogue/google';
 import { finishConnect, startConnect } from '0-integrations/connect';
 
-// Send the browser to `start.url`; keep `state` and `start.codeVerifier` on the server.
+// Send the browser to `start.url`; keep `state`, `start.codeVerifier`, and `start.values` when the entry has plain
+// fields, on the server.
 const start = await startConnect(google, { clientId: oauthClient.clientId, redirectUri, state });
 
 // In the callback, once the state matches, with the verifier kept at the start:

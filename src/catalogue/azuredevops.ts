@@ -19,6 +19,7 @@ export const azuredevops = defineProvider({
   categories: ['code'],
   fields: [{ name: 'organization', title: 'Organization',
     help: 'The name of your Azure DevOps organization, as in https://dev.azure.com/<organization>.' }],
+  // The tenant is fixed to `organizations`; a guest from another tenant needs that tenant's identifier in its place:
   // https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize',
     tokenUrl: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token',
