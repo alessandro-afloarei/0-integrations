@@ -183,7 +183,7 @@ const plainReads = (entry: Entry) => [...placeholders(entry.http.baseUrl), ...re
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 /** An OAuth 2 sign-in's URLs, as the engine reads them. */
 const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
-const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's) has a placeholder";
+const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
 const HOST_SPLIT = 'the base, `http.bases` and the OAuth 2 URLs on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
@@ -208,14 +208,11 @@ const runnable = {
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
-  [HOST_PATTERN]: (entry: Entry) => ([entry.http.baseUrl, ...oauthUrlList(entry)].some(url => placeholders(hostPart(url)).length > 0)
+  [HOST_PATTERN]: (entry: Entry) => ([entry.http.baseUrl, ...oauthUrlList(entry), tokenRequest(entry)?.url ?? ''].some(url => placeholders(hostPart(url)).length > 0)
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
     || /^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl)),
-  // The token URL is filled by the base's rule, so a typed host there is checked against the same pattern.
-  "a token request's `url` with a placeholder in its host only beside an `http.host` pattern": (entry: Entry) =>
-    placeholders(hostPart(tokenRequest(entry)?.url ?? 'https://')).length === 0 || entry.http.host !== undefined,
   // A URL is filled from plain values, never a secret; the body and Basic from either.
   // What the engine cannot fill is `template_missing` at the first sign-in.
   "a token request names only the entry's fields, a plain one in its `url`": (entry: Entry) => {
@@ -497,7 +494,7 @@ test.each<[Rule, Entry]>([
     auth: [{ ...tokened.auth[0], send: { query: { s: '{clientSecret}' } } }] })],
   ["a `token` entry's `send`: name no secret field", defineProvider({ ...tokened,
     auth: [{ ...tokened.auth[0], send: { basic: ['{clientId}', '{clientSecret}'] } }] })],
-  ["a token request's `url` with a placeholder in its host only beside an `http.host` pattern", defineProvider({ ...tokened,
+  [HOST_PATTERN, defineProvider({ ...tokened,
     fields: [...tokened.fields, { name: 'apiHost', title: 'Host' }], auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request,
       url: 'https://{apiHost}/token' } }] })],
   ...([[{ url: 'https://k.test/{tenant}/token' }, "a token request names only the entry's fields, a plain one in its `url`"], [{ url: 'https://k.test/{clientSecret}/token' }, "a token request names only the entry's fields, a plain one in its `url`"],
