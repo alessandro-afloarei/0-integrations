@@ -518,8 +518,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
   out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
   strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
-  parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}` when none), posted with the query to
-  the base.
+  parameters are sent as one JSON object, `{}` when none is given, `variables` as GraphQL's variables (`{}` when none),
+  posted with the query to the base.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
   any, with their `id`s (or `null`). Without `records`, a list `result` is the records themselves (a list at the answer's
@@ -564,8 +564,11 @@ other people must use OAuth, the key's `help` says the key is for the person's o
   then its email. With none, a credential check with no `id` on the cheapest read the credential can always make.
 - `http`: `headers` for every header the docs say each request needs, `content-type` included, and no other; `retry: {}` when the docs state a 429 or a
   `Retry-After`, with `maxWaitMs` and `defaultWaitMs` only from stated numbers; `minIntervalMs` only from a stated
-  per-credential limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
-  limit answer.
+  limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
+  limit answer. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
+  the credential that signs the calls: a limit that varies by plan, or that the credential shares with its
+  organization, is left out. The entries written before this rule (Aircall, Apollo, Attio, Fathom, GitHub, Granola,
+  HubSpot, Lusha, Notion) still declare `minIntervalMs` and are being checked against it.
 - `errors.detail` only for a documented machine code, never a human message.
 - `paging`: one named shape per way the declared lists page. A list the engine cannot page is declared unpaged, its
   paging parameters ordinary parameters and its paging fields in its `result`.
@@ -585,7 +588,8 @@ way to list it). No `delete`.
 | `code` | source control: `repositories.list`, `repositories.get`, `pullRequests.list`, `pullRequests.get`, `pullRequests.create`; CI and deploys: `<runs>.list`, `<runs>.get`, `<runs>.create`, `<projects>.list` |
 | `monitoring` | `<issues>.list`, `<issues>.get`, `<issues>.update`, `<projects>.list`; incident tools add `<incidents>.create` |
 
-A category gains its template with the batch that first writes it.
+A category gains its template with the batch that first writes it. `<containers>.list` may instead be the list a
+create's required parameter is chosen from (incident.io's severities, Shortcut's workflows).
 
 **Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
 its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record

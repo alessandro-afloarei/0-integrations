@@ -11,6 +11,11 @@ Nothing here is released yet.
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.
 - New entries: Buildkite (code), ClickUp (tasks; OAuth 2 and a key), Linear (tasks; OAuth 2 and a key), Rollbar
   (monitoring), Shortcut (tasks). Every entry is `declared`.
+- An operation that declares body parameters sends a JSON object, `{}` when called with no body argument; it sent no body.
+- New entries: 23 developer tools and productivity providers (airtable, asana, betterstack, bitbucket, chatwork,
+  circleci, coda, gitbook, guru, honeybadger, incidentio, line, mattermost, monday, outline, pagerduty, render, sentry,
+  slite, smartsheet, todoist, vercel, zulip), each with the operations of its category's template the engine can say;
+  what waits is in the waiting list. Every entry is `declared`.
 - A paged operation whose `result` is a list and that names no `records` yields the list's elements (an answer that is
   a list), a bad one skipped and reported; it yielded each page whole. First used by Buildkite.
 - New: `linkHeader` paging, first used by Buildkite; a next link may be a path on the provider's origin, first used by
