@@ -100,7 +100,8 @@ That is a whole provider: sign-in form, credential check, account identity, retr
 - **Template**: a string with `{name}` placeholders. A name that is missing is an error that names the entry and the
   key. There are no fallbacks, conditions or functions. Each place that takes a template states its names:
   - `auth.send`: every plain field of the entry by its name, the entry's only secret field by its name, and `{token}`:
-    the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one.
+    the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one. A plain
+    value that is blank fills no template: it is missing, and nothing is sent.
   - `identify` and `save` values: the lookup described under `identify`.
   - `webhook.signed`: `{body}`, `{timestamp}`, `{method}`, `{url}`.
   - an operation's `path`: its declared `path` parameters.
@@ -128,7 +129,8 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 | Field | What it declares | Default |
 |---|---|---|
-| `id`, `name`, `docs`, `categories` | Identity and metadata. | — |
+| `id`, `name`, `categories` | Identity and metadata. | — |
+| `docs` | The provider's own page that states what the entry declares, https. Every library entry has one. | — |
 | `fields` | What the user enters to connect: `{ name, title, secret?, default?, help? }`. A connect screen is drawn from these. | none |
 | `auth` | A list of sign-in alternatives (below). | — |
 | `scopes` | `{ default, requireGranted? }`. `requireGranted` refuses a grant that lacks a requested scope. | none |
@@ -143,11 +145,10 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 #### Arriving later
 
-Some pieces of this design are not in the code until a provider or a later step needs them: `docs` and `categories`,
-`fields[].default` and `help`, `Send.value`, `oauth2.send`, `Call.base` and `Operation.base`, placeholders in
-`identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds
-`offset`, `page` and `linkHeader`, `Size`, and `Where.variables`. `paging` and `operations` arrive with the walker and
-the client.
+Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
+`Send.value`, `oauth2.send`, `Call.base` and `Operation.base`, placeholders in `identify`'s request path, the `s` and
+`epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
+and `Where.variables`. `paging` and `operations` arrive with the walker and the client.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -165,12 +166,16 @@ type Auth =
       scopeSeparator?: ','; authorizeParams?: Record<string, string>; tokenTypes?: readonly string[];
       failed?: When; reusesGrant?: true; send?: Send };
 
-type Send = { header: string; value?: Template } | { basic: readonly [Template, Template] };
+type Send = { header: string; value?: Template } | { basic: readonly [Template, Template] }
+  | { query: Record<string, Template> };
 ```
 
 - `send` says how the credential travels. With no `send` it is `{ header: 'authorization', value: 'Bearer {token}' }`.
   A `send` with a header and no `value` sends the bare `{token}`.
 - `key` covers API keys, bearer tokens and basic auth: `{ basic: ['{apiId}', '{apiToken}'] }`.
+- `query` sets each parameter, filled, on the URL of every request and every redirect hop, after the caller's query, so
+  it replaces a value of the same name. It adds no header, and `beforeRequest` sees the URL without it. A query send
+  names at least one parameter.
 - `oauth2` states only what differs: PKCE on, the client secret in the body, scopes joined by a space. `failed` marks
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
@@ -404,18 +409,22 @@ removed in the step that replaces it; nothing is kept for 0.12 callers.
 11. Declared operations and the inferred client; `./http` becomes internal.
 12. Release 0.13.0 with a migration list.
 
-**Stage B: expansion.** Each item arrives with a first provider that needs it, an entry and a recording or a derived
-fake as proof. Order follows how many providers need each:
+**Stage B: expansion.** Four pull requests. Each item arrives with a first provider that needs it, an entry citing
+its docs, and engine tests as proof:
 
-1. Keys in the query string, field choices (region, sandbox), templated base URLs with a host pattern, and the guarded
-   `fetch` that refuses private addresses.
-2. The remaining OAuth 2 deviations as flags: JSON token bodies, a separate refresh URL, extra token parameters, token
-   paths, a default expiry.
-3. One declared token request for client credentials and session logins.
-4. More webhook schemes (timestamped `t=,v1=` headers, SHA-1, Ed25519, shared tokens, Standard Webhooks) and challenge
-   handshakes.
-5. Retry of 5xx and network failures on reads, with jitter.
-6. A fake derived from an entry, a scaffolder (`pnpm new <id>`), and a five-step guide to adding a provider.
+1. **Where a call can go.** Keys in the query (Trello); field choices and defaults, and a base filled from a value with
+   a host pattern (Intercom); a guarded `fetch` that refuses private addresses, for a host the person types (GitLab);
+   retry of 5xx and network failures on reads, with jitter (Microsoft, Google).
+2. **How a token is obtained.** JSON token bodies, a second base for a declared call and a base from saved values
+   (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session sign-ins
+   (Zoom, Metabase); a templated token URL (PayPal).
+3. **More webhook schemes.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 (Discord), shared tokens
+   (Google), Standard Webhooks (GitLab), and a challenge handshake (Slack, Discord).
+4. **The kit.** A fake derived from any entry, the recorder for an entry with no module, a scaffolder (`pnpm new <id>`)
+   and a five-step guide to adding a provider.
+
+Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
+code flow; templated OAuth authorize and token URLs (Shopify); placeholders in `bases`; retry of writes; second challenge shapes; webhook schemes that are code (Twilio, HubSpot v3, PayPal, SendGrid).
 
 OAuth 1, JWT and service-account sign-in, and multipart bodies wait for the first provider that needs them.
 
