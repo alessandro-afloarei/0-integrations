@@ -428,6 +428,12 @@ test("catalogue.json's tier: a real recording makes its own entry recorded, no o
   expect([tierOf('acme', real), tierOf('acme-two', real), tierOf('acm', real)]).toEqual(['recorded', 'declared', 'declared']);
 });
 
+test("Discord's User-Agent names the package's own version, which Discord asks of every client", () => {
+  const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+  expect(entries.find(([id]) => id === 'discord')?.[1].http.headers?.['user-agent'])
+    .toBe(`DiscordBot (https://www.npmjs.com/package/0-integrations, ${version})`);
+});
+
 test('every recording sits beside an entry', () => {
   const ids = entries.map(([id]) => id);
   expect(recordings.map(({ file }) => file).filter(file => !besideAnEntry(file, ids))).toEqual([]);
