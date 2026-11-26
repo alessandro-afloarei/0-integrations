@@ -408,7 +408,7 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
    beside it (an app's own entry with both compares `prefix` and the digest inside the piece), and a `part` name holds
    no `,`, `=` or whitespace.
-3. `timestamp: { part }` reads the timestamp from the same header's piece of that name; `{timestamp}` in `signed` is
+3. `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in `signed` is
    that value. `timestamp.part` needs `part`, and `{timestamp}` is in `signed` exactly when there is a `timestamp`: a
    tolerance on a timestamp that is not signed would let a replay pass with a fresh one.
 4. `ed25519` (Discord): the secret is the provider's public key as 64 hex characters; the header holds a
@@ -424,7 +424,7 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
    string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
 
-In the code today: `hmac` with `hash` and `part` (Stripe, Intercom, Breakcold, Fireflies, Slack), `ed25519` and
+In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom) and `part` (Stripe), `ed25519` and
 `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge` (Slack, Discord). A secret that keys
 nothing (empty, or a `standard` secret whose base64 decodes to nothing) is `false`. The table test also refuses a
 `challenge.when` with a `status`, `header` or `detail` or without a `path`, and an `echo` holding a `.`.
