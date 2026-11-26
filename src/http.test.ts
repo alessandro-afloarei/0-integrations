@@ -938,6 +938,15 @@ test("a typed host that is a name, or a public address, goes to the app's own fe
   }
 });
 
+test("an own base is compared with the filled base's origin alone: a path value it discards is not needed", async () => {
+  const tenanted = defineProvider({ id: 'ten', name: 'Ten', fields: [{ name: 'host', title: 'Host' }, { name: 'apiKey', title: 'Key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://{host}/tenants/{tenantId}', host: '*' } });
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await createClient(tenanted, { token: () => Promise.resolve('t'), values: { host: 'api.example.test' }, fetch: fake.fetch,
+    baseUrl: 'https://api.example.test/v2' }).json('/a');
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.example.test/v2/a']);
+});
+
 test("an app's own base for a typed-host entry on another origin is refused, an address included, nothing sent", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
   await expect(createClient(gitlab, { token: () => Promise.resolve('t'), values: { host: 'gitlab.example.com' }, fetch: fake.fetch,

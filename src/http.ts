@@ -185,8 +185,9 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
     // An app's own base passes the same check as the entry's; on a typed host it may move the path, never the origin.
     const origin = sendable(entry, url).origin;
-    if (input.baseUrl !== undefined && placeholders(hostPart(entry.http.baseUrl) ?? '').length > 0
-      && origin !== new URL(filledBase(entry, input.values ?? {})).origin) throw new TypeError(`base_host_refused: ${entry.id}`);
+    const authority = hostPart(entry.http.baseUrl) ?? ''; // well formed: `checkHosts` ran
+    if (input.baseUrl !== undefined && placeholders(authority).length > 0
+      && origin !== new URL(filledBase(entry, input.values ?? {}, authority)).origin) throw new TypeError(`base_host_refused: ${entry.id}`);
     return (base = { url, origin });
   };
   const [auth] = entry.auth;
