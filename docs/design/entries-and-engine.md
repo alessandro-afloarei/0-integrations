@@ -413,8 +413,8 @@ The engine owns the stop rules, and entries hold no stop expressions:
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.
-- One rule for a next link, from either: one that starts with a single `/` (Shortcut's search answers
-  `/api/v3/search/stories?…`) is read on the base's origin; a full URL is read as it is. Either must then stay on the
+- One rule for a next link, from either: one that starts with a single `/` (Shortcut's search answers "the URL path
+  and query string for the next page") is read on the base's origin; a full URL is read as it is. Either must then stay on the
   base's origin and under the base's path and `pathPrefix` (a whole directory counted from the base URL's path), read
   as it resolves; else it is `invalid_response` (`next_link_foreign`) before anything is sent to it. `//host/…`,
   `/\host/…`, another origin, `/../x` and a percent-encoded dot segment are refused. A link that comes back is
