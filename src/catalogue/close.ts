@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Close: OAuth 2 (an app is private to its own organization until Close reviews it and makes it public,
- * https://developer.close.com/integrations/publish; every app is granted all.full_access offline_access,
- * https://developer.close.com/integrations/create-an-oauth-app), then an API key. Companies are leads, deals are
- * opportunities. Identify: https://developer.close.com/api/resources/users/get-me */
+/** Close: OAuth 2, private to the app's own organization until Close reviews it and makes it public
+ * (https://developer.close.com/integrations/publish), then an API key with an access level
+ * (https://help.close.com/docs/api-keys-oauth). Companies are leads, deals are opportunities. Identify:
+ * https://developer.close.com/api/resources/users/get-me */
 const email = { email: 'string', 'type?': 'string' } as const;
 const contactKeys = { 'name?': 'string', 'title?': 'string', 'lead_id?': 'string', 'emails?': [email] } as const;
 const contact = { id: 'string', display_name: 'string', ...contactKeys, date_created: 'string', date_updated: 'string' } as const;
@@ -16,10 +16,10 @@ export const close = defineProvider({
   id: 'close', name: 'Close', docs: 'https://developer.close.com/api/overview/oauth-authentication',
   categories: ['crm'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'For your own Close organization: Settings, then Developer, then API Keys. An app for other Close customers connects with the OAuth 2 sign-in.' }],
+    help: 'For your own Close organization: Settings, then Developer, then API Keys, with the access level "Read, write, and delete". An app for other Close customers connects with the OAuth 2 sign-in.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.close.com/oauth2/authorize/', tokenUrl: 'https://api.close.com/oauth2/token/',
     pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key', send: { basic: ['{apiKey}', ''] } }],
-  scopes: { default: ['all.full_access', 'offline_access'] },
+  scopes: { default: ['all.full_access'] },
   revoke: { url: 'https://api.close.com/oauth2/revoke/', token: ['refresh'] },
   http: { baseUrl: 'https://api.close.com/api/v1', retry: {} },
   identify: { request: { path: '/me/' }, id: 'id', name: 'email' },
@@ -40,7 +40,7 @@ export const close = defineProvider({
     'contacts.search': { docs: `${ref}/advanced-filtering/search`, method: 'POST', path: '/data/search/', kind: 'read',
       paging: 'cursor', records: 'data',
       params: { query: { in: 'body', type: 'unknown', required: true,
-        description: 'An `and` query holding { "type": "object_type", "object_type": "contact" } and the filters.' },
+        description: 'An `and` query holding { "type": "object_type", "object_type": "contact" } and the filters. Cursors expire after 30 seconds.' },
       _fields: { in: 'body', type: 'unknown', description: 'Fields per object type, such as { "contact": ["id", "display_name", "emails"] }; else only `id`.' },
       _limit: { in: 'body', type: 'integer', description: 'Results per page: 10 by default, at most 200.' } },
       result: { data: [{ id: 'string', 'display_name?': 'string', ...contactKeys, 'date_created?': 'string', 'date_updated?': 'string' }],
