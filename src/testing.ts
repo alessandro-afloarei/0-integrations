@@ -181,7 +181,8 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
         throw new Error('captured');
       } }).catch(reject); // after a capture, a no-op
     });
-    routes.push(route('POST', base(request.url), '', async (_call, sent) => {
+    // At the token URL exactly as `requestToken` sends it (its own `filledBase`), a trailing `/` included.
+    routes.push(route('POST', target(new URL(filledBase(entry, values, request.url))), '', async (_call, sent) => {
       const [basic, body] = await (expected ??= capture());
       // RFC 6749 §5.2: a client whose Basic or body differs is refused.
       if (sent.headers.get('authorization') !== basic || await sent.text() !== body) return Response.json({ error: 'invalid_client' }, { status: 400 });

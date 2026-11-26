@@ -213,6 +213,23 @@ describe('fakeProvider', () => {
     await expect(api.items.slashed()).rejects.toThrow('fakeFetch: no route for GET https://api.slashed.test/items/');
   });
 
+  test('a token URL that ends in `/` is answered as the engine sends it', async () => {
+    const slashed = defineProvider({ id: 'slashed', name: 'Slashed', docs: 'https://slashed.test/docs',
+      fields: [{ name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Client secret', secret: true }],
+      auth: [{ kind: 'token', request: { url: 'https://api.slashed.test/oauth/token/', body: { grant_type: 'client_credentials' },
+        basic: ['{clientId}', '{clientSecret}'] } }], http: { baseUrl: 'https://api.slashed.test' } });
+    const { fetch } = fakeFetch(fakeProvider(slashed, { key: 'k', values: { clientId: 'c' } }));
+    await expect(requestToken(slashed, { secret: { clientSecret: 'k' }, values: { clientId: 'c' }, fetch })).resolves.toMatchObject({ token: 'kit-token' });
+  });
+
+  test('an identify path that ends in `/` matches the request the engine sends for it, and only that', async () => {
+    const slashed = defineProvider({ id: 'slashed', name: 'Slashed', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.slashed.test' }, identify: { request: { path: '/me/' }, id: 'id' } });
+    const { fetch } = fakeFetch(fakeProvider(slashed, { key: 'k' }));
+    await expect(finishConnect(slashed, { secret: { apiKey: 'k' }, fetch })).resolves.toMatchObject({ account: { id: 'kit-account' } });
+    await expect(fetch('https://api.slashed.test/me', { headers: { authorization: 'Bearer k' } })).rejects.toThrow('no route for GET');
+  });
+
   test('an id template that reads several answer paths is filled at each of them; a list of paths at its first', async () => {
     const templated = defineProvider({ id: 'templated', name: 'Templated', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
       auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.templated.test' },
