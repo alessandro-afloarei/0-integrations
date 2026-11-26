@@ -11,6 +11,8 @@ Nothing here is released yet.
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.
 - New entries: Buildkite (code), ClickUp (tasks; OAuth 2 and a key), Linear (tasks; OAuth 2 and a key), Rollbar
   (monitoring), Shortcut (tasks). Every entry is `declared`.
+- An operation with a body parameter always sends a JSON object, `{}` when called with no body argument; it sent no body.
+  An operation with no body parameter still sends none.
 - New entries: 23 developer tools and productivity providers (airtable, asana, betterstack, bitbucket, chatwork,
   circleci, coda, gitbook, guru, honeybadger, incidentio, line, mattermost, monday, outline, pagerduty, render, sentry,
   slite, smartsheet, todoist, vercel, zulip), each with the operations of its category's template the engine can say;

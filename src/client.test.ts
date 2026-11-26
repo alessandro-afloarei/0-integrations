@@ -60,6 +60,14 @@ test('each parameter goes to its place; a path value is one encoded segment; an 
   expect(fake.calls[0]?.headers.authorization).toBe('Bearer k');
 });
 
+test('an operation with a body parameter sends a JSON object, {} when given none; one with no body parameter sends none', async () => {
+  const { fake, api } = setup(json({ ok: true }));
+  await api.issues.rate();
+  await api.issues.archive();
+  expect(wire(fake)).toEqual([['POST', `${BASE}/rate`, '{}'], ['PUT', `${BASE}/archive`, '']]);
+  expect(fake.calls[0]?.headers['content-type']).toBe('application/json');
+});
+
 test('a nullable argument with an enum sends null, and is held to its enum otherwise', async () => {
   const { fake, api } = setup(json({}));
   await api.issues.create({ title: 'Ship', status: null });
