@@ -74,7 +74,7 @@ export async function identifyAccount(entry: Entry, input: { fetch: typeof fetch
   for (const [key, value] of Object.entries(save)) {
     const found = await valueOf(value, read, entry.id, id);
     // Only a scalar is kept: an object or a list (`tokenAnswer.authed_user`) may hold a credential.
-    if (found !== undefined && typeof found !== 'object') saved[key] = found;
+    if (found !== undefined && typeof found !== 'object' && (typeof found !== 'number' || Number.isFinite(found))) saved[key] = found;
   }
   return { account: id === undefined ? null : { id, name: typeof name === 'string' && name.trim() !== '' ? name : id },
     values: { ...saved, ...values } };

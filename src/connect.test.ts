@@ -463,6 +463,11 @@ describe('connect review regressions', () => {
       authed_user: { access_token: 'USERTOK', id: 'U1' }, list: ['USERTOK'] }) }]);
     const result = await finishConnect(saving, { client, code: 'c', redirectUri: callback, fetch: fake.fetch, onRevokeFailed: vi.fn() });
     expect(result.values).toEqual({ uid: 'U1' });
+    // A JSON number beyond the finite range parses to Infinity: not kept.
+    const huge = fakeFetch([{ url: 'https://nested.test/token', respond: () => new Response('{"access_token":"a","token_type":"bearer","authed_user":{"id":1e999}}',
+      { headers: { 'content-type': 'application/json' } }) }]);
+    const infinite = await finishConnect(saving, { client, code: 'c', redirectUri: callback, fetch: huge.fetch, onRevokeFailed: vi.fn() });
+    expect(infinite.values).toEqual({});
   });
 
   it("compares the granted scopes split on the entry's separator; an answer naming none granted those asked", async () => {

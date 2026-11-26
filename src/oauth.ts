@@ -233,7 +233,7 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
   // RFC 6749 §5.2: a refused client or grant; its detail is the answer's `error` only when that is one of the RFC's codes.
   if (status === 400 || status === 401 || status === 403) {
     const code = readPath(data, 'error');
-    throw new ProviderHttpError('rejected', status, typeof code === 'string' && RFC6749_ERRORS.includes(code) ? code : null);
+    throw new ProviderHttpError('rejected', status, typeof code === 'string' && RFC6749_ERRORS.includes(code) ? safeDetail(code, secrets) : null);
   }
   const error = status >= 200 && status < 300 ? null : classify(entry, response);
   if (error) throw error;

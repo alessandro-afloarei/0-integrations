@@ -533,3 +533,8 @@ test.each([['invalid_client', 'invalid_client'], ['unsupported_grant_type', 'uns
   'a refused token request keeps only an RFC 6749 code as its detail: %s', async (error, detail) => {
     await expect(requestToken(zoom, zoomInput(endpoint({ error }, 400).fetch))).rejects.toMatchObject({ code: 'rejected', status: 400, detail });
   });
+
+test('an allowed code that echoes an entered secret is no detail', async () => {
+  await expect(requestToken(zoom, { secret: { clientSecret: 'invalid_client' }, values: zoomValues,
+    fetch: endpoint({ error: 'invalid_client' }, 401).fetch })).rejects.toMatchObject({ code: 'rejected', detail: null });
+});
