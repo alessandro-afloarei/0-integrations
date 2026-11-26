@@ -392,9 +392,10 @@ classified in this order, and the first step that decides wins:
 
 1. `errors.revoked`: the provider's code is on the list, so the grant is gone (`GrantRevoked`).
 2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code. The error carries only
-   `Retry-After`, else `retry.wait`: never a rate limit's.
+   `Retry-After`, else `retry.wait` (a header's on a 429 only): never a rate limit's.
 3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is
-   `Retry-After`, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`, else `retry.wait`.
+   `Retry-After`, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`, else `retry.wait` (a header's on a
+   429 only).
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -412,7 +413,11 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
   instants, whose wait is the instant minus now, at least 0. Anything else states no wait. One reader serves the retry
   and the error.
-- An answer's **stated wait** is a positive `Retry-After`, else, on a 429, `retry.wait`. A retry never comes before
+- An answer's **stated wait** is a positive `Retry-After`, else `retry.wait`: a wait declared as a header counts only
+  on a 429, since a reset header rides on every answer; one declared as a body path counts on any answer that holds
+  it, for the retry on every retried status. A declared wait that is not positive (an instant already past, a body
+  `0`) states no wait, as a past `Retry-After` date does. A rate-limit rule's own `wait` is read as it is. A retry
+  never comes before
   it: an answer whose stated wait is longer than `maxWaitMs` is not retried, whatever its status, and its error carries
   that wait. With `retry.onlyStated`, an answer that states no wait is not retried either, and neither is a network
   failure (Jira: "Only retry if the API is idempotent and the response includes a Retry-After header").

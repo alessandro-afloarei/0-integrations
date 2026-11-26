@@ -26,7 +26,7 @@ function httpDate(value: string, nowMs: number): number | null {
   return new Date(timestamp).toUTCString() === canonical ? timestamp : null;
 }
 
-/** The wait a response names: a valid Retry-After, else the body's wait. The retry caps it; errors carry it as is. */
+/** The wait a response names: a valid Retry-After, else the declared wait given; no retry comes before it. */
 export function retryAfterMs(headers: Headers, nowMs: number, bodyWaitMs?: number): number | null {
   const value = headers.get('retry-after');
   if (value !== null) {

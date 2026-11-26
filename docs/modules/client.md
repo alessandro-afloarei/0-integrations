@@ -61,8 +61,10 @@ or the redirect, and no error the library builds holds the URL. A call times out
 seconds by default) and is paced `minIntervalMs` apart. A read is sent again only when the entry declares
 `http.retry`, never with a caller's `signal`, and at most `retry.limit` times: after a 429 (waiting what it names, a
 `Retry-After` or the entry's declared `retry.wait`, else `retry.defaultWaitMs`), and after a 408, 500, 502, 503 or 504
-or a network failure (waiting a positive `Retry-After`, else a random share of one second doubled at each retry: at
-most 1, 2, 4 seconds and so on). No wait is longer than `retry.maxWaitMs`, and a retry never comes before the wait an
+or a network failure (waiting a positive `Retry-After` or a declared body wait, else a random share of one second
+doubled at each retry: at most 1, 2, 4 seconds and so on). A declared wait header counts only on a 429, since a reset
+header rides on every answer; a declared body wait counts on any answer that holds it; a wait already past, or 0,
+counts as none. No wait is longer than `retry.maxWaitMs`, and a retry never comes before the wait an
 answer names: one longer than the cap is not retried, and its error carries it as `retryAfterMs`. With
 `retry.onlyStated` (Jira), an answer that names no wait and a network failure are not retried. A call not marked
 idempotent, a timeout (it is `unavailable` at once), a 501, any other 4xx and an `address_blocked` refusal are never
