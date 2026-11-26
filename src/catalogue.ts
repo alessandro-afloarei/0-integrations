@@ -38,10 +38,13 @@ export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[
 export type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64';
   timestamp?: { header: string; toleranceSeconds?: number };
   deliveryId?: { header: string } | { body: readonly Path[] } };
+export type Where = { query: string } | { body: string };
+export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
 /** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. */
 export type Entry = { id: string; name: string; fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
   scopes?: { default: readonly string[]; requireGranted?: true }; identify?: Identify;
-  save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook };
+  save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook;
+  paging?: Readonly<Record<string, Paging>> };
 
 /** One provider, as plain data. The literal's type is kept, so a client's types are inferred from it. */
 export function defineProvider<const D extends Entry>(data: D): D { return data; }

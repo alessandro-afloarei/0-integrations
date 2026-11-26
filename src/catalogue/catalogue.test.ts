@@ -37,7 +37,7 @@ const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ b
 const value = z.union([z.string(), z.array(z.string())]);
 const request = z.strictObject({ method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional(), path: template.optional(),
   query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional() });
-/** The entry types as a schema. Tests only: no published declaration may name zod. Paging and operations join it when they join the types. */
+/** The entry types as a schema. Tests only: no published declaration may name zod. Operations join it when they join the types. */
 const entrySchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9-]*$/u), name: z.string().min(1),
   fields: z.array(z.strictObject({ name: z.string(), title: z.string(), secret: z.literal(true).optional() })).optional(),
@@ -70,6 +70,12 @@ const entrySchema = z.strictObject({
   webhook: z.strictObject({ kind: z.literal('hmac'), header: z.string(), signed: template.optional(), prefix: z.string().optional(),
     encoding: z.literal('base64').optional(), timestamp: z.strictObject({ header: z.string(), toleranceSeconds: z.number().int().positive().optional() }).optional(),
     deliveryId: z.union([z.strictObject({ header: z.string() }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional() }).optional(),
+  paging: z.record(z.string(), z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(),
+      send: z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]) }),
+    // A prefix is a whole directory (`/me/`), so `/meetings` is not under `/me`.
+    z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix: z.string().regex(/^\/(?:.*\/)?$/u).optional() }),
+  ])).optional(),
 });
 
 /** Every function anywhere in a value, by its path. */

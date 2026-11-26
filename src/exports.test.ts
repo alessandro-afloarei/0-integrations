@@ -2,7 +2,7 @@ import { globSync, readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 
 /** Source files that are no subpath. A new file must be exported or named here: the choice is never silent. */
-const INTERNAL = new Set(['http-response', 'retry-after', 'parse', 'shapes', 'rules', 'account',
+const INTERNAL = new Set(['http-response', 'retry-after', 'parse', 'shapes', 'rules', 'account', 'paging',
   'fireflies/transcript', 'mailbox/fake']);
 const target = (path: string) => ({ types: `./dist/${path}.d.ts`, default: `./dist/${path}.js` });
 

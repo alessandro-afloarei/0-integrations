@@ -6,6 +6,8 @@ Every line below breaks 0.12 unless it says otherwise.
 
 - New: `0-integrations/catalogue` (`defineProvider` and the entry types), one entry per provider at
   `0-integrations/catalogue/<id>`, and `0-integrations/catalogue.json`, all 17 providers as plain data.
+- New: an entry may declare `paging`, named `cursor` and `nextUrl` shapes; a `nextUrl` link is followed only on the base's
+  origin and under its `pathPrefix`, else it is `invalid_response` (`next_link_foreign`).
 - A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
   by the retry wait. The retry wait no longer accepts forms such as `2e3`, `+2`, `0x10` or `Infinity`: they fall back to
   the body's wait or the default.
