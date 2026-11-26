@@ -115,9 +115,8 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
   };
 
   /**
-   * A page of a Graph list. The next page is Graph's `@odata.nextLink`, which may name the resource in its own form
-   * (`/me/calendars('…')/calendarView`): it is followed only on Graph and under the member's own `/me`, read as the address
-   * resolves (dot segments, `%2e%2e` among them), so the token goes nowhere else, and kept as that path.
+   * A page of a Graph list. The next page is Graph's `@odata.nextLink`, followed only under the member's own `/me/` (the
+   * entry's `pathPrefix`), so the token goes nowhere else, and kept as that path.
    */
   async function list(path: string, query: Record<string, string>, cursor: string | undefined): Promise<{ value: unknown[]; cursor: string | null }> {
     if (cursor !== undefined && ownPath(microsoft.paging.nextLink, http.baseUrl, http.baseUrl + cursor) === null) throw new TypeError('cursor_invalid');

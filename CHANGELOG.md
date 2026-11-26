@@ -12,6 +12,8 @@ Every line below breaks 0.12 unless it says otherwise.
   (`import { hubspot } from '0-integrations/catalogue/hubspot'`).
 - The types of `0-integrations/providers` have their counterparts in `0-integrations/catalogue`: `ProviderDefinition`
   is `Entry`, `OAuth2Definition` is the `oauth2` member of `Auth`, `RetryPolicy` is `Retry`, `HmacScheme` is `Webhook`.
+- An app that wrote its own `ProviderDefinition` or `HmacScheme` writes an entry instead (`defineProvider`, its scheme
+  as `webhook`); `docs/modules/catalogue.md` describes the fields.
 - A definition's fields are read from the entry: `def.baseUrl` is `entry.http.baseUrl`, `def.oauth2.authUrl` is
   `entry.auth[0].authorizeUrl`, `def.oauth2.revokeUrl` is `entry.revoke.url`, `def.oauth2.revokedErrors` is
   `entry.errors.revoked`, and `GOOGLE_CALENDAR_BASE` is `google.http.bases.calendar`.

@@ -300,7 +300,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 - An operation id's first dot-separated segment is never `json`, `request` or `paginate` (compared for equality, so
   `requests.list` is fine): those are the client's own calls. Nor is an id `then`, which would make the client a
   thenable. No id has an empty segment or is a dotted prefix of another (`pages` beside `pages.markdown`). The
-  compiler and the table test refuse such an entry, and `client()` refuses an app's own with `operation_clash: <id>`.
+  compiler refuses a reserved first segment and `then`; the table test and `client()` refuse every one of these, and
+  `client()` refuses an app's own with `operation_clash: <id>`.
 - At run time each argument is checked by its declared type (and `enum`) before anything is sent; one that does not fit
   is a `TypeError` naming it (`param_missing: <name>`, `param_invalid: <name>`). An argument that is not declared, or is
   `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left

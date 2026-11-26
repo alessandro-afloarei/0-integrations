@@ -21,8 +21,8 @@ const me = await api.json('/users/me');
 - `fetch`: the global one by default. In production pass the app's own guarded `fetch`: the library does not refuse
   private addresses yet.
 - `values`: the connection's plain values, for a credential built from them (Aircall's `{apiId}`).
-- `baseUrl`, `headers` and `minIntervalMs` replace the entry's. A header of the same name replaces the entry's, and the
-  credential is set last.
+- `baseUrl` and `minIntervalMs` replace the entry's. `headers` are merged with the entry's, a header of the same name
+  winning, and the credential is set last.
 - `beforeRequest(url)` runs once per call before anything is sent (an app's metering). What it throws reaches the caller.
 
 An OAuth connection passes a function that reads the grant and refreshes it under a lock:

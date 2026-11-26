@@ -43,8 +43,8 @@ from the provider's documented examples, marked `synthetic: true`. That tests th
 Only a real capture (`synthetic: false`) makes it `recorded`. Every recording must sit beside an entry.
 
 Add a module, `src/<id>/<id>.ts`, only when the provider needs real code: answers with meaning, incremental reads,
-parsed webhooks, a sign-in the provider hosts. It builds on its entry (`createClient(entry, …)` inside the library, so its
-errors, retry and paging are the entry's) and ships with:
+parsed webhooks, a sign-in the provider hosts. It builds on its entry with `client(entry, …)`, so its errors, retry and
+paging are the entry's, and ships with:
 
 - a fake at `src/<id>/fake.ts`: routes that answer the calls the module makes, from data the test passes;
 - the provider kit or the lookup kit, run once on the recording and once on the fake, so the fake answers as the
