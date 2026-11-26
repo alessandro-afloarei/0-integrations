@@ -2,8 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Hunter: a search costs 1 credit, an enrichment 0.2, Discover none (https://hunter.io/api-documentation/v2#account);
  * a Domain Search page counts only when it finds results. The rate limit is a 403 `too_many_requests`, a 429 the
- * plan's usage limit (https://hunter.io/api-documentation/v2#errors). Free plans page neither Domain Search past 10
- * results nor Discover past its first page. Webhooks are unsigned. */
+ * plan's usage limit (https://hunter.io/api-documentation/v2#errors). On a Free plan a walk ends in a 400
+ * `pagination_error` after its first page. Webhooks are unsigned. */
 const api = 'https://hunter.io/api-documentation/v2';
 const email = { value: 'string', 'first_name?': 'string', 'last_name?': 'string', 'position?': 'string',
   'department?': 'string', 'linkedin?': 'string', 'confidence?': 'integer' } as const;
@@ -33,9 +33,10 @@ export const hunter = defineProvider({
         limit: { in: 'query', type: 'integer', description: 'Email addresses per page, 10 by default, at most 100.' } },
       result: { data: { 'domain?': 'string', 'organization?': 'string', emails: [email] }, 'meta?': { 'results?': 'integer' } } },
     'people.get': { docs: `${api}#email-enrichment`, path: '/people/find', kind: 'write', notFound: 'null',
-      params: { email: { in: 'query', type: 'string', required: true,
-        description: 'The person\'s email. Hunter takes an email or a LinkedIn handle; the handle wins.' },
-        linkedin_handle: { in: 'query', type: 'string' } },
+      params: { email: { in: 'query', type: 'string',
+        description: 'The person\'s email. Hunter needs at least one of email or linkedin_handle; the handle wins.' },
+        linkedin_handle: { in: 'query', type: 'string',
+          description: 'The person\'s LinkedIn handle. Hunter needs at least one of email or linkedin_handle.' } },
       result: { data: person } },
     'companies.search': { docs: `${api}#discover`, method: 'POST', path: '/discover', kind: 'read', paging: 'companies',
       records: 'data',
