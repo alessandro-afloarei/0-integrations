@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { defineProvider, signInWith, type Entry, type Retry } from './catalogue.js';
+import { defineProvider, type Entry, type Retry } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { discord } from './catalogue/discord.js';
@@ -560,7 +560,7 @@ test('a code that echoes the Basic header is no detail', async () => {
 test("a header send's value is filled: Discord's `Bot {token}`, an inline `Token token={token}`", async () => {
   const tokenHeader = defineProvider({ id: 'tokenheader', name: 'Token header', fields: [{ name: 'key', title: 'Key', secret: true }],
     auth: [{ kind: 'key', send: { header: 'authorization', value: 'Token token={token}' } }], http: { baseUrl: 'https://api.th.test' } });
-  for (const [entry, sent] of [[signInWith(discord, 'key'), 'Bot t'], [tokenHeader, 'Token token=t']] as const) {
+  for (const [entry, sent] of [[discord, 'Bot t'], [tokenHeader, 'Token token=t']] as const) {
     const fake = script(entry, ok);
     await fake.client.json('/me');
     expect(fake.calls[0]?.headers.authorization).toBe(sent);
@@ -606,7 +606,7 @@ test('a code that echoes any value a credential template took is no detail: a he
 });
 
 test("a code that echoes the filled header value or the token is no detail", async () => {
-  const echoing = { ...signInWith(discord, 'key'), errors: { detail: 'code' } };
+  const echoing = { ...discord, errors: { detail: 'code' } };
   for (const code of ['Bot t', 't']) {
     const fake = script(echoing, () => Response.json({ code }, { status: 400 }));
     await expect(fake.client.json('/me')).rejects.toMatchObject({ code: 'request_failed', detail: null });
