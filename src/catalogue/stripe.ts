@@ -9,7 +9,7 @@ export const stripe = defineProvider({
   fields: [{ name: 'secretKey', title: 'Secret key', secret: true,
     help: 'A restricted key (rk_…) with Read on Balance, which sign-in reads, and what your calls need: Stripe recommends it over a secret key (sk_…).' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.stripe.com/v1' },
+  http: { baseUrl: 'https://api.stripe.com/v1', retry: {} },
   errors: { detail: 'error.code' },
   identify: { request: { path: '/balance' } },
   webhook: { kind: 'hmac', header: 'stripe-signature', signed: '{timestamp}.{body}', part: 'v1', timestamp: { part: 't' },
