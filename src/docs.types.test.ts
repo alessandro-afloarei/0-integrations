@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, signInWith, type Webhook } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Values, type Webhook } from './catalogue.js';
 import { attio } from './catalogue/attio.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { stripe } from './catalogue/stripe.js';
@@ -203,6 +203,13 @@ async function connectToken(password: string, host: string, username: string) {
   return [handler, account];
 }
 
+// docs/modules/oauth.md: a wrapper generic over the entry, as one over `startConnect`.
+function oauthWrapper(client: OAuthClient, refreshToken: string, clientId: string, state: string) {
+  const renew = (entry: Entry, values: Values) => refreshGrant(entry, client, refreshToken, { values });
+  const start = (entry: Entry, values: Values) => startConnect(entry, { clientId, redirectUri: 'https://app.test/cb', state, values });
+  return [renew, start];
+}
+
 // docs/modules/oauth.md › A `token` entry.
 function oauthTokenSource(secret: { clientSecret: string }, values: { accountId: string; clientId: string }) {
   // One source per connection, built outside any request handler and kept for the process's life.
@@ -292,7 +299,7 @@ async function testingDerivedOAuth() {
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectTwoSignIns, connectOwnServer, connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
+    connectTwoSignIns, connectOwnServer, connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, oauthWrapper, connectToken, webhooksReceive,
     webhooksReceiveCalls, webhooksDeclared, testingDerivedFake, testingDerivedOperation,
     testingDerivedToken, testingDerivedOAuth].every(example => typeof example === 'function')).toBe(true);
 });
