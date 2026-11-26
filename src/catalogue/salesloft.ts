@@ -1,7 +1,7 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Salesloft, pages under https://developers.salesloft.com/docs/: other teams use an OAuth 2 app (its scopes picked
- * on the app) once Salesloft allowlists it: platform/marketplace/submission-checklist/. The key, identify, the `data`
+/** Salesloft, pages under https://developers.salesloft.com/docs/: other teams use an OAuth 2 app once Salesloft
+ * allowlists it: platform/marketplace/submission-checklist/. The key, identify (no scope), the `data`
  * envelope, paging, webhooks (hex HMAC-SHA1): platform/api-basics/api-key-authentication/, api/me-index/,
  * platform/api-basics/request-response-format/, …/filtering-paging-sorting/, platform/webhooks/delivery-headers/. */
 const person = { id: 'integer', 'display_name?': 'string', 'email_address?': 'string', 'account?': { 'id?': 'integer' },
@@ -20,7 +20,7 @@ export const salesloft = defineProvider({
     help: 'For your own Salesloft account: Salesloft makes API keys for customers, and an app for other people connects with the OAuth 2 sign-in. Give the key the people:read, people:write, cadences:read and cadences:write scopes.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://accounts.salesloft.com/oauth/authorize', tokenUrl: 'https://accounts.salesloft.com/oauth/token',
     json: true, pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
-  scopes: { default: [] },
+  scopes: { default: ['people:read', 'people:write', 'cadences:read', 'cadences:write'] },
   http: { baseUrl: 'https://api.salesloft.com' },
   identify: { request: { path: '/v2/me' }, id: 'data.id', name: ['data.name', 'data.email'] },
   webhook: { kind: 'hmac', header: 'x-salesloft-signature', hash: 'sha1' },
