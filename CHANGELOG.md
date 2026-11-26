@@ -4,6 +4,36 @@
 
 Nothing here is released yet.
 
+- The 28 entries written before the fact protocol are checked against their providers' pages.
+- Attio lists OAuth 2 first; its API key is `signInWith(attio, 'key')`.
+- GitHub lists OAuth 2 first; its personal access token is `signInWith(github, 'key')`.
+- GitLab lists OAuth 2 first, on the host the person types; its personal access token is `signInWith(gitlab, 'key')`.
+- HubSpot lists a key second, the static auth access token of an app installed in your own account:
+  `signInWith(hubspot, 'key')`.
+- Figma adds a personal access token second, sent in `X-Figma-Token`: `signInWith(figma, 'key')`.
+- Figma's connect identifies with `GET /v1/me` (`id`), no longer the token answer's `user_id_string`, which a key has
+  not; Figma does not state the two are equal, so an app that keyed Figma connections by account id should check one.
+  Its default scope is `current_user:read` alone: an app passes the scopes its own calls need.
+- Notion sends `Content-Type: application/json` on every request, beside `Notion-Version`, as its authorization guide
+  asks.
+- Discord's calls send `Content-Type: application/json` and `User-Agent: DiscordBot
+  (https://www.npmjs.com/package/0-integrations, 0.13.0)`, which Discord asks of every client; a release updates the
+  version.
+- Intercom's calls send `Accept: application/json`, without which Intercom may answer 404 or 406.
+- PayPal sends `Accept: application/json` on every call and on its token request.
+- Slack identifies an org-level install by its organization (`enterprise.id`); it failed with `missing_fields`.
+- Breakcold waits before retrying a 429 that names no wait (one second); it retried at once.
+- Aircall, Apollo, Attio, GitHub, Granola, HubSpot, Lusha and Notion no longer declare `minIntervalMs`: each limit
+  depends on the plan or is shared by the account, workspace or the person's other tokens (their modules still take
+  one). Fathom keeps its 1,000 ms: 60 calls a minute for each key, on every plan.
+- Figma, GitLab, Granola, Intercom, Jira, PayPal, Slack, Stripe and Trello retry a read once after a 429 (waiting its
+  `Retry-After`, else one second, at most 60 seconds), a 408, a 5xx or a network failure (`retry: {}`); a write, and
+  PayPal's token request, are never retried.
+- `FirefliesUser`'s `email` and `name` are `string | null` (they were `string`): a Fireflies user without one no longer
+  fails `user()` with `invalid_response`.
+- For contributors: a key sign-in may name a `tokenAnswer.*` path in identify's `id` or `name` list before a path of
+  identify's answer when the entry also has an OAuth 2 or token sign-in (HubSpot's `['tokenAnswer.hub_id',
+  'portalId']`); one alone, last, or on a key-only entry is still refused.
 - New: an entry may list several sign-ins (OAuth 2, then a key); `signInWith(entry, kind)` from
   `0-integrations/catalogue` narrows it to one, and every call takes the narrowed entry. First used by Linear and
   ClickUp.
