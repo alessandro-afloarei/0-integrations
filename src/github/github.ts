@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { signInWith } from '../catalogue.js';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { responseJson } from '../http-response.js';
@@ -62,7 +63,7 @@ function nextPage(link: string | null): string | null {
 
 /** `pageSize` is for tests: GitHub answers at most 100 a page. */
 export function githubClient(input: { token: string; fetch: typeof fetch; minIntervalMs?: number; pageSize?: number }): GitHubClient {
-  const http = createClient(github, { token: () => Promise.resolve(input.token), fetch: input.fetch,
+  const http = createClient(signInWith(github, 'key'), { token: () => Promise.resolve(input.token), fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   /** GitHub pages by number and names the next one in its Link header, which `request` reads. */
   async function paged<T>(path: string, schema: z.ZodType<T>, cursor: string | undefined,

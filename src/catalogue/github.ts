@@ -8,10 +8,16 @@ export const github = defineProvider({
   id: 'github', name: 'GitHub', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api',
   categories: ['code'],
-  auth: [{ kind: 'key' }],
+  // An OAuth app, which anyone registers under their account; with no scope its token reads public data and `/user`.
+  // Then a personal access token.
+  // https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://github.com/login/oauth/authorize',
+    tokenUrl: 'https://github.com/login/oauth/access_token', authorizeParams: { response_type: 'code' } },
+  { kind: 'key' }],
+  scopes: { default: [] },
   // The latest API version: it drops `assignee` and `merge_commit_sha`, which the client never reads. GitHub refuses a
   // request without a User-Agent.
-  http: { baseUrl: 'https://api.github.com', minIntervalMs: 250,
+  http: { baseUrl: 'https://api.github.com',
     headers: { accept: 'application/vnd.github+json', 'x-github-api-version': '2026-03-10', 'user-agent': '0-integrations' },
     rateLimit: { defaultWaitMs: 60_000, when: [
       { status: 403, header: 'x-ratelimit-remaining', equals: '0', resetAt: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } },
