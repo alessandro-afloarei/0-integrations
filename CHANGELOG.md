@@ -41,7 +41,8 @@ Nothing here is released yet.
 - New: `page` paging (a page number in the query or the body, 1-based or `zeroBased`), first used by Rollbar and ClickUp.
   An empty list ends it; a list that is missing or no list is `invalid_response`, as in a typed paged operation.
 - New: `offset` paging (a record offset in the query or the body, the next one counted from the records received),
-  first used by Outline and PagerDuty, whose lists now page to their end (PagerDuty's up to its 10,000-record cap).
+  first used by Outline and PagerDuty, whose lists now page to their end. PagerDuty's page up to its 10,000-record
+  cap; past it PagerDuty answers 400 and the walk fails there, so narrow a larger result set with a filter.
 - `client()` refuses an operation on a `page` or `offset` shape whose `records` is not the shape's `list`
   (`records_unpaged`), as the table test already did for this library's entries.
 - `client()` refuses an operation with a parameter in the place its paging shape's `send` writes (`param_paged`), as the
