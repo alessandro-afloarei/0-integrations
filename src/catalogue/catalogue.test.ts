@@ -150,7 +150,7 @@ function stringsIn(value: unknown): string[] {
   return Object.entries(value).flatMap(([key, item]) => [key, ...stringsIn(item)]);
 }
 /** `pnpm new` writes a skeleton whose every unknown is `TODO`: it fails here until each is filled. */
-const TODO_RULE = "replace every TODO from pnpm new with the provider's documented value";
+const TODO_RULE = "no TODO left from pnpm new: replace each with the provider's documented value";
 
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
