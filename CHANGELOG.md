@@ -4,6 +4,9 @@
 
 Nothing here is released yet.
 
+- An authorize URL carries no `scope` when the entry asks for none (Bitbucket, GitHub).
+- `authorizeUrl`, `exchangeCode`, `refreshGrant`, `revokeGrant` and `tokenSource` type `values` by the entry, as
+  `startConnect` and `finishConnect` do.
 - A retry never comes before the provider's stated wait: an answer whose `Retry-After` (or declared wait) is longer
   than the entry's cap is not retried and reports that wait.
 - New: `retry.onlyStated` retries only an answer that states its wait; `retry.wait` reads a wait from a header

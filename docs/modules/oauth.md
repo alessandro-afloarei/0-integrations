@@ -2,14 +2,19 @@
 
 `oauth` builds consent URLs with `authorizeUrl(entry, …)` and handles `exchangeCode`, `refreshGrant` and `revokeGrant`
 on `oauth4webapi`, each driven by a catalogue entry whose sign-in is OAuth 2. `pkcePair` supplies PKCE where the entry
-uses it. The app owns the state nonce. `exchangeCode` returns only the token-answer fields the entry reads
+uses it. The app owns the state nonce. The scopes asked are joined by the entry's `scopeSeparator` (a space by
+default); none asked sends no `scope` parameter. `exchangeCode` returns only the token-answer fields the entry reads
 (`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
 condition marks is refused with the entry's own code.
 
 Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` and
 checked as a base is: `authorizeUrl(entry, { …, values? })`, `exchangeCode(entry, client, { …, values? })`,
 `refreshGrant(entry, client, refreshToken, { values?, fetch? })` and `revokeGrant` take the connection's `values`, and a
-URL that names a value not given is `template_missing` before anything is sent. An entry whose OAuth 2 URLs, base or
+URL that names a value not given is `template_missing` before anything is sent. Each types `values` by the entry, as
+`startConnect` and `finishConnect` do: `authorizeUrl` and `exchangeCode` take the plain fields (nothing is saved before
+the exchange), `refreshGrant`, `revokeGrant` and `tokenSource` the connection's values, plain and saved. `values` is
+required when the entry declares a plain field, optional when it declares only `save` keys, and absent when neither; a
+key the entry does not declare is a compile error. An entry whose OAuth 2 URLs, base or
 `http.bases` mix a typed host with any other host is refused with `TypeError('host_split: <entry id>')` before
 anything is built or sent: on a typed host a credential goes only to that host. `exchangeCode`, `refreshGrant` and
 `revokeGrant` default `fetch` to `guardedFetch` for an entry whose host is typed, else the global one. The exchange, a
