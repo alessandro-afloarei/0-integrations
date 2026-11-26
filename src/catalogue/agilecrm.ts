@@ -35,7 +35,7 @@ export const agilecrm = defineProvider({
       params: { properties: { ...properties, required: true }, tags: { in: 'body', type: ['string'] } }, result: contact },
     'contacts.update': { docs: `${ref}#14-update-properties-of-a-contact-by-id-partial-update`, method: 'PUT',
       path: '/api/contacts/edit-properties',
-      params: { id: { in: 'body', type: 'string', required: true }, properties }, result: contact },
+      params: { id: { in: 'body', type: 'string', required: true }, properties: { ...properties, required: true } }, result: contact },
     'deals.list': { docs: `${ref}#31-listing-deals`, path: '/api/opportunity', params: paged,
       result: [{ id: 'integer', 'name?': 'string', 'milestone?': 'string', 'pipeline_id?': 'unknown', 'owner_id?': 'string',
         'close_date?': 'integer', 'created_time?': 'unknown', 'cursor?': 'string' }] },
