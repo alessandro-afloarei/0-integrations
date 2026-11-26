@@ -18,7 +18,6 @@ import { ProviderHttpError } from './errors.js';
 import { fakeGoogle } from './google/fake.js';
 import * as guard from './guard.js';
 import { tokenSource } from './oauth.js';
-import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
 import { fakeFetch, fakeProvider, type Route } from './testing.js';
 
@@ -339,7 +338,7 @@ describe('connect types', () => {
   const attioFetch = fakeFetch([{ url: 'https://api.attio.com/v2/self', respond: () => Response.json({ workspace_id: 'w1', workspace_name: 'Account' }) }]).fetch;
 
   it('finishes either kind through a widened entry, or a union an app picks by id, with no cast', async () => {
-    const pick = (id: string): typeof hubspot | typeof attio => (id === 'attio' ? attio : hubspot);
+    const pick = (id: string): typeof slack | typeof attio => (id === 'attio' ? attio : slack);
     const widened: Entry = slack;
     const http = fakeFetch(fakeSlack(data));
     expect((await finishConnect(widened, oauth(http.fetch, await authorize(http)))).account).toEqual({ id: 'T1', name: 'Acme' });
@@ -347,7 +346,7 @@ describe('connect types', () => {
     // Either input type-checks for both: the runtime refuses a mismatch (`oauth_options_required`, `connect_field_required`).
     for (const input of [oauth(http.fetch, 'code'), { secret: { apiKey: 'k' }, fetch: attioFetch }]) {
       expectTypeOf(input).toExtend<Parameters<typeof finishConnect<Entry>>[1]>();
-      expectTypeOf(input).toExtend<Parameters<typeof finishConnect<typeof hubspot | typeof attio>>[1]>();
+      expectTypeOf(input).toExtend<Parameters<typeof finishConnect<typeof slack | typeof attio>>[1]>();
     }
     const widenedStart = await startConnect(widened, start);
     expectTypeOf(widenedStart).toEqualTypeOf<ConnectStart>();
