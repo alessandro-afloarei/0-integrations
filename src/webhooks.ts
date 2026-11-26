@@ -21,18 +21,14 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   if (!received || received.length > MAX_HEADER_BYTES) return false;
   // Compared as digests of equal length, so the token's length leaks nothing.
   if (scheme.kind === 'token') return timingSafeEqual(sha256(received), sha256(secret));
-  const part = scheme.kind === 'hmac' ? scheme.part : undefined;
   // With `part`, the header is `name=value` pieces split on `,` (Standard Webhooks: `name,value` on spaces). A name holds
   // neither separator (the table's rule), so a piece is that name's exactly when it starts with the name and `assign`.
   const [between, assign] = standard ? [' ', ','] : [',', '='];
   const named = (name: string) => received.split(between).filter(piece => piece.startsWith(name + assign)).map(piece => piece.slice(name.length + 1));
   const stamp = scheme.timestamp;
   const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
-  if (stamp) {
-    if (!/^\d+$/.test(timestamp)) return false;
-    const seconds = Number(timestamp);
-    if (!Number.isSafeInteger(seconds) || Math.abs(Math.floor(Date.now() / 1000) - seconds) > (stamp.toleranceSeconds ?? 300)) return false;
-  }
+  // Plain seconds within the tolerance of now (so always a safe integer).
+  if (stamp && !(/^\d+$/.test(timestamp) && Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) <= (stamp.toleranceSeconds ?? 300))) return false;
   const id = standard ? request.headers.get('webhook-id') || null : '';
   if (id === null) return false;
   const substitutions: Record<string, string | Uint8Array> = {
@@ -55,7 +51,7 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   if (key.length === 0) return false;
   const hmac = createHmac(scheme.hash ?? 'sha256', key).update(content);
   const expected = Buffer.from((scheme.prefix ?? '') + hmac.digest(scheme.encoding ?? 'hex'));
-  return (part === undefined ? [received] : named(part)).some(candidate => {
+  return (scheme.part === undefined ? [received] : named(scheme.part)).some(candidate => {
     const actual = Buffer.from(candidate);
     return actual.length === expected.length && timingSafeEqual(actual, expected);
   });
