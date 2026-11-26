@@ -59,7 +59,7 @@ one takes five steps:
 3. `pnpm providers`, which writes the entry's row into [`docs/providers.md`](docs/providers.md), then `pnpm check`.
    The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake derived from it
    (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry has an identify
-   request or a token request; an entry with two sign-ins runs the rules and the sign-in once for each. `pnpm check` also fails while the committed page differs from the entries.
+   request or a token request, and connects an OAuth 2 sign-in on it with a good code and a bad one; an entry with two sign-ins runs the rules and the sign-in once for each. `pnpm check` also fails while the committed page differs from the entries.
 4. Optional: record it from a test account (below), read the file, and commit it. An entry the recorder can record (one
    with no module that sends a request when it signs in) becomes `recorded`.
 5. Add one line to `CHANGELOG.md` under `Unreleased`, then open a pull request.

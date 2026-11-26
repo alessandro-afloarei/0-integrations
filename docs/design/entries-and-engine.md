@@ -622,8 +622,12 @@ other people must use OAuth, the key's `help` says the key is for the person's o
   authorization, the refresh token goes first.
 - `identify`: the documented request that answers who the credential is, `id` its id path, `name` its display name,
   then its email. With none, a credential check with no `id` on the cheapest read the credential can always make.
-- `http`: `headers` for every header the docs say each request needs, `content-type` included, and no other; `retry: {}` when the docs state a 429 or a
-  `Retry-After`, with `maxWaitMs` and `defaultWaitMs` only from stated numbers; `minIntervalMs` only from a stated
+- `http`: `headers` for every header the docs say each request needs, `content-type` included, and no other. `retry`
+  as the docs say: no limit status stated, or a limit that blocks a caller who keeps calling with no stated wait, no
+  `retry`; "retry only with `Retry-After`" or "wait until the reset", `onlyStated: true` (with `wait` when another header
+  or field states it); a wait in another header or a body field, `wait` with the page's unit; a window of at most 60
+  seconds with no wait promised on every 429, `defaultWaitMs` the window; a 429 and nothing more, `retry: {}`. `limit`
+  and `maxWaitMs` only from stated numbers. `minIntervalMs` only from a stated
   limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
   limit answer. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
   the credential that signs the calls: a limit that varies by plan, or that the credential shares with its
@@ -727,10 +731,12 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
    the end and a 429 on the same recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange
    and revoke, and webhook samples join the table's replay with the first entry that has them and no module.
 3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
-   `./testing`) answers identify, a `token` entry's token request and each operation the app answers, filling the base
-   and the credential with the engine's own functions, and comparing a token request with the one the engine sends for
-   the good key. Every sign-in of an entry that sends a request to sign in (an identify request, or a `token` sign-in's
-   token request) signs in on it with a good key and is `rejected` with a bad one, with no recording.
+   `./testing`) answers identify, a `token` entry's token request, an OAuth 2 entry's token, refresh and revoke URLs,
+   and each operation the app answers, filling the base and the credential with the engine's own functions, and
+   comparing a token request with the one the engine sends for the good key. Every sign-in of an entry that sends a
+   request to sign in (an identify request, or a `token` sign-in's token request) signs in on it with a good key and is
+   `rejected` with a bad one, and every OAuth 2 sign-in connects with a good code and is refused with a bad one
+   (`GrantRevoked`), with no recording.
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.
 

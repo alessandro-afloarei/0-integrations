@@ -121,8 +121,8 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   with `synthetic: false`, replacing any recording of that name, so the table test replays it with the kit's key and
   values and the entry's tier is `recorded`.
 
-**What is written.** Each exchange is its method, its URL, its request body, its status, its `retry-after` header (no
-other header), and from the answer only the paths the entry reads:
+**What is written.** Each exchange is its method, its URL, its request body, its status, its `retry-after` header and
+the wait headers the entry declares (no other header), and from the answer only the paths the entry reads:
 
 - identify's `id` and `name` paths and every `save` path (a `tokenAnswer.` path is read in the token answer), a token
   answer's token and `expires_in`, and a body wait's path;
@@ -138,7 +138,7 @@ answer that is not JSON is written as `null`. Nothing else in an answer is writt
 number.
 
 **What is swapped.** The key becomes `kit-good-key`, each plain value given its kit value, and every token at the
-entry's `token` path `kit-token`: inside the URL, the request body and `retry-after` (as written, JSON-escaped,
+entry's `token` path `kit-token`: inside the URL, the request body and the headers kept (as written, JSON-escaped,
 percent- or form-encoded), and in the answers where they are a whole value. In the answers, the account's id and name
 become `kit-account` and `kit-name` (read in identify's answer or the token answer), and each `save` value
 `kit-<name>` (its key's name). A blank string at an identity or `save` path is written as the provider answered it:
