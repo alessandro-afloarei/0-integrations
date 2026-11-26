@@ -11,11 +11,11 @@ A mechanism is built once three providers wait for it, with one of them as its f
 
 | Mechanism | Providers waiting |
 |---|---|
-| An OAuth 2 sign-in that reads a plain field: a host its authorize and token URLs are built from, or a value in the base (a host, an organization). A token is sent only to the host that issued it: on a person's own server, the registration, the sign-in and the calls all belong to that server. **Next to be built.** | Mattermost (the host in the URLs), Azure DevOps (the organization in the base), Outline (the host in the base; its documented OAuth URLs are the cloud's, so that sign-in belongs to the cloud's API host only), Sentry (the host in the base; its documented OAuth URLs are sentry.io's, so that sign-in belongs to sentry.io's API host only) |
+| An OAuth 2 sign-in on the cloud host alone, beside a key on a typed host: the provider writes its OAuth 2 URLs on its cloud host only, while its API is also served on a host the person types, so the OAuth 2 sign-in needs a base of its own (the cloud's) | Outline (OAuth 2 on `app.getoutline.com`, its API also `https://{domain}/api`, [openapi.json](https://www.getoutline.com/openapi.json)), Sentry (OAuth 2 on `sentry.io`, self-hosting named for internal-integration tokens only, [Authentication](https://docs.sentry.io/api/auth/)) |
+| An identify per sign-in: two sign-ins share `identify`, and the endpoint the OAuth 2 sign-in identifies with refuses the other credential | Azure DevOps (the Profiles API requires Microsoft Entra tokens, [Use personal access tokens](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops)) |
 | A GraphQL cursor sent in the query's variables (Linear's lists are declared one page each, `first` and `after` ordinary variables) | Linear, monday.com |
-| `offset` paging | Outline, PagerDuty |
 | A 429's wait in a header of seconds left (`RateLimit-User-Reset`, `RateLimit-Reset`) | Buildkite, PagerDuty |
-| A form-encoded body on a declared operation | Chatwork, Zulip |
+| A form-encoded body on a declared operation. **Next to be built.** | Chatwork, Zulip |
 | An error code that is a number (`errorCode`, `error.code`), which `errors.detail` cannot read | PagerDuty, Smartsheet |
 | A webhook secret decoded from base64 before it signs | Airtable, Chatwork |
 | A next cursor that is a number | Vercel |
@@ -69,9 +69,7 @@ entry's comment, not here.
 | Honeybadger | OAuth 2: no page says how an app registers a client | — |
 | Honeybadger | The Bearer token a person may set on the Webhook integration: `webhook` checks `Honeybadger-Token` | A `token` webhook whose header carries a prefix |
 | incident.io | The webhook: its page leaves the hash and the secret's form to Svix | — |
-| Outline | Paging: each list answers one page, `offset` and `limit` body parameters, `pagination` in the result | `offset` paging |
-| Outline | OAuth 2: its documented URLs are the cloud's (`app.getoutline.com`), so that sign-in belongs to the cloud's API host only, while the entry's base is the host the person types | An OAuth 2 sign-in that reads a plain field |
-| Mattermost | OAuth 2: each server is its own OAuth 2 provider | An OAuth 2 sign-in that reads a plain field |
+| Outline | OAuth 2: its documented authorize, token and refresh URLs are the cloud's (`app.getoutline.com`), while the entry's base is the host the person types | An OAuth 2 sign-in on the cloud host alone, beside a key on a typed host |
 | Mattermost | Paging and records of `posts.list`: one page, its posts a map keyed by id (`'unknown'`) beside `order`, `page` and `per_page` ordinary parameters, `has_next` in the result | A list whose records are a map keyed by id |
 | Zulip | `messages.create` | A form-encoded body |
 | Zulip | Paging: `messages.list` reads around an `anchor`, which an app moves to the last message's id, `num_before` and `num_after` ordinary parameters, `found_newest` and `found_oldest` in the result | A next cursor read from the last record of a page |
@@ -84,12 +82,16 @@ entry's comment, not here.
 | Vercel | OAuth 2 (Sign in with Vercel): its REST API permissions are in private beta | — |
 | Render | Paging: each list answers one page, `cursor` and `limit` declared, each element keeps its `cursor` | A next cursor read from the last record of a page |
 | Sentry | Paging: each list answers one page, `cursor` an ordinary query parameter (the next cursor is in the `Link` header only) | `Link` paging that ends on `results="false"` |
-| Sentry | OAuth 2: its documented authorize and token URLs are sentry.io's ([OAuth2](https://docs.sentry.io/api/auth/#oauth2)), so that sign-in belongs to sentry.io's API host only, while the entry's base is the host the person types; a client is made under Developer Settings, then OAuth Applications ([Setting up Sentry OAuth application](https://github.com/getsentry/sentry-oauth-example#1-setting-up-sentry-oauth-application)) | An OAuth 2 sign-in that reads a plain field |
+| Sentry | OAuth 2: its documented authorize and token URLs are sentry.io's ([Authentication](https://docs.sentry.io/api/auth/#oauth2)), and self-hosting is named only for internal-integration tokens, while the entry's base is the host the person types; a client is made under Developer Settings, then OAuth Applications ([Setting up Sentry OAuth application](https://github.com/getsentry/sentry-oauth-example#1-setting-up-sentry-oauth-application)) | An OAuth 2 sign-in on the cloud host alone, beside a key on a typed host |
 | Sentry | OAuth 2 for a public integration (Sentry's integration platform) | An OAuth 2 token URL built from a value the redirect returns |
-| PagerDuty | Paging: each list answers one page, `limit` and `offset` declared, `more` in the result | `offset` paging |
+| PagerDuty | Records past the 10,000th: "the sum of the `offset` and `limit` parameters cannot exceed 10000, or the REST API will respond with status 400", so a longer walk ends on that 400 ([Pagination](https://docs.pagerduty.com/developer/pagination)) | — |
 | PagerDuty | `incidents.create` and `incidents.update`: both need the `From` header | An operation parameter sent as a header |
 | PagerDuty | `errors.detail`: the code, `error.code`, is a number | An error code that is a number |
 | PagerDuty | A 429's wait: it is in `ratelimit-reset`, which the retry does not read | A 429's wait in a header of seconds left |
+| Azure DevOps | The personal access token: it cannot call the Profiles API the OAuth 2 sign-in identifies with, and both sign-ins share `identify`; Microsoft also says not to use PATs as long-term credentials for production applications ([Use personal access tokens](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops)) | An identify per sign-in |
+| Azure DevOps | Microsoft account (MSA) users: Microsoft Entra apps don't natively support them for the Azure DevOps resource ([Entra OAuth apps](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth?view=azure-devops)) | — |
+| Azure DevOps | Guests signing in from another tenant: Microsoft's page says a guest scenario needs the tenant's identifier in the path, and the entry's tenant is the fixed `organizations`; a plain `tenant` field (default `organizations`) would cover it and keep every host fixed, left out until an app needs it ([Authorization code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow)) | — |
+| Azure DevOps | Paging of `projects.list`: one page, `$top` and `$skip` ordinary parameters; no page says what `$skip` counts or where the next `continuationToken` comes from ([Projects - List](https://learn.microsoft.com/en-us/rest/api/azure/devops/core/projects/list?view=azure-devops-rest-7.1)) | — |
 
 ## Not declared
 
@@ -101,4 +103,3 @@ cannot be read without signing in, or does not load, is listed here too, with th
 | Confluence | Atlassian's rules forbid apps that collect API tokens, so a key alone would steer an app wrong, and its OAuth 2 (3LO) uses another base | [Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/) |
 | Wrike | Its OAuth 2 base is the host the token answer names, and its permanent token is not meant for multi-user applications | [OAuth 2.0 authorization](https://developers.wrike.com/docs/oauth-20-authorization/), [FAQ](https://developers.wrike.com/docs/faq/) |
 | Netlify | Integrations other people use must use OAuth 2, and the documentation gives only the implicit grant, with no token URL for the code flow | [Get started with the API](https://docs.netlify.com/api-and-cli-guides/api-guides/get-started-with-api/) |
-| Azure DevOps | A personal access token is not for production applications. Its Microsoft Entra OAuth 2 signs in through the Microsoft identity platform, apart from the REST calls, whose base holds the organization (`dev.azure.com/{organization}`): it waits for an OAuth 2 sign-in that reads a plain field | [Use personal access tokens](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops), [Entra OAuth apps](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth?view=azure-devops), [REST API](https://learn.microsoft.com/en-us/rest/api/azure/devops/?view=azure-devops-rest-7.1) |

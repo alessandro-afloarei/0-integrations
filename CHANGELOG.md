@@ -8,11 +8,14 @@ Nothing here is released yet.
   `0-integrations/catalogue` narrows it to one, and every call takes the narrowed entry. First used by Linear and
   ClickUp.
 - New: an OAuth 2 sign-in may read the entry's plain fields: `startConnect` takes and returns `values`, and
-  `finishConnect`, `refreshGrant` and `revokeGrant` take them; every OAuth 2 URL is filled and checked as a base is,
-  and a token never goes to a host other than the one that issued it. First used by Mattermost, which now lists OAuth 2
-  first.
+  `authorizeUrl`, `exchangeCode`, `finishConnect`, `refreshGrant` and `revokeGrant` take them; `Connected['values']`
+  holds the plain fields for every sign-in kind. Every OAuth 2 URL is filled and checked as a base is, and a token
+  never goes to a host other than the one that issued it: an entry whose OAuth 2 URLs, base and `http.bases` do not
+  share one host when any of them is typed is refused with `oauth_host_split` before anything is built or sent. First
+  used by Mattermost, which now lists OAuth 2 first; its personal access token is `signInWith(mattermost, 'key')`.
 - `exchangeCode`, `refreshGrant` and `revokeGrant` take `fetch` as an option, by default `guardedFetch` for an entry
   whose host is typed.
+- New entry: Azure DevOps (code; Microsoft Entra OAuth 2). Every entry is `declared`.
 - An OAuth 2 token answer that states no `token_type` is read as Bearer; it was `invalid_response`. One that states
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.
 - New entries: Buildkite (code), ClickUp (tasks; OAuth 2 and a key), Linear (tasks; OAuth 2 and a key), Rollbar
@@ -42,8 +45,8 @@ Nothing here is released yet.
   `Basic :<token>`.
 - Every entry has a `docs` link.
 - New: a field may offer `choices` and a `default`, with `help`; a base may hold a host part from a plain value, checked
-  against `http.host`. First used by Intercom's region. Only `finishConnect` applies a default: a client needs the
-  connection's `values`.
+  against `http.host`. First used by Intercom's region. Only `startConnect` and `finishConnect` apply a default: a
+  client needs the connection's `values`.
 - New: `guardedFetch` (from `0-integrations/client`) refuses private, loopback, link-local, unique-local and metadata
   addresses; an entry whose host is typed (`http.host: '*'`, first GitLab) uses it unless the app passes its own `fetch`.
 - `finishConnect`'s `fetch` is optional.

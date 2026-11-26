@@ -92,9 +92,11 @@ entry:
   one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
-  names a declared shape and no `notFound`, a records path leads to a list (on a `page` shape, the shape's `list`), and
-  no id is a client call or a dotted prefix of another;
-- has an `oauth2` sign-in that reads no plain field (its connect asks for none).
+  names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's
+  `list`), and no id is a client call or a dotted prefix of another;
+- has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields,
+  and whose URLs, base and `http.bases` share one host when any of them is typed: a token goes only to the host that
+  issued it.
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
 the test signs in once with a good key and once with a bad one (a `token` entry's token request, then identify's when a
