@@ -127,8 +127,8 @@ An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pag
 - The answer is read by the operation's `result`: undeclared keys are dropped, and an answer that does not fit is
   `invalid_response`. With no `result` the answer is `unknown`, and a 204 answers `null`; any other answer without JSON
   is `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
-- A paged operation is read with `for await`. It yields the records at `records`, page by page; a record that does not
-  fit is skipped, and the `onSkipped(ids)` option hears once from each page that skipped any.
+- A paged operation is read with `for await`. It yields the records at `records`, or, with no `records`, the elements of
+  a list `result` (an answer that is a list), page by page; a record that does not fit is skipped, and the `onSkipped(ids)` option hears once from each page that skipped any.
 
 The client's own calls take some names. An operation id whose first dot-separated segment equals `json`, `request` or
 `paginate` (`requests.list` is fine), an id `then`, an id with an empty segment, and an id that is a dotted prefix of

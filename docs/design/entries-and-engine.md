@@ -483,7 +483,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   the base.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
-  any, with their `id`s (or `null`). Without `records` it yields each page's whole answer.
+  any, with their `id`s (or `null`). Without `records`, a list `result` is the records themselves (a list at the answer's
+  top level, Buildkite's) and is read the same way; any other `result` yields each page's whole answer.
 - There are no sync concepts here: no parent and child streams, no incremental cursors, no transforms. An app calls an
   operation with the parent's id.
 

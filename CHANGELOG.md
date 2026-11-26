@@ -4,6 +4,8 @@
 
 Nothing here is released yet.
 
+- A paged operation whose `result` is a list and that names no `records` yields the list's elements (an answer that is
+  a list), a bad one skipped and reported; it yielded each page whole. First used by Buildkite.
 - New: `linkHeader` paging, first used by Buildkite; a next link may be a path on the provider's origin, first used by
   Confluence.
 - New: `page` paging (a page number in the query or the body, 1-based or `zeroBased`), first used by Rollbar and ClickUp.

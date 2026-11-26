@@ -7,7 +7,8 @@ import { fakeFetch, sequence } from './testing.js';
 const BASE = 'https://api.acme.test/v1';
 const acme = defineProvider({
   id: 'acme', name: 'Acme Tasks', auth: [{ kind: 'key' }], http: { baseUrl: BASE, retry: { defaultWaitMs: 0 } },
-  paging: { cursor: { kind: 'cursor', next: 'meta.next', send: { query: 'cursor' } }, link: { kind: 'nextUrl', next: 'next' } },
+  paging: { cursor: { kind: 'cursor', next: 'meta.next', send: { query: 'cursor' } }, link: { kind: 'nextUrl', next: 'next' },
+    header: { kind: 'linkHeader' } },
   operations: {
     'issues.list': { path: '/teams/{teamId}/issues', paging: 'cursor', records: 'data.items',
       params: { teamId: { in: 'path', type: 'string', required: true }, state: { in: 'query', type: 'string', enum: ['open', 'closed'] },
@@ -25,6 +26,7 @@ const acme = defineProvider({
     'issues.rate': { method: 'POST', path: '/rate', params: { score: { in: 'body', type: 'number' } } },
     'issues.raw': { path: '/raw', result: { raw: 'unknown' } },
     feed: { path: '/feed', paging: 'link', result: { 'next?': 'string', n: 'integer' } },
+    'builds.list': { path: '/builds', paging: 'header', result: [{ id: 'string', 'number?': 'integer' }] },
     'requests.list': { path: '/requests' },
     viewer: { kind: 'read', graphql: 'query Viewer($first: Int) { viewer { id } }', params: { first: { in: 'variables', type: 'integer' } } },
   },
@@ -153,6 +155,20 @@ test('a paged operation without records yields each page whole, shaped by its re
   for await (const page of api.feed()) pages.push(page);
   expect(pages).toStrictEqual([{ next: `${BASE}/feed?page=2`, n: 1 }, { n: 2 }]);
   await expect(api.feed().next()).rejects.toEqual(new ProviderHttpError('invalid_response', null));
+});
+
+test('a paged operation whose result is a list and that names no records yields its elements, skipping and reporting a bad one', async () => {
+  const { fake, api } = setup(sequence(
+    () => Response.json([{ id: 'b1', number: 1, extra: true }, { id: 7 }], { headers: { link: `<${BASE}/builds?page=2>; rel="next"` } }),
+    json([{ id: 'b2' }, 'junk'])));
+  const seen: unknown[] = [];
+  const skipped: (string | null)[][] = [];
+  for await (const build of api.builds.list({}, { onSkipped: ids => skipped.push(ids) })) seen.push(build);
+  expect(seen).toStrictEqual([{ id: 'b1', number: 1 }, { id: 'b2' }]);
+  expect(skipped).toEqual([['7'], [null]]);
+  expect(fake.calls.map(call => call.url)).toEqual([`${BASE}/builds`, `${BASE}/builds?page=2`]);
+  const { api: broken } = setup(json({ builds: [] }));
+  await expect(broken.builds.list().next()).rejects.toEqual(new ProviderHttpError('invalid_response', null));
 });
 
 test('json and request are authenticated, classified and carry no provider body; paginate walks a declared shape', async () => {
