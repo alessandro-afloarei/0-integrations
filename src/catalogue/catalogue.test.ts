@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { identifyAccount, lookupNames, sendCall } from '../account.js';
-import { defineProvider, type Entry } from '../catalogue.js';
+import { defineProvider, type Entry, type Shape } from '../catalogue.js';
 import { finishConnect } from '../connect.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, GOOD_KEY, replay, type Exchange, type Recording } from '../kit.test-support.js';
@@ -73,9 +73,17 @@ const condition = <T extends Selects>(schema: z.ZodType<T>) =>
 const when = condition(whenObject);
 const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ basic: z.tuple([template, template]) })]);
 const value = z.union([z.string(), z.array(z.string())]);
-const request = z.strictObject({ method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional(), path: template.optional(),
+const method = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+const request = z.strictObject({ method: method.optional(), path: template.optional(),
   query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional() });
-/** The entry types as a schema. Tests only: no published declaration may name zod. Operations join it when they join the types. */
+const shape: z.ZodType<Shape> = z.lazy(() =>
+  z.union([z.enum(['string', 'integer', 'number', 'boolean', 'unknown']), z.tuple([shape]), z.record(z.string(), shape)]));
+const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
+  params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'variables']), type: shape,
+    required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
+    description: z.string().optional() })).optional(),
+  result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional() };
+/** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9-]*$/u), name: z.string().min(1),
   fields: z.array(z.strictObject({ name: z.string(), title: z.string(), secret: z.literal(true).optional() })).optional(),
@@ -114,6 +122,8 @@ const entrySchema = z.strictObject({
     // A prefix is a whole directory (`/me/`), so `/meetings` is not under `/me`.
     z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix: z.string().regex(/^\/(?:.*\/)?$/u).optional() }),
   ])).optional(),
+  operations: z.record(z.string(), z.union([z.strictObject({ method: method.optional(), path: template, ...operationParts }),
+    z.strictObject({ graphql: z.string(), ...operationParts })])).optional(),
 });
 
 /** Every function anywhere in a value, by its path. */
@@ -123,8 +133,12 @@ function functionsIn(value: unknown, at = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => functionsIn(item, at ? `${at}.${key}` : key));
 }
 
+/** An id the client's own calls take: its first dot-separated segment equals one (a prefix is fine). */
+const clientCall = (id: string) => ['json', 'request', 'paginate'].includes(id.split('.')[0] ?? '');
+
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
+const operations = (entry: Entry) => Object.values(entry.operations ?? {});
 const runnable = {
   // The engine sends only that field as `{token}`.
   'one secret field, the only one a key entry has': (entry: Entry) => {
@@ -137,6 +151,11 @@ const runnable = {
   'no token answer, scopes or RFC 7009 revoke on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key'
     || (reads(entry, 'tokenAnswer.').length === 0 && entry.scopes === undefined && !(entry.revoke !== undefined && 'url' in entry.revoke)),
   'scopes on an oauth2 entry': (entry: Entry) => entry.auth[0].kind !== 'oauth2' || entry.scopes !== undefined,
+  'a declared paging shape for every paged operation': (entry: Entry) =>
+    operations(entry).every(op => op.paging === undefined || Object.hasOwn(entry.paging ?? {}, op.paging)),
+  "a required path parameter for every {name} in an operation's path": (entry: Entry) => operations(entry).every(op =>
+    !('path' in op) || placeholders(op.path).every(name => op.params?.[name]?.in === 'path' && op.params[name].required === true)),
+  "no operation id that is the client's own call": (entry: Entry) => !Object.keys(entry.operations ?? {}).some(clientCall),
 };
 type Rule = keyof typeof runnable;
 
@@ -231,4 +250,18 @@ test.each<[Rule, Entry]>([
   ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
   ['scopes on an oauth2 entry', defineProvider(oauth2)],
+  // The compiler refuses the last two through `defineProvider`; these are entries read as data.
+  ['a declared paging shape for every paged operation', { ...key, auth: [{ kind: 'key' }], fields: [secret],
+    operations: { list: { path: '/items', paging: 'cursor' } } }],
+  ["a required path parameter for every {name} in an operation's path", { ...key, auth: [{ kind: 'key' }], fields: [secret],
+    operations: { get: { path: '/items/{id}', params: { id: { in: 'query', type: 'string', required: true } } } } }],
+  ["a required path parameter for every {name} in an operation's path", { ...key, auth: [{ kind: 'key' }], fields: [secret],
+    operations: { get: { path: '/items/{id}', params: { id: { in: 'path', type: 'string' } } } } }],
+  ["no operation id that is the client's own call", { ...key, auth: [{ kind: 'key' }], fields: [secret],
+    operations: { 'request.create': { method: 'POST', path: '/requests' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
+
+test.each([['json', true], ['request.create', true], ['paginate.all', true],
+  ['requests.create', false], ['pages.markdown', false], ['jsonish', false]])('operation id %s is a client call: %s', (id, taken) => {
+  expect(clientCall(id)).toBe(taken);
+});
