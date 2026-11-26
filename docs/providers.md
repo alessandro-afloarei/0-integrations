@@ -1,7 +1,7 @@
 # Providers
 
-Generated from `src/catalogue/` by `pnpm providers`: do not edit. 56 providers: 56 declared, 0 recorded;
-122 typed operations; webhooks: ed25519 1, hmac 16, standard 2, token 2. What waits is in the [waiting list](waiting-list.md).
+Generated from `src/catalogue/` by `pnpm providers`: do not edit. 57 providers: 57 declared, 0 recorded;
+128 typed operations; webhooks: ed25519 1, hmac 16, standard 2, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -10,6 +10,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 56 providers: 
 | [Apollo](https://docs.apollo.io/reference/authentication) | sales | key | — | — | declared |
 | [Asana](https://developers.asana.com/docs/oauth) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, projects.list | — | declared |
 | [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | key | — | — | declared |
+| [Azure DevOps](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth?view=azure-devops) | code | OAuth 2 | repositories.list, repositories.get, pullRequests.list, pullRequests.get, pullRequests.create, projects.list | — | declared |
 | [Better Stack](https://betterstack.com/docs/uptime/api/getting-started-with-uptime-api/) | monitoring | key | incidents.list, incidents.get, incidents.create, incidents.update, monitors.list | — | declared |
 | [Bitbucket](https://developer.atlassian.com/cloud/bitbucket/rest/intro/#authentication) | code | OAuth 2, key | repositories.list, repositories.get, pullRequests.list, pullRequests.get, pullRequests.create | hmac | declared |
 | [Breakcold](https://docs.breakcold.com/api/authentication) | crm | key | — | hmac | declared |
