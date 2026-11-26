@@ -15,7 +15,7 @@ export const coda = defineProvider({
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
     help: 'From My account; it is shown once. Make it with no restriction, so it can do what you can: a token restricted to a doc can call only that doc (it cannot list docs), and a read-only one cannot write. Creating a page needs a Doc Maker in the workspace.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://coda.io/apis/v1', retry: {} },
+  http: { baseUrl: 'https://coda.io/apis/v1', retry: { defaultWaitMs: 6_000 } },
   identify: { request: { path: '/whoami' }, id: 'loginId', name: ['name', 'loginId'] },
   paging: { cursor: { kind: 'cursor', next: 'nextPageToken', send: { query: 'pageToken' } } },
   operations: {
