@@ -39,7 +39,9 @@ export type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?
   timestamp?: { header: string; toleranceSeconds?: number };
   deliveryId?: { header: string } | { body: readonly Path[] } };
 export type Where = { query: string } | { body: string };
-export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
+export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path;
+  /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
+  pathPrefix?: string };
 /** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. */
 export type Entry = { id: string; name: string; fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
   scopes?: { default: readonly string[]; requireGranted?: true }; identify?: Identify;

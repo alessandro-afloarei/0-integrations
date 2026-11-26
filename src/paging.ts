@@ -18,15 +18,16 @@ export function nextCursor(shape: Cursor, answer: unknown): string | null {
   return cursor;
 }
 
-/** An address on the base's origin under its path and `pathPrefix`, read as it resolves (dot segments, `%2e%2e`), as the
- * path after the base with its search; null for any other. */
+/** An address on the base's origin, under the base's path as a whole segment and under `pathPrefix`, read as it resolves
+ * (dot segments, `%2e%2e`), as the path after the base with its search; null for any other. */
 export function ownPath(shape: NextUrl, baseUrl: string, address: string): string | null {
   if (!URL.canParse(address)) return null;
   const base = new URL(baseUrl);
   const root = base.pathname.replace(/\/$/u, ''); // an origin-only base's path is `/`
   const url = new URL(address);
-  return url.origin === base.origin && url.pathname.startsWith(`${root}${shape.pathPrefix ?? '/'}`)
-    ? url.pathname.slice(root.length) + url.search : null;
+  const rest = url.pathname.slice(root.length);
+  return url.origin === base.origin && url.pathname.startsWith(root) && rest.startsWith('/') && rest.startsWith(shape.pathPrefix ?? '/')
+    ? rest + url.search : null;
 }
 
 /** The next page's path after the base, or null when the answer names none; a link that leaves is `next_link_foreign`. */
@@ -45,11 +46,15 @@ function withCursor(where: Where, options: RequestOptions, cursor: string): Requ
 }
 
 /** Every page's answer, in order, until the shape names no next page; a cursor that comes back is `cursor_repeated`. */
-export async function* walk(http: HttpClient, baseUrl: string, shape: Paging, path: string, options: RequestOptions = {}):
-AsyncGenerator<unknown, void, undefined> {
-  for await (const page of paginate(async (cursor: string | undefined) => {
-    const answer = await (cursor === undefined ? http.json(path, options)
-      : shape.kind === 'cursor' ? http.json(path, withCursor(shape.send, options, cursor)) : http.json(cursor, { ...options, query: {} }));
-    return { items: [answer], skipped: [], cursor: shape.kind === 'cursor' ? nextCursor(shape, answer) : nextLink(shape, baseUrl, answer) };
-  })) yield* page.items;
+export async function* walk(http: HttpClient, shape: Paging, path: string, options: RequestOptions = {}): AsyncGenerator<unknown, void, undefined> {
+  const load = shape.kind === 'cursor'
+    ? async (cursor: string | undefined) => {
+      const answer = await http.json(path, cursor === undefined ? options : withCursor(shape.send, options, cursor));
+      return { items: [answer], skipped: [], cursor: nextCursor(shape, answer) };
+    }
+    : async (link: string | undefined) => {
+      const answer = await http.json(link ?? path, link === undefined ? options : { ...options, query: {} });
+      return { items: [answer], skipped: [], cursor: nextLink(shape, http.baseUrl, answer) };
+    };
+  for await (const page of paginate(load)) yield* page.items;
 }

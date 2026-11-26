@@ -155,7 +155,7 @@ export function hubspotClient(input: {
     /** The portal's owners who have an email, lower-cased; a name falls back to the email. */
     async owners(): Promise<HubSpotOwner[]> {
       const owners: HubSpotOwner[] = [];
-      for await (const body of walk(http, hubspot.http.baseUrl, hubspot.paging.after, "/crm/owners/2026-09", { query: { limit: "100" } })) {
+      for await (const body of walk(http, hubspot.paging.after, "/crm/owners/2026-09", { query: { limit: "100" } })) {
         for (const owner of parseAnswer(ownersSchema, body).results) {
           if (!owner.email) continue;
           const email = owner.email.toLowerCase();

@@ -29,7 +29,7 @@ export function slackClient(input: { token: string; fetch: typeof fetch }): Slac
       const skipped: (string | null)[] = [];
       let channelsCut = false;
       let count = 0;
-      for await (const body of walk(http, slack.http.baseUrl, slack.paging.cursor, '/conversations.list',
+      for await (const body of walk(http, slack.paging.cursor, '/conversations.list',
         { query: { types: 'public_channel,private_channel', exclude_archived: 'true', limit: '200' } })) {
         const page = parseEntries(channelSchema, parseAnswer(channelsSchema, body).channels);
         channels.push(...page.items.map(channel => ({ id: channel.id, name: channel.name, isPrivate: channel.is_private === true })));

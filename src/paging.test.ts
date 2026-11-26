@@ -30,36 +30,43 @@ test("nextUrl stays on the provider's origin and under its prefix", () => {
   for (const link of ['https://user:pass@graph.microsoft.com/v1.0/me/x', 'https://graph.microsoft.com:443/v1.0/me/x',
     'https://graph.microsoft.com\\v1.0\\me\\x']) expect(ownPath(graph, BASE, link)).toBe('/me/x');
   expect(ownPath({ kind: 'nextUrl', next: 'next' }, 'https://api.acme.test', 'blob:https://api.acme.test/me/x')).toBeNull();
+  // An app's own entry may declare any prefix: the link must still sit under the base's path, as a whole segment.
+  for (const pathPrefix of ['', 'me/']) expect(ownPath({ kind: 'nextUrl', next: 'next', pathPrefix }, BASE, 'https://graph.microsoft.com/v1.0evil/me/x')).toBeNull();
+  expect(ownPath({ kind: 'nextUrl', next: 'next', pathPrefix: '' }, 'https://api.acme.test', 'blob:https://api.acme.test/x')).toBeNull();
 });
 
 const acme = defineProvider({ id: 'acme', name: 'Acme', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' } });
+const token = () => Promise.resolve('t');
 test('walk sends the cursor where the shape says, and refuses one that comes back', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ paging: { after: 'a1' } }), () => Response.json({ paging: { after: 'a1' } })) }]);
-  const http = createClient(acme, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   const shape = { kind: 'cursor', next: 'paging.after', send: { query: 'after' } } as const;
   const pages: unknown[] = [];
-  await expect((async () => { for await (const page of walk(http, acme.http.baseUrl, shape, '/owners', { query: { limit: '100' } })) pages.push(page); })())
+  await expect((async () => { for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), shape, '/owners', { query: { limit: '100' } })) pages.push(page); })())
     .rejects.toMatchObject({ detail: 'cursor_repeated' });
   expect(fake.calls.map(call => call.url)).toEqual(['https://api.acme.test/owners?limit=100', 'https://api.acme.test/owners?limit=100&after=a1']);
+  expect(pages).toEqual([{ paging: { after: 'a1' } }, { paging: { after: 'a1' } }]);
 });
 
-test('walk follows a next link with its own search, and a body cursor goes in the body', async () => {
-  const links = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'https://api.acme.test/me/x?page=2' }), () => Response.json({})) }]);
+test("walk follows a next link with its own search on the client's base, and a body cursor goes in the body", async () => {
+  const links = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'https://api.acme.test/v1/me/x?page=2' }), () => Response.json({})) }]);
   const pages: unknown[] = [];
-  for await (const page of walk(createClient(acme, { token: () => Promise.resolve('t'), fetch: links.fetch }), acme.http.baseUrl,
+  for await (const page of walk(createClient(acme, { baseUrl: 'https://api.acme.test/v1', token, fetch: links.fetch }),
     { kind: 'nextUrl', next: 'next' }, '/me/x', { query: { top: '2' } })) pages.push(page);
-  expect(links.calls.map(call => call.url)).toEqual(['https://api.acme.test/me/x?top=2', 'https://api.acme.test/me/x?page=2']);
-  expect(pages).toHaveLength(2);
+  expect(links.calls.map(call => call.url)).toEqual(['https://api.acme.test/v1/me/x?top=2', 'https://api.acme.test/v1/me/x?page=2']);
+  expect(pages).toEqual([{ next: 'https://api.acme.test/v1/me/x?page=2' }, {}]);
   const bodies = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'b2' }), () => Response.json({})) }]);
-  for await (const page of walk(createClient(acme, { token: () => Promise.resolve('t'), fetch: bodies.fetch }), acme.http.baseUrl,
-    { kind: 'cursor', next: 'next', send: { body: 'start' } }, '/search', { method: 'POST', json: { q: 'x' } })) pages.push(page);
+  for await (const page of walk(createClient(acme, { token, fetch: bodies.fetch }),
+    { kind: 'cursor', next: 'next', send: { body: 'start' } }, '/search', { method: 'POST', json: { q: 'x' } })) expect(page).toBeTypeOf('object');
   expect(bodies.calls.map(call => call.body)).toEqual(['{"q":"x"}', '{"q":"x","start":"b2"}']);
 });
 
-test('a next link on another origin is an error, never a request', async () => {
-  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ next: 'https://evil.test/me/x?page=2' }) }]);
-  const read = async () => { for await (const page of walk(createClient(acme, { token: () => Promise.resolve('t'), fetch: fake.fetch }),
-    acme.http.baseUrl, { kind: 'nextUrl', next: 'next' }, '/me/x')) expect(page).toBeDefined(); };
-  await expect(read()).rejects.toMatchObject({ code: 'invalid_response', detail: 'next_link_foreign' });
-  expect(fake.calls.map(call => call.url)).toEqual(['https://api.acme.test/me/x']);
+test("a next link that leaves the base's origin or path is an error, never a request", async () => {
+  for (const [baseUrl, pathPrefix, link] of [['https://api.acme.test', '/', 'https://evil.test/me/x?page=2'],
+    ['https://api.acme.test/v1', '', 'https://api.acme.test/v1evil/me/x'], ['https://api.acme.test/v1', 'me/', 'https://api.acme.test/v1evil/me/x'],
+    ['https://api.acme.test', '', 'blob:https://api.acme.test/x']] as const) {
+    const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ next: link }) }]);
+    await expect(walk(createClient(acme, { baseUrl, token, fetch: fake.fetch }), { kind: 'nextUrl', next: 'next', pathPrefix }, '/me/x').next())
+      .rejects.toMatchObject({ code: 'invalid_response', detail: 'next_link_foreign' });
+    expect(fake.calls.map(call => call.url)).toEqual([`${baseUrl}/me/x`]);
+  }
 });

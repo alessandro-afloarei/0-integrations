@@ -16,6 +16,8 @@ export type RequestOptions = {
 };
 export type ProviderResponse = { status: number; headers: Headers; data: unknown };
 export type HttpClient = {
+  /** The base every path is read after: the entry's, or the one the client was built with. */
+  readonly baseUrl: string;
   json(path: string, options?: RequestOptions): Promise<unknown>;
   request(path: string, options?: RequestOptions): Promise<ProviderResponse>;
 };
@@ -191,6 +193,7 @@ export function createClient(entry: Entry, input: {
   };
 
   return {
+    baseUrl,
     request,
     async json(path, options) {
       return responseJson(entry, await request(path, options));

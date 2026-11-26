@@ -9,7 +9,6 @@ import { parseAnswer, parseEntries } from '../parse.js';
 import { microsoft } from '../catalogue/microsoft.js';
 import { datetime, pageSize, utc } from '../shapes.js';
 
-const GRAPH = microsoft.http.baseUrl;
 const text = z.string().nullish().transform(value => value ?? '');
 const emailAddress = z.object({ name: z.string().nullish(), address: z.string().nullish() });
 const recipient = z.object({ emailAddress });
@@ -121,9 +120,9 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
    * resolves (dot segments, `%2e%2e` among them), so the token goes nowhere else, and kept as that path.
    */
   async function list(path: string, query: Record<string, string>, cursor: string | undefined): Promise<{ value: unknown[]; cursor: string | null }> {
-    if (cursor !== undefined && ownPath(microsoft.paging.nextLink, GRAPH, GRAPH + cursor) === null) throw new TypeError('cursor_invalid');
+    if (cursor !== undefined && ownPath(microsoft.paging.nextLink, http.baseUrl, http.baseUrl + cursor) === null) throw new TypeError('cursor_invalid');
     const answer = parseAnswer(listSchema, await http.json(cursor ?? path, cursor === undefined ? { query } : {}));
-    return { value: answer.value, cursor: nextLink(microsoft.paging.nextLink, GRAPH, answer) };
+    return { value: answer.value, cursor: nextLink(microsoft.paging.nextLink, http.baseUrl, answer) };
   }
 
   async function emails(path: string, query: Record<string, string>, cursor: string | undefined): Promise<Page<MailboxEmail>> {
