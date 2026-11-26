@@ -4,7 +4,7 @@ import { defineProvider } from '../catalogue.js';
  * (https://developer.getguru.com/docs/paging), not declared: each list answers its first page. A card written without
  * `shareStatus` is private to its owner, and an update without `tags` removes the card's tags: send both back. */
 const card = { id: 'string', preferredPhrase: 'string', 'verificationState?': 'string', 'collection?': { 'id?': 'string' },
-  'slug?': 'string', 'dateCreated?': 'string', 'lastModified?': 'string' } as const;
+  'lastModified?': 'string', 'content?': 'string', 'shareStatus?': 'string', 'tags?': ['unknown'] } as const;
 const cardId = { in: 'path', type: 'string', required: true } as const;
 const fields = { preferredPhrase: { in: 'body', type: 'string', required: true }, content: { in: 'body', type: 'string', required: true },
   shareStatus: { in: 'body', type: 'string', enum: ['PRIVATE', 'TEAM', 'PUBLIC'] } } as const;
