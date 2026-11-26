@@ -30,10 +30,11 @@ const renderFailed = (error: unknown) => error instanceof ProviderHttpError && (
 
 export function firecrawlClient(input: { apiKey: string; fetch: typeof fetch }): FirecrawlClient {
   const http = createClient(firecrawl, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
-  // A map or a scrape changes nothing, so a 429 is waited out like a GET's.
-  const post = (path: string, json: unknown) => http.json(path, { method: 'POST', json, idempotent: true });
+  // A map or a plain scrape changes nothing, so it is retried like a GET. A scrape that runs a script may already have
+  // acted on the page: it is sent once, and a 429 fails with the wait Firecrawl names.
+  const post = (path: string, json: unknown, idempotent = true) => http.json(path, { method: 'POST', json, idempotent });
   const send = (url: string, actions?: readonly FirecrawlAction[]) => post('/v2/scrape',
-    { url, formats: ['markdown'], onlyMainContent: true, timeout: 60_000, actions });
+    { url, formats: ['markdown'], onlyMainContent: true, timeout: 60_000, actions }, actions === undefined);
   const read = async (url: string, actions?: readonly FirecrawlAction[]): Promise<unknown> => {
     if (!actions?.length || DOCUMENT.test(new URL(url).pathname)) return send(url);
     try {

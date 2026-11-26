@@ -1,8 +1,11 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { ProviderHttpError } from '../errors.js';
 import { fakeFetch, sequence } from '../testing.js';
 import { fakeFirecrawl } from './fake.js';
 import { firecrawlClient, type FirecrawlAction } from './firecrawl.js';
+
+// A failed assertion must not leave Math.random stubbed for the next test.
+afterEach(() => { vi.restoreAllMocks(); });
 
 const pages = [
   { url: 'https://lumen.test/', title: 'Home', markdown: '# Home', links: ['https://lumen.test/pricing'] },
@@ -52,6 +55,8 @@ test('sends no actions to a document', async () => {
 });
 
 test('reads a page as it loads when its render could not finish, never after a 402', async () => {
+  // A plain scrape is retried after a 5xx; with no backoff nothing waits. A scrape with a script is sent once.
+  vi.spyOn(Math, 'random').mockReturnValue(0);
   const rendering = fakeFetch([{ url: SCRAPE, async respond(request) {
     const { actions } = await request.json() as { actions?: unknown };
     return actions ? Response.json({ success: false, error: 'Action(s) failed to complete' }, { status: 500 }) : page({ title: 'FAQ' });
@@ -78,7 +83,28 @@ test('reads a page as it loads when its render could not finish, never after a 4
 
   const down = fakeFetch([{ url: SCRAPE, respond: () => new Response(null, { status: 503 }) }]);
   await expect(client(down).scrape('https://x.test/faq', WAIT)).rejects.toMatchObject({ code: 'unavailable' });
-  expect(down.calls).toHaveLength(2);
+  expect(bodies(down).map(body => 'actions' in body)).toEqual([true, false, false, false, false]);
+});
+
+test('a scrape that runs a script is sent once: never after a dropped connection, and its 429 carries the wait', async () => {
+  vi.useFakeTimers();
+  try {
+    const dropped = fakeFetch([{ url: SCRAPE, async respond(request) {
+      const { actions } = await request.json() as { actions?: unknown };
+      if (actions) throw new TypeError('fetch failed');
+      return page({ title: 'FAQ' });
+    } }]);
+    const read = client(dropped).scrape('https://x.test/faq', WAIT);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await read).toMatchObject({ title: 'FAQ' });
+    expect(bodies(dropped).map(body => 'actions' in body)).toEqual([true, false]);
+
+    const limited = fakeFetch([{ url: SCRAPE, respond: () => new Response(null, { status: 429, headers: { 'retry-after': '2' } }) }]);
+    await expect(client(limited).scrape('https://x.test/faq', WAIT)).rejects.toMatchObject({ code: 'rate_limited', retryAfterMs: 2000 });
+    expect(limited.calls).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("waits out a scrape's 429 and resends the same body", async () => {

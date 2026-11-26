@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { paginate } from '../paginate.js';
 import { fakeFetch, sequence } from '../testing.js';
@@ -7,6 +7,9 @@ import calendarRecording from '../catalogue/unipile.calendar.recording.json' wit
 import mailRecording from '../catalogue/unipile.mail.recording.json' with { type: 'json' };
 import { KIT_ACCOUNT, unipileCalendarScenario, unipileMailScenario } from './scenario.test-support.js';
 import { unipileClient, unipileMailbox, type UnipileCalendar, type UnipileEmail, type UnipileEvent } from './unipile.js';
+
+// A failed assertion must not leave Math.random stubbed for the next test.
+afterEach(() => { vi.restoreAllMocks(); });
 
 const API = 'https://api.unipile.com/v2';
 const ON = `${API}/${KIT_ACCOUNT}`;
@@ -95,14 +98,17 @@ test("says where a message sits by its folders' roles, read once per account and
   const list = { data: ['AAMk-drafts', 'AAMk-sent', 'AAMk-junk', 'AAMk-bin', 'AAMk-in', 'AAMk-mine'].map(folder => ({ ...wireEmail,
     id: folder, folders: [folder] })) };
   const unipile = fakeFetch([{ url: `${ON}/emails`, respond: () => Response.json(list) },
-    { url: `${ON}/folders`, respond: sequence(() => new Response(null, { status: 503 }), () => Response.json({ data: folders })) }]);
+    // Unipile's limit is 3 retries; with no backoff nothing waits, and the fourth 503 is the failure.
+    { url: `${ON}/folders`, respond: sequence(...Array.from({ length: 4 }, () => () => new Response(null, { status: 503 })),
+      () => Response.json({ data: folders })) }]);
+  vi.spyOn(Math, 'random').mockReturnValue(0);
   const reader = client(unipile.fetch);
   await expect(reader.emails(KIT_ACCOUNT, {})).rejects.toMatchObject({ code: 'unavailable' });
   for (let read = 0; read < 2; read++) {
     expect((await reader.emails(KIT_ACCOUNT, {})).items.map(item => [item.id, item.role])).toEqual([['AAMk-drafts', 'drafts'],
       ['AAMk-sent', 'sent'], ['AAMk-junk', 'spam'], ['AAMk-bin', 'trash'], ['AAMk-in', 'inbox'], ['AAMk-mine', 'inbox']]);
   }
-  expect(unipile.calls.filter(call => call.url.includes('/folders'))).toHaveLength(3);
+  expect(unipile.calls.filter(call => call.url.includes('/folders'))).toHaveLength(6);
 });
 
 test('reads a thread whole by its own route, and a thread gone as not found', async () => {
@@ -296,7 +302,10 @@ test('deletes an account, which the fake then does not know anywhere; one alread
     client(unipile.fetch).company(KIT_ACCOUNT, '1')]) await expect(read).rejects.toMatchObject({ code: 'not_found' });
   await expect(client(unipile.fetch).deleteAccount(KIT_ACCOUNT)).resolves.toBeUndefined();
   const failing = fakeFetch([{ url: `${API}/accounts/kit-account`, respond: () => Response.json({ status: 500 }, { status: 500 }) }]);
+  // An idempotent delete is retried; with no backoff nothing waits.
+  vi.spyOn(Math, 'random').mockReturnValue(0);
   await expect(client(failing.fetch).deleteAccount(KIT_ACCOUNT)).rejects.toMatchObject({ code: 'unavailable' });
+  expect(failing.calls).toHaveLength(4);
 });
 
 test('reads one account as a mailbox: its address, mail by metadata without drafts, a thread whole, the primary calendar', async () => {

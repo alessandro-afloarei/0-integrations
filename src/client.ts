@@ -1,12 +1,13 @@
 import type { Entry, Operation, Shape, TypeOf } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
-import { callRequest, createClient, type HttpOptions, type ProviderResponse, type RequestOptions } from './http.js';
+import { callRequest, createClient, defaultFetch, type HttpOptions, type ProviderResponse, type RequestOptions } from './http.js';
 import { responseJson } from './http-response.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
 import { clashing, fill, placed, readPath, shapeAt } from './rules.js';
 
 export type { ProviderResponse, RequestOptions };
+export { guardedFetch } from './guard.js';
 
 /** An argument's type: one of its `enum`, else its shape's, and `null` when it is `nullable`. */
 type ArgOf<P> = (P extends { enum: readonly (infer E)[] } ? E : P extends { type: infer S } ? TypeOf<S> : never)
@@ -40,7 +41,7 @@ export type Client<E extends Entry> = Nest<{ [K in keyof E['operations']]: Metho
   paginate(paging: keyof NonNullable<E['paging']> & string, path: string, options?: RequestOptions): AsyncGenerator<unknown, void, undefined> };
 
 /** `createClient`'s options, with `token` also a plain string (a missing or blank one is refused when a request needs it)
- * and the global `fetch` by default. */
+ * and `fetch` by default the global one, or `guardedFetch` for an entry whose host is typed (`http.host: '*'`). */
 export type ClientOptions = Omit<HttpOptions, 'token' | 'fetch'> & { token: string | undefined | HttpOptions['token']; fetch?: typeof fetch };
 type Given = Readonly<Record<string, unknown>>;
 
@@ -111,7 +112,7 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
   const clash = clashing(operations.map(([id]) => id));
   if (clash !== undefined) refuse(`operation_clash: ${clash}`);
   const http = createClient(entry, { ...options, token: typeof token === 'function' ? token : () => Promise.resolve(token ?? ''),
-    fetch: options.fetch ?? globalThis.fetch });
+    fetch: options.fetch ?? defaultFetch(entry) });
   const pagingOf = (name: string) => (entry.paging !== undefined && Object.hasOwn(entry.paging, name) ? entry.paging[name] : undefined)
     ?? refuse(`paging_unknown: ${name}`);
 

@@ -4,8 +4,9 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { identifyAccount, lookupNames } from '../account.js';
-import { defineProvider, type Entry, type Shape } from '../catalogue.js';
+import { defineProvider, type Entry, type Field, type Shape } from '../catalogue.js';
 import { finishConnect } from '../connect.js';
+import { createClient } from '../http.js';
 import { BAD_KEY, GOOD_KEY, replay, type Recording } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
 import { tierOf } from '../tier.js';
@@ -56,7 +57,9 @@ const selectsOne = (item: Selects) => !(item.header !== undefined && item.path !
 const condition = <T extends Selects>(schema: z.ZodType<T>) =>
   schema.refine(selectsOne, 'a condition compares one header or one path, and a header only to a string');
 const when = condition(whenObject);
-const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ basic: z.tuple([template, template]) })]);
+const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ basic: z.tuple([template, template]) }),
+  z.strictObject({ query: z.record(z.string(), template) })])
+  .refine(item => !('query' in item) || Object.keys(item.query).length > 0, 'a query send names at least one parameter');
 const value = z.union([z.string(), z.array(z.string())]);
 const method = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const request = z.strictObject({ method: method.optional(), path: template.optional(),
@@ -71,8 +74,11 @@ const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
-  id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1),
-  fields: z.array(z.strictObject({ name: z.string(), title: z.string(), secret: z.literal(true).optional() })).optional(),
+  id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1), docs: z.string().optional(),
+  fields: z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
+    secret: z.literal(true).optional(), default: z.string().optional(),
+    help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
+    choices: z.array(z.string()).optional() })).optional(),
   auth: z.array(z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('key'), send: send.optional() }),
     z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, pkce: z.literal(false).optional(),
@@ -87,7 +93,7 @@ const entrySchema = z.strictObject({
   save: z.record(z.string(), value).optional(),
   revoke: z.union([z.strictObject({ url: https, token: z.array(z.enum(['refresh', 'access'])), goneErrors: z.array(z.string()).optional() }),
     z.strictObject({ request, goneErrors: z.array(z.string()).optional() })]).optional(),
-  http: z.strictObject({ baseUrl: https, bases: z.record(z.string(), https).optional(), headers: z.record(z.string(), z.string()).optional(),
+  http: z.strictObject({ baseUrl: https, host: z.string().optional(), bases: z.record(z.string(), https).optional(), headers: z.record(z.string(), z.string()).optional(),
     timeoutMs: z.number().int().positive().optional(), minIntervalMs: z.number().int().nonnegative().optional(),
     retry: z.strictObject({ limit: z.number().int().nonnegative().optional(), maxWaitMs: z.number().int().nonnegative().optional(),
       defaultWaitMs: z.number().int().nonnegative().optional(),
@@ -122,41 +128,85 @@ function functionsIn(value: unknown, at = ''): string[] {
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
+/** The base's host part: between `https://` and the first `/` after it. */
+const baseHost = (entry: Entry) => entry.http.baseUrl.slice('https://'.length).split('/')[0] ?? '';
 const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
+/** The templates a Basic or query send fills, and the secret field's name. */
+const sentTemplates = (entry: Entry) => {
+  const auth = entry.auth[0];
+  return !('send' in auth) || 'header' in auth.send ? [] : 'basic' in auth.send ? auth.send.basic : Object.values(auth.send.query);
+};
+const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
+  // A Basic or query send that names no secret would send a credential anyone could make.
+  '`auth.send` basic or query: name the secret ({token} or the secret field)': (entry: Entry) => sentTemplates(entry).length === 0
+    || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || name === secretField(entry)),
+  "`auth.send` templates: name only the entry's fields and {token}": (entry: Entry) => sentTemplates(entry).flatMap(placeholders)
+    .every(name => name === 'token' || (entry.fields ?? []).some(field => field.name === name)),
+  // Every claim an entry makes is checked against the provider's own page.
+  'a `docs` link to the provider\'s page, https': (entry: Entry) => entry.docs?.startsWith('https://') === true,
+  // A typed host is checked against a pattern before the token is read; a fixed one needs none.
+  // Path segments from values arrive later (Jira): until then the engine checks every base value as a host part.
+  '`http.baseUrl` placeholders in its host only, never its path': (entry: Entry) =>
+    placeholders(baseHost(entry)).length === placeholders(entry.http.baseUrl).length,
+  'an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder': (entry: Entry) => (placeholders(entry.http.baseUrl).length > 0
+    ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
+  // Any host is allowed only where the person types the whole host, which is then address-guarded.
+  "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
+    || /^\{[^{}]+\}$/u.test(baseHost(entry)),
+  'a plain field (not secret) for every `http.baseUrl` placeholder': (entry: Entry) => placeholders(entry.http.baseUrl)
+    .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true)),
+  // A choice the engine would refuse fails here, not when a person picks it.
+  "`fields[].choices` and `default` that fill the base to a host `http.host` takes": (entry: Entry) => {
+    const named = (entry.fields ?? []).filter(field => placeholders(entry.http.baseUrl).includes(field.name));
+    const first = (field: Field) => field.default ?? field.choices?.[0] ?? 'x';
+    return named.every(field => [...field.choices ?? [], ...field.default === undefined ? [] : [field.default]].every(value => {
+      const values = { ...Object.fromEntries(named.map(other => [other.name, first(other)])), [field.name]: value };
+      try {
+        return createClient(entry, { token: () => Promise.resolve('t'), fetch: globalThis.fetch, values }).baseUrl !== '';
+      } catch { return false; }
+    }));
+  },
+  // A connect screen draws the choices; the default is what it shows first.
+  '`fields[].choices` a non-empty list of unique values that holds the `default`': (entry: Entry) => (entry.fields ?? []).every(field =>
+    field.choices === undefined || (field.choices.length > 0 && new Set(field.choices).size === field.choices.length
+      && (field.default === undefined || field.choices.includes(field.default)))),
+  // A secret is never shown or guessed.
+  'no `default` or `choices` on a secret field': (entry: Entry) => (entry.fields ?? [])
+    .every(field => field.secret !== true || (field.default === undefined && field.choices === undefined)),
   // The engine sends only that field as `{token}`.
-  'one secret field, the only one a key entry has': (entry: Entry) => {
+  'at most one secret field in `fields`, exactly one on a key entry': (entry: Entry) => {
     const secrets = (entry.fields ?? []).filter(field => field.secret === true).length;
     return entry.auth[0].kind === 'key' ? secrets === 1 : secrets <= 1;
   },
   // No silent GET to the base URL.
-  "a request when a value reads identify's answer": (entry: Entry) => entry.identify?.request !== undefined
+  "an `identify.request` whenever a value reads identify's answer": (entry: Entry) => entry.identify?.request !== undefined
     || lookupNames(entry).every(name => name.startsWith('tokenAnswer.') || name.startsWith('connection.')),
-  'no token answer, scopes or RFC 7009 revoke on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key'
+  'no `tokenAnswer.*`, `scopes` or RFC 7009 `revoke` on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key'
     || (reads(entry, 'tokenAnswer.').length === 0 && entry.scopes === undefined && !(entry.revoke !== undefined && 'url' in entry.revoke)),
-  'scopes on an oauth2 entry': (entry: Entry) => entry.auth[0].kind !== 'oauth2' || entry.scopes !== undefined,
-  'a declared paging shape for every paged operation': (entry: Entry) =>
+  '`scopes` on an oauth2 entry': (entry: Entry) => entry.auth[0].kind !== 'oauth2' || entry.scopes !== undefined,
+  'an `operations[].paging` name declared in `paging`': (entry: Entry) =>
     operations(entry).every(op => op.paging === undefined || Object.hasOwn(entry.paging ?? {}, op.paging)),
-  "a required path parameter for every {name} in an operation's path": (entry: Entry) => operations(entry).every(op =>
+  "a required `in: 'path'` parameter for every {name} in an operation's `path`": (entry: Entry) => operations(entry).every(op =>
     !('path' in op) || placeholders(op.path).every(name => op.params?.[name]?.in === 'path' && op.params[name].required === true)),
   // The rule `client()` applies: `pages` and `pages.markdown` would be one property of the client, `a..b` none, and
   // `json` or `then` would hide one of the client's own.
-  'operation ids a client can hold': (entry: Entry) => clashing(Object.keys(entry.operations ?? {})) === undefined,
+  '`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)': (entry: Entry) => clashing(Object.keys(entry.operations ?? {})) === undefined,
   // A parameter with no place in the request would be left off it silently.
-  'a place in the request for every parameter': (entry: Entry) => operations(entry).every(op =>
+  'a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)': (entry: Entry) => operations(entry).every(op =>
     Object.entries(op.params ?? {}).every(([name, param]) => placed(op, name, param))),
   // The client checks an argument against its enum as a string.
-  'an enum only on a string parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
+  '`params[].enum` only on a `type: \'string\'` parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
   // A path segment and a query value are one string each: never null, a list or an object.
-  'only a scalar, non-nullable parameter in a path or a query': (entry: Entry) => params(entry).every(param =>
+  'only a scalar, non-`nullable` parameter `in` a path or a query': (entry: Entry) => params(entry).every(param =>
     (param.in !== 'path' && param.in !== 'query') || (param.nullable === undefined && typeof param.type === 'string')),
   // A paged operation yields its records: a 404 is no record to answer null for.
-  'notFound only on an unpaged operation': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
+  '`notFound` only on an operation with no `paging`': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
   // A saved value would replace the field the person entered, which `Connected` types as a string.
-  "save keys apart from the fields' names": (entry: Entry) =>
+  "`save` keys apart from the fields' names": (entry: Entry) =>
     Object.keys(entry.save ?? {}).every(name => !(entry.fields ?? []).some(field => field.name === name)),
   // Otherwise the records are typed `unknown`.
-  "a records path to a list in the operation's result": (entry: Entry) => operations(entry).every(op =>
+  "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
 };
 type Rule = keyof typeof runnable;
@@ -167,10 +217,6 @@ describe.each(entries)('%s', (id, entry) => {
   test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(entry))).toEqual(entry); });
   test.each(Object.keys(runnable) as Rule[])('declares %s', rule => { expect(runnable[rule](entry)).toBe(true); });
   test('names only what each place allows in its templates', () => {
-    const fields = (entry.fields ?? []).map(field => field.name);
-    const auth = entry.auth[0];
-    // auth.send: every field by its name, and the token.
-    if ('send' in auth && 'basic' in auth.send) for (const name of auth.send.basic.flatMap(placeholders)) expect([...fields, 'token']).toContain(name);
     // identify and save read one lookup: the id found, the token answer, a connection value (a plain field the user
     // entered, or a value `save` keeps), or a path into the identify answer. A value without braces is itself a path.
     const connection = [...(entry.fields ?? []).filter(field => field.secret !== true).map(field => field.name),
@@ -233,56 +279,103 @@ test.each([
   ['compares a path to a boolean', { path: 'active', equals: false }],
 ])('a condition that %s matches the schema', (_, good) => { expect(when.safeParse(good).success).toBe(true); });
 
-const key = { id: 'k', name: 'K', http: { baseUrl: 'https://api.k.test' } } as const;
+const key = { id: 'k', name: 'K', docs: 'https://k.test/docs', http: { baseUrl: 'https://api.k.test' } } as const;
 const oauth2 = { ...key, auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }] } as const;
 const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
 test.each<[Rule, Entry]>([
-  ['one secret field, the only one a key entry has', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
-  ['one secret field, the only one a key entry has', defineProvider({ ...key, auth: [{ kind: 'key' }],
+  ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
+  ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
+  ['`auth.send` basic or query: name the secret ({token} or the secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+    auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
+  ['`auth.send` basic or query: name the secret ({token} or the secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+    auth: [{ kind: 'key', send: { basic: ['{apiId}', ''] } }] })],
+  ["`auth.send` templates: name only the entry's fields and {token}", defineProvider({ ...key, fields: [secret],
+    auth: [{ kind: 'key', send: { query: { key: '{apiKey}', account: '{acount}' } } }] })],
+  ['at most one secret field in `fields`, exactly one on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
+  ['at most one secret field in `fields`, exactly one on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
-  ['one secret field, the only one a key entry has', defineProvider({ ...oauth2, scopes: { default: [] },
+  ['at most one secret field in `fields`, exactly one on a key entry', defineProvider({ ...oauth2, scopes: { default: [] },
     fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
-  ["a request when a value reads identify's answer", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ["an `identify.request` whenever a value reads identify's answer", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { id: 'workspace_id' } })],
-  ["a request when a value reads identify's answer", defineProvider({ ...oauth2, scopes: { default: [] },
+  ["an `identify.request` whenever a value reads identify's answer", defineProvider({ ...oauth2, scopes: { default: [] },
     identify: { id: 'tokenAnswer.team.id' }, save: { region: 'Region {region}' } })],
-  ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*`, `scopes` or RFC 7009 `revoke` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { id: 'tokenAnswer.team.id' } })],
-  ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*`, `scopes` or RFC 7009 `revoke` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     scopes: { default: ['read'] } })],
-  ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*`, `scopes` or RFC 7009 `revoke` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
-  ['scopes on an oauth2 entry', defineProvider(oauth2)],
-  ["save keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
+  ['`scopes` on an oauth2 entry', defineProvider(oauth2)],
+  ...([
+    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}.k.test' }],
+    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://api.k.test', host: 'api.k.test' }],
+    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}', host: 'example.com/x' }],
+    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}', host: '*.com' }],
+    ['`http.baseUrl` placeholders in its host only, never its path', { baseUrl: 'https://api.example.com/{region}' }],
+    ['`http.baseUrl` placeholders in its host only, never its path', { baseUrl: 'https://{region}.k.test/{region}', host: '*.k.test' }],
+    ["`http.host: '*'` only on a base whose whole host is one placeholder", { baseUrl: 'https://{region}.example.com', host: '*' }],
+    ['a plain field (not secret) for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
+    ['a plain field (not secret) for every `http.baseUrl` placeholder', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
+  ] as const).map(([rule, http]): [Rule, Entry] => [rule, { ...key, http, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region' }] }]),
+  ...([
+    ['`fields[].choices` a non-empty list of unique values that holds the `default`', { choices: ['us', 'eu'], default: 'au' }],
+    ['`fields[].choices` a non-empty list of unique values that holds the `default`', { choices: [] }],
+    ['`fields[].choices` a non-empty list of unique values that holds the `default`', { choices: ['us', 'us'] }],
+  ] as const).map(([rule, field]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
+  ...([
+    [{ choices: ['api.mailgun.net'] }, 'mailgun.net'],
+    [{ choices: ['api.mailgun.net', 'api.eu.mailgun.com'] }, '*.mailgun.net'],
+    [{ default: 'api.mailgun.net' }, '*.mailgun.com'],
+  ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill the base to a host `http.host` takes",
+    defineProvider({ ...key, http: { baseUrl: 'https://{region}', host }, auth: [{ kind: 'key' }],
+      fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
+  ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, default: 'k' }] })],
+  ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, choices: ['k'] }] })],
+  ["`save` keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([
-    ['operation ids a client can hold', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
-    ['operation ids a client can hold', { '': { path: '/a' } }],
-    ['operation ids a client can hold', { 'a..b': { path: '/a' } }],
-    ['a place in the request for every parameter', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
-    ['a place in the request for every parameter', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
-    ['a place in the request for every parameter', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
-    ['a place in the request for every parameter', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
-    ['notFound only on an unpaged operation', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
-    ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
-    ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
-    ['an enum only on a string parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],
-    ['only a scalar, non-nullable parameter in a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
-    ['only a scalar, non-nullable parameter in a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
-    ['only a scalar, non-nullable parameter in a path or a query', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
+    ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
+    ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { '': { path: '/a' } }],
+    ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { 'a..b': { path: '/a' } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
+    ['`notFound` only on an operation with no `paging`', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
+    ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
+    ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
+    ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path or a query', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
   ] as const).map(([rule, operations]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations })]),
   // The compiler refuses these through `defineProvider`; they are entries read as data.
-  ['a declared paging shape for every paged operation', { ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['an `operations[].paging` name declared in `paging`', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { list: { path: '/items', paging: 'cursor' } } }],
-  ["a required path parameter for every {name} in an operation's path", { ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ["a required `in: 'path'` parameter for every {name} in an operation's `path`", { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { get: { path: '/items/{id}', params: { id: { in: 'query', type: 'string', required: true } } } } }],
-  ["a required path parameter for every {name} in an operation's path", { ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ["a required `in: 'path'` parameter for every {name} in an operation's `path`", { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { get: { path: '/items/{id}', params: { id: { in: 'path', type: 'string' } } } } }],
-  ['operation ids a client can hold', { ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { 'request.create': { method: 'POST', path: '/requests' } } }],
-  ['operation ids a client can hold', { ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { then: { path: '/then' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
+
+test.each([[{ title: '' }, "a field's title says what to enter: give it words"],
+  [{ help: '' }, "a field's help is a line a person reads: give it words, or leave it out"]])(
+  'a field with %j fails the schema, with what to fix', (part, message) => {
+    const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', ...part }] };
+    expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+  });
+
+test('a query send that names no parameter fails the schema, with what to fix', () => {
+  const bad = { ...key, auth: [{ kind: 'key', send: { query: {} } }], fields: [secret] };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(['a query send names at least one parameter']);
+});
 
 test('an entry whose operations keep every rule passes them all', () => {
   const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],

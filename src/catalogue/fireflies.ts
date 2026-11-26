@@ -2,6 +2,7 @@ import { defineProvider } from '../catalogue.js';
 
 export const fireflies = defineProvider({
   id: 'fireflies', name: 'Fireflies', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+  docs: 'https://docs.fireflies.ai/fundamentals/authorization',
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.fireflies.ai/graphql',
     retry: { limit: 0, waitFromBody: { path: 'errors.0.extensions.metadata.retryAfter', unit: 'epochMs' } } },

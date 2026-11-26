@@ -100,7 +100,9 @@ That is a whole provider: sign-in form, credential check, account identity, retr
 - **Template**: a string with `{name}` placeholders. A name that is missing is an error that names the entry and the
   key. There are no fallbacks, conditions or functions. Each place that takes a template states its names:
   - `auth.send`: every plain field of the entry by its name, the entry's only secret field by its name, and `{token}`:
-    the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one.
+    the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one. A plain
+    value that is blank fills no template: it is missing, and nothing is sent.
+  - `http.baseUrl`: every plain field by its name. See "A base filled from a value" below.
   - `identify` and `save` values: the lookup described under `identify`.
   - `webhook.signed`: `{body}`, `{timestamp}`, `{method}`, `{url}`.
   - an operation's `path`: its declared `path` parameters.
@@ -128,26 +130,75 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 | Field | What it declares | Default |
 |---|---|---|
-| `id`, `name`, `docs`, `categories` | Identity and metadata. | — |
-| `fields` | What the user enters to connect: `{ name, title, secret?, default?, help? }`. A connect screen is drawn from these. | none |
+| `id`, `name`, `categories` | Identity and metadata. | — |
+| `docs` | The provider's own page that states what the entry declares, https. Every library entry has one. | — |
+| `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default` in `finishConnect`, the one place a default is applied; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
 | `auth` | A list of sign-in alternatives (below). | — |
 | `scopes` | `{ default, requireGranted? }`. `requireGranted` refuses a grant that lacks a requested scope. | none |
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
 | `save` | Values kept on the connection after sign-in: `{ hubId: 'tokenAnswer.hub_id' }`. | none |
 | `revoke` | `{ url, token: ['refresh', 'access'] }` (RFC 7009) or `{ request }`, each with `goneErrors?`. | none |
-| `http` | `baseUrl`, `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
+| `http` | `baseUrl`, `host?` (the host a base filled from a value must have; `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
 | `errors` | Where the provider's error code is, and how answers map to error codes (below). | status only |
 | `paging` | Named paging shapes (below). | none |
 | `webhook` | The signature scheme (below). | none |
 | `operations` | Named reads and writes (below). | none |
 
+#### A base filled from a value
+
+A placeholder in `http.baseUrl` names a plain field and sits in its host (between `https://` and the next `/`; a
+path segment from a value arrives later). A base with one needs `http.host`, the host the filled base must have: a
+name (`api.example.com`), `*.` and a domain (any name ending in `.example.com`, never `example.com` itself), or `*`
+(any). Intercom's region is the first:
+`baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts.
+
+- The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
+  is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given.
+- The value is the connection's plain value; none is `template_missing`. Only `finishConnect` applies a field's
+  `default` (and returns it in `values`): a client, and a revoke, never do, so they need the connection's `values`. A
+  value that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host`
+  checks only the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
+- The filled base must parse, be https with no user or password, and its host must match `http.host`, else
+  `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.
+- `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
+  placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
+  (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.
+
+#### The address guard
+
+`guardedFetch` (published from `0-integrations/client`) is a `fetch` over `node:https` that refuses
+`ProviderHttpError('request_failed', null, 'address_blocked')`, never retried, for a URL that is not https, a host that
+is a blocked address, and a name whose lookup answers none or any blocked address. It is the default `fetch` of
+`client()` and `finishConnect` for an entry with `http.host: '*'`; every other entry keeps the global one.
+
+- The blocked ranges, in `node:net`'s `BlockList`. IPv4: `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10`, `127.0.0.0/8`,
+  `169.254.0.0/16` (the cloud metadata address), `172.16.0.0/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`,
+  `192.168.0.0/16`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24`, `224.0.0.0/3`. IPv6: `::/96`,
+  `64:ff9b::/96`, `64:ff9b:1::/48`, `100::/64`, `2001::/32`, `2001:db8::/32`, `2002::/16`, `fc00::/7` (holds
+  `fd00:ec2::254`), `fe80::/10`, `fec0::/10`, `ff00::/8`. A string that is not an IP is blocked. `::ffff:0:0/96` is
+  never listed: `BlockList` applies the IPv4 rules to IPv4-mapped addresses itself, and that rule would match every
+  IPv4 address. The URL parser already reads `https://2130706433` and `https://0x7f.1` as `127.0.0.1`.
+- DNS rebinding is closed: the guard dials with its own lookup, which resolves every address and refuses the whole
+  answer if one is blocked, so the address dialled is one it checked. The socket's remote address is checked again
+  as it connects, and on a reused socket, before TLS or the request writes a byte. A blocked literal and a blocked name
+  never get a TCP connection.
+- It is a minimal `fetch` for what the engine sends: a `Request` or a URL with init, a body read whole, the caller's
+  `signal` and the timeout's abort, a redirect answered and never followed (as `redirect: 'manual'`), and the answer's
+  body streamed; a body cut short fails as fetch's does, `TypeError('terminated')`. It asks for no compression and
+  decodes none.
+- It dials through its own agent, never Node's global one, which follows `HTTPS_PROXY` when `NODE_USE_ENV_PROXY=1` or
+  `--use-env-proxy` is set (Node 22.21 and later) and would hand the name to the proxy unchecked. So the guard never
+  sends through a proxy, whatever the environment says.
+- Outside the guard: an app's own `fetch` (a test fake, a wrapper, a proxy). The engine cannot see what it resolves, so
+  only a host that is an address literal is checked. A proxy that an app's own `fetch` sends through resolves and dials
+  for it, unchecked. In production pass `guardedFetch`, or no `fetch`, for an entry whose host is typed.
+
 #### Arriving later
 
-Some pieces of this design are not in the code until a provider or a later step needs them: `docs` and `categories`,
-`fields[].default` and `help`, `Send.value`, `oauth2.send`, `Call.base` and `Operation.base`, placeholders in
-`identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds
-`offset`, `page` and `linkHeader`, `Size`, and `Where.variables`. `paging` and `operations` arrive with the walker and
-the client.
+Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
+`Send.value`, `oauth2.send`, `Call.base` and `Operation.base`, placeholders in `identify`'s request path, the `s` and
+`epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
+and `Where.variables`. `paging` and `operations` arrive with the walker and the client.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -165,12 +216,16 @@ type Auth =
       scopeSeparator?: ','; authorizeParams?: Record<string, string>; tokenTypes?: readonly string[];
       failed?: When; reusesGrant?: true; send?: Send };
 
-type Send = { header: string; value?: Template } | { basic: readonly [Template, Template] };
+type Send = { header: string; value?: Template } | { basic: readonly [Template, Template] }
+  | { query: Record<string, Template> };
 ```
 
 - `send` says how the credential travels. With no `send` it is `{ header: 'authorization', value: 'Bearer {token}' }`.
   A `send` with a header and no `value` sends the bare `{token}`.
 - `key` covers API keys, bearer tokens and basic auth: `{ basic: ['{apiId}', '{apiToken}'] }`.
+- `query` sets each parameter, filled, on the URL of every request and every redirect hop, after the caller's query, so
+  it replaces a value of the same name. It adds no header, and `beforeRequest` sees the URL without it. A query send
+  names at least one parameter.
 - `oauth2` states only what differs: PKCE on, the client secret in the body, scopes joined by a space. `failed` marks
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
@@ -234,8 +289,19 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   empty one is skipped and the next path read. A `/` in it becomes `.`, and it must then pass the library's strict
   pattern, so no provider text or secret reaches an error. `allow` keeps only the listed codes. It checks the first
   code found, so a refused one hides a later path.
-- Only a 429 is retried, as today, on reads, up to `retry.limit`. The wait is `Retry-After`, else `waitFromBody`, else
-  `retry.defaultWaitMs`, capped by `maxWaitMs`. An answer that step 3 reclassifies is reported, not retried.
+- Only a call marked idempotent is retried: a GET unless the caller says `idempotent: false`, or any call the caller
+  marks `idempotent: true` (an operation of `kind: 'read'`, an idempotent DELETE), never with a caller's `signal`. It is
+  retried after a 429, a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was
+  dropped before an answer), up to `retry.limit` retries of any of these together. The limit counts per request sent:
+  a redirect hop and the resend after a 401 each get their own.
+- A 429 waits `Retry-After`, else `waitFromBody`, else `retry.defaultWaitMs`, capped by `maxWaitMs`, with no jitter. The
+  others wait a positive `Retry-After`, capped by `maxWaitMs`; without one, the n-th retry (n from 0) waits a
+  full-jitter backoff: a random share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so
+  on. The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
+- Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
+  retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
+  the OAuth token endpoint and an RFC 7009 revoke. An answer that step 3 reclassifies is reported, not retried. The
+  last answer is classified as any other; a timeout, and a network failure after the last retry, are `unavailable`.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
   1 second. A `limit` of 0 means no retry; an error still carries the wait the provider names.
 - The error taxonomy does not change.
@@ -291,7 +357,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 
 - An operation's key is its id (`'issues.create'`). `kind` defaults from the method: GET is a read, DELETE a delete,
   anything else a write. A GraphQL operation is a POST, so a write unless it says `kind: 'read'`. A search sent as POST
-  says `kind: 'read'`, and reads are the calls the engine retries.
+  says `kind: 'read'`: the engine retries only a call marked idempotent, a GET by default and an operation of
+  `kind: 'read'`.
 - A shape key ending in `?` may be missing or null, and is read as absent.
 - `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 204
   (the usual answer to DELETE, PUT and PATCH) answers `null`, which `unknown` already covers. Any other answer without
@@ -306,8 +373,9 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   is a `TypeError` naming it (`param_missing: <name>`, `param_invalid: <name>`). An argument that is not declared, or is
   `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
   out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
-  strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body` parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}`
-  when none), posted with the query to the base.
+  strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
+  parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}` when none), posted with the query to
+  the base.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
   any, with their `id`s (or `null`). Without `records` it yields each page's whole answer.
@@ -329,11 +397,11 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 |---|---|
 | `catalogue` (new) | `defineProvider`, the entry types, the template and path helpers. |
 | `http` (internal) | `createClient(entry, options)` reads `auth.send`, `http`, `errors`, `rateLimit` from the entry, and `classify` interprets the declared rules. `./http` is no longer a subpath: `client` is the public client. |
-| `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. |
+| `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
 | `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
 | `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, plus `deliveryId(entry.webhook, request)`. |
-| `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default. |
+| `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |
 | `vault` | Unchanged. A connection's plain values are the app's to keep. |
 
 ```ts
@@ -379,8 +447,8 @@ leaves the entry `declared`. The module kits stay for what an entry cannot know,
 ## What an app developer learns
 
 Two concepts: an **entry** (a provider) and a **connection** (one account's secret and plain values, which the app
-keeps). Sign-in is `startConnect` and `finishConnect`; calls go through `client`. OAuth app credentials are arguments, never a stored
-"integration" object.
+keeps). Sign-in is `startConnect` and `finishConnect`; calls go through `client`. OAuth app credentials are arguments,
+never a stored "integration" object.
 
 ## Order of work
 
@@ -404,18 +472,24 @@ removed in the step that replaces it; nothing is kept for 0.12 callers.
 11. Declared operations and the inferred client; `./http` becomes internal.
 12. Release 0.13.0 with a migration list.
 
-**Stage B: expansion.** Each item arrives with a first provider that needs it, an entry and a recording or a derived
-fake as proof. Order follows how many providers need each:
+**Stage B: expansion.** Four pull requests. Each item arrives with a first provider that needs it, an entry citing
+its docs, and engine tests as proof:
 
-1. Keys in the query string, field choices (region, sandbox), templated base URLs with a host pattern, and the guarded
-   `fetch` that refuses private addresses.
-2. The remaining OAuth 2 deviations as flags: JSON token bodies, a separate refresh URL, extra token parameters, token
-   paths, a default expiry.
-3. One declared token request for client credentials and session logins.
-4. More webhook schemes (timestamped `t=,v1=` headers, SHA-1, Ed25519, shared tokens, Standard Webhooks) and challenge
-   handshakes.
-5. Retry of 5xx and network failures on reads, with jitter.
-6. A fake derived from an entry, a scaffolder (`pnpm new <id>`), and a five-step guide to adding a provider.
+1. **Where a call can go.** Keys in the query (SerpApi); field choices and defaults, and a base filled from a value with
+   a host pattern (Intercom); a guarded `fetch` that refuses private addresses, for a host the person types (GitLab);
+   retry of 5xx and network failures on reads, with jitter (Microsoft, Google).
+2. **How a token is obtained.** JSON token bodies, a second base for a declared call and a base from saved values
+   (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session sign-ins
+   (Zoom, Metabase); a templated token URL (PayPal, Metabase).
+3. **More webhook schemes.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 and a header value
+   template (Discord, Trello), shared tokens (Google), Standard Webhooks (GitLab), and a challenge handshake (Slack,
+   Discord).
+4. **The kit.** A fake derived from any entry, the recorder for an entry with no module, a scaffolder (`pnpm new <id>`)
+   and a five-step guide to adding a provider.
+
+Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
+code flow; templated OAuth authorize and token URLs (Shopify); placeholders in `bases`; retry of writes; second
+challenge shapes; webhook schemes that are code (Twilio, HubSpot v3, PayPal, SendGrid).
 
 OAuth 1, JWT and service-account sign-in, and multipart bodies wait for the first provider that needs them.
 

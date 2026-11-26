@@ -4,6 +4,7 @@ import { defineProvider } from '../catalogue.js';
  * API ID and the API token. */
 export const aircall = defineProvider({
   id: 'aircall', name: 'Aircall',
+  docs: 'https://developers.aircall.io/api-references',
   fields: [{ name: 'apiId', title: 'API ID' }, { name: 'apiToken', title: 'API token', secret: true }],
   auth: [{ kind: 'key', send: { basic: ['{apiId}', '{apiToken}'] } }],
   http: { baseUrl: 'https://api.aircall.io/v1', minIntervalMs: 500, retry: { defaultWaitMs: 60_000 } },

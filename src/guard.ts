@@ -1,0 +1,92 @@
+import { lookup, type LookupAddress, type LookupOptions } from 'node:dns';
+import { Agent, request as dial } from 'node:https';
+import { BlockList, isIP, type LookupFunction } from 'node:net';
+import { ProviderHttpError } from './errors.js';
+
+/** Addresses a typed host may never reach: unspecified, private, shared, loopback, link-local (the cloud metadata
+ * address), documentation, relay, benchmarking, multicast and reserved ranges, and their IPv6 counterparts. Never add
+ * `::ffff:0:0/96`: BlockList applies the IPv4 rules to IPv4-mapped addresses itself, and that IPv6 rule would match
+ * every IPv4 address, refusing the whole internet. */
+const BLOCKED = new BlockList();
+for (const range of ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24',
+  '192.0.2.0/24', '192.88.99.0/24', '192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/3', '::/96',
+  '64:ff9b::/96', '64:ff9b:1::/48', '100::/64', '2001::/32', '2001:db8::/32', '2002::/16', 'fc00::/7', 'fe80::/10', 'fec0::/10', 'ff00::/8']) {
+  const [network = '', prefix] = range.split('/');
+  BLOCKED.addSubnet(network, Number(prefix), isIP(network) === 4 ? 'ipv4' : 'ipv6');
+}
+
+/** Whether an address is one an entry's typed host may never reach; anything that is not an IP is blocked. */
+export function blockedAddress(ip: string): boolean {
+  const family = isIP(ip);
+  return family === 0 || BLOCKED.check(ip, family === 4 ? 'ipv4' : 'ipv6');
+}
+
+/** Whether a URL's host is an address literal (brackets stripped) that is blocked; a name is checked when it resolves. */
+export function blockedHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/gu, '');
+  return isIP(host) !== 0 && blockedAddress(host);
+}
+
+/** The one refusal for an address the guard blocks: `request_failed`, detail `address_blocked`, never retried. */
+export const refusal = () => new ProviderHttpError('request_failed', null, 'address_blocked');
+/** The guard's own sockets: the global agent may follow `HTTPS_PROXY` (`NODE_USE_ENV_PROXY`), dialling past the lookup. */
+const agent = new Agent({ keepAlive: true });
+
+/** An answer's body as fetch streams it: a connection lost midway is `TypeError('terminated')`, an abort its reason. */
+async function* bodyOf(incoming: AsyncIterable<Uint8Array>, signal: AbortSignal) {
+  try {
+    yield* incoming;
+  } catch (error) {
+    throw signal.aborted ? signal.reason as Error : new TypeError('terminated', { cause: error });
+  }
+}
+
+/** `dns.lookup` that answers only when every resolved address is allowed: the lookup `guardedFetch` dials with. */
+export function guardedLookup(host: string, options: LookupOptions,
+  callback: (error: Error | null, address?: string | LookupAddress[], family?: number) => void): void {
+  lookup(host, { ...options, all: true }, (error, addresses) => {
+    if (error) { callback(error); return; }
+    const [first] = addresses;
+    if (first === undefined || addresses.some(({ address }) => blockedAddress(address))) callback(refusal());
+    else if (options.all === true) callback(null, addresses);
+    else callback(null, first.address, first.family);
+  });
+}
+
+/** A fetch over node:https that refuses, before any request byte is written, every blocked address it would dial. It
+ * answers a redirect as `redirect: 'manual'` does, never following it, and streams the answer's body. */
+export const guardedFetch: typeof fetch = async (input, init) => {
+  const request = new Request(input, init);
+  request.signal.throwIfAborted();
+  const url = new URL(request.url);
+  if (url.protocol !== 'https:' || blockedHost(url.hostname)) throw refusal();
+  const body = request.body === null ? undefined : Buffer.from(await request.arrayBuffer());
+  return new Promise<Response>((resolve, reject) => {
+    const outgoing = dial(url, { method: request.method, headers: Object.fromEntries(request.headers), signal: request.signal,
+      agent, lookup: guardedLookup as LookupFunction });
+    // A reused socket is checked again; a new one as it connects, before TLS or the request writes anything.
+    outgoing.on('socket', socket => {
+      const check = () => { if (blockedAddress(socket.remoteAddress ?? '')) outgoing.destroy(refusal()); };
+      if (socket.connecting) socket.prependOnceListener('connect', check); else check();
+    });
+    outgoing.on('error', error => {
+      // As fetch does: an abort rejects with the signal's reason, a refusal as it is, anything else as `fetch failed`.
+      reject(request.signal.aborted ? request.signal.reason as Error
+        : error instanceof ProviderHttpError ? error : new TypeError('fetch failed', { cause: error }));
+    });
+    outgoing.on('response', incoming => {
+      const headers = new Headers();
+      for (let at = 0; at < incoming.rawHeaders.length; at += 2) headers.append(incoming.rawHeaders[at] ?? '', incoming.rawHeaders[at + 1] ?? '');
+      const status = incoming.statusCode ?? 0;
+      const empty = request.method === 'HEAD' || [204, 205, 304].includes(status);
+      if (empty) incoming.resume();
+      try {
+        resolve(new Response(empty ? null : ReadableStream.from(bodyOf(incoming, request.signal)), { status, headers }));
+      } catch (error) {
+        outgoing.destroy();
+        reject(new TypeError('fetch failed', { cause: error }));
+      }
+    });
+    outgoing.end(body);
+  });
+};

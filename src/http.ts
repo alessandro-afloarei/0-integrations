@@ -2,9 +2,10 @@ import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
-import { bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
+import { blockedHost, guardedFetch, refusal } from './guard.js';
+import { backoffMs, bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { fill, parseJson } from './rules.js';
+import { fill, parseJson, placeholders, plainValue } from './rules.js';
 
 export type RequestOptions = {
   method?: Method;
@@ -56,6 +57,9 @@ async function retryBody(response: Response, timeoutMs: number): Promise<string>
 }
 
 const MAX_REDIRECTS = 5;
+/** The statuses a read is retried after: a 429, a 408 (the server's request timeout) and the passing server failures
+ * (never 501). */
+const RETRIED = [408, 429, 500, 502, 503, 504];
 
 /**
  * The redirect to follow, as fetch would: only to the same origin, since the credential must not reach another host,
@@ -75,21 +79,53 @@ function redirectTarget(url: URL, method: string, response: ProviderResponse): U
   }
 }
 
-/** The header a request's credential travels in: Bearer by default, a header's bare token, or Basic from a template. */
-function credentialOf(entry: Entry, token: string, values: Values): [header: string, value: string] {
+/** What a request's credential adds: a header, or query parameters set on every hop. */
+type Credential = { header?: [name: string, value: string]; query?: [name: string, value: string][] };
+
+/** Bearer by default, a header's bare token, Basic from a template, or the query's parameters from templates. */
+function credentialOf(entry: Entry, token: string, values: Values): Credential {
   const [auth] = entry.auth;
   const send = 'send' in auth ? auth.send : undefined;
-  if (send === undefined) return ['authorization', `Bearer ${token}`];
-  if ('header' in send) return [send.header, token];
+  if (send === undefined) return { header: ['authorization', `Bearer ${token}`] };
+  if ('header' in send) return { header: [send.header, token] };
   const secret = entry.fields?.find(field => field.secret === true)?.name;
-  const lookup = (name: string) => (name === 'token' || name === secret ? token : values[name]);
+  const lookup = (name: string) => (name === 'token' || name === secret ? token : plainValue(values, name));
+  if ('query' in send) return { query: Object.entries(send.query).map(([name, template]) => [name, fill(template, lookup, entry.id)]) };
   const pair = `${fill(send.basic[0], lookup, entry.id)}:${fill(send.basic[1], lookup, entry.id)}`;
-  return ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`];
+  return { header: ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`] };
+}
+
+/** A value a base's placeholder takes: a host name's ASCII labels. Never a port (`http.host` checks the name alone), a
+ * `/`, `@`, `#`, space or empty label; no `i` flag, which would let the Kelvin sign and the long s pass as `k` and `s`. */
+const BASE_VALUE = /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/u;
+
+/** The entry's base, its placeholders filled from plain values: an https URL with no user, its host matching `http.host`
+ * (equal, `*.d` a name ending in `.d`, `*` any). Throws before anything is read or sent. */
+function filledBase(entry: Entry, values: Values): string {
+  const { baseUrl, host = '' } = entry.http;
+  if (placeholders(baseUrl).length === 0) return baseUrl;
+  const filled = fill(baseUrl, name => {
+    const value = plainValue(values, name);
+    if (value !== undefined && !BASE_VALUE.test(String(value))) throw new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
+    return value;
+  }, entry.id);
+  const url = URL.canParse(filled) ? new URL(filled) : undefined;
+  const hosted = url !== undefined && (host === '*' || url.hostname === host || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1))));
+  if (!hosted || url.protocol !== 'https:') throw new TypeError(`base_host_refused: ${entry.id}`);
+  // A typed host that is an address is checked here too, since an app's own fetch cannot be seen to dial; a name is
+  // only checked by guardedFetch.
+  if (host === '*' && blockedHost(url.hostname)) throw refusal();
+  return filled;
+}
+
+/** The fetch an entry uses when the app passes none: guardedFetch for `http.host: '*'`, else the global one. */
+export function defaultFetch(entry: Entry): typeof fetch {
+  return entry.http.host === '*' ? guardedFetch : globalThis.fetch;
 }
 
 export type HttpOptions = {
   token: (rejected?: string) => Promise<string>; fetch: typeof fetch;
-  /** The connection's plain values, for a credential built from them (Aircall's `{apiId}`). */
+  /** The connection's plain values, for a credential or a base built from them (Aircall's `{apiId}`, Intercom's `{apiHost}`). */
   values?: Values;
   baseUrl?: string; headers?: Readonly<Record<string, string>>; minIntervalMs?: number;
   /** Runs once per call, before anything is sent (an app's metering); what it throws reaches the caller unchanged. */
@@ -97,9 +133,20 @@ export type HttpOptions = {
 };
 
 export function createClient(entry: Entry, input: HttpOptions): HttpClient {
-  // Read without a trailing slash, so a path after it never makes `//` (`https://x/v1/` + `/a`).
-  const baseUrl = (input.baseUrl ?? entry.http.baseUrl).replace(/\/+$/u, '');
-  const origin = new URL(baseUrl).origin;
+  // Filled once, on the first read: a wrong value throws before it is sent, never when the client is built. An app's
+  // own base is used as given. Read without a trailing slash, so a path after it never makes `//` (`https://x/v1/` + `/a`).
+  let base: { url: string; origin: string } | undefined;
+  const based = () => {
+    if (base) return base;
+    const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
+    // A base parses and holds no username or password, an app's own included; refused by entry id alone, since Node's
+    // own errors name the URL (`ERR_INVALID_URL` keeps it in `input`) and its query key. No `URL.parse`: Node 22.1+.
+    const parsed = URL.canParse(url) ? new URL(url) : undefined;
+    if (parsed === undefined || parsed.username !== '' || parsed.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
+    return (base = { url, origin: parsed.origin });
+  };
+  const [auth] = entry.auth;
+  const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];
   const retry = retryPolicy(entry.http.retry);
   const timeoutMs = entry.http.timeoutMs ?? 30_000;
   const minIntervalMs = input.minIntervalMs ?? entry.http.minIntervalMs ?? 0;
@@ -129,10 +176,12 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     return renewal;
   }
 
-  /** Waits: a positive Retry-After, else the wait the body names, else the provider's default. */
-  async function waitFor(response: Response): Promise<number> {
+  /** A 429's wait: a positive Retry-After, else the wait the body names, else the provider's default, with no jitter. A
+   * 408's or a 5xx's: a positive Retry-After, else the backoff. */
+  async function waitFor(response: Response, retryCount: number): Promise<number> {
     const header = retryAfterMs(response.headers, Date.now());
     if (header !== null && header > 0) return header;
+    if (response.status !== 429) return backoffMs(retry.maxWaitMs, retryCount);
     // The body is read only for a wait the entry says it names: a slow body must not hold up the retry.
     const fromBody = entry.http.retry?.waitFromBody === undefined ? undefined
       : bodyWaitOf(entry.http.retry, parseJson(await retryBody(response, timeoutMs)), Date.now());
@@ -145,7 +194,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     if (wait > 0) await new Promise<void>(resolve => { setTimeout(resolve, wait); });
   }
 
-  async function send(url: URL, [name, value]: [string, string], options: RequestOptions): Promise<ProviderResponse> {
+  async function send(url: URL, credential: [string, string] | undefined, options: RequestOptions): Promise<ProviderResponse> {
     const method = options.method ?? 'GET';
     // A GET is a read unless the caller says otherwise (an operation declared a write).
     const limit = (options.idempotent ?? method === 'GET') && !options.signal ? retry.limit : 0;
@@ -153,7 +202,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     try {
       headers = new Headers(entry.http.headers);
       for (const [key, header] of Object.entries(input.headers ?? {})) headers.set(key, header);
-      headers.set(name, value);
+      if (credential) headers.set(...credential);
     } catch {
       throw new ProviderHttpError('request_failed', null);
     }
@@ -164,13 +213,15 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
         ...(options.signal ? { signal: options.signal } : {}),
         ...(options.json !== undefined ? { json: options.json } : {}),
         ...(options.form ? { body: new URLSearchParams(options.form) } : {}),
-        // Only a 429 is retried, by the hook below; ky's own status and network retries stay off.
-        retry: { limit, statusCodes: [], shouldRetry: () => false },
+        // A status is retried by the hook below; ky retries only a network failure, after the backoff, on the request's
+        // own method (`limit` already says whether it is a read). A timeout has spent the time budget: never retried.
+        retry: { limit, methods: [method], statusCodes: [], delay: attempt => backoffMs(retry.maxWaitMs, attempt - 1),
+          shouldRetry: ({ error }) => isNetworkError(error) },
         hooks: {
           beforeRequest: [pace], beforeRetry: [pace],
           afterResponse: [async ({ response, retryCount }) => {
-            if (response.status !== 429 || retryCount >= limit) return;
-            return ky.retry({ delay: Math.min(await waitFor(response), retry.maxWaitMs) });
+            if (!RETRIED.includes(response.status) || retryCount >= limit) return;
+            return ky.retry({ delay: Math.min(await waitFor(response, retryCount), retry.maxWaitMs) });
           }],
         },
       });
@@ -186,24 +237,31 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     }
   }
 
-  async function follow(start: URL, bearer: string, credential: [string, string], options: RequestOptions): Promise<ProviderResponse> {
-    const [, value] = credential;
+  async function follow(start: URL, bearer: string, { header, query = [] }: Credential, options: RequestOptions): Promise<ProviderResponse> {
+    // Every value the credential rendered (the token, a header's value, each query value): a code echoing one is no detail.
+    const rendered = [bearer, ...query.map(([, value]) => value), ...header ? [header[1].slice(header[1].indexOf(' ') + 1)] : []];
     let url = start;
     for (let hop = 0; ; hop++) {
-      const response = await send(url, credential, options);
+      // Set on each hop's copy, replacing the caller's or a Location's value; `start` never holds it.
+      const sent = new URL(url);
+      for (const [name, value] of query) sent.searchParams.set(name, value);
+      const response = await send(sent, header, options);
       const next = hop < MAX_REDIRECTS ? redirectTarget(url, options.method ?? 'GET', response) : null;
-      if (next === null) return sentWith(response, [bearer, value.slice(value.indexOf(' ') + 1)]);
+      if (next === null) return sentWith(response, rendered);
       url = next;
     }
   }
 
   const request = async (path: string, options: RequestOptions = {}): Promise<ProviderResponse> => {
+    const { url: baseUrl, origin } = based();
     const url = new URL(baseUrl + path);
     // The credential never leaves the base's origin, the first request included (`https://api.x.test` + `@evil.test`).
     if (url.origin !== origin) throw new TypeError('url_outside_origin');
     // A path is read after the base, so one without its `/` would run into the base's last segment (`/v1users`).
     if (path !== '' && !path.startsWith('/') && !path.startsWith('?')) throw new TypeError('url_path_relative');
     for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value);
+    // A next link may echo a query credential: `beforeRequest` never sees one.
+    for (const name of queried) url.searchParams.delete(name);
     await input.beforeRequest?.(new URL(url));
     const sendAs = (bearer: string) => follow(url, bearer, credentialOf(entry, bearer, input.values ?? {}), options);
     const bearer = await token();
@@ -214,7 +272,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   };
 
   return {
-    baseUrl,
+    get baseUrl() { return based().url; },
     request,
     async json(path, options) {
       return responseJson(entry, await request(path, options));

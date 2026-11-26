@@ -41,7 +41,7 @@ function withTokenAnswer(routes: Route[], change: (body: Record<string, unknown>
   } }, ...routes];
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('HubSpot sign-in', () => {
   it('starts with the exact read scopes', async () => {
@@ -84,6 +84,8 @@ describe('HubSpot sign-in', () => {
 
   it.each(['extras-zero', 'account-zero', 'account-unavailable'] as const)
   ('retains the issued refresh grant when identity fails (%s)', async failure => {
+    // The identify read is retried once after a 503; no backoff, so nothing waits.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     let issued: Record<string, unknown> = {};
     const http = fakeFetch(withTokenAnswer([
       ...(failure === 'account-unavailable' ? [{ url: accountUrl, respond: () => Response.json({ private: 'fixture-provider-secret' }, { status: 503 }) }] : []),
@@ -95,7 +97,7 @@ describe('HubSpot sign-in', () => {
     const onRevokeFailed = vi.fn();
     await expect(finish(http, await authorize(http), onRevokeFailed)).rejects.toEqual(
       failure === 'account-unavailable' ? new ProviderHttpError('unavailable', 503) : new ProviderHttpError('invalid_response', 200, 'missing_fields'));
-    expect(http.calls.filter(call => call.url === accountUrl)).toHaveLength(failure === 'extras-zero' ? 0 : 1);
+    expect(http.calls.filter(call => call.url === accountUrl)).toHaveLength({ 'extras-zero': 0, 'account-zero': 1, 'account-unavailable': 2 }[failure]);
     expect(http.calls.some(call => call.url === revokeUrl)).toBe(false);
     const refreshToken = issued.refresh_token;
     if (typeof refreshToken !== 'string') throw new Error('expected_refresh_token');

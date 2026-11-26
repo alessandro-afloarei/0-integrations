@@ -1,4 +1,4 @@
-import type { Operation, Param, Path, Shape, Template, When } from './catalogue.js';
+import type { Operation, Param, Path, Shape, Template, Values, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -59,6 +59,13 @@ export function fill(template: Template, lookup: (name: string) => unknown, wher
     if (typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))) return String(value);
     throw new TypeError(`template_missing: ${where} {${name}}`);
   });
+}
+
+/** A connection's plain value as templates read it: a non-blank string or a finite number, else undefined. Never a
+ * field's default: `finishConnect` applies it and returns it in `values`, which a client must be given. */
+export function plainValue(values: Values, name: string): string | number | undefined {
+  const value = values[name];
+  return (typeof value === 'string' && value.trim() !== '') || (typeof value === 'number' && Number.isFinite(value)) ? value : undefined;
 }
 
 export type Answer = { status: number; headers: Headers; body: unknown; code?: string | undefined };

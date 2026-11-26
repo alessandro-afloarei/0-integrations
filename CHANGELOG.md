@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+Nothing here is released yet.
+
+- New: an entry can send its key in the query string (`send: { query }`), first used by SerpApi.
+- A blank plain value (Aircall's `apiId: ''`) is refused with `template_missing` before anything is sent; it was sent as
+  `Basic :<token>`.
+- Every entry has a `docs` link.
+- New: a field may offer `choices` and a `default`, with `help`; a base may hold a host part from a plain value, checked
+  against `http.host`. First used by Intercom's region. Only `finishConnect` applies a default: a client needs the
+  connection's `values`.
+- New: `guardedFetch` (from `0-integrations/client`) refuses private, loopback, link-local, unique-local and metadata
+  addresses; an entry whose host is typed (`http.host: '*'`, first GitLab) uses it unless the app passes its own `fetch`.
+- `finishConnect`'s `fetch` is optional.
+- An entry with `retry` now also retries 408, 500, 502, 503 and 504 answers and network failures on reads, with
+  full-jitter backoff from one second: the n-th retry waits a random share of at most 1, 2, 4 seconds and so on, capped
+  by `maxWaitMs`, or a positive `Retry-After` (Microsoft, Google, Attio, HubSpot, Notion, Aircall, Breakcold and the
+  other entries that declare `retry`). A timeout is not retried.
+- A Firecrawl scrape that runs a script (`actions`) skips the automatic retries: a 5xx or a dropped connection goes
+  straight to the plain read, and a 429 fails with the wait Firecrawl names (before, its 429 was retried). A plain
+  scrape and a map are retried as reads.
+
 ## 0.13.0
 
 Every line below breaks 0.12 unless it says otherwise.
