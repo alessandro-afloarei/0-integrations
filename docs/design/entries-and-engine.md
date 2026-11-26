@@ -641,6 +641,10 @@ are `'unknown'`. A `get`, `create` and `update` declare the same record as the l
 only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
+When a page requires at least one of several equal inputs to find one record (an email, a LinkedIn URL, a domain), none
+is `required` and each input's description names the group: the engine sends what the app gives, and the provider
+refuses a call with none until the engine can refuse it first ("A group of parameters of which at least one is
+required" on the [waiting list](../waiting-list.md#mechanisms)). For a list, the filter that scopes it stays required.
 
 ## The engine
 

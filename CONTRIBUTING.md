@@ -40,6 +40,8 @@ one takes five steps:
      a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
      the list to its container (a project, a board), are required; an operation that needs a header whose value changes
      per call stays out and goes on the [waiting list](docs/waiting-list.md);
+   - when the page asks for at least one of several equal inputs that find one record (an email, a LinkedIn URL, a
+     domain), none is required and each input's description names the group: the provider refuses a call with none;
    - a call the docs say spends credits is `kind: 'write'`, whatever its method, and its leading comment names the
      credit page;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
