@@ -137,7 +137,7 @@ test('403 is rejected, 404 not_found, 500 unavailable, 400 request_failed', asyn
 
 test("times out at the provider's timeoutMs", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => new Promise<Response>(() => {}) }]);
-  const client = createClient(headerKey, { token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const client = createClient(hubspot, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   let settled = false;
   const result = client.json('/items').catch((e: unknown) => { settled = true; return e; });
   await vi.advanceTimersByTimeAsync(29999);
@@ -707,7 +707,7 @@ const retrying = (retry: Retry, extra: Partial<Entry> = {}) => defineProvider({ 
 const answer = (status: number, headers: Record<string, string> = {}) => () => Response.json({}, { status, headers });
 const offline = () => { throw new TypeError('fetch failed'); };
 
-describe('a read is retried after a 5xx, a 408, a network failure or a timeout, waiting with full jitter', () => {
+describe('a read is retried after a 5xx, a 408 or a network failure, waiting with full jitter', () => {
   beforeEach(() => { vi.spyOn(Math, 'random').mockReturnValue(0.5); });
   afterEach(() => { vi.restoreAllMocks(); });
 
@@ -786,14 +786,14 @@ describe('a read is retried after a 5xx, a 408, a network failure or a timeout, 
     expect(fake.calls).toHaveLength(3);
   });
 
-  test('a timeout is retried', async () => {
-    let hangs = true;
-    const fake = fakeFetch([{ url: /https:/, respond: () => (hangs ? ((hangs = false), new Promise<Response>(() => undefined)) : ok()) }]);
-    const client = createClient(retrying({}), { token: () => Promise.resolve('t'), fetch: fake.fetch });
-    const result = client.json('/a');
-    await vi.advanceTimersByTimeAsync(30_000 + 500);
-    expect(await result).toEqual({ ok: true });
-    expect(fake.calls).toHaveLength(2);
+  test('a timeout is never retried: one request, unavailable once the time budget is spent', async () => {
+    const fake = fakeFetch([{ url: /https:/, respond: () => new Promise<Response>(() => undefined) }]);
+    const client = createClient(retrying({ limit: 3 }), { token: () => Promise.resolve('t'), fetch: fake.fetch });
+    const result = client.json('/a').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await result).toMatchObject({ code: 'unavailable', status: null });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fake.calls).toHaveLength(1);
   });
 
   const failedOk = retrying({}, { errors: { failed: { path: 'ok', equals: false } } });

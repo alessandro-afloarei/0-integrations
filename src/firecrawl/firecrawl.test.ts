@@ -103,21 +103,17 @@ test("waits out a scrape's 429 and resends the same body", async () => {
   }
 });
 
-test('ends a stalled map at 120 seconds an attempt, after its three retries', async () => {
+test('ends a stalled map at 120 seconds', async () => {
   vi.useFakeTimers();
-  vi.spyOn(Math, 'random').mockReturnValue(0);
   try {
     const fake = fakeFetch([{ url: 'https://api.firecrawl.dev/v2/map', respond: () => new Promise<Response>(() => undefined) }]);
     let settled = false;
     const pending = client(fake).map('https://x.test', 5).catch((error: unknown) => error).finally(() => { settled = true; });
-    await vi.advanceTimersByTimeAsync(4 * 120_000 - 1);
+    await vi.advanceTimersByTimeAsync(119_999);
     expect(settled).toBe(false);
-    // Each of the three retries waits a zero backoff, which a timer still counts as a millisecond.
-    await vi.advanceTimersByTimeAsync(4);
+    await vi.advanceTimersByTimeAsync(1);
     expect(await pending).toMatchObject({ code: 'unavailable' });
-    expect(fake.calls).toHaveLength(4);
   } finally {
     vi.useRealTimers();
-    vi.restoreAllMocks();
   }
 });

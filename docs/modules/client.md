@@ -52,9 +52,9 @@ sent in the query (SerpApi's `api_key`) is set on every hop, replacing a value o
 or the redirect, and no error the library builds holds the URL. A call times out after the entry's `timeoutMs` (30
 seconds by default) and is paced `minIntervalMs` apart. A read is sent again only when the entry declares
 `http.retry`, never with a caller's `signal`, and at most `retry.limit` times: after a 429 (waiting what it names, else
-`retry.defaultWaitMs`), and after a 408, 500, 502, 503 or 504, a network failure or a timeout (waiting a positive
-`Retry-After`, else a random share of `defaultWaitMs` doubled at each retry). No wait is longer than `retry.maxWaitMs`.
-A write, a 501, any other 4xx and an `address_blocked` refusal are never retried. A GET is a read unless `idempotent`
+`retry.defaultWaitMs`), and after a 408, 500, 502, 503 or 504 or a network failure (waiting a positive `Retry-After`,
+else a random share of `defaultWaitMs` doubled at each retry). No wait is longer than `retry.maxWaitMs`. A write, a
+timeout (it is `unavailable` at once), a 501, any other 4xx and an `address_blocked` refusal are never retried. A GET is a read unless `idempotent`
 says otherwise. An error answer is a `ProviderHttpError` or a `GrantRevoked`
 ([errors](errors.md)), classified by the entry's rules.
 

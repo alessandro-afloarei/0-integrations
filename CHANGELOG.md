@@ -15,7 +15,9 @@ Nothing here is released yet.
 - `finishConnect`'s `fetch` is optional.
 - An entry with `retry` now also retries 408, 500, 502, 503 and 504 answers and network failures on reads, with
   full-jitter backoff (Microsoft, Google, Attio, HubSpot, Notion, Aircall, Breakcold and the other entries that declare
-  `retry`).
+  `retry`). A timeout is not retried.
+- A 5xx on a read is now retried before a module's own fallback runs: Firecrawl's 500 "Action(s) failed" is sent again
+  up to three times before the page is read as it loads.
 
 ## 0.13.0
 

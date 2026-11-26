@@ -289,13 +289,15 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   code found, so a refused one hides a later path.
 - Only a read is retried: a GET unless the caller says `idempotent: false`, or a call the caller marks idempotent (an
   operation of `kind: 'read'`), never with a caller's `signal`. It is retried after a 429, a 408, 500, 502, 503 or 504,
-  a network failure or a timeout, up to `retry.limit` retries of any of these together.
+  or a network failure (the connection could not be made, or was dropped before an answer), up to `retry.limit` retries
+  of any of these together.
 - A 429 waits `Retry-After`, else `waitFromBody`, else `retry.defaultWaitMs`, capped by `maxWaitMs`, with no jitter. The
   others wait a positive `Retry-After`, capped by `maxWaitMs`; without one, the n-th retry (n from 0) waits a full-jitter
   backoff: a random share of `min(maxWaitMs, defaultWaitMs × 2^n)`.
-- Never retried: a write, a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`, the
-  OAuth token endpoint and an RFC 7009 revoke. An answer that step 3 reclassifies is reported, not retried. The last answer is
-  classified as any other; a network failure or a timeout after the last retry is `unavailable`.
+- Never retried: a write, a timeout (the caller has already waited the whole `timeoutMs`; a retry would only multiply
+  it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`, the OAuth token endpoint
+  and an RFC 7009 revoke. An answer that step 3 reclassifies is reported, not retried. The last answer is classified as
+  any other; a timeout, and a network failure after the last retry, are `unavailable`.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
   1 second. A `limit` of 0 means no retry; an error still carries the wait the provider names.
 - The error taxonomy does not change.

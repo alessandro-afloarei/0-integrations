@@ -208,10 +208,10 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
         ...(options.signal ? { signal: options.signal } : {}),
         ...(options.json !== undefined ? { json: options.json } : {}),
         ...(options.form ? { body: new URLSearchParams(options.form) } : {}),
-        // A status is retried by the hook below; ky retries only a network failure or a timeout, after the backoff, on
-        // the request's own method (`limit` already says whether it is a read).
+        // A status is retried by the hook below; ky retries only a network failure, after the backoff, on the request's
+        // own method (`limit` already says whether it is a read). A timeout has spent the time budget: never retried.
         retry: { limit, methods: [method], statusCodes: [], delay: attempt => backoffMs(retry, attempt - 1),
-          shouldRetry: ({ error }) => isNetworkError(error) || isTimeoutError(error) },
+          shouldRetry: ({ error }) => isNetworkError(error) },
         hooks: {
           beforeRequest: [pace], beforeRetry: [pace],
           afterResponse: [async ({ response, retryCount }) => {
