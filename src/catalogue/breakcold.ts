@@ -7,7 +7,7 @@ export const breakcold = defineProvider({
   categories: ['crm'],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://rest.breakcold.com/api/v1',
-    retry: { defaultWaitMs: 0, waitFromBody: { path: 'error.retryAfterMs', unit: 'ms' } } },
+    retry: { waitFromBody: { path: 'error.retryAfterMs', unit: 'ms' } } },
   errors: { detail: 'error.code' },
   identify: { request: { path: '/workspaces', query: { limit: '100' } } },
   webhook: { kind: 'hmac', header: 'x-webhook-signature', signed: '{timestamp}.{body}', prefix: 'sha256=',
