@@ -172,6 +172,18 @@ describe('guardedFetch is fetch for what the engine sends', () => {
       length: '3', key: 'k', body: 'a=b' });
   });
 
+  test("a caller's accept-encoding is removed, whatever its case, and every other header is sent", async () => {
+    answer = (request, response) => {
+      response.end(JSON.stringify({ encoding: request.headers['accept-encoding'] ?? null, other: request.headers['x-other'] }));
+    };
+    const headers = { 'Accept-Encoding': 'gzip, br', 'x-other': '1' };
+    const caller = new Request(`${at}/echo`, { headers });
+    for (const response of [await guardedFetch(new URL(`${at}/echo`), { headers }), await guardedFetch(caller)]) {
+      expect(await response.json()).toEqual({ encoding: null, other: '1' });
+    }
+    expect(caller.headers.get('accept-encoding')).toBe('gzip, br');
+  });
+
   test('a Request, as ky sends one, with a JSON body', async () => {
     answer = (request, response, body) => { response.end(`${request.method ?? ''} ${request.url ?? ''} ${body}`); };
     const response = await guardedFetch(new Request(`${at}/items`, { method: 'PUT', body: JSON.stringify({ a: 1 }) }));

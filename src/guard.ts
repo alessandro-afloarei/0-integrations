@@ -61,6 +61,7 @@ export const guardedFetch: typeof fetch = async (input, init) => {
   const url = new URL(request.url);
   if (url.protocol !== 'https:' || blockedHost(url.hostname)) throw refusal();
   const body = request.body === null ? undefined : Buffer.from(await request.arrayBuffer());
+  request.headers.delete('accept-encoding'); // this copy's: no compression is decoded, so none is asked for
   return new Promise<Response>((resolve, reject) => {
     const outgoing = dial(url, { method: request.method, headers: Object.fromEntries(request.headers), signal: request.signal,
       agent, lookup: guardedLookup as LookupFunction });

@@ -76,7 +76,8 @@ link-local, unique-local and metadata addresses (the ranges are in the
 address, and a name that resolves to one, as
 `ProviderHttpError('request_failed', null, 'address_blocked')`, never retried. It dials only an address its own lookup
 checked, and checks the connected address again before a byte is written, so a name rebound to a private address
-between the two is refused. It answers a redirect without following it, as `redirect: 'manual'` does.
+between the two is refused. It answers a redirect without following it, as `redirect: 'manual'` does. It asks for no
+compression, removes a caller's `accept-encoding`, and decodes none.
 
 An entry whose host the person types uses it when the app passes no `fetch`:
 
