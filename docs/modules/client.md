@@ -123,8 +123,8 @@ An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pag
 
 - Each argument is checked by its declared type before anything is sent: `TypeError('param_missing: <name>')` or
   `TypeError('param_invalid: <name>')`. An argument that is not declared, or is `undefined`, is not sent. An operation
-  with no required parameter may be called with no argument. An operation with a body parameter always sends a JSON
-  object, `{}` when no body argument is given; one with no body parameter sends no body.
+  with no required parameter may be called with no argument. An operation that declares body parameters sends a JSON
+  object, `{}` when no body argument is given.
 - The answer is read by the operation's `result`: undeclared keys are dropped, and an answer that does not fit is
   `invalid_response`. With no `result` the answer is `unknown`, and a 204 answers `null`; any other answer without JSON
   is `invalid_response`. With `notFound: 'null'` a 404 answers `null`.

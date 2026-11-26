@@ -518,9 +518,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
   out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
   strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
-  parameters are sent as one JSON object, `{}` when none is given (an operation with no `body` parameter sends no body),
-  `variables` as GraphQL's variables (`{}` when none), posted with the query to
-  the base.
+  parameters are sent as one JSON object, `{}` when none is given, `variables` as GraphQL's variables (`{}` when none),
+  posted with the query to the base.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
   any, with their `id`s (or `null`). Without `records`, a list `result` is the records themselves (a list at the answer's

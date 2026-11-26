@@ -11,7 +11,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 
 | Mechanism | Providers waiting |
 |---|---|
-| An OAuth 2 sign-in that reads a plain field: a host its authorize and token URLs are built from, or a value in the base (a host, an organization). **Next to be built.** | Mattermost (the host in the URLs), Azure DevOps (the organization in the base), Outline (the host in the base; its documented URLs are the cloud's), Sentry (the host in the base; its documented URLs are sentry.io's) |
+| An OAuth 2 sign-in that reads a plain field: a host its authorize and token URLs are built from, or a value in the base (a host, an organization). A token is sent only to the host that issued it: on a person's own server, the registration, the sign-in and the calls all belong to that server. **Next to be built.** | Mattermost (the host in the URLs), Azure DevOps (the organization in the base), Outline (the host in the base; its documented OAuth URLs are the cloud's, so that sign-in belongs to the cloud's API host only), Sentry (the host in the base; its documented OAuth URLs are sentry.io's, so that sign-in belongs to sentry.io's API host only) |
 | A GraphQL cursor sent in the query's variables (Linear's lists are declared one page each, `first` and `after` ordinary variables) | Linear, monday.com |
 | `offset` paging | Outline, PagerDuty |
 | A 429's wait in a header of seconds left (`RateLimit-User-Reset`, `RateLimit-Reset`) | Buildkite, PagerDuty |
@@ -70,7 +70,7 @@ entry's comment, not here.
 | Honeybadger | The Bearer token a person may set on the Webhook integration: `webhook` checks `Honeybadger-Token` | A `token` webhook whose header carries a prefix |
 | incident.io | The webhook: its page leaves the hash and the secret's form to Svix | — |
 | Outline | Paging: each list answers one page, `offset` and `limit` body parameters, `pagination` in the result | `offset` paging |
-| Outline | OAuth 2: its documented URLs are the cloud's (`app.getoutline.com`), while the entry's base is the host the person types | An OAuth 2 sign-in that reads a plain field |
+| Outline | OAuth 2: its documented URLs are the cloud's (`app.getoutline.com`), so that sign-in belongs to the cloud's API host only, while the entry's base is the host the person types | An OAuth 2 sign-in that reads a plain field |
 | Mattermost | OAuth 2: each server is its own OAuth 2 provider | An OAuth 2 sign-in that reads a plain field |
 | Mattermost | Paging and records of `posts.list`: one page, its posts a map keyed by id (`'unknown'`) beside `order`, `page` and `per_page` ordinary parameters, `has_next` in the result | A list whose records are a map keyed by id |
 | Zulip | `messages.create` | A form-encoded body |
@@ -84,7 +84,7 @@ entry's comment, not here.
 | Vercel | OAuth 2 (Sign in with Vercel): its REST API permissions are in private beta | — |
 | Render | Paging: each list answers one page, `cursor` and `limit` declared, each element keeps its `cursor` | A next cursor read from the last record of a page |
 | Sentry | Paging: each list answers one page, `cursor` an ordinary query parameter (the next cursor is in the `Link` header only) | `Link` paging that ends on `results="false"` |
-| Sentry | OAuth 2: its documented authorize and token URLs are sentry.io's ([OAuth2](https://docs.sentry.io/api/auth/#oauth2)), while the entry's base is the host the person types | An OAuth 2 sign-in that reads a plain field |
+| Sentry | OAuth 2: its documented authorize and token URLs are sentry.io's ([OAuth2](https://docs.sentry.io/api/auth/#oauth2)), so that sign-in belongs to sentry.io's API host only, while the entry's base is the host the person types; a client is made under Developer Settings, then OAuth Applications ([Setting up Sentry OAuth application](https://github.com/getsentry/sentry-oauth-example#1-setting-up-sentry-oauth-application)) | An OAuth 2 sign-in that reads a plain field |
 | Sentry | OAuth 2 for a public integration (Sentry's integration platform) | An OAuth 2 token URL built from a value the redirect returns |
 | PagerDuty | Paging: each list answers one page, `limit` and `offset` declared, `more` in the result | `offset` paging |
 | PagerDuty | `incidents.create` and `incidents.update`: both need the `From` header | An operation parameter sent as a header |
