@@ -217,10 +217,10 @@ describe("the HubSpot client", () => {
     expect(calls[0]).toMatchObject({ url: "https://api.hubapi.com/crm/pipelines/2026-09/deals", method: "GET" });
   });
 
-  it("lists the owners who have an email, across pages, skipping and reporting a malformed one", async () => {
+  it("lists the owners who have an email, across pages, leaving out one with none and reporting a malformed one", async () => {
     const { calls, fetch } = scripted(
       json({ results: [{ email: "Alice@Acme.test", firstName: "Alice", lastName: "Reed" }, { firstName: "No", lastName: "Email" },
-        { id: "7", email: 42 }], paging: { next: { after: "a+b=" } } }),
+        { id: "8", email: null }, { id: "7", email: 42 }], paging: { next: { after: "a+b=" } } }),
       json({ results: [{ email: "bob@acme.test", firstName: "", lastName: "" }, "junk"] }),
     );
     expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners()).toEqual({

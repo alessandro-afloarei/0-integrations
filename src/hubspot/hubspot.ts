@@ -39,7 +39,7 @@ const portalIdSchema = z.union([z.number().int().positive(), z.string().regex(/^
 const accountSchema = z.object({ portalId: portalIdSchema });
 const pipelinesSchema = z.object({ results: z.array(z.object({ stages: z.array(z.object({ id: z.string(), label: z.string() })) })) });
 const ownersSchema = z.object({ results: z.array(z.unknown()) });
-const ownerSchema = z.object({ email: z.string().optional(), firstName: z.string().optional(), lastName: z.string().optional() });
+const ownerSchema = z.object({ email: z.string().nullish(), firstName: z.string().optional(), lastName: z.string().optional() });
 
 export function hubspotClient(input: {
   /** The run's access token; asked again once, naming the token HubSpot answered 401 to, so a refresh replaces it. */
@@ -152,8 +152,8 @@ export function hubspotClient(input: {
       const answer = await call("/crm/pipelines/2026-09/deals", pipelinesSchema);
       return new Map(answer.results.flatMap(pipeline => pipeline.stages.map(stage => [stage.id, stage.label] as const)));
     },
-    /** The portal's owners who have an email, lower-cased; a name falls back to the email. A malformed owner is skipped
-     * and its id reported. */
+    /** The portal's owners who have an email, lower-cased; a name falls back to the email. An owner with no email, null
+     * or absent, is left out; a malformed one is skipped and its id reported. */
     async owners(): Promise<{ items: HubSpotOwner[]; skipped: (string | null)[] }> {
       const items: HubSpotOwner[] = [];
       const skipped: (string | null)[] = [];
