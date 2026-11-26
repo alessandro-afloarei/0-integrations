@@ -122,16 +122,28 @@ async function clientGuarded(accessToken: string, host: string) {
 
 // docs/modules/connect.md › A token provider's connect.
 async function connectToken(password: string, host: string, username: string) {
+  // Once, at sign-in:
   const { secret, values, account } = await finishConnect(metabase, { secret: { password }, values: { host, username } });
   // secret: { password } to seal; values: { host, username } to keep; account: { id: username, name: username }
+
+  // Outside any request handler, once per connection:
   const api = client(metabase, { token: tokenSource(metabase, { secret, values }), values });
-  return [api, account];
+
+  async function handler() {
+    return api.json('/user/current');
+  }
+  return [handler, account];
 }
 
 // docs/modules/oauth.md › A `token` entry.
 function oauthTokenSource(secret: { clientSecret: string }, values: { accountId: string; clientId: string }) {
+  // One source per connection, built outside any request handler and kept for the process's life.
   const api = client(zoom, { token: tokenSource(zoom, { secret, values }), values });
-  return api;
+
+  async function handler() {
+    return api.json('/users/me'); // every request reuses the kept token
+  }
+  return handler;
 }
 
 // docs/design/entries-and-engine.md › The engine (its operation line is a comment there).

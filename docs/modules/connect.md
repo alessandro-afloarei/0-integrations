@@ -68,10 +68,20 @@ import { client } from '0-integrations/client';
 import { finishConnect } from '0-integrations/connect';
 import { tokenSource } from '0-integrations/oauth';
 
+// Once, at sign-in:
 const { secret, values, account } = await finishConnect(metabase, { secret: { password }, values: { host, username } });
 // secret: { password } to seal; values: { host, username } to keep; account: { id: username, name: username }
+
+// Outside any request handler, once per connection:
 const api = client(metabase, { token: tokenSource(metabase, { secret, values }), values });
+
+export async function handler() {
+  return api.json('/user/current');
+}
 ```
+
+Build one source per connection and keep it for the process's life: a new source requests a new token (for Metabase,
+a new session; each process signs in its own).
 
 The [HubSpot page](hubspot.md) shows a whole OAuth connect against the HubSpot fake.
 

@@ -15,9 +15,8 @@ header.
 first token the entry's `revoke.token` names (it needs `client`, else `oauth_client_required`), or the entry's
 `revoke.request` sent with the access token, to the `http.bases` entry its `base` names, if any. A 2xx,
 `invalid_grant`, a revoked code and the entry's `goneErrors` are done, and so is an RFC 7009 revoke's 404, an entry
-with no `revoke` or a grant without the token it names. A request
-revoke's answer is read as any JSON call's: its 404 is `not_found` (a missing route, not a gone token), and a 2xx
-without JSON is `invalid_response`.
+with no `revoke` or a grant without the token it names. A request revoke's answer is read as any JSON call's: its 404
+is `not_found` (a missing route, not a gone token), and a 2xx without JSON is `invalid_response`.
 
 ## A `token` entry: `tokenSource`
 
@@ -29,8 +28,16 @@ import { zoom } from '0-integrations/catalogue/zoom';
 import { client } from '0-integrations/client';
 import { tokenSource } from '0-integrations/oauth';
 
+// One source per connection, built outside any request handler and kept for the process's life.
 const api = client(zoom, { token: tokenSource(zoom, { secret, values }), values });
+
+export async function handler() {
+  return api.json('/users/me'); // every request reuses the kept token
+}
 ```
+
+Build one source per connection and keep it for the process's life: a new source requests a new token (for Metabase,
+a new session; each process signs in its own).
 
 `secret` is the entry's secret field by name (`{ clientSecret }`), `values` the plain ones (`{ accountId, clientId }`):
 pass the connection's, as `finishConnect` returned them, since neither `tokenSource` nor `client` applies a field's

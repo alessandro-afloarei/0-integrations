@@ -99,9 +99,10 @@ That is a whole provider: sign-in form, credential check, account identity, retr
 
 - **Template**: a string with `{name}` placeholders. A name that is missing is an error that names the entry and the
   key. There are no fallbacks, conditions or functions. Each place that takes a template states its names:
-  - `auth.send`: every plain field of the entry by its name, the entry's only secret field by its name, and `{token}`:
-    the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one. A plain
-    value that is blank fills no template: it is missing, and nothing is sent.
+  - `auth.send`: every plain field of the entry by its name, and `{token}`: the access token, or the key. Only a key
+    entry's secret field is its credential, so only a key entry's `send` may also name it. An entry has at most one
+    secret field, and a key or token entry exactly one. A plain value that is blank fills no template: it is missing,
+    and nothing is sent.
   - `http.baseUrl`: every plain field and every `save` key by its name. See "A base filled from a value" below.
   - `identify` and `save` values: the lookup described under `identify`.
   - `webhook.signed`: `{body}`, `{timestamp}`, `{method}`, `{url}`.
@@ -163,9 +164,10 @@ its `save` keeps.
   and a revoke, never do, so they need the connection's `values`. A value in the host that is not a host part (ASCII
   letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only the name) is
   `TypeError('base_value_invalid: <entry id> {<name>}')`.
-- Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL) must parse and be https
-  with no user or password, and a templated host must match `http.host`, else
-  `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then never leaves the filled base's origin.
+- Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 token,
+  refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
+  `http.host`, else `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then
+  never leaves the filled base's origin.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
   placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
   (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.

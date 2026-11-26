@@ -89,7 +89,7 @@ function credentialOf(entry: Entry, token: string, values: Values): Credential {
   if (send === undefined) return { header: ['authorization', `Bearer ${token}`] };
   if ('header' in send) return { header: [send.header, token] };
   const secret = entry.fields?.find(field => field.secret === true)?.name;
-  // A token entry's secret field goes only to its token request, never with a call, whatever `values` holds.
+  // Only a key entry's secret field is its credential: any other kind's never goes with a call, whatever `values` holds.
   const lookup = (name: string) => (name === secret ? (auth.kind === 'key' ? token : undefined)
     : name === 'token' ? token : plainValue(values, name));
   if ('query' in send) return { query: Object.entries(send.query).map(([name, template]) => [name, fill(template, lookup, entry.id)]) };

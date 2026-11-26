@@ -28,12 +28,15 @@ entry:
   function, prints to JSON unchanged, and has an id that is unique and equals its file name;
 - cites in `docs` the https page of the provider that states what the entry declares;
 - names in each template only what that place allows;
-- is one the engine can run: a key entry has exactly one secret field and reads no token answer, scopes or RFC 7009
-  revoke; an OAuth entry declares scopes; a value read from identify's answer has a request to read it from; no `save`
-  key is a field's name; each placeholder in the base names a plain field and sits in its host, never its path, and
-  `http.host` is declared exactly when the base holds one, `'*'` only when the whole host is one placeholder; a
-  field's `choices` are a non-empty list of unique values holding its `default`, each of them and the `default` fills
-  the base to a host `http.host` takes, and a secret field has neither;
+- is one the engine can run: a key or token entry has exactly one secret field, a key entry reads no token answer, and
+  neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
+  the token itself from `tokenAnswer.*`; a value read from identify's answer has a request to read it from; no `save`
+  key is a field's name; each placeholder in the base names a plain field or a `save` key, either in its host, with
+  `http.host` declared (`'*'` only when the whole host is one placeholder), or as one segment of its path; `http.bases`
+  hold no placeholder, and a call's `base` names one of them; a token request names only the entry's fields (a plain
+  one in its `url`, whose host placeholder needs `http.host`), sends the secret field in its body or Basic, and its
+  `send` names no secret field; a field's `choices` are a non-empty list of unique values holding its `default`, each
+  of them and the `default` fills the base to a host `http.host` takes, and a secret field has neither;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body), a paged operation names a declared shape and no `notFound`, a records path
   leads to a list, and no id is a client call or a dotted prefix of another.

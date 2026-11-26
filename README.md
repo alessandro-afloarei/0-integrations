@@ -68,7 +68,8 @@ const me = await api.json('/users/me'); // raw: authenticated, paced, classified
 ```
 
 Any entry gives the raw calls `json`, `request` and `paginate`; an entry that declares operations adds them, typed. For
-an OAuth connection, `token` is a function that renews the token: [client](docs/modules/client.md) shows one.
+an OAuth connection, `token` is a function that renews the token: [client](docs/modules/client.md) shows one. For a
+`token` entry (Zoom, PayPal, Metabase) it is `tokenSource(entry, { secret, values })` from `0-integrations/oauth`.
 
 ## Providers
 
