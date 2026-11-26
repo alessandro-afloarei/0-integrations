@@ -18,8 +18,8 @@ Nothing here is released yet.
 - A named base (`http.bases`) with a placeholder is refused where a call chooses it (`base_templated`); it was sent
   to a host spelt with braces.
 - A URL template that is not well formed (`https://`, then letters, digits, `.`, `-` and `{name}`s with an optional
-  literal port, then `/` or the end) is refused, `base_host_refused`, where it is filled or chosen: `https:///{x}` sent a
-  typed value to the host with no `http.host` check.
+  literal port, then `/` or the end) is refused, `base_host_refused`, where it is filled or chosen: `https:///{x}` sent
+  a typed value to the host with no `http.host` check.
 - A `token` sign-in is under the host rule: a token request whose URL does not share the typed base's host is refused,
   `host_split`, before it is sent; the token it gave went to the host typed.
 - `client()`'s `baseUrl` on an entry whose host is typed must keep the filled base's origin, else `base_host_refused`
@@ -41,7 +41,7 @@ Nothing here is released yet.
 - New: `page` paging (a page number in the query or the body, 1-based or `zeroBased`), first used by Rollbar and ClickUp.
   An empty list ends it; a list that is missing or no list is `invalid_response`, as in a typed paged operation.
 - New: `offset` paging (a record offset in the query or the body, the next one counted from the records received),
-  first used by Outline and PagerDuty, whose lists now page to their end.
+  first used by Outline and PagerDuty, whose lists now page to their end (PagerDuty's up to its 10,000-record cap).
 - `client()` refuses an operation on a `page` or `offset` shape whose `records` is not the shape's `list`
   (`records_unpaged`), as the table test already did for this library's entries.
 - `client()` refuses an operation with a parameter in the place its paging shape's `send` writes (`param_paged`), as the

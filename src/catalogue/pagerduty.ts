@@ -21,6 +21,7 @@ export const pagerduty = defineProvider({
   http: { baseUrl: 'https://api.pagerduty.com', headers: { accept: 'application/vnd.pagerduty+json;version=2' }, minIntervalMs: 63, retry: {} },
   identify: { request: { path: '/abilities' } },
   webhook: { kind: 'hmac', header: 'x-pagerduty-signature', part: 'v1', deliveryId: { header: 'x-webhook-id' } },
+  // offset + limit may not pass 10,000: https://docs.pagerduty.com/developer/pagination
   paging: { incidents: { kind: 'offset', send: { query: 'offset' }, list: 'incidents', more: 'more' },
     services: { kind: 'offset', send: { query: 'offset' }, list: 'services', more: 'more' } },
   operations: {
