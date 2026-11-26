@@ -143,6 +143,15 @@ function functionsIn(value: unknown, at = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => functionsIn(item, at ? `${at}.${key}` : key));
 }
 
+/** Every string anywhere in a value, keys included. */
+function stringsIn(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (typeof value !== 'object' || value === null) return [];
+  return Object.entries(value).flatMap(([key, item]) => [key, ...stringsIn(item)]);
+}
+/** `pnpm new` writes a skeleton whose every unknown is `TODO`: it fails here until each is filled. */
+const TODO_RULE = "replace every TODO from pnpm new with the provider's documented value";
+
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
@@ -171,6 +180,7 @@ const hmac = (entry: Entry) => (entry.webhook?.kind === 'hmac' ? entry.webhook :
 const signing = (entry: Entry) => (entry.webhook?.kind === 'hmac' || entry.webhook?.kind === 'ed25519' ? entry.webhook : undefined);
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
+  [TODO_RULE]: (entry: Entry) => !stringsIn(entry).some(text => text.includes('TODO')),
   // A Basic or query send that names no secret would send a credential anyone could make.
   '`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)': (entry: Entry) => sentTemplates(entry).length === 0
     || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || (entry.auth[0].kind === 'key' && name === secretField(entry))),
@@ -408,6 +418,7 @@ const tokened = { ...key, fields: [{ name: 'clientId', title: 'Client ID' }, { n
 test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
+  [TODO_RULE, defineProvider({ ...key, docs: 'https://TODO', auth: [{ kind: 'key' }], fields: [secret] })],
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
