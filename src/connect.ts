@@ -2,7 +2,7 @@ import { identifyAccount, type Account } from './account.js';
 import type { Entry, Field, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { defaultFetch } from './http.js';
-import { authorizeUrl, exchangeCode, pkcePair, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
+import { authorizeUrl, exchangeCode, pkcePair, requestToken, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
 
 type Redirect = { kind: 'redirect'; url: string; codeVerifier?: string };
 type Form = { kind: 'form'; fields: readonly Field[] };
@@ -19,7 +19,7 @@ type Unnamed<E extends Entry> = string extends Fields<E>['name'] ? true : false;
 type Keyed<E extends Entry, K extends string, V> = Unnamed<E> extends true ? Readonly<Record<string, V>> : Readonly<Record<K, V>>;
 /** The names `save` keeps, when the entry declares any. */
 type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : never;
-/** A key entry's secret fields, and its plain fields, by name. */
+/** A form entry's secret fields, and its plain fields, by name. */
 type Secrets<E extends Entry> = Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>;
 type PlainFields<E extends Entry> = Exclude<Fields<E>, { secret: true }>;
 type Plain<E extends Entry> = Keyed<E, PlainFields<E>['name'], string>;
@@ -28,7 +28,7 @@ type Entered<E extends Entry> = Unnamed<E> extends true ? Values : Keyed<E, Excl
   & Partial<Keyed<E, Extract<PlainFields<E>, { default: string }>['name'], string>>;
 /** A finished sign-in: the secret to seal, the plain values to keep, and the account; one per entry of a union. */
 export type Connected<E extends Entry = Entry> = E extends Entry ? {
-  /** The grant, or a key entry's secret fields by name. */
+  /** The grant, or a key or token entry's secret fields by name. */
   secret: ByKind<E, Grant, Secrets<E>>;
   /** The plain fields entered, by name, and what `save` kept (present only when the provider answered it). */
   values: Unnamed<E> extends true ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
@@ -37,7 +37,7 @@ export type Connected<E extends Entry = Entry> = E extends Entry ? {
 type OAuthStart = { clientId: string; redirectUri: string; state: string };
 type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string | undefined; fetch?: typeof fetch;
   onRevokeFailed: (error: unknown) => void };
-/** A key entry's finish: its secret fields by name, and its plain fields, required unless each has a default. */
+/** A form entry's finish (key or token): its secret fields by name, and its plain fields, required unless each has a default. */
 type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch?: typeof fetch } & (Unnamed<E> extends true
   ? { values?: Values } : [PlainFields<E>] extends [never] ? { values?: never }
   : Partial<Entered<E>> extends Entered<E> ? { values?: Entered<E> } : { values: Entered<E> }) : never;
@@ -58,7 +58,7 @@ export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, 
 export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
   const [auth] = entry.auth;
   const fetch = input.fetch ?? defaultFetch(entry);
-  if (auth.kind === 'key') {
+  if (auth.kind !== 'oauth2') {
     const { secret: secrets = {}, values: plain = {} }: Partial<FormFinish> = 'secret' in input ? input : {};
     // Only the declared fields, each filled, all checked before anything is sent: an entry's templates read them.
     const fields = entry.fields ?? [];
@@ -78,9 +78,14 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     const [credential, ...others] = fields.filter(field => field.secret).map(read);
     if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const values = Object.fromEntries(fields.filter(field => !field.secret).map(read));
-    return { secret: Object.fromEntries([credential, ...others]), ...await identifyAccount(entry, { fetch, token: credential[1], values }) };
+    const secret = Object.fromEntries([credential, ...others]);
+    if (auth.kind === 'key') return { secret, ...await identifyAccount(entry, { fetch, token: credential[1], values }) };
+    // The token request is the credential check, sent the very secret fields returned; only the answer's keys the entry
+    // names reach identify, and no token is returned.
+    const { token, extras } = await requestToken(entry, { secret, values, fetch });
+    return { secret, ...await identifyAccount(entry, { fetch, token, values, tokenAnswer: extras }) };
   }
-  if (!('code' in input) || auth.kind !== 'oauth2') throw new TypeError('oauth_options_required');
+  if (!('code' in input)) throw new TypeError('oauth_options_required');
   const { grant, extras } = await exchangeCode(entry, input.client, { ...input, fetch });
   try {
     // RFC 6749 §5.1: a token answer without `scope` granted the scopes requested.

@@ -31,14 +31,19 @@ import { tokenSource } from '0-integrations/oauth';
 const api = client(zoom, { token: tokenSource(zoom, { secret, values }), values });
 ```
 
-`secret` is the entry's secret field by name (`{ clientSecret }`), `values` the plain ones (`{ accountId, clientId }`).
+`secret` is the entry's secret field by name (`{ clientSecret }`), `values` the plain ones (`{ accountId, clientId }`):
+pass the connection's, as `finishConnect` returned them, since neither `tokenSource` nor `client` applies a field's
+`default` (PayPal's `apiHost`).
 The source requests a token on its first call and keeps it until 60 seconds before the answer's `expires_in` runs out
 (an answer with no positive `expires_in` keeps it until it is refused). Concurrent calls share one request; a failed
 request is not kept, so the next call tries again. When the API refuses the token with a 401, the client passes it back
 and the source requests a new one.
 
 The request posts the entry's body as a form (or as one JSON object with `json: true`), with Basic client
-authentication when the entry says `basic`, and the entry's `http.headers`. It is sent once: never retried, since it is
+authentication when the entry says `basic`, and the entry's `http.headers`. Its URL is filled by the base's rule: a host
+from a field (PayPal's `'https://{apiHost}/v1/oauth2/token'`) must match `http.host`, and a typed host (Metabase's,
+`http.host: '*'`) is sent through `guardedFetch` unless the app passes its own `fetch`, which still never reaches an
+address literal the guard blocks. It is sent once: never retried, since it is
 no read of the provider's API, and never redirected (a 3xx is `request_failed`). A 400, 401 or 403 is `rejected`, with
 the RFC 6749 `error` as its detail; a 2xx without a non-empty token is `invalid_response` (`missing_fields`); any other
 answer is classified as usual. No detail holds a secret field, a body value filled from one, or the Basic value sent.

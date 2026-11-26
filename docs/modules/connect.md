@@ -15,6 +15,12 @@ none and starts with a form, and an entry whose kind is not known in the types (
   The entry's only secret field is the credential: an entry that declares none is refused first, as the entry's fault,
   with `TypeError('connect_secret_field_missing: <entry id>')`. Then the entry's `identify` runs: with a request it
   checks the credential and learns the account; an entry that declares none sends nothing, and its `account` is `null`.
+- A token entry (Zoom, PayPal, Metabase) also starts as a form of its `fields`, and `finishConnect(entry, { secret,
+  values?, fetch? })` reads them as a key entry does (defaults, choices). It then requests a token with them, once and
+  never retried: that request is the credential check, and a refused one is `rejected`. Its URL may take its host from
+  a field (PayPal's `'https://{apiHost}/v1/oauth2/token'`), filled and checked as a base's is. Identify runs with the
+  token and reads only the token answer's keys the entry names (`tokenAnswer.*`, PayPal's `app_id`). The result's
+  `secret` is the secret fields; the token is never returned.
 - An OAuth 2 entry starts with a redirect asking for the entry's `scopes.default`, with PKCE unless the entry says
   `pkce: false`. `finishConnect(entry, { client, code, redirectUri, codeVerifier?, fetch?, onRevokeFailed })` exchanges
   the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
@@ -28,9 +34,11 @@ does not refuse a misspelled key at compile time (the catalogue test does, for t
 the key's name.
 
 `fetch` is optional in both: by default the global one, or `guardedFetch` for an entry whose host the person types
-(`http.host: '*'`, GitLab), which refuses private and metadata addresses ([client](client.md#the-address-guard)). An
-account id of a provider whose host is typed is local to that host (user 1 on gitlab.com is not user 1 on a company's
-GitLab), so an app keys such a connection by host and account id.
+(`http.host: '*'`, GitLab and Metabase), which refuses private and metadata addresses
+([client](client.md#the-address-guard)); with an app's own `fetch`, a host that is a blocked address literal is refused
+before anything is sent, a token entry's password included. An account id of a provider whose host is typed is local to
+that host (user 1 on gitlab.com is not user 1 on a company's GitLab, and a Metabase email names a person on one
+Metabase), so an app keys such a connection by host and account id.
 
 The result is `{ secret, values, account }`, typed from the entry: the secret to seal (the grant, or the secret fields by
 name), the plain values to keep (the plain fields by name, and what the entry's `save` keeps when the provider answers
@@ -48,6 +56,21 @@ import { finishConnect, startConnect } from '0-integrations/connect';
 const { fields } = await startConnect(aircall); // API ID, and API token (secret)
 const { secret, values, account } = await finishConnect(aircall, { secret: { apiToken }, values: { apiId }, fetch });
 // secret: { apiToken } to seal; values: { apiId } to keep; account: { id: apiId, name: the company's name }
+```
+
+A token provider's connect is the same form; its calls take a [`tokenSource`](oauth.md#a-token-entry-tokensource) built
+from the connection. Pass it, and `client`, the connection's `values`: the defaults `finishConnect` applied are in them,
+and neither applies one.
+
+```ts
+import { metabase } from '0-integrations/catalogue/metabase';
+import { client } from '0-integrations/client';
+import { finishConnect } from '0-integrations/connect';
+import { tokenSource } from '0-integrations/oauth';
+
+const { secret, values, account } = await finishConnect(metabase, { secret: { password }, values: { host, username } });
+// secret: { password } to seal; values: { host, username } to keep; account: { id: username, name: username }
+const api = client(metabase, { token: tokenSource(metabase, { secret, values }), values });
 ```
 
 The [HubSpot page](hubspot.md) shows a whole OAuth connect against the HubSpot fake.

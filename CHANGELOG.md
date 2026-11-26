@@ -26,6 +26,8 @@ Nothing here is released yet.
   value. First used by Jira (Atlassian 3LO).
 - New: the `token` sign-in kind, one declared request for client credentials or a session sign-in, and
   `tokenSource(entry, { secret, values })` for `client()`. First used by Zoom Server-to-Server OAuth.
+- `startConnect` and `finishConnect` run a `token` entry (Metabase, PayPal, Zoom); a token URL may take its host from a
+  field, and a typed host is address-guarded.
 
 ## 0.13.0
 

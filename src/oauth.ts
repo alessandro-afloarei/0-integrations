@@ -21,6 +21,12 @@ function tokenAnswerKeys(entry: Entry): string[] {
   return [...new Set([...keys, ...(entry.scopes?.requireGranted ? ['scope'] : [])])];
 }
 
+/** Only the token answer's keys the entry reads: nothing else of it leaves the engine. */
+function tokenAnswerOf(entry: Entry, answer: unknown): Record<string, unknown> {
+  return Object.fromEntries(tokenAnswerKeys(entry).map((key): [string, unknown] => [key, readPath(answer, key)])
+    .filter(([, value]) => value !== undefined));
+}
+
 export function authorizeUrl(entry: Entry, input: {
   clientId: string; redirectUri: string; scopes: readonly string[]; state: string; codeChallenge?: string;
 }): URL {
@@ -124,8 +130,7 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options));
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
-    const extras = Object.fromEntries(tokenAnswerKeys(entry).flatMap(key => answer[key] === undefined ? [] : [[key, answer[key]]]));
-    return { grant: grant(answer, null), extras };
+    return { grant: grant(answer, null), extras: tokenAnswerOf(entry, answer) };
   } catch (error) {
     throw processingError(error, entry, response.status, secrets);
   }
@@ -186,11 +191,11 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
 
 type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; fetch?: typeof fetch };
 
-/** @internal Requests a token entry's token: the token, its expiry (ms since epoch) or null, and the parsed answer. Sent
- * once, never retried (it is no read of the provider's API) and never redirected. Its templates read the secret fields
- * from `secret` and every other name as a plain value; no error detail holds a secret, a body value filled from one, or
- * the Basic value sent. */
-export async function requestToken(entry: Entry, input: TokenInput): Promise<{ token: string; expiresAt: number | null; answer: unknown }> {
+/** @internal Requests a token entry's token: the token, its expiry (ms since epoch) or null, and the answer's keys the
+ * entry reads (`tokenAnswer.*`). Sent once, never retried (it is no read of the provider's API) and never redirected. Its
+ * templates read the secret fields from `secret` and every other name as a plain value; no error detail holds a secret, a
+ * body value filled from one, or the Basic value sent. */
+export async function requestToken(entry: Entry, input: TokenInput): Promise<{ token: string; expiresAt: number | null; extras: Record<string, unknown> }> {
   const [auth] = entry.auth;
   if (auth.kind !== 'token') throw new TypeError('token_unsupported');
   const { request } = auth;
@@ -225,7 +230,8 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
   const token = readPath(data, request.token ?? 'access_token');
   if (typeof token !== 'string' || token.trim() === '') throw new ProviderHttpError('invalid_response', status, 'missing_fields');
   const life = readPath(data, 'expires_in');
-  return { token, expiresAt: typeof life === 'number' && Number.isFinite(life) && life > 0 ? Date.now() + life * 1000 : null, answer: data };
+  return { token, expiresAt: typeof life === 'number' && Number.isFinite(life) && life > 0 ? Date.now() + life * 1000 : null,
+    extras: tokenAnswerOf(entry, data) };
 }
 
 /** The token function `client()` takes, for a `token` entry: requests a token, keeps it until it expires (60 s early) or

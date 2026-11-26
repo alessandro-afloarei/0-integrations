@@ -7,10 +7,16 @@ import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
+import { metabase } from './catalogue/metabase.js';
+import { paypal } from './catalogue/paypal.js';
 import { slack } from './catalogue/slack.js';
+import { zoom } from './catalogue/zoom.js';
+import { client as apiClient } from './client.js';
 import { finishConnect, startConnect, type Connected, type ConnectStart } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import { fakeGoogle } from './google/fake.js';
+import * as guard from './guard.js';
+import { tokenSource } from './oauth.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
 import { fakeFetch, type Route } from './testing.js';
@@ -200,6 +206,91 @@ describe('field defaults and choices', () => {
   });
 });
 
+describe('a token entry', () => {
+  const basic = (pair: string) => `Basic ${Buffer.from(pair).toString('base64')}`;
+  const zoomInput = { secret: { clientSecret: 'zoom-secret' }, values: { accountId: 'acc', clientId: 'cid' } };
+  const metabaseInput = (host: string) => ({ secret: { password: 'p' }, values: { host, username: 'u@example.com' } });
+  const session = (answer: unknown = { id: 's' }) => fakeFetch([
+    { url: 'https://metabase.example.test/api/session', respond: () => Response.json(answer) },
+    { url: 'https://metabase.example.test/api/user/current', respond: () => Response.json({ email: 'u@example.com' }) }]);
+
+  it('Zoom starts as a form and finishes with one token request: the secret fields, the plain ones, the account entered', async () => {
+    expect(await startConnect(zoom)).toEqual({ kind: 'form', fields: zoom.fields });
+    const fake = fakeFetch([{ url: 'https://zoom.us/oauth/token', respond: () => Response.json({ access_token: 'at', expires_in: 3600 }) }]);
+    expect(await finishConnect(zoom, { ...zoomInput, fetch: fake.fetch })).toEqual({ secret: { clientSecret: 'zoom-secret' },
+      values: { accountId: 'acc', clientId: 'cid' }, account: { id: 'acc', name: 'acc' } });
+    expect(fake.calls.map(call => call.url)).toEqual(['https://zoom.us/oauth/token']);
+    expect(fake.calls[0]?.headers.authorization).toBe(basic('cid:zoom-secret'));
+  });
+
+  it('a refused token request is the refused credential', async () => {
+    const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ error: 'invalid_client' }, { status: 401 }) }]);
+    await expect(finishConnect(zoom, { ...zoomInput, fetch: fake.fetch })).rejects.toMatchObject({ code: 'rejected', detail: 'invalid_client' });
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it.each([[undefined, 'api-m.paypal.com'], ['api-m.sandbox.paypal.com', 'api-m.sandbox.paypal.com']])(
+    'PayPal with apiHost %j posts to %s, and the account is the app the answer names', async (apiHost, host) => {
+      const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ scope: 'x', access_token: 'at', token_type: 'Bearer',
+        app_id: 'APP-80W284485P519543T', expires_in: 31668, nonce: 'n' }) }]);
+      const values = { clientId: 'cid', ...(apiHost === undefined ? {} : { apiHost }) };
+      expect(await finishConnect(paypal, { secret: { clientSecret: 'pp-secret' }, values, fetch: fake.fetch })).toEqual({
+        secret: { clientSecret: 'pp-secret' }, values: { apiHost: host, clientId: 'cid' },
+        account: { id: 'APP-80W284485P519543T', name: 'APP-80W284485P519543T' } });
+      expect(fake.calls.map(call => [call.method, call.url, call.body])).toEqual([['POST', `https://${host}/v1/oauth2/token`, 'grant_type=client_credentials']]);
+      expect(fake.calls[0]?.headers.authorization).toBe(basic('cid:pp-secret'));
+    });
+
+  it('PayPal with a host not among its choices is connect_field_invalid, before anything is sent', async () => {
+    const fake = fakeFetch([]);
+    await expect(finishConnect(paypal, { secret: { clientSecret: 's' }, values: { apiHost: 'evil.test', clientId: 'cid' }, fetch: fake.fetch }))
+      .rejects.toThrow(new TypeError('connect_field_invalid: apiHost'));
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it('Metabase signs in with JSON at /api/session; the account is the email; calls carry the session, which the result never holds', async () => {
+    const fake = session();
+    const result = await finishConnect(metabase, { ...metabaseInput('metabase.example.test'), fetch: fake.fetch });
+    expect(result).toEqual({ secret: { password: 'p' }, values: { host: 'metabase.example.test', username: 'u@example.com' },
+      account: { id: 'u@example.com', name: 'u@example.com' } });
+    expect(fake.calls.map(call => [call.method, call.url, call.headers['content-type']]))
+      .toEqual([['POST', 'https://metabase.example.test/api/session', 'application/json']]);
+    expect(JSON.parse(fake.calls[0]?.body ?? '') as unknown).toEqual({ username: 'u@example.com', password: 'p' });
+    expect(JSON.stringify(result)).not.toContain('"s"');
+    const token = tokenSource(metabase, { secret: result.secret, values: result.values, fetch: fake.fetch });
+    expect(await apiClient(metabase, { token, values: result.values, fetch: fake.fetch }).json('/user/current')).toEqual({ email: 'u@example.com' });
+    expect(fake.calls.at(-1)?.headers['x-metabase-session']).toBe('s');
+    expect(fake.calls.at(-1)?.headers.authorization).toBeUndefined();
+  });
+
+  it("a token answer's keys the entry does not name never reach the result", async () => {
+    const result = await finishConnect(metabase, { ...metabaseInput('metabase.example.test'), fetch: session({ id: 's', extra: 'x' }).fetch });
+    expect(result).toEqual({ secret: { password: 'p' }, values: { host: 'metabase.example.test', username: 'u@example.com' },
+      account: { id: 'u@example.com', name: 'u@example.com' } });
+  });
+
+  it('Metabase on an address with an app fetch is address_blocked: the fetch never called, the password never sent', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    await expect(finishConnect(metabase, { ...metabaseInput('127.0.0.1'), fetch }))
+      .rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('Metabase with no fetch signs in through guardedFetch, which refuses a loopback name at once', async () => {
+    const guarded = vi.spyOn(guard, 'guardedFetch');
+    try {
+      await expect(finishConnect(metabase, metabaseInput('localhost')))
+        .rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
+      expect(guarded.mock.calls.map(([input]) => (input instanceof Request ? input.url : input.toString()))).toEqual(['https://localhost/api/session']);
+    } finally { guarded.mockRestore(); }
+  });
+
+  it('a host that is no host name is base_value_invalid, before anything is sent', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    await expect(finishConnect(metabase, { ...metabaseInput('x/y'), fetch })).rejects.toThrow(new TypeError('base_value_invalid: metabase {host}'));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
 
 describe('connect types', () => {
   const oauth = (fetch: typeof globalThis.fetch, code: string) => ({ client, code, redirectUri: callback, fetch, onRevokeFailed: vi.fn() });

@@ -6,6 +6,7 @@ import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
 import { aircall } from './catalogue/aircall.js';
 import { gitlab } from './catalogue/gitlab.js';
+import { metabase } from './catalogue/metabase.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
@@ -119,6 +120,14 @@ async function clientGuarded(accessToken: string, host: string) {
   return user;
 }
 
+// docs/modules/connect.md › A token provider's connect.
+async function connectToken(password: string, host: string, username: string) {
+  const { secret, values, account } = await finishConnect(metabase, { secret: { password }, values: { host, username } });
+  // secret: { password } to seal; values: { host, username } to keep; account: { id: username, name: username }
+  const api = client(metabase, { token: tokenSource(metabase, { secret, values }), values });
+  return [api, account];
+}
+
 // docs/modules/oauth.md › A `token` entry.
 function oauthTokenSource(secret: { clientSecret: string }, values: { accountId: string; clientId: string }) {
   const api = client(zoom, { token: tokenSource(zoom, { secret, values }), values });
@@ -134,5 +143,5 @@ async function designClient() {
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource].every(example => typeof example === 'function')).toBe(true);
+    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken].every(example => typeof example === 'function')).toBe(true);
 });

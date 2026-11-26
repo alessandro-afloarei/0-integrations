@@ -254,7 +254,8 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     one, or the Basic value sent. The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
     the token until 60 seconds before its expiry or until it is passed back as refused, concurrent calls share one
-    request, and a failed request is not kept.
+    request, and a failed request is not kept. It applies no field's `default`, so an app passes it, and `client`, the
+    connection's `values` as `finishConnect` returned them.
   - `startConnect` returns the form. `finishConnect(entry, { secret, values?, fetch? })` reads the fields as a key
     entry does (defaults, choices), requests a token (the credential check), identifies with it, with the token
     answer's keys the entry names as `tokenAnswer.*`, and returns the secret fields as `secret`; the token is not

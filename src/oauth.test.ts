@@ -407,7 +407,7 @@ test('json and a token path: the body is the filled flat object as JSON, and the
   http: { baseUrl: 'https://session.test/api', headers: { accept: 'application/json' } } });
   const fake = endpoint({ id: 's' });
   expect(await requestToken(session, { secret: { password: 'p' }, values: { username: 'u@example.com' }, fetch: fake.fetch }))
-    .toEqual({ token: 's', expiresAt: null, answer: { id: 's' } });
+    .toEqual({ token: 's', expiresAt: null, extras: {} });
   expect(JSON.parse(fake.calls[0]?.body ?? '') as unknown).toEqual({ username: 'u@example.com', password: 'p' });
   expect(fake.calls[0]?.headers).toMatchObject({ 'content-type': 'application/json', accept: 'application/json' });
   expect(fake.calls[0]?.headers.authorization).toBeUndefined();
