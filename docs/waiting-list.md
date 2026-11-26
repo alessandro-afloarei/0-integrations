@@ -25,7 +25,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 | Page numbers where a page past the last answers the last page again, so the walk stops at the answer's page count | Smartsheet |
 | A list that answers 204 with no body when it is empty | Chatwork |
 | A list whose records are a map keyed by id, beside an `order` list of the ids | Mattermost |
-| A 429's wait in the error body, in seconds, possibly fractional | Zulip |
+| A 429's wait in the error body, in seconds (Zulip's `retry-after`, possibly fractional; Todoist's `error_extra.retry_after`) | Zulip, Todoist |
 | An operation parameter sent as a header | PagerDuty |
 | Regional hosts on more than one domain | Smartsheet |
 | OAuth 2 (3LO) on `api.atlassian.com/ex/confluence/{cloudId}` with next links relative to the site (`/wiki/api/v2/…`); a key sign-in breaks Atlassian's rules for apps, which must not collect API tokens ([Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/)) | Confluence |
@@ -56,6 +56,7 @@ entry's comment, not here.
 | Airtable | The webhook | A webhook secret decoded from base64 |
 | Asana | The webhook | A webhook handshake answered in a header |
 | Todoist | `revoke` | An RFC 7009 revoke that authenticates the client by Basic |
+| Todoist | A 429's wait: it is in `error_extra.retry_after`, in seconds, which the retry does not read | A 429's wait in the error body |
 | Smartsheet | Gov, Europe and Australia: other domains, with their own tokens | Regional hosts on more than one domain |
 | Smartsheet | Paging: `sheets.list` and `rows.list` answer one page each, `page` and `pageSize` ordinary parameters, `totalPages` and `totalRowCount` in their results | Page numbers where a page past the last answers the last page again |
 | Smartsheet | `errors.detail`: the code, `errorCode`, is a number | An error code that is a number |
