@@ -823,6 +823,17 @@ test('a named base with a placeholder is refused where a call chooses it: a name
   expect(fake.calls).toEqual([]);
 });
 
+test("a token sign-in whose token URL is fixed while the base is typed is host_split before a token is requested", async () => {
+  const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'cloud-token', id: '1' }) }]);
+  const split = defineProvider({ id: 'tok', name: 'Tok', fields: [{ name: 'host', title: 'Host' }, { name: 'secret', title: 'Secret', secret: true }],
+    auth: [{ kind: 'token', request: { url: 'https://auth.k.test/token', body: { s: '{secret}' } } }],
+    http: { baseUrl: 'https://{host}/api', host: '*' }, identify: { request: { path: '/me' }, id: 'id' } });
+  const refused = new TypeError('host_split: tok');
+  await expect(requestToken(split, { secret: { secret: 's' }, values: { host: 'evil.k.test' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  await expect(finishConnect(split, { secret: { secret: 's' }, values: { host: 'evil.k.test' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  expect(fake.calls).toEqual([]);
+});
+
 /** Every name the malformed templates below use, filled with a value the base rule accepts. */
 const bentFields = ['host', 'user', 'port'].map(name => ({ name, title: name }));
 const bentValues = { host: 'evil.k.test', user: 'u', port: '8443' };

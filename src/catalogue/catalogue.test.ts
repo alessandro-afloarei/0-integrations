@@ -186,7 +186,7 @@ const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
 const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
-const HOST_SPLIT = 'the base, `http.bases` and the OAuth 2 URLs on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
+const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
 /** Every URL the entry declares: the base, `http.bases`, the OAuth 2 URLs and a token request's URL. */
 const declaredUrls = (entry: Entry) => [entry.http.baseUrl, ...Object.values(entry.http.bases ?? {}), ...oauthUrlList(entry),
@@ -619,6 +619,8 @@ test.each<[Rule, Entry]>([
   ...(['https:///{region}/api', 'https://{region}@k.test', 'HTTPS://api.k.test'] as const).map((baseUrl): [Rule, Entry] => [WELL_FORMED_URLS,
     defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region' }], http: { baseUrl, host: '*' } })]),
   [WELL_FORMED_URLS, defineProvider({ ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], tokenUrl: 'https:///k.test/token' }] })],
+  // A fixed token URL beside a typed base: the token it gives would go to any host typed.
+  [HOST_SPLIT, defineProvider({ ...tokened, fields: [...tokened.fields, { name: 'host', title: 'Host' }], http: { baseUrl: 'https://{host}/api', host: '*' } })],
   // A key on a typed host beside a fixed second base: the key would go to that other host.
   [HOST_SPLIT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'host', title: 'Host' }],
     http: { baseUrl: 'https://{host}/api', host: '*', bases: { cloud: 'https://cloud.k.test' } } })],

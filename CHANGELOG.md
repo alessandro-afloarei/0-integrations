@@ -20,6 +20,8 @@ Nothing here is released yet.
 - A URL template that is not well formed (`https://`, then letters, digits, `.`, `-` and `{name}`s with an optional
   literal port, then `/` or the end) is refused, `base_host_refused`, where it is filled or chosen: `https:///{x}` sent a
   typed value to the host with no `http.host` check.
+- A `token` sign-in is under the host rule: a token request whose URL does not share the typed base's host is refused,
+  `host_split`, before it is sent; the token it gave went to the host typed.
 - New entry: Azure DevOps (code; Microsoft Entra OAuth 2). Every entry is `declared`.
 - An OAuth 2 token answer that states no `token_type` is read as Bearer; it was `invalid_response`. One that states
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.

@@ -180,15 +180,15 @@ its `save` keeps.
 - Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled by this rule, from the plain fields alone:
   a secret field or a `save` key named there is `template_missing`, since neither exists before the exchange. A URL
   with no placeholder is used as written.
-- **On a typed host, a credential goes only to that host.** When the base, an `http.bases` value or an OAuth 2 URL
-  takes its host from a value, every one of them has exactly the same host part (`https://{host}`): on a person's own
-  server the registration, the sign-in and the calls all belong to that server. So a cloud's fixed token URL never
-  pairs with a typed base (a cloud token would go to any host), nor a typed token URL with a fixed base, nor a key on a
-  typed host with a fixed second base. `hostSplit(entry)` is the check: the engine refuses such an entry with
-  `TypeError('host_split: <entry id>')` in `authorizeUrl`, before every exchange, refresh and revoke, and where a
-  call chooses a named base, before anything is built or sent, and the table runs it as a rule on every sign-in. An
-  entry whose hosts are all fixed (a value only in the base's path) is unaffected. No value is ever read from the
-  callback's query: the callback is the person's browser.
+- **On a typed host, a credential goes only to that host.** When the base, an `http.bases` value, an OAuth 2 URL or a
+  token request's URL takes its host from a value, every one of them has exactly the same host part (`https://{host}`):
+  on a person's own server the registration, the sign-in and the calls all belong to that server. So a cloud's fixed
+  token URL never pairs with a typed base (a cloud token would go to any host), nor a typed token URL with a fixed base,
+  nor a key on a typed host with a fixed second base, nor a fixed token request with a typed base. `hostSplit(entry)` is
+  the check: the engine refuses such an entry with `TypeError('host_split: <entry id>')` in `authorizeUrl`, before every
+  exchange, refresh, revoke and token request, and where a call chooses a named base, before anything is built or sent,
+  and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed (a value only in the base's path)
+  is unaffected. No value is ever read from the callback's query: the callback is the person's browser.
 
 #### The address guard
 

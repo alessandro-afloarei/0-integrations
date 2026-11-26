@@ -89,10 +89,13 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
     ...(entry.revoke && 'url' in entry.revoke ? { revoke: entry.revoke.url } : {}) };
 }
 
-/** Whether the entry's base, its `http.bases` and an OAuth 2 sign-in's URLs differ in their host part when any of them
- * takes its host from a value: on a typed host a credential goes only to that host, and a cloud's never reaches it. */
+/** Whether the entry's base, its `http.bases`, an OAuth 2 sign-in's URLs and a token request's URL differ in their host
+ * part when any of them takes its host from a value: on a typed host a credential goes only to that host, and a cloud's
+ * never reaches it. */
 export function hostSplit(entry: Entry): boolean {
-  const hosts = [...Object.values(oauthUrls(entry) ?? {}), entry.http.baseUrl, ...Object.values(entry.http.bases ?? {})]
+  const [auth] = entry.auth;
+  const hosts = [...Object.values(oauthUrls(entry) ?? {}), ...auth.kind === 'token' ? [auth.request.url] : [], entry.http.baseUrl,
+    ...Object.values(entry.http.bases ?? {})]
     .flatMap(url => hostPart(url) ?? []); // one not well formed is refused where it is filled or chosen
   return hosts.some(host => placeholders(host).length > 0) && new Set(hosts).size > 1;
 }

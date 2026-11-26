@@ -228,6 +228,7 @@ type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; f
 export async function requestToken(entry: Entry, input: TokenInput): Promise<{ token: string; expiresAt: number | null; extras: Record<string, unknown> }> {
   const [auth] = entry.auth;
   if (auth.kind !== 'token') throw new TypeError('token_unsupported');
+  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
   const { request } = auth;
   const values = { ...input.values }; // own values, each read once, for the URL, the body and Basic
   const secretNames = new Set((entry.fields ?? []).filter(field => field.secret).map(field => field.name));
