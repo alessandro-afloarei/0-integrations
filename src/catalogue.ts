@@ -55,12 +55,15 @@ type Timestamp = { header: string; toleranceSeconds?: number };
 /** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `part`: the header is a
  * comma-separated list of `name=value` pieces, each piece named `part` a signature, any of which may match;
  * `timestamp.part` reads the timestamp from the same list. `ed25519`: the header is the hex signature of `signed`, the
- * secret the provider's public key in hex. `deliveryId` is what an app dedupes on. */
+ * secret the provider's public key in hex. `token`: the header is the secret itself. `standard`: Standard Webhooks, the
+ * secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on. */
 export type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
     part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
-) & { deliveryId?: { header: string } | { body: readonly Path[] } };
+  | { kind: 'token'; header: string }
+  | { kind: 'standard' }
+) &{ deliveryId?: { header: string } | { body: readonly Path[] } };
 export type Where = { query: string } | { body: string };
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */

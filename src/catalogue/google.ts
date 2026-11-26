@@ -20,4 +20,7 @@ export const google = defineProvider({
   errors: { detail: ['error.code', 'error.errors.0.reason', 'error.status'] },
   identify: { request: { path: '/users/me/profile' }, id: 'emailAddress', name: 'emailAddress', lowercase: true },
   paging: { pageToken: { kind: 'cursor', next: 'nextPageToken', send: { query: 'pageToken' } } },
+  // Calendar push sends no signature: the channel's own `token` comes back on every notification
+  // (https://developers.google.com/workspace/calendar/api/guides/push).
+  webhook: { kind: 'token', header: 'x-goog-channel-token' },
 });

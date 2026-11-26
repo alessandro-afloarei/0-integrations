@@ -123,6 +123,12 @@ const entrySchema = z.strictObject({
     z.strictObject({ kind: z.literal('ed25519'), header: z.string(), signed: template.optional(), timestamp: timestamp.optional(),
       ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
       ? 'an `ed25519` webhook takes no `prefix`, `encoding`, `hash` or `part`: leave them out' : undefined) }),
+    // The header is compared whole: nothing is signed, so nothing to fill, prefix or time.
+    z.strictObject({ kind: z.literal('token'), header: z.string(), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
+      ? 'a `token` webhook takes only its `header` (and `deliveryId`): leave the rest out' : undefined) }),
+    // The scheme fixes its headers, its signed content and its timestamp.
+    z.strictObject({ kind: z.literal('standard'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
+      ? 'a `standard` webhook takes no `header`, `signed`, `timestamp` or `prefix`: Standard Webhooks fixes them' : undefined) }),
   ]).optional(),
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(),
@@ -165,6 +171,8 @@ const sentTemplates = (entry: Entry) => {
 };
 /** An `hmac` webhook, the one kind with a digest's `prefix` and `part`. */
 const hmac = (entry: Entry) => (entry.webhook?.kind === 'hmac' ? entry.webhook : undefined);
+/** A webhook whose entry declares what is signed: `hmac` or `ed25519`. */
+const signing = (entry: Entry) => (entry.webhook?.kind === 'hmac' || entry.webhook?.kind === 'ed25519' ? entry.webhook : undefined);
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
   // A Basic or query send that names no secret would send a credential anyone could make.
@@ -272,8 +280,8 @@ const runnable = {
   "a `webhook.timestamp.part` only beside `webhook.part`": (entry: Entry) => hmac(entry)?.timestamp === undefined
     || !('part' in (hmac(entry)?.timestamp ?? {})) || hmac(entry)?.part !== undefined,
   // Without a timestamp, `{timestamp}` signs an empty string and no tolerance is checked.
-  '`{timestamp}` in `webhook.signed` only beside a `webhook.timestamp`': (entry: Entry) => entry.webhook?.timestamp !== undefined
-    || !placeholders(entry.webhook?.signed ?? '').includes('timestamp'),
+  '`{timestamp}` in `webhook.signed` only beside a `webhook.timestamp`': (entry: Entry) => signing(entry)?.timestamp !== undefined
+    || !placeholders(signing(entry)?.signed ?? '').includes('timestamp'),
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
@@ -296,7 +304,7 @@ describe.each(entries)('%s', (id, entry) => {
     }
     // identify's request path holds none until a provider needs one.
     expect(placeholders(entry.identify?.request?.path ?? '')).toEqual([]);
-    for (const name of placeholders(entry.webhook?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
+    for (const name of placeholders(signing(entry)?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 
   // With a recording beside it, identify replays a good and a bad key on its recordings' exchanges merged, sending its
@@ -523,6 +531,22 @@ test.each(['prefix', 'encoding', 'hash', 'part'])('an `ed25519` webhook with `%s
     webhook: { kind: 'ed25519', header: 'x-signature-ed25519', [part]: part === 'encoding' ? 'base64' : 'x' } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
     .toEqual(['an `ed25519` webhook takes no `prefix`, `encoding`, `hash` or `part`: leave them out']);
+});
+
+test.each<[string, Record<string, unknown>, string]>([
+  ['token', { header: 'x-goog-channel-token', prefix: 'x' }, 'a `token` webhook takes only its `header` (and `deliveryId`): leave the rest out'],
+  ['token', { header: 'x-goog-channel-token', timestamp: { header: 'x-t' } }, 'a `token` webhook takes only its `header` (and `deliveryId`): leave the rest out'],
+  ...['header', 'signed', 'timestamp', 'prefix'].map((part): [string, Record<string, unknown>, string] => ['standard',
+    { [part]: part === 'timestamp' ? { header: 'webhook-timestamp' } : 'x' },
+    'a `standard` webhook takes no `header`, `signed`, `timestamp` or `prefix`: Standard Webhooks fixes them']),
+])('a `%s` webhook with %j fails the schema, with what to fix', (kind, parts, message) => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind, ...parts } };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+});
+
+test('a `token` webhook needs its header', () => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'token' } };
+  expect(entrySchema.safeParse(bad).success).toBe(false);
 });
 
 test("a base with a host from a field's choices and a path segment from a saved value passes every rule", () => {

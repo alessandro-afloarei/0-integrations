@@ -4,6 +4,8 @@ import type { Webhook } from './catalogue.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
+import { gitlab } from './catalogue/gitlab.js';
+import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { stripe } from './catalogue/stripe.js';
 import { deliveryId, readCappedBody, verifyWebhook, type WebhookRequest } from './webhooks.js';
@@ -37,6 +39,9 @@ test("verifies Fireflies' signature", () => {
   const digest = createHmac('sha256', secret).update(body).digest('hex');
   expect(verifyWebhook(fireflies.webhook, request({ 'x-hub-signature': `sha256=${digest}` }), secret)).toBe(true);
   expect(verifyWebhook(fireflies.webhook, request({}), secret)).toBe(false);
+  // An empty secret is a key anyone can sign with.
+  const unkeyed = createHmac('sha256', '').update(body).digest('hex');
+  expect(verifyWebhook(fireflies.webhook, request({ 'x-hub-signature': `sha256=${unkeyed}` }), '')).toBe(false);
 });
 
 test('refuses a timestamp that is not plain seconds', () => {
@@ -168,7 +173,56 @@ test('an Ed25519 webhook keeps the timestamp rule: plain seconds, inside the tol
   expect(verifyWebhook(discord.webhook, request({ 'x-signature-timestamp': t }), publicKey)).toBe(false);
 });
 
+test("verifies Google Calendar push's channel token: the exact token, nothing longer, shorter or different", () => {
+  const token = 'channel-token-1';
+  const push = (value?: string) => request(value === undefined ? {} : { 'x-goog-channel-token': value }, new Uint8Array());
+  expect(verifyWebhook(google.webhook, push(token), token)).toBe(true);
+  for (const value of [`${token}1`, token.slice(0, -1), `${token.slice(0, -1)}2`, undefined]) {
+    expect(verifyWebhook(google.webhook, push(value), token)).toBe(false);
+  }
+});
+
+/** A Standard Webhooks secret: 24 random-looking bytes, base64 after `whsec_`. */
+const standardKey = Buffer.from('standard-webhooks-key-24');
+const standardSecret = `whsec_${standardKey.toString('base64')}`;
+/** The spec's construction: `v1,` and the base64 HMAC-SHA256 of `<webhook-id>.<webhook-timestamp>.<body>`. */
+const standardSignature = (id: string, timestamp: string, key = standardKey) =>
+  `v1,${createHmac('sha256', key).update(`${id}.${timestamp}.`).update(body).digest('base64')}`;
+function standardSigned(signature: string, timestamp = t, id = 'msg_1'): WebhookRequest {
+  return request({ 'webhook-id': id, 'webhook-timestamp': timestamp, 'webhook-signature': signature });
+}
+
+test("verifies a Standard Webhooks signature (GitLab's signing token): any `v1` may match", () => {
+  const good = standardSignature('msg_1', t);
+  expect(verifyWebhook(gitlab.webhook, standardSigned(good), standardSecret)).toBe(true);
+  expect(verifyWebhook(gitlab.webhook, standardSigned(`v1,${Buffer.alloc(32).toString('base64')} ${good}`), standardSecret)).toBe(true);
+  // The `whsec_` prefix is optional; the key is its base64 either way.
+  expect(verifyWebhook(gitlab.webhook, standardSigned(good), standardKey.toString('base64'))).toBe(true);
+});
+
+test('refuses a Standard Webhooks request that is not a fresh `v1` signature of this id, timestamp and body', () => {
+  const good = standardSignature('msg_1', t);
+  // Another version is ignored, so a `v1a` alone signs nothing.
+  expect(verifyWebhook(gitlab.webhook, standardSigned(good.replace('v1,', 'v1a,')), standardSecret)).toBe(false);
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', String(now - 301)), String(now - 301)), standardSecret)).toBe(false);
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', String(now - 300)), String(now - 300)), standardSecret)).toBe(true);
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', `${t}.0`), `${t}.0`), standardSecret)).toBe(false);
+  // The id is signed: the same signature under another id fails, and so does a request with none.
+  expect(verifyWebhook(gitlab.webhook, standardSigned(good, t, 'msg_2'), standardSecret)).toBe(false);
+  expect(verifyWebhook(gitlab.webhook, request({ 'webhook-timestamp': t, 'webhook-signature': good }), standardSecret)).toBe(false);
+  const changed = Buffer.from(body);
+  changed[0] = 1;
+  expect(verifyWebhook(gitlab.webhook, { ...standardSigned(good), rawBody: changed }, standardSecret)).toBe(false);
+  // A secret whose base64 decodes to nothing keys nothing, even beside a signature made with an empty key.
+  for (const empty of ['whsec_', '', '!!!']) {
+    expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.alloc(0))), empty)).toBe(false);
+  }
+  // The 8 KiB cap: a list over it is false before it is parsed, though its last signature is good.
+  expect(verifyWebhook(gitlab.webhook, standardSigned(`${'v1a,x '.repeat(1400)}${good}`), standardSecret)).toBe(false);
+});
+
 test('deliveryId reads the declared header or the body paths', () => {
+  expect(deliveryId(gitlab.webhook, standardSigned(standardSignature('msg_1', t)))).toBe('msg_1');
   expect(deliveryId(stripe.webhook, request({}, Buffer.from('{"id":"evt_1","type":"balance.available"}')))).toBe('evt_1');
   expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }))).toBe('d1');
   expect(deliveryId(breakcold.webhook, request({}))).toBeNull();

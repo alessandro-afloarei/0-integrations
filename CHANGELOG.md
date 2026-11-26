@@ -37,6 +37,8 @@ Nothing here is released yet.
 - New: webhook `hash: 'sha1'` (Intercom) and `part` for headers such as Stripe's `t=…,v1=…`. A signature header over
   8 KiB is refused before it is parsed.
 - New: `send: { header, value }` (Discord's `Bot {token}`, Trello's `OAuth …` header) and `ed25519` webhooks.
+- New: `token` webhooks (Google Calendar push's channel token) and `standard` (Standard Webhooks, GitLab's signing token).
+- An HMAC webhook checked with an empty secret is `false`: anyone can sign with an empty key.
 
 ## 0.13.0
 

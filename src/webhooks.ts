@@ -1,4 +1,4 @@
-import { createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
+import { createHash, createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { Webhook } from './catalogue.js';
 import { parseJson, readPath } from './rules.js';
@@ -8,29 +8,42 @@ export type WebhookRequest = { method: string; url: string; headers: Headers; ra
 /** A signature header longer than this is refused before it is parsed. */
 const MAX_HEADER_BYTES = 8 * 1024;
 
+const sha256 = (value: string) => createHash('sha256').update(value).digest();
+/** Standard Webhooks read as the HMAC it is: `webhook-signature` lists `v1,<base64>` pieces with spaces between, over
+ * `<webhook-id>.<webhook-timestamp>.<body>`, keyed with the secret's base64. */
+const STANDARD: Extract<Webhook, { kind: 'hmac' }> = { kind: 'hmac', header: 'webhook-signature', signed: '{timestamp}.{body}',
+  encoding: 'base64', part: 'v1', timestamp: { header: 'webhook-timestamp' } };
+
 export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret: string): boolean {
-  const received = request.headers.get(webhook.header);
+  const standard = webhook.kind === 'standard';
+  const scheme = standard ? STANDARD : webhook;
+  const received = request.headers.get(scheme.header);
   if (!received || received.length > MAX_HEADER_BYTES) return false;
-  const part = webhook.kind === 'hmac' ? webhook.part : undefined;
-  // With `part`, the header is `name=value` pieces split on `,`, each on its first `=`; a piece with no `=` names nothing.
-  const pieces = part === undefined ? [] : received.split(',').flatMap(piece => {
-    const at = piece.indexOf('=');
+  // Compared as digests of equal length, so the token's length leaks nothing.
+  if (scheme.kind === 'token') return timingSafeEqual(sha256(received), sha256(secret));
+  const part = scheme.kind === 'hmac' ? scheme.part : undefined;
+  // With `part`, the header is `name=value` pieces split on `,` (Standard Webhooks: `name,value` on spaces); no `=`, no name.
+  const [between, assign] = standard ? [' ', ','] : [',', '='];
+  const pieces = part === undefined ? [] : received.split(between).flatMap(piece => {
+    const at = piece.indexOf(assign);
     return at < 0 ? [] : [{ name: piece.slice(0, at), value: piece.slice(at + 1) }];
   });
   const named = (name: string) => pieces.filter(piece => piece.name === name).map(piece => piece.value);
-  const stamp = webhook.timestamp;
+  const stamp = scheme.timestamp;
   const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
   if (stamp) {
     if (!/^\d+$/.test(timestamp)) return false;
     const seconds = Number(timestamp);
     if (!Number.isSafeInteger(seconds) || Math.abs(Math.floor(Date.now() / 1000) - seconds) > (stamp.toleranceSeconds ?? 300)) return false;
   }
+  const id = standard ? request.headers.get('webhook-id') || null : '';
+  if (id === null) return false;
   const substitutions: Record<string, string | Uint8Array> = {
     '{body}': request.rawBody, '{timestamp}': timestamp, '{method}': request.method, '{url}': request.url,
   };
-  const content = Buffer.concat((webhook.signed ?? '{body}').split(/(\{body\}|\{timestamp\}|\{method\}|\{url\})/)
-    .map(piece => Buffer.from(substitutions[piece] ?? piece)));
-  if (webhook.kind === 'ed25519') {
+  const content = Buffer.concat([Buffer.from(standard ? `${id}.` : ''), ...(scheme.signed ?? '{body}')
+    .split(/(\{body\}|\{timestamp\}|\{method\}|\{url\})/).map(piece => Buffer.from(substitutions[piece] ?? piece))]);
+  if (scheme.kind === 'ed25519') {
     // The public key is 32 bytes and the signature 64, both hex; anything else, or a key that is no point, is false.
     if (!/^[0-9a-f]{128}$/iu.test(received) || !/^[0-9a-f]{64}$/iu.test(secret)) return false;
     try {
@@ -40,9 +53,12 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
       return false;
     }
   }
-  const hmac = createHmac(webhook.hash ?? 'sha256', secret).update(content);
+  // An empty key, which anyone can sign with, accepts nothing.
+  const key = standard ? Buffer.from(secret.replace(/^whsec_/u, ''), 'base64') : secret;
+  if (key.length === 0) return false;
+  const hmac = createHmac(scheme.hash ?? 'sha256', key).update(content);
   // A part's value is the signature alone: `prefix` is not compared there.
-  const expected = Buffer.from((part === undefined ? webhook.prefix ?? '' : '') + hmac.digest(webhook.encoding ?? 'hex'));
+  const expected = Buffer.from((part === undefined ? scheme.prefix ?? '' : '') + hmac.digest(scheme.encoding ?? 'hex'));
   return (part === undefined ? [received] : named(part)).some(candidate => {
     const actual = Buffer.from(candidate);
     return actual.length === expected.length && timingSafeEqual(actual, expected);
