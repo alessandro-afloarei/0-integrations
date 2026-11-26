@@ -12,9 +12,10 @@ import { serpapi } from './catalogue/serpapi.js';
 import { trello } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
-import { finishConnect } from './connect.js';
+import { finishConnect, startConnect } from './connect.js';
+import { GrantRevoked } from './errors.js';
 import { kitValues } from './kit.test-support.js';
-import { requestToken, tokenSource } from './oauth.js';
+import { exchangeCode, refreshGrant, requestToken, revokeGrant, tokenSource } from './oauth.js';
 import { checkCredentialStore, fakeFetch, fakeProvider, memoryStores, respondFrom, sequence, type FakeCall } from './testing.js';
 import type { Sealed } from './vault.js';
 
@@ -270,6 +271,53 @@ describe('fakeProvider', () => {
     const api = client(lemlist, { token: 'k', fetch });
     await expect(api.contacts.create({ email: 'a@example.test' })).resolves.toEqual({ data: { _id: 'created' } });
     await expect(api.contacts.update({ contactId: 'c1' })).resolves.toEqual({ data: { _id: 'updated' } });
+  });
+
+  /** Basic client authentication, a JSON token body and no PKCE: the three shapes that differ from the defaults. */
+  const basicJson = defineProvider({ id: 'basicjson', name: 'Basic JSON', http: { baseUrl: 'https://api.basicjson.test' },
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize', tokenUrl: 'https://basicjson.test/token',
+      refreshUrl: 'https://basicjson.test/refresh', clientAuth: 'basic', json: true, pkce: false, scopeSeparator: ',' }],
+    scopes: { default: ['read', 'write'], requireGranted: true }, revoke: { url: 'https://basicjson.test/revoke', token: ['refresh'] },
+    identify: { request: { path: '/me' }, id: 'id', name: 'tokenAnswer.workspace.name' } });
+  const kitClient = { clientId: 'kit-client', clientSecret: 'kit-secret' };
+  const redirectUri = 'https://app.test/callback';
+
+  test('an OAuth 2 entry with Basic client authentication, a JSON body and no PKCE connects on its fake', async () => {
+    const { fetch, calls } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
+    const start = await startConnect(basicJson, { clientId: 'kit-client', redirectUri, state: 's' });
+    await expect(finishConnect(basicJson, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
+      .resolves.toMatchObject({ secret: { accessToken: 'k', refreshToken: 'kit-refresh' }, account: { id: 'kit-account', name: 'kit-workspace.name' } });
+    expect(start.codeVerifier).toBeUndefined();
+    expect(calls[0]).toMatchObject({ url: 'https://basicjson.test/token', body: JSON.stringify({ code: 'kit-code', redirect_uri: redirectUri, grant_type: 'authorization_code' }) });
+    await expect(exchangeCode(basicJson, kitClient, { code: 'kit-code', redirectUri, fetch })).resolves.toMatchObject({ extras: { scope: 'read,write' } });
+    await expect(exchangeCode(basicJson, kitClient, { code: 'other', redirectUri, fetch })).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(refreshGrant(basicJson, kitClient, 'kit-refresh', { fetch })).resolves.toMatchObject({ accessToken: 'k' });
+    await expect(refreshGrant(basicJson, kitClient, 'old', { fetch })).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(revokeGrant(basicJson, { refreshToken: 'kit-refresh', client: kitClient, fetch })).resolves.toBeUndefined();
+  });
+
+  test('a wrong client is refused 401 invalid_client, at the token, refresh and revoke URLs alike', async () => {
+    const { fetch } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
+    const wrong = { clientId: 'kit-client', clientSecret: 'other' };
+    const refused = { code: 'request_failed', status: 401, detail: 'invalid_client' };
+    await expect(exchangeCode(basicJson, wrong, { code: 'kit-code', redirectUri, fetch })).rejects.toMatchObject(refused);
+    await expect(refreshGrant(basicJson, wrong, 'kit-refresh', { fetch })).rejects.toMatchObject(refused);
+    await expect(revokeGrant(basicJson, { refreshToken: 'kit-refresh', client: wrong, fetch })).rejects.toMatchObject(refused);
+    // The client in the body, where the entry declares Basic, is no client either.
+    const body = JSON.stringify({ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri, client_id: 'kit-client', client_secret: 'kit-secret' });
+    expect((await fetch('https://basicjson.test/token', { method: 'POST', body })).status).toBe(401);
+  });
+
+  test('a PKCE entry is answered only with a code verifier, its client in the form body, and a given code and client', async () => {
+    const pkce = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize', tokenUrl: 'https://basicjson.test/token' }] });
+    const client = { clientId: 'app', clientSecret: 'secret' };
+    const { fetch } = fakeFetch(fakeProvider(pkce, { key: 'k', client, code: 'c1' }));
+    const form = (parts: Record<string, string>) => fetch('https://basicjson.test/token', { method: 'POST',
+      body: new URLSearchParams({ grant_type: 'authorization_code', code: 'c1', redirect_uri: redirectUri, client_id: 'app', client_secret: 'secret', ...parts }) });
+    expect(await answer(await form({}))).toEqual({ status: 400, body: { error: 'invalid_grant' } });
+    expect((await form({ code_verifier: 'v' })).status).toBe(200);
+    await expect(exchangeCode(pkce, client, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).resolves.toMatchObject({ grant: { accessToken: 'k' } });
+    await expect(exchangeCode(pkce, kitClient, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).rejects.toMatchObject({ status: 401 });
   });
 
   test("a `tokenAnswer.*` kit value never replaces the token or `expires_in`", async () => {

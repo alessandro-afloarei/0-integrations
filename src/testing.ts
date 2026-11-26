@@ -1,10 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
+import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
 import type { Entry, Operation, Value, Values } from './catalogue.js';
 import type { WithLock } from './credentials.js';
 import { callBase, credentialOf, filledBase } from './http.js';
-import { requestToken } from './oauth.js';
-import { parseJson, placeholders, readPath } from './rules.js';
+import { requestToken, type OAuthClient } from './oauth.js';
+import { oauthUrls, parseJson, placeholders, readPath } from './rules.js';
 import type { Sealed, SecretStore, TenantKeyStore } from './vault.js';
 
 export function memoryStores(): {
@@ -115,12 +116,12 @@ const answerPaths = (value: Value | undefined) => {
 };
 
 /** Routes that answer as the entry declares, for one credential: identify (by default an answer holding a kit account
- * at the entry's id and name paths), a token request for a `token` entry, and each declared operation the app answers.
- * A request without the credential the entry sends is 401. Of two routes that match, the one whose first differing
- * segment is literal answers. */
-export function fakeProvider<const E extends Entry>(entry: E, data: { key: string; values?: Values; account?: unknown;
+ * at the entry's id and name paths), a token request for a `token` entry, an OAuth 2 entry's token, refresh and revoke
+ * URLs for `client` and `code`, and each declared operation the app answers. A request without the credential the entry
+ * sends is 401. Of two routes that match, the one whose first differing segment is literal answers. */
+export function fakeProvider<const E extends Entry>(entry: E, data: { key: string; values?: Values; account?: unknown; client?: OAuthClient; code?: string;
   operations?: E extends { operations: infer O } ? { [K in keyof O]?: Answer } : Record<string, never> }): Route[] {
-  const { key, values = {} } = data;
+  const { key, values = {}, code = 'kit-code', client: { clientId, clientSecret } = { clientId: 'kit-client', clientSecret: 'kit-secret' } } = data;
   const operations = (data.operations ?? {}) as Readonly<Record<string, Answer | undefined>>;
   const [auth] = entry.auth;
   // The engine's own rules fill the base and the credential, so the fake and the engine never disagree.
@@ -145,6 +146,10 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
       return value instanceof Response ? value : value === undefined ? Response.json({ error: 'not_found' }, { status: 404 }) : Response.json(value);
     } }];
   };
+  // At each `tokenAnswer.<path>` the entry reads: the value given for the `save` key reading it, else `kit-<path>`.
+  const saved = new Map(Object.entries(entry.save ?? {}).map(([name, read]) => [read, values[name]]));
+  const tokenAnswer = (answer: Record<string, unknown>) => lookupNames(entry).filter(read => read.startsWith('tokenAnswer.'))
+    .reduce((into, read) => put(into, read.slice('tokenAnswer.'.length), saved.get(read) ?? `kit-${read.slice('tokenAnswer.'.length)}`), answer);
   const routes: [number[], Route][] = [];
   // GraphQL posts every query to its base; the app's answers come first, so an operation sharing identify's request answers it.
   const graphql: [at: string, query: string, answer: Answer][] = [];
@@ -195,9 +200,27 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
       const [basic, body] = await (expected ??= capture());
       // RFC 6749 §5.2: a client whose Basic or body differs is refused.
       if (sent.headers.get('authorization') !== basic || await sent.text() !== body) return Response.json({ error: 'invalid_client' }, { status: 400 });
-      return lookupNames(entry).filter(read => read.startsWith('tokenAnswer.')).map(read => read.slice('tokenAnswer.'.length))
-        .reduce((answer, path) => put(answer, path, `kit-${path}`), put(put({}, request.token ?? 'access_token', 'kit-token'), 'expires_in', 3600));
+      return tokenAnswer(put(put({}, request.token ?? 'access_token', 'kit-token'), 'expires_in', 3600));
     }, true));
+  }
+  const urls = oauthUrls(entry);
+  if (auth.kind === 'oauth2' && urls !== undefined) {
+    // The client authentication the entry declares, encoded as RFC 6749 §2.3.1 says: a Basic header, or the body's pair.
+    const client = { headers: new Headers(), body: new URLSearchParams() };
+    void (auth.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(clientSecret)({ issuer: '' }, { client_id: clientId }, client.body, client.headers);
+    for (const url of new Set([urls.token, urls.refresh, urls.revoke ?? urls.token])) {
+      routes.push(route('POST', target(new URL(filledBase(entry, values, url))), '', async (call, sent) => {
+        const body = new URLSearchParams(auth.json ? call.body as Record<string, string> : await sent.text());
+        const sameClient = sent.headers.get('authorization') === client.headers.get('authorization') && [...client.body].every(([name, value]) => body.get(name) === value);
+        if (!sameClient) return Response.json({ error: 'invalid_client' }, { status: 401 });
+        if (url === urls.revoke) return new Response(null, { status: 200 });
+        const granted = body.get('grant_type') === 'refresh_token' ? url === urls.refresh && body.get('refresh_token') === 'kit-refresh' : url === urls.token
+          && body.get('grant_type') === 'authorization_code' && body.get('code') === code && body.has('redirect_uri') && (auth.pkce === false || body.has('code_verifier'));
+        if (!granted) return Response.json({ error: 'invalid_grant' }, { status: 400 });
+        const scope = entry.scopes?.requireGranted ? { scope: entry.scopes.default.join(auth.scopeSeparator ?? ' ') } : {};
+        return tokenAnswer({ access_token: key, token_type: 'bearer', refresh_token: 'kit-refresh', expires_in: 3600, ...scope });
+      }, true));
+    }
   }
   // Stable: the more specific route first, and on a tie an operation beats identify.
   return routes.sort(([a], [b]) => moreSpecific(a, b)).map(([, route]) => route);
