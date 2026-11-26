@@ -35,6 +35,7 @@ Every line below breaks 0.12 unless it says otherwise.
 - unipile: its entry declares its `apiKey` field, so `startConnect(unipile)` returns a form that asks for it (it was empty).
 - unipile: `unipileConnect` is gone: call `client.authLink(link)` for the sign-in URL and
   `client.account(accountId, signal)` for the account.
+- `accessToken` always refreshes 15 minutes before expiry: a provider definition's `refreshMarginMs` is gone.
 - `authorizeUrl`, `exchangeCode`, `refreshGrant` and `accessToken({ provider })` take a catalogue entry; a token answer
   is refused inside a 200 when the entry's `auth.failed` holds, with the code `errors.detail` reads (Slack's as before).
 - `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke, by RFC 7009 or by the entry's
@@ -68,6 +69,7 @@ Every line below breaks 0.12 unless it says otherwise.
 - microsoft: the account id is Graph's `id` lowercased (Graph ids are lowercase GUIDs). A user with no address (neither
   `mail` nor `userPrincipalName`, or one without `@`) now signs in, named by its address if any, else its id; the
   mailbox reader still refuses it as `no_mailbox` at its first read.
+- microsoft: a Graph mailbox read no longer refuses a `/me` answer that has no `id`.
 - `0-integrations/providers` and its types (`ProviderDefinition`, `OAuth2Definition`, `RetryPolicy`, `HmacScheme`) are
   gone: import the entry from `0-integrations/catalogue/<id>`. `GOOGLE_CALENDAR_BASE` is gone: read
   `google.http.bases.calendar`.
