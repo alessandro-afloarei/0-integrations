@@ -11,7 +11,7 @@ export const rollbar = defineProvider({
   id: 'rollbar', name: 'Rollbar', docs: 'https://docs.rollbar.com/reference/getting-started-1',
   categories: ['monitoring'],
   fields: [{ name: 'accessToken', title: 'Project access token', secret: true,
-    help: 'A project access token with the read and write scopes, from Project → Settings → Project Access Tokens.' }],
+    help: 'A project access token with the read and write scopes, made in the project settings, under Project Access Tokens.' }],
   auth: [{ kind: 'key', send: { header: 'x-rollbar-access-token' } }],
   http: { baseUrl: 'https://api.rollbar.com/api/1', retry: {} },
   identify: { request: { path: '/items' } },

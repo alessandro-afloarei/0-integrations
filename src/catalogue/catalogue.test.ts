@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
@@ -634,6 +638,19 @@ test.each<[string, Record<string, unknown>, string]>([
 });
 
 const OAUTH_PLAIN = 'no plain field read by an `oauth2` sign-in (its connect asks for none): a provider whose OAuth needs one (a subdomain or region) waits for a plain value at OAuth sign-in';
+test("pnpm new's unfilled skeleton breaks only rules that say what to fill: the TODOs and the categories", async () => {
+  const folder = mkdtempSync(fileURLToPath(new URL('../../.scaffold-table-', import.meta.url)));
+  try {
+    mkdirSync(join(folder, 'src/catalogue'), { recursive: true });
+    spawnSync(process.execPath, [fileURLToPath(new URL('../../scripts/new.mjs', import.meta.url)), 'acme'], { cwd: folder });
+    const file = join(folder, 'src/catalogue/acme.ts');
+    writeFileSync(file, readFileSync(file, 'utf8').replace("'../catalogue.js'", `'${new URL('../catalogue.ts', import.meta.url).href}'`));
+    const { acme } = await import(pathToFileURL(file).href) as { acme: Entry };
+    expect(entrySchema.safeParse(acme).error).toBeUndefined();
+    expect(broken(acme)).toEqual([`${TODO_RULE} (key)`, '`categories`: one or two unique values, the first the main one (key)']);
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
 test.each<[string, Entry, string[]]>([
   // Narrowing a key entry would drop these: a one-sign-in entry is checked as it is.
   ['a key entry with scopes and an RFC 7009 revoke', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], scopes: { default: ['read'] },

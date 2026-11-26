@@ -9,7 +9,8 @@ Nothing here is released yet.
   ClickUp.
 - An OAuth 2 token answer that states no `token_type` is read as Bearer; it was `invalid_response`. One that states
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.
-- New entry: Linear (tasks), OAuth 2 and its key. Every entry is `declared`.
+- New entries: Buildkite (code), ClickUp (tasks; OAuth 2 and a key), Linear (tasks; OAuth 2 and a key), Rollbar
+  (monitoring), Shortcut (tasks). Every entry is `declared`.
 - A paged operation whose `result` is a list and that names no `records` yields the list's elements (an answer that is
   a list), a bad one skipped and reported; it yielded each page whole. First used by Buildkite.
 - New: `linkHeader` paging, first used by Buildkite; a next link may be a path on the provider's origin, first used by

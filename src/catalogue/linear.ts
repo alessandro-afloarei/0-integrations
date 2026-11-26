@@ -16,7 +16,7 @@ export const linear = defineProvider({
   id: 'linear', name: 'Linear', docs: `${guide}#authentication`,
   categories: ['tasks'],
   fields: [{ name: 'apiKey', title: 'Personal API key', secret: true,
-    help: 'Create it under Settings > Account > Security & Access with Write access to the teams the app works on: a key can be limited to some permissions and teams, and admins can stop members creating keys.' }],
+    help: 'Create it in your account settings, under Security & Access, with Write access to the teams the app works on: a key can be limited to some permissions and teams, and admins can stop members creating keys.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://linear.app/oauth/authorize', tokenUrl: 'https://api.linear.app/oauth/token',
     scopeSeparator: ',', authorizeParams: { response_type: 'code' } }, { kind: 'key', send: { header: 'authorization' } }],
   scopes: { default: ['read', 'issues:create'] },

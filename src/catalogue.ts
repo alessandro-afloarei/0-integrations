@@ -84,7 +84,7 @@ export type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; 
 export type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Readonly<Record<string, Param>>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null' };
-/** What a provider is for: a closed list, a value added with the first entry that needs it. */
+/** What a provider is for: a closed list of 20; a new value arrives with the first entry that needs it. */
 export type Category = 'tasks' | 'docs' | 'chat' | 'code' | 'monitoring' | 'crm' | 'sales' | 'mail' | 'calendar' | 'meetings'
   | 'support' | 'marketing' | 'finance' | 'hr' | 'storage' | 'ecommerce' | 'phone' | 'design' | 'analytics' | 'search';
 /** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. `categories`: the first is the main one. */

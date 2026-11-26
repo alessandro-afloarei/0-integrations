@@ -27,6 +27,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 | A placeholder in identify's request path | Twilio |
 | A `User-Agent` the app names, sent when it signs in | Basecamp |
 | A webhook signed as a JWT | Monday, Netlify |
+| Error codes read per sign-in (codes meaning a revoked OAuth grant, beside a key whose bad value must read as refused) | ClickUp |
 | A webhook timestamp in milliseconds (the signed body's `webhookTimestamp`; the `Linear-Timestamp` header is not signed) | Linear |
 | A plain value for an OAuth 2 sign-in (a subdomain or region chosen before the redirect) | — |
 | An OAuth 2 token answer whose `scope` is a list of strings, which the engine's OAuth library refuses (Linear's apps created before 1 December 2023, [OAuth 2.0 authentication](https://linear.app/developers/oauth-2-0-authentication)) | Linear |
@@ -42,6 +43,8 @@ An entry declared in part is listed here with what it leaves out and the mechani
 | Linear | Paging: each list answers one page, `first` and `after` ordinary variables, `pageInfo` in the result | A GraphQL cursor sent in the query's variables |
 | Linear | OAuth 2 for an app created before 1 December 2023: its token answer's `scope` is an array, so it cannot sign in | An OAuth 2 token answer whose `scope` is a list of strings |
 | Linear | The webhook timestamp check: the app refuses a delivery over a minute old itself | A webhook timestamp in milliseconds |
+| Buildkite | A 429's wait: it is in `RateLimit-User-Reset`, which the retry does not read | A 429's wait in a header of seconds left |
+| ClickUp | The codes that mean a revoked authorization (`OAUTH_019`, `OAUTH_021`, `OAUTH_025`, `OAUTH_077`): `errors` is shared by both sign-ins, and a personal token would read them as a revoked grant | Errors per sign-in |
 
 ## Skipped
 

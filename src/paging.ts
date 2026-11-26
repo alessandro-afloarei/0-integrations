@@ -47,11 +47,14 @@ export function nextLink(shape: NextUrl, baseUrl: string, answer: unknown): stri
   return followed(shape, baseUrl, readPath(answer, shape.next));
 }
 
-/** The target of the `Link` header's link-value whose `rel` (split on spaces) holds `next`. */
+/** A link-value's parameters: each `;`, its name, and a value quoted (RFC 8288 quoted-string) or bare. */
+const PARAM = /\s*;\s*([^\s;,=]+)\s*(?:=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s;,"]*)))?/gu;
+/** The target of the `Link` header's link-value whose `rel` (split on spaces) holds `next`. A quoted value is read
+ * whole, so a `<`, `,` or `; rel=next` inside one is neither a link nor a `rel`. */
 function relNext(header: string | null): string | undefined {
-  for (const [, target, params = ''] of (header ?? '').matchAll(/<([^>]*)>([^<]*)/gu)) {
-    const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^\s;,]+))/iu.exec(params);
-    if ((rel?.[1] ?? rel?.[2] ?? '').toLowerCase().split(/\s+/u).includes('next')) return target;
+  for (const [, target, params = ''] of (header ?? '').matchAll(new RegExp(`<([^>]*)>((?:${PARAM.source})*)`, 'gu'))) {
+    const rel = [...params.matchAll(PARAM)].find(([, name = '']) => name.toLowerCase() === 'rel');
+    if ((rel?.[2] ?? rel?.[3] ?? '').toLowerCase().split(/\s+/u).includes('next')) return target;
   }
   return undefined;
 }

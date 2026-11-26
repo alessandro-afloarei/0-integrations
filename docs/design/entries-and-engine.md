@@ -132,7 +132,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 | Field | What it declares | Default |
 |---|---|---|
 | `id`, `name` | Identity. | — |
-| `categories` | What the provider is for: one or two of a closed list, the first the main one. Every library entry has them. The list: `tasks`, `docs`, `chat`, `code`, `monitoring`, `crm`, `sales`, `mail`, `calendar`, `meetings`, `support`, `marketing`, `finance`, `hr`, `storage`, `ecommerce`, `phone`, `design`, `analytics`, `search`. A value is added with the batch of entries that first needs it. | — |
+| `categories` | What the provider is for: one or two of a closed list, the first the main one. Every library entry has them. The list: `tasks`, `docs`, `chat`, `code`, `monitoring`, `crm`, `sales`, `mail`, `calendar`, `meetings`, `support`, `marketing`, `finance`, `hr`, `storage`, `ecommerce`, `phone`, `design`, `analytics`, `search`: a closed list of 20; a new value arrives with the first entry that needs it. | — |
 | `docs` | The provider's own page that states what the entry declares, https. Every library entry has one. | — |
 | `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default` in `finishConnect`, the one place a default is applied; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
 | `auth` | A list of sign-in alternatives (below). | — |

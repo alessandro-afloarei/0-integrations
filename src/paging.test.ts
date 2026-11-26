@@ -120,6 +120,16 @@ test("linkHeader: walks the rel=\"next\" links to the end, and a page with no he
   expect([last.urls.length, last.error]).toEqual([1, undefined]);
 });
 
+test('linkHeader: a quoted parameter holding `<`, `,` or `; rel=next` is no link and no rel (RFC 8288 quoted-string)', async () => {
+  const next = `${linkBase}/builds?page=2`;
+  // A valid header whose title holds a link-like `<x>` and a `rel=next`: the real next link is followed.
+  const titled = await linkWalk(linkHeader, [[[1], `<${next}>; title="see <x>, then; rel=next" ; rel=next`], [[2], null]]);
+  expect([titled.urls, titled.error]).toEqual([[`${linkBase}/builds?per_page=2`, next], undefined]);
+  // A prev link whose title says `rel=next` is not followed.
+  const prev = await linkWalk(linkHeader, [[[1], `<${linkBase}/builds?page=0>; title="a; rel=next" ; rel="prev"`]]);
+  expect([prev.urls.length, prev.error]).toEqual([1, undefined]);
+});
+
 test('linkHeader: an error answer throws, as a json call does', async () => {
   const walked = await linkWalk(linkHeader, [[[1], `<${linkBase}/builds?page=2>; rel="next"`], 404]);
   expect(walked.error).toMatchObject({ code: 'not_found' });
