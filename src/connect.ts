@@ -3,7 +3,7 @@ import type { Entry, Field, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { defaultFetch, filledBase } from './http.js';
 import { authorizeUrl, exchangeCode, pkcePair, requestToken, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
-import { placeholders } from './rules.js';
+import { placeholders, plainFields } from './rules.js';
 
 type Redirect<E extends Entry = Entry> = { kind: 'redirect'; url: string; codeVerifier?: string; values: Plain<E> };
 type Form = { kind: 'form'; fields: readonly Field[] };
@@ -57,7 +57,7 @@ function read(field: Field, source: Values): readonly [string, string] {
 
 /** The entry's plain fields, each read once: the values a connection keeps. */
 const plainOf = (entry: Entry, given: Values): Record<string, string> =>
-  Object.fromEntries((entry.fields ?? []).filter(field => !field.secret).map(field => read(field, given)));
+  Object.fromEntries(plainFields(entry).map(field => read(field, given)));
 
 /** A form of the entry's fields, or the provider's authorization URL with the PKCE verifier and the plain values read,
  * every OAuth 2 URL and the base filled and checked with them first. */

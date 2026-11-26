@@ -4,7 +4,7 @@ import type { Entry, Values } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
-import { fill, holds, hostSplit, oauthUrls, parseJson, placeholders, plainValue, readPath } from './rules.js';
+import { fill, holds, hostSplit, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
@@ -16,7 +16,7 @@ function endpoints(entry: Entry, values: Values = {}) {
   const urls = oauthUrls(entry);
   if (auth.kind !== 'oauth2' || urls === undefined) throw new TypeError('oauth_unsupported');
   if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
-  const plain = Object.fromEntries((entry.fields ?? []).filter(field => !field.secret).map(({ name }) => [name, values[name]]));
+  const plain = Object.fromEntries(plainFields(entry).map(({ name }) => [name, values[name]]));
   const url = (template: string) => new URL(filledBase(entry, plain, template));
   return { config: auth, authorize: url(urls.authorize), token: url(urls.token), refresh: url(urls.refresh),
     revoke: urls.revoke === undefined ? undefined : url(urls.revoke) };
@@ -231,9 +231,9 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
   const { request } = auth;
   const values = { ...input.values }; // own values, each read once, for the URL, the body and Basic
   const secretNames = new Set((entry.fields ?? []).filter(field => field.secret).map(field => field.name));
-  // The URL is filled from plain values only (a secret field's name there is missing, whatever `values` holds), and
+  // The URL is filled from the plain fields only (a secret field's name there is missing, whatever `values` holds), and
   // checked before any secret is read.
-  const url = filledBase(entry, Object.fromEntries(Object.entries(values).filter(([name]) => !secretNames.has(name))), request.url);
+  const url = filledBase(entry, Object.fromEntries(plainFields(entry).map(({ name }) => [name, values[name]])), request.url);
   // One read of each secret (an app's may be a getter), so the value redacted is the value sent.
   const secret = { ...input.secret };
   const filled = (template: string) => fill(template, name => plainValue(secretNames.has(name) ? secret : values, name), entry.id);

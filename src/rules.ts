@@ -1,4 +1,4 @@
-import type { Entry, Operation, Paging, Param, Path, Shape, Template, Values, When } from './catalogue.js';
+import type { Entry, Field, Operation, Paging, Param, Path, Shape, Template, Values, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -65,6 +65,9 @@ const PLACEHOLDER = /\{([^{}]+)\}/gu;
 export function placeholders(template: Template): string[] {
   return [...template.matchAll(PLACEHOLDER)].map(match => match[1] ?? '');
 }
+
+/** The entry's fields that are not secret: what a connection keeps, and what fills a URL. */
+export const plainFields = (entry: Entry): Field[] => (entry.fields ?? []).filter(field => !field.secret);
 
 /** A URL's host part, its scheme included: all before the first `/` after `//` (`https://{host}`). */
 export function hostPart(url: string): string {
