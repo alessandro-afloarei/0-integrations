@@ -132,7 +132,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 |---|---|---|
 | `id`, `name`, `categories` | Identity and metadata. | — |
 | `docs` | The provider's own page that states what the entry declares, https. Every library entry has one. | — |
-| `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default`; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
+| `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default` in `finishConnect`, the one place a default is applied; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
 | `auth` | A list of sign-in alternatives (below). | — |
 | `scopes` | `{ default, requireGranted? }`. `requireGranted` refuses a grant that lacks a requested scope. | none |
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
@@ -153,9 +153,10 @@ ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's 
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given.
-- The value is the plain value, else the field's `default`; none is `template_missing`. A value that is not a host
-  part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only the name) is `TypeError('base_value_invalid: <entry id>
-  {<name>}')`.
+- The value is the connection's plain value; none is `template_missing`. Only `finishConnect` applies a field's
+  `default` (and returns it in `values`): a client, and a revoke, never do, so they need the connection's `values`. A
+  value that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host`
+  checks only the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
 - The filled base must parse, be https with no user or password, and its host must match `http.host`, else
   `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one

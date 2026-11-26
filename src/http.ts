@@ -88,7 +88,7 @@ function credentialOf(entry: Entry, token: string, values: Values): Credential {
   if (send === undefined) return { header: ['authorization', `Bearer ${token}`] };
   if ('header' in send) return { header: [send.header, token] };
   const secret = entry.fields?.find(field => field.secret === true)?.name;
-  const lookup = (name: string) => (name === 'token' || name === secret ? token : plainValue(entry, values, name));
+  const lookup = (name: string) => (name === 'token' || name === secret ? token : plainValue(values, name));
   if ('query' in send) return { query: Object.entries(send.query).map(([name, template]) => [name, fill(template, lookup, entry.id)]) };
   const pair = `${fill(send.basic[0], lookup, entry.id)}:${fill(send.basic[1], lookup, entry.id)}`;
   return { header: ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`] };
@@ -104,7 +104,7 @@ function filledBase(entry: Entry, values: Values): string {
   const { baseUrl, host = '' } = entry.http;
   if (placeholders(baseUrl).length === 0) return baseUrl;
   const filled = fill(baseUrl, name => {
-    const value = plainValue(entry, values, name);
+    const value = plainValue(values, name);
     if (value !== undefined && !BASE_VALUE.test(String(value))) throw new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
     return value;
   }, entry.id);

@@ -13,6 +13,7 @@ import { notion } from './catalogue/notion.js';
 import { client } from './client.js';
 import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
+import { revokeGrant } from './oauth.js';
 import * as guard from './guard.js';
 import { callRequest, createClient, defaultFetch } from './http.js';
 import { walk } from './paging.js';
@@ -625,13 +626,25 @@ test("an app's templated base with no host pattern is refused", async () => {
   await expect(filled(entry, { h: 'api.example.com' }).client.json('/a')).rejects.toThrow(new TypeError('base_host_refused: loose'));
 });
 
-test("a field's default fills the base, and a value replaces it", async () => {
+test("a client never fills a base from a field's default: only finishConnect applies one", async () => {
   const defaulted = defineProvider({ ...regional, fields: [{ name: 'sub', title: 'Subdomain', default: 'us' }, regional.fields[1]] });
-  for (const [values, url] of [[{}, 'https://us.example.com/v1/a'], [{ sub: ' ' }, 'https://us.example.com/v1/a'], [{ sub: 'eu' }, 'https://eu.example.com/v1/a']] as const) {
+  for (const values of [{}, { sub: ' ' }]) {
     const fake = filled(defaulted, values);
-    await fake.client.json('/a');
-    expect(fake.calls[0]?.url).toBe(url);
+    await expect(fake.client.json('/a')).rejects.toThrow(new TypeError('template_missing: regional {sub}'));
+    expect(fake.token).not.toHaveBeenCalled();
+    expect(fake.calls).toHaveLength(0);
   }
+  const fake = filled(defaulted, { sub: 'eu' });
+  await fake.client.json('/a');
+  expect(fake.calls[0]?.url).toBe('https://eu.example.com/v1/a');
+});
+
+test('a request revoke on a templated base, given no values, fails closed with nothing sent', async () => {
+  const revoking = defineProvider({ ...regional, fields: [{ name: 'sub', title: 'Subdomain', default: 'us' }, regional.fields[1]],
+    revoke: { request: { method: 'POST', path: '/revoke' } } });
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await expect(revokeGrant(revoking, { accessToken: 'a', fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: regional {sub}'));
+  expect(fake.calls).toHaveLength(0);
 });
 
 test('a templated base is not filled when the client is built, and an app\'s own base is used as given', async () => {

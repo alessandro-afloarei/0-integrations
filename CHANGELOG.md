@@ -9,7 +9,8 @@ Nothing here is released yet.
   `Basic :<token>`.
 - Every entry has a `docs` link.
 - New: a field may offer `choices` and a `default`, with `help`; a base may hold a host part from a plain value, checked
-  against `http.host`. First used by Intercom's region.
+  against `http.host`. First used by Intercom's region. Only `finishConnect` applies a default: a client needs the
+  connection's `values`.
 - New: `guardedFetch` (from `0-integrations/client`) refuses private, loopback, link-local, unique-local and metadata
   addresses; an entry whose host is typed (`http.host: '*'`, first GitLab) uses it unless the app passes its own `fetch`.
 - `finishConnect`'s `fetch` is optional.
