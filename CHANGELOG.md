@@ -4,7 +4,7 @@
 
 Nothing here is released yet.
 
-- New: an entry can send its key in the query string (`send: { query }`), first used by Trello.
+- New: an entry can send its key in the query string (`send: { query }`), first used by SerpApi.
 - A blank plain value (Aircall's `apiId: ''`) is refused with `template_missing` before anything is sent; it was sent as
   `Basic :<token>`.
 - Every entry has a `docs` link.

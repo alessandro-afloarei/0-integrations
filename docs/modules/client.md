@@ -20,8 +20,8 @@ const me = await api.json('/users/me');
   blank token is `TypeError('token_missing')`, thrown when a request needs it, before anything is sent.
 - `fetch`: the global one by default. In production pass the app's own guarded `fetch`: the library does not refuse
   private addresses yet.
-- `values`: the connection's plain values, for a credential or a base built from them (Aircall's `{apiId}`, Trello's
-  `{apiKey}`, Intercom's `{apiHost}`). A value the entry names that is missing, blank or neither a string nor a finite
+- `values`: the connection's plain values, for a credential or a base built from them (Aircall's `{apiId}`,
+  Intercom's `{apiHost}`). A value the entry names that is missing, blank or neither a string nor a finite
   number takes its field's `default`, else is `TypeError('template_missing: <entry id> {<name>}')`, before anything is
   sent. A base is filled and checked on the first request (see [catalogue](catalogue.md)), not when the client is built.
 - `baseUrl` replaces the entry's, used as given: an app's own base is neither filled nor checked against `http.host`.
@@ -48,7 +48,7 @@ const gmail = client(google, {
 
 The credential travels as the entry says and never leaves the base URL's origin: a path that would leave it is
 `TypeError('url_outside_origin')`, and a redirect is followed only on the same origin, at most five hops. A credential
-sent in the query (Trello's `key` and `token`) is set on every hop, replacing a value of the same name from the caller
+sent in the query (SerpApi's `api_key`) is set on every hop, replacing a value of the same name from the caller
 or the redirect, and no error the library builds holds the URL. A call times out after the entry's `timeoutMs` (30
 seconds by default) and is paced `minIntervalMs` apart. A 429 is waited out and sent again only on a read, only when
 the entry declares `http.retry`, never with a caller's `signal`, and never longer than `retry.maxWaitMs`. A GET is a

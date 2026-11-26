@@ -128,7 +128,18 @@ const operations = (entry: Entry) => Object.values(entry.operations ?? {});
 /** The base's host part: between `https://` and the first `/` after it. */
 const baseHost = (entry: Entry) => entry.http.baseUrl.slice('https://'.length).split('/')[0] ?? '';
 const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
+/** The templates a Basic or query send fills, and the secret field's name. */
+const sentTemplates = (entry: Entry) => {
+  const auth = entry.auth[0];
+  return !('send' in auth) || 'header' in auth.send ? [] : 'basic' in auth.send ? auth.send.basic : Object.values(auth.send.query);
+};
+const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
+  // A Basic or query send that names no secret would send a credential anyone could make.
+  'the secret ({token} or the secret field) in a basic or query send': (entry: Entry) => sentTemplates(entry).length === 0
+    || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || name === secretField(entry)),
+  "only the entry's fields and {token} in a send's templates": (entry: Entry) => sentTemplates(entry).flatMap(placeholders)
+    .every(name => name === 'token' || (entry.fields ?? []).some(field => field.name === name)),
   // Every claim an entry makes is checked against the provider's own page.
   'an https docs page': (entry: Entry) => entry.docs?.startsWith('https://') === true,
   // A typed host is checked against a pattern before the token is read; a fixed one needs none.
@@ -186,12 +197,6 @@ describe.each(entries)('%s', (id, entry) => {
   test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(entry))).toEqual(entry); });
   test.each(Object.keys(runnable) as Rule[])('declares %s', rule => { expect(runnable[rule](entry)).toBe(true); });
   test('names only what each place allows in its templates', () => {
-    const fields = (entry.fields ?? []).map(field => field.name);
-    const auth = entry.auth[0];
-    // auth.send: every field by its name, and the token.
-    const sent = !('send' in auth) || 'header' in auth.send ? []
-      : 'basic' in auth.send ? auth.send.basic : Object.values(auth.send.query);
-    for (const name of sent.flatMap(placeholders)) expect([...fields, 'token']).toContain(name);
     // identify and save read one lookup: the id found, the token answer, a connection value (a plain field the user
     // entered, or a value `save` keeps), or a path into the identify answer. A value without braces is itself a path.
     const connection = [...(entry.fields ?? []).filter(field => field.secret !== true).map(field => field.name),
@@ -260,6 +265,12 @@ const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
 test.each<[Rule, Entry]>([
   ['an https docs page', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['an https docs page', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
+  ['the secret ({token} or the secret field) in a basic or query send', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+    auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
+  ['the secret ({token} or the secret field) in a basic or query send', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+    auth: [{ kind: 'key', send: { basic: ['{apiId}', ''] } }] })],
+  ["only the entry's fields and {token} in a send's templates", defineProvider({ ...key, fields: [secret],
+    auth: [{ kind: 'key', send: { query: { key: '{apiKey}', account: '{acount}' } } }] })],
   ['one secret field, the only one a key entry has', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
   ['one secret field, the only one a key entry has', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'other', title: 'Other', secret: true }] })],

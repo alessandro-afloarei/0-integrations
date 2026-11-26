@@ -10,6 +10,7 @@ import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
 import { client } from './client.js';
 import { callRequest, createClient } from './http.js';
+import { walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-24T12:00:00Z')); });
@@ -408,7 +409,7 @@ test("Aircall's Basic credential is filled from a plain value and the secret, an
   expect(fake.calls).toHaveLength(1);
 });
 
-/** Trello's shape: a plain key and the secret token, both sent in the query. */
+/** A plain key and the secret token, both sent in the query. */
 const queryKey = defineProvider({ id: 'querykey', name: 'Query key',
   fields: [{ name: 'apiKey', title: 'API key' }, { name: 'apiToken', title: 'Token', secret: true }],
   auth: [{ kind: 'key', send: { query: { key: '{apiKey}', token: '{apiToken}' } } }],
@@ -423,7 +424,7 @@ test('a query send sets each parameter on the URL, after the caller\'s query, an
   await queryClient(fake.fetch).json('/a');
   await queryClient(fake.fetch).json('/a', { query: { token: 'evil', q: 'x' } });
   expect(fake.calls.map(call => [call.url, call.headers.authorization])).toEqual([
-    ['https://api.x.test/a?key=k&token=t', undefined], ['https://api.x.test/a?token=t&q=x&key=k', undefined]]);
+    ['https://api.x.test/a?key=k&token=t', undefined], ['https://api.x.test/a?q=x&key=k&token=t', undefined]]);
 });
 
 test('a query credential is set again on every same-origin hop, replacing a Location\'s value', async () => {
@@ -444,6 +445,17 @@ test("beforeRequest never sees a query send's credential", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
   await queryClient(fake.fetch, url => { seen.push(url.toString()); }).json('/a', { query: { q: '1' } });
   expect(seen).toEqual(['https://api.x.test/a?q=1']);
+});
+
+test('a next link or a Location that echoes the query credential never shows it to beforeRequest', async () => {
+  const seen: string[] = [];
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'https://api.x.test/a?page=2&token=t&key=k' }),
+    moved('/b?token=t'), ok) }]);
+  const pages = walk(queryClient(fake.fetch, url => { seen.push(url.toString()); }), { kind: 'nextUrl', next: 'next' }, '/a');
+  for await (const page of pages) expect(page).toBeDefined();
+  expect(seen).toEqual(['https://api.x.test/a', 'https://api.x.test/a?page=2']);
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.x.test/a?key=k&token=t',
+    'https://api.x.test/a?page=2&key=k&token=t', 'https://api.x.test/b?token=t&key=k']);
 });
 
 test('a code that is the token sent in the query is no detail', async () => {

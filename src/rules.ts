@@ -70,7 +70,7 @@ export function plainValue(entry: Pick<Entry, 'fields'>, values: Values, name: s
   return usable(value) ? value as string | number : usable(fallback) ? fallback : undefined;
 }
 
-export type Answer ={ status: number; headers: Headers; body: unknown; code?: string | undefined };
+export type Answer = { status: number; headers: Headers; body: unknown; code?: string | undefined };
 
 /** Whether every part `when` states holds for the answer; `header` or `path` (one of them, not both) selects the value compared. */
 export function holds(when: When, answer: Answer): boolean {

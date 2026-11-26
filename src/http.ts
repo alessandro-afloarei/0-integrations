@@ -128,6 +128,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
     return (base = { url, origin: new URL(url).origin });
   };
+  const [auth] = entry.auth;
+  const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];
   const retry = retryPolicy(entry.http.retry);
   const timeoutMs = entry.http.timeoutMs ?? 30_000;
   const minIntervalMs = input.minIntervalMs ?? entry.http.minIntervalMs ?? 0;
@@ -217,7 +219,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   async function follow(start: URL, bearer: string, { header, query = [] }: Credential, options: RequestOptions): Promise<ProviderResponse> {
     let url = start;
     for (let hop = 0; ; hop++) {
-      // Set on every hop, replacing the caller's or a Location's value; `url` itself never holds it.
+      // Set on each hop's copy, replacing the caller's or a Location's value; `start` never holds it.
       const sent = new URL(url);
       for (const [name, value] of query) sent.searchParams.set(name, value);
       const response = await send(sent, header, options);
@@ -235,6 +237,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     // A path is read after the base, so one without its `/` would run into the base's last segment (`/v1users`).
     if (path !== '' && !path.startsWith('/') && !path.startsWith('?')) throw new TypeError('url_path_relative');
     for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value);
+    // A next link may echo a query credential: `beforeRequest` never sees one.
+    for (const name of queried) url.searchParams.delete(name);
     await input.beforeRequest?.(new URL(url));
     const sendAs = (bearer: string) => follow(url, bearer, credentialOf(entry, bearer, input.values ?? {}), options);
     const bearer = await token();
