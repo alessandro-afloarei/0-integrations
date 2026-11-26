@@ -100,7 +100,7 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
       : param.in === 'path' ? encodeURIComponent(String(checked)) : String(checked);
   }
   const blank = (value: unknown) => value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
-  if (op.anyOf?.some(set => set.every(path => !blank(readPath(given, path)))) === false) refuse(`param_group_missing: ${id}`);
+  if (op.anyOf !== undefined && !op.anyOf.some(set => set.every(path => !blank(readPath(given, path))))) refuse(`param_group_missing: ${id}`);
   // A read is what the engine retries: a GET unless `kind` says otherwise (GraphQL is a POST, so a write by default).
   const read = op.kind === undefined ? !('graphql' in op) && (op.method ?? 'GET') === 'GET' : op.kind === 'read';
   return callRequest('graphql' in op ? { graphql: op.graphql }

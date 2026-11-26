@@ -373,7 +373,7 @@ test("an app's `anyOf` path that names no declared argument is refused when its 
   const entry = (anyOf: readonly (readonly string[])[]) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
     operations: { 'people.get': { method: 'POST', path: '/people', anyOf,
       params: { email: { in: 'body', type: 'string' }, input: { in: 'body', type: { 'company?': { 'domain?': 'string' } } } } } } }) as Entry;
-  for (const path of ['emial', 'email.x', 'input.company.name', 'input.constructor', 'constructor', '']) {
+  for (const path of ['emial', 'email.x', 'input.company.name', 'input.company?.domain', 'input.company.domain?', 'input.constructor', 'constructor', '']) {
     expect(() => client(entry([['email'], [path]]), { token: 'k' })).toThrow(new TypeError(`param_group_unknown: people.get ${path}`));
   }
   expect(() => client(entry([['email'], ['input.company.domain']]), { token: 'k' })).not.toThrow();
