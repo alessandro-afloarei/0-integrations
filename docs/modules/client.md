@@ -113,7 +113,7 @@ read, as `TypeError('url_outside_origin')` when it would change the host and `Ty
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
   A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered page that repeats
   the one before (`page_repeated`). A next link, from a `Link` header or the body, may be a full URL or a path on the
-  base's origin (`/wiki/api/v2/pages?cursor=…`); one outside the base's origin, path or `pathPrefix` is
+  base's origin (Shortcut's `/api/v3/search/stories?…`); one outside the base's origin, path or `pathPrefix` is
   `invalid_response` (`next_link_foreign`), and nothing is sent to it.
 
 ## Operations

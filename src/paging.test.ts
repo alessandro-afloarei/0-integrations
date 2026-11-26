@@ -140,16 +140,20 @@ test("a next link that leaves the base's origin or path is next_link_foreign, ne
 });
 
 test("a next link that is a path resolves on the base's origin and must sit under the base's path and pathPrefix", async () => {
-  const wiki = 'https://acme.atlassian.test/wiki';
-  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ _links: { next: '/wiki/api/v2/pages?cursor=c2' } }),
-    () => Response.json({ _links: {} })) }]);
-  for await (const page of walk(createClient(acme, { baseUrl: wiki, token, fetch: fake.fetch }),
-    { kind: 'nextUrl', next: '_links.next', pathPrefix: '/api/v2/' }, '/api/v2/pages', { query: { limit: '2' } })) expect(page).toBeTypeOf('object');
-  expect(fake.calls.map(call => call.url)).toEqual([`${wiki}/api/v2/pages?limit=2`, `${wiki}/api/v2/pages?cursor=c2`]);
+  // Shortcut's search: `next` is "the URL path and query string for the next page", on a base that is the origin.
+  const origin = 'https://api.k.test';
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ data: [1], next: '/api/v3/search/stories?query=x&next=c2' }),
+    () => Response.json({ data: [2], next: null })) }]);
+  for await (const page of walk(createClient(acme, { baseUrl: origin, token, fetch: fake.fetch }),
+    { kind: 'nextUrl', next: 'next', pathPrefix: '/api/v3/search/' }, '/api/v3/search/stories', { query: { query: 'x' } })) expect(page).toBeTypeOf('object');
+  expect(fake.calls.map(call => call.url)).toEqual([`${origin}/api/v3/search/stories?query=x`, `${origin}/api/v3/search/stories?query=x&next=c2`]);
+  // On a base with a path, a path keeps the base's path and the prefix after it.
   expect(ownPath({ kind: 'linkHeader' }, linkBase, '/v2/builds?page=2')).toBe('/builds?page=2');
-  for (const link of ['/api/v2/pages?cursor=c2', '/wiki/rest/api/content', '/wikix/api/v2/pages']) {
-    expect(ownPath({ kind: 'nextUrl', next: 'next', pathPrefix: '/api/v2/' }, wiki, link)).toBeNull();
+  expect(ownPath({ kind: 'nextUrl', next: 'next', pathPrefix: '/builds/' }, linkBase, '/v2/builds/x?page=2')).toBe('/builds/x?page=2');
+  for (const link of ['/builds/x?page=2', '/v2/admin/x', '/v2x/builds/x']) {
+    expect(ownPath({ kind: 'nextUrl', next: 'next', pathPrefix: '/builds/' }, linkBase, link)).toBeNull();
   }
+  expect(ownPath({ kind: 'nextUrl', next: 'next', pathPrefix: '/api/v3/search/' }, origin, '/api/v3/stories/1')).toBeNull();
 });
 
 test('linkHeader: a link that comes back is cursor_repeated', async () => {

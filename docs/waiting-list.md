@@ -18,6 +18,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 | `Link` paging that ends on `results="false"` | Sentry |
 | `Link` paging under another `rel` (`next-page`) | Guru |
 | A continuation token in an answer's header | Azure DevOps |
+| OAuth 2 (3LO) on `api.atlassian.com/ex/confluence/{cloudId}` with next links relative to the site (`/wiki/api/v2/…`); a key sign-in breaks Atlassian's rules for apps, which must not collect API tokens ([Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/)) | Confluence |
 | A 429's wait in a header of seconds left (`RateLimit-User-Reset`, `RateLimit-Reset`) | Buildkite |
 | A form-encoded body on a declared operation | Chatwork, Twilio |
 | An operation parameter sent as a header | PagerDuty |
