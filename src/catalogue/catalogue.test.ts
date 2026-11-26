@@ -6,6 +6,8 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
+import { finishConnect, startConnect } from '../connect.js';
+import { GrantRevoked } from '../errors.js';
 import { createClient } from '../http.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
@@ -402,6 +404,19 @@ describe.each(entries)('%s', (id, entry) => {
         const signedIn = signIn(one, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
         if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
         else expect((await signedIn).account === null).toBe(one.identify?.id === undefined);
+      });
+    }
+    // Every OAuth 2 sign-in connects on its derived fake: the kit's client, the consent's code and verifier.
+    if (one.auth[0].kind === 'oauth2') {
+      test.each(['good', 'bad'] as const)(`connects on its derived fake with a %s code${named}`, async code => {
+        const { fetch } = fakeFetch(fakeProvider(one, { key: GOOD_KEY, values: kitValues(one) }));
+        const redirectUri = 'https://app.example.test/callback';
+        const start = await startConnect(one, { clientId: 'kit-client', redirectUri, state: 'kit-state', values: kitValues(one) });
+        if (start.kind !== 'redirect') throw new Error('an OAuth 2 sign-in starts with a redirect');
+        const connected = finishConnect(one, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, code: code === 'good' ? 'kit-code' : 'kit-bad-code',
+          redirectUri, codeVerifier: start.codeVerifier, values: start.values, fetch, onRevokeFailed: error => { throw error; } });
+        if (code === 'bad') await expect(connected).rejects.toBeInstanceOf(GrantRevoked);
+        else expect((await connected).account === null).toBe(one.identify?.id === undefined);
       });
     }
   }
