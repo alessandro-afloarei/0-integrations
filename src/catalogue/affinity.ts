@@ -15,7 +15,7 @@ export const affinity = defineProvider({
   id: 'affinity', name: 'Affinity', docs: 'https://developer.affinity.co/pages/external-api-v2/authentication',
   categories: ['crm'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'From Manage Apps in your Affinity settings; making one needs the "Generate an API key" permission.' }],
+    help: 'From Manage Apps in your Affinity settings ("Generate an API key" permission). The lists need the "Export All People directory", "Export All Organizations directory" and "Export data from Lists" permissions; the Essentials plan has no API calls.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.affinity.co', headers: { 'x-affinity-api-version': '2026-09-17' }, retry: {} },
   errors: { detail: 'errors.0.code' },
