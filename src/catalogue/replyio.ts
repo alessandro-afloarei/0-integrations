@@ -11,7 +11,6 @@ const written = { firstName: { in: 'body', type: 'string' }, lastName: { in: 'bo
   linkedInUrl: { in: 'body', type: 'string' } } as const;
 const top = { top: { in: 'query', type: 'integer', description: 'At most 1000, 25 by default.' } } as const;
 const id = { in: 'path', type: 'integer', required: true } as const;
-const oneOf = 'All fields are optional — at minimum provide email or a LinkedIn URL.';
 const ref = 'https://docs.reply.io/api-reference';
 
 export const replyio = defineProvider({
@@ -31,9 +30,9 @@ export const replyio = defineProvider({
     'contacts.list': { docs: `${ref}/contacts/list-all-contacts`, path: '/v3/contacts', paging: 'skip', records: 'items',
       params: top, result: { items: [contact] } },
     'contacts.get': { docs: `${ref}/contacts/get-a-contact`, path: '/v3/contacts/{id}', notFound: 'null', params: { id }, result: contact },
-    'contacts.create': { docs: `${ref}/contacts/create-a-contact`, method: 'POST', path: '/v3/contacts',
-      params: { ...written, email: { in: 'body', type: 'string', description: `The email. ${oneOf}` },
-        linkedInUrl: { in: 'body', type: 'string', description: `The LinkedIn profile URL. ${oneOf}` } }, result: contact },
+    'contacts.create': { docs: `${ref}/contacts/create-a-contact`, method: 'POST', path: '/v3/contacts', anyOf: [['email'], ['linkedInUrl']],
+      params: { ...written, email: { in: 'body', type: 'string', description: 'The email.' },
+        linkedInUrl: { in: 'body', type: 'string', description: 'The LinkedIn profile URL.' } }, result: contact },
     'contacts.update': { docs: `${ref}/contacts/update-a-contact`, method: 'PATCH', path: '/v3/contacts/{id}',
       params: { id, email: { in: 'body', type: 'string' }, ...written }, result: contact },
     'contactLinks.create': { docs: `${ref}/sequence-contacts/bulk-add-contacts-to-sequence`, method: 'POST',

@@ -11,7 +11,7 @@ const viewId = { view_id: { in: 'path', type: 'number', required: true, descript
 const id = { id: { in: 'path', type: 'number', required: true } } as const;
 const written = { type: { 'first_name?': 'string', 'last_name?': 'string', 'email?': 'string', 'mobile_number?': 'string',
   'twitter?': 'string', 'external_id?': 'string', 'job_title?': 'string', 'owner_id?': 'number' },
-  description: 'The contact. "Either Email/Mobile/Twitter ID is required to create a contact": email, mobile_number or twitter (the table also marks external_id); none is required alone.' } as const;
+  description: 'The contact.' } as const;
 const meta = { 'meta?': { 'total_pages?': 'number', 'total?': 'number' } } as const;
 
 export const freshsales = defineProvider({
@@ -35,6 +35,7 @@ export const freshsales = defineProvider({
       result: { contacts: [contact], ...meta } },
     'contacts.get': { docs: `${ref}#view_a_contact`, path: '/contacts/{id}', notFound: 'null', params: id, result: { contact } },
     'contacts.create': { docs: `${ref}#create_contact`, method: 'POST', path: '/contacts',
+      anyOf: [['contact.email'], ['contact.mobile_number'], ['contact.twitter'], ['contact.external_id']],
       params: { contact: { in: 'body', required: true, ...written } }, result: { contact } },
     'contacts.update': { docs: `${ref}#update_a_contact`, method: 'PUT', path: '/contacts/{id}',
       params: { ...id, contact: { in: 'body', required: true, ...written } }, result: { contact } },
