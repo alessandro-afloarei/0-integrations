@@ -15,8 +15,9 @@ password); for an OAuth 2 entry, the access token its token URL gives.
 
 - Identify's request answers `account`, or by default `kit-account` at the answer paths of `identify.id` and
   `kit-name` at those of `name`: every path a template reads (`'{org.id}/{user.id}'`), else the first of a list.
-- A `token` entry's token request answers `kit-token` (at its `token` path), `expires_in: 3600` and `kit-<path>` at
-  every `tokenAnswer.<path>` the entry reads (never over the token or `expires_in`). One whose Basic or body differs
+- A `token` entry's token request answers `kit-token` (at its `token` path), `expires_in: 3600` and, at every
+  `tokenAnswer.<path>` the entry reads, `kit-<path>` or the value `values` gives the `save` key that reads it (never
+  over the token or `expires_in`). One whose Basic or body differs
   from the request the engine sends for `key` is 400 `{ "error": "invalid_client" }`. Its calls then carry `kit-token`.
 - An OAuth 2 entry's token, refresh and RFC 7009 revoke URLs, filled from `values`, take a form body, or a JSON one
   with `json`, and check the client authentication `clientAuth` declares (a Basic header, else `client_id` and
@@ -26,8 +27,8 @@ password); for an OAuth 2 entry, the access token its token URL gives.
     `code_verifier` unless `pkce: false`. The refresh URL (the token URL unless the entry names one) answers a
     `refresh_token` grant of `kit-refresh`. Any other grant is 400 `{ "error": "invalid_grant" }`.
   - Both answer `{ access_token: key, token_type: 'bearer', refresh_token: 'kit-refresh', expires_in: 3600 }`, with
-    every `tokenAnswer.<path>` the entry reads (`kit-<path>`, or the value `values` gives the `save` key that reads it)
-    and, with `requireGranted`, the default scopes as `scope`.
+    every `tokenAnswer.<path>` the entry reads, as a `token` entry's answer holds them, and, with `requireGranted`, the
+    default scopes as `scope`.
   - The revoke URL answers 200.
 - Each operation the app answers is routed by its method and path (each `{name}` one segment, decoded into
   `call.path`), or for GraphQL by its query. When two paths match a request, the one whose first differing segment is

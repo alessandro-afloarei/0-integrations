@@ -9,6 +9,7 @@ import { lemlist } from './catalogue/lemlist.js';
 import { metabase } from './catalogue/metabase.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
+import { slack } from './catalogue/slack.js';
 import { trello } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
@@ -318,6 +319,12 @@ describe('fakeProvider', () => {
     expect((await form({ code_verifier: 'v' })).status).toBe(200);
     await expect(exchangeCode(pkce, client, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).resolves.toMatchObject({ grant: { accessToken: 'k' } });
     await expect(exchangeCode(pkce, kitClient, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).rejects.toMatchObject({ status: 401 });
+  });
+
+  test("Slack's token answer holds the value given for the `save` key that reads it, and its kit values elsewhere", async () => {
+    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { botUserId: 'U1' } }));
+    await expect(finishConnect(slack, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
+      .resolves.toMatchObject({ values: { botUserId: 'U1' }, account: { id: 'kit-team.id', name: 'kit-team.name' } });
   });
 
   test("a `tokenAnswer.*` kit value never replaces the token or `expires_in`", async () => {
