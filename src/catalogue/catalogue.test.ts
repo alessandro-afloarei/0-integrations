@@ -73,7 +73,8 @@ const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional() };
 const timestamp = z.strictObject({ header: z.string(), toleranceSeconds: z.number().int().positive().optional() });
 /** What every webhook kind may declare. */
-const webhookParts = { deliveryId: z.union([z.strictObject({ header: z.string() }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional() };
+const webhookParts = { deliveryId: z.union([z.strictObject({ header: z.string() }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional(),
+  challenge: z.strictObject({ when, echo: z.string().min(1) }).optional() };
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
@@ -282,6 +283,13 @@ const runnable = {
   // Without a timestamp, `{timestamp}` signs an empty string and no tolerance is checked.
   '`{timestamp}` in `webhook.signed` only beside a `webhook.timestamp`': (entry: Entry) => signing(entry)?.timestamp !== undefined
     || !placeholders(signing(entry)?.signed ?? '').includes('timestamp'),
+  // A challenge is read from the body alone: there is no answer status, no header worth trusting and no provider code.
+  "a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`": (entry: Entry) => {
+    const when = entry.webhook?.challenge?.when;
+    return when === undefined || (when.path !== undefined && when.status === undefined && when.header === undefined && when.detail === undefined);
+  },
+  // The echoed value is the body's top-level key of that name.
+  'a `webhook.challenge.echo` with no `.` (a top-level key of the body)': (entry: Entry) => !(entry.webhook?.challenge?.echo.includes('.') ?? false),
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
@@ -477,7 +485,13 @@ test.each<[Rule, Entry]>([
     ["a `webhook.timestamp.part` only beside `webhook.part`", { kind: 'hmac', header: 'stripe-signature', signed: '{timestamp}.{body}',
       timestamp: { part: 't' } }],
     ['`{timestamp}` in `webhook.signed` only beside a `webhook.timestamp`', { kind: 'hmac', header: 'x-signature', signed: '{timestamp}.{body}' }],
+    ['a `webhook.challenge.echo` with no `.` (a top-level key of the body)', { kind: 'ed25519', header: 'x-signature-ed25519',
+      challenge: { when: { path: 'type', equals: 1 }, echo: 'a.b' } }],
   ] as const).map(([rule, webhook]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook })]),
+  ...([{ status: 200, path: 'type', equals: 1 }, { header: 'x-type', equals: '1' }, { path: 'type', detail: 'ping' }, { equals: 1 }] as const)
+    .map((when): [Rule, Entry] => ["a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`",
+      defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+        webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when, echo: 'type' } } })]),
   // The compiler refuses these through `defineProvider`; they are entries read as data.
   ['an `operations[].paging` name declared in `paging`', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { list: { path: '/items', paging: 'cursor' } } }],

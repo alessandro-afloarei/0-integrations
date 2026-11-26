@@ -94,7 +94,7 @@ an entry needs no line here. The providers below also have a module and a fake a
 | [Lusha](docs/modules/lusha.md) | Key | person and company lookups, credits | — | — |
 | [Microsoft](docs/modules/microsoft.md) | OAuth | Outlook mail and calendar | — | — |
 | [Notion](docs/modules/notion.md) | Key | shared pages, page text | — | — |
-| [Slack](docs/modules/slack.md) | OAuth | channels | post a message | — |
+| [Slack](docs/modules/slack.md) | OAuth | channels | post a message | signature, challenge |
 | [Unipile](docs/modules/unipile.md) | Key, plus hosted sign-in | accounts, mail, calendars | delete an account | — |
 
 ## Core
@@ -107,7 +107,7 @@ an entry needs no line here. The providers below also have a module and a fake a
 | [`oauth`](docs/modules/oauth.md) | Consent URLs, code exchange, refresh and revoke, with PKCE |
 | [`credentials`](docs/modules/credentials.md) | Reads API keys and refreshes OAuth tokens under a lock |
 | [`vault`](docs/modules/vault.md) | Seals JSON secrets under per-tenant data keys |
-| [`webhooks`](docs/modules/webhooks.md) | HMAC (SHA-256 or SHA-1, Stripe-style `t=…,v1=…` headers), Ed25519, shared-token and Standard Webhooks checks over the raw body bytes, and delivery ids |
+| [`webhooks`](docs/modules/webhooks.md) | HMAC (SHA-256 or SHA-1, Stripe-style `t=…,v1=…` headers), Ed25519, shared-token and Standard Webhooks checks over the raw body bytes, delivery ids, and challenge answers (Slack, Discord) |
 | [`paginate`](docs/modules/paginate.md) | Walks a module's pages and refuses a repeated cursor |
 | [`errors`](docs/modules/errors.md) | Coded errors such as `ProviderHttpError` and `GrantRevoked`, never carrying provider bodies or secrets |
 | [`testing`](docs/modules/testing.md) | Scripted fetch, in-memory stores and locks, and a check for your own credential store |

@@ -1,6 +1,8 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider } from './catalogue.js';
+import { defineProvider, type Webhook } from './catalogue.js';
 import { attio } from './catalogue/attio.js';
+import { discord } from './catalogue/discord.js';
+import { slack } from './catalogue/slack.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
@@ -15,6 +17,7 @@ import { fakeHubSpot, type HubSpotFakeData } from './hubspot/fake.js';
 import { refreshGrant, tokenSource, type OAuthClient } from './oauth.js';
 import { fakeFetch } from './testing.js';
 import type { SecretStore, Vault } from './vault.js';
+import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook } from './webhooks.js';
 
 // Every code example of README.md and docs/, as written, each in its own function. An import of
 // `0-integrations/<subpath>` is the source file that subpath publishes (src/exports.test.ts holds the map). The
@@ -153,7 +156,24 @@ async function designClient() {
   return self;
 }
 
+// docs/modules/webhooks.md › Receiving a delivery (its last line, a comment there, is the two calls below).
+async function webhooksReceive(webhook: Webhook, request: Request, secret: string,
+  handle: (id: string | null, rawBody: Buffer) => Promise<Response>): Promise<Response> {
+  const rawBody = await readCappedBody(request, 1024 * 1024);
+  if (rawBody === null) return new Response(null, { status: 413 });
+  const delivery = { method: request.method, url: request.url, headers: request.headers, rawBody };
+  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
+  const answer = challengeAnswer(webhook, delivery);
+  if (answer !== null) return answer;
+  return handle(deliveryId(webhook, delivery), rawBody); // the app dedupes on the id, when the entry declares one
+}
+function webhooksReceiveCalls(request: Request, signingSecret: string, publicKey: string,
+  handle: (id: string | null, rawBody: Buffer) => Promise<Response>) {
+  return [webhooksReceive(slack.webhook, request, signingSecret, handle), webhooksReceive(discord.webhook, request, publicKey, handle)];
+}
+
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken].every(example => typeof example === 'function')).toBe(true);
+    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
+    webhooksReceiveCalls].every(example => typeof example === 'function')).toBe(true);
 });

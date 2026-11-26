@@ -421,9 +421,10 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
    string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
 
-In the code today: `hmac` with `hash` and `part` (Stripe, Intercom, Breakcold, Fireflies), `ed25519` and `Send.value`
-(Discord, Trello), `token` (Google) and `standard` (GitLab). `challenge` arrives in the next step of the same pull
-request. A secret that keys nothing (empty, or a `standard` secret whose base64 decodes to nothing) is `false`.
+In the code today: `hmac` with `hash` and `part` (Stripe, Intercom, Breakcold, Fireflies, Slack), `ed25519` and
+`Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge` (Slack, Discord). A secret that keys
+nothing (empty, or a `standard` secret whose base64 decodes to nothing) is `false`. The table test also refuses a
+`challenge.when` with a `status`, `header` or `detail` or without a `path`, and an `echo` holding a `.`.
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a
@@ -486,7 +487,7 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 | `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
 | `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
-| `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, plus `deliveryId(entry.webhook, request)`. |
+| `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, then `challengeAnswer(entry.webhook, request)` and `deliveryId(entry.webhook, request)`. |
 | `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |
 | `vault` | Unchanged. A connection's plain values are the app's to keep. |
 

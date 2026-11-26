@@ -39,6 +39,8 @@ Nothing here is released yet.
 - New: `send: { header, value }` (Discord's `Bot {token}`, Trello's `OAuth …` header) and `ed25519` webhooks.
 - New: `token` webhooks (Google Calendar push's channel token) and `standard` (Standard Webhooks, GitLab's signing token).
 - An HMAC webhook checked with an empty secret is `false`: anyone can sign with an empty key.
+- New: `challengeAnswer(entry.webhook, request)` answers Slack's `url_verification` and Discord's PING; Slack's entry
+  declares its signature.
 
 ## 0.13.0
 

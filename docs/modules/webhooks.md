@@ -1,7 +1,7 @@
 # `webhooks`
 
 `webhooks` verifies HMAC and Ed25519 signatures, shared tokens and Standard Webhooks with `verifyWebhook(entry.webhook, request, secret)` over the exact raw body
-bytes. Use `readCappedBody(request, maxBytes)` before verification. `deliveryId(entry.webhook, request)` reads what the
+bytes, and answers URL challenges with `challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification. `deliveryId(entry.webhook, request)` reads what the
 entry declares an app dedupes on: a header, or body paths joined with `:`, null when one is missing. Read it only after
 `verifyWebhook` accepted the request: an id such as Fireflies' `event:meeting_id` can be guessed, so deduplicating before
 verifying lets a forged post suppress the real delivery. Routing, replay protection, dedupe and the inbox remain in the
@@ -17,6 +17,9 @@ provider's public key, passed as `secret` in 64 hex characters, as the provider'
 not 128 hex characters, a key that is not 64, a key that is no Ed25519 point and a wrong signature are all `false`; the
 timestamp rule is the same as `hmac`'s. Discord asks for a `401` when the check fails.
 
+Slack's entry signs `v0:{timestamp}:{body}` with the app's signing secret: `X-Slack-Signature: v0=<hex>` and
+`X-Slack-Request-Timestamp`, within five minutes.
+
 `kind: 'token'` (Google Calendar push) signs nothing: the header (`x-goog-channel-token`) must equal the secret, the
 channel `token` the app set when it opened the channel. The two are compared as SHA-256 digests, so their lengths leak
 nothing; a missing header is `false`.
@@ -29,3 +32,28 @@ secret of any HMAC scheme. GitLab's entry declares `webhook-id`, the same across
 
 [Fireflies](fireflies.md) and [Breakcold](breakcold.md) declare a delivery id; Fireflies' module also parses the event.
 Stripe's entry declares the event's `id` as its delivery id.
+
+## Receiving a delivery
+
+Verify first, then answer a challenge, then dedupe and handle. `challengeAnswer(entry.webhook, request)` answers a URL
+handshake the entry declares (`challenge`): Slack's `url_verification` with `{ "challenge": … }`, Discord's PING with
+`{ "type": 1 }`, each a JSON `200`. It is null for any other body, a body that is not JSON, a value that is not a string
+or a number, and an entry with no `challenge`; it copies nothing else of the body. Answer a challenge only after
+`verifyWebhook` accepted the request: an unsigned one would let anyone register your URL elsewhere.
+
+```ts
+import type { Webhook } from '0-integrations/catalogue';
+import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook } from '0-integrations/webhooks';
+
+async function receive(webhook: Webhook, request: Request, secret: string,
+  handle: (id: string | null, rawBody: Buffer) => Promise<Response>): Promise<Response> {
+  const rawBody = await readCappedBody(request, 1024 * 1024);
+  if (rawBody === null) return new Response(null, { status: 413 });
+  const delivery = { method: request.method, url: request.url, headers: request.headers, rawBody };
+  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
+  const answer = challengeAnswer(webhook, delivery);
+  if (answer !== null) return answer;
+  return handle(deliveryId(webhook, delivery), rawBody); // the app dedupes on the id, when the entry declares one
+}
+// receive(slack.webhook, request, signingSecret, …), or receive(discord.webhook, request, publicKey, …)
+```

@@ -1,7 +1,7 @@
 import { createHash, createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { Webhook } from './catalogue.js';
-import { parseJson, readPath } from './rules.js';
+import { holds, parseJson, readPath } from './rules.js';
 
 export type WebhookRequest = { method: string; url: string; headers: Headers; rawBody: Uint8Array };
 
@@ -75,6 +75,18 @@ export function deliveryId(webhook: Webhook, request: WebhookRequest): string | 
   const parts = source.body.map(path => readPath(body, path));
   return parts.every((part): part is string | number => (typeof part === 'string' && part !== '') || typeof part === 'number')
     ? parts.join(':') : null;
+}
+
+/** The answer to a challenge the entry declares (`{ [echo]: <the body's value> }` as JSON), or null. Call it only after
+ * `verifyWebhook` accepted the request. */
+export function challengeAnswer(webhook: Webhook, request: WebhookRequest): Response | null {
+  const challenge = webhook.challenge;
+  if (challenge === undefined) return null;
+  const body = parseJson(Buffer.from(request.rawBody).toString('utf8'));
+  const value = readPath(body, challenge.echo);
+  return holds(challenge.when, { status: 200, headers: request.headers, body })
+    && (typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)))
+    ? Response.json({ [challenge.echo]: value }) : null;
 }
 
 export async function readCappedBody(request: Request, maxBytes: number): Promise<Buffer | null> {

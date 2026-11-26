@@ -56,14 +56,15 @@ type Timestamp = { header: string; toleranceSeconds?: number };
  * comma-separated list of `name=value` pieces, each piece named `part` a signature, any of which may match;
  * `timestamp.part` reads the timestamp from the same list. `ed25519`: the header is the hex signature of `signed`, the
  * secret the provider's public key in hex. `token`: the header is the secret itself. `standard`: Standard Webhooks, the
- * secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on. */
+ * secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on. `challenge`: a handshake whose body
+ * `when` holds is answered `{ [echo]: <the body's value> }` (Slack's `url_verification`, Discord's PING). */
 export type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
     part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
-) &{ deliveryId?: { header: string } | { body: readonly Path[] } };
+) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 export type Where = { query: string } | { body: string };
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
