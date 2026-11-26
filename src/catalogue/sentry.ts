@@ -17,7 +17,7 @@ export const sentry = defineProvider({
   fields: [{ name: 'host', title: 'Sentry host', default: 'sentry.io',
     help: 'sentry.io, your region\'s host (us.sentry.io or de.sentry.io), or the host name of your own Sentry, with no port.' },
   { name: 'authToken', title: 'Auth token', secret: true,
-    help: 'A personal token (under User settings, then Personal Tokens) or an internal integration\'s token, with the org:read, event:read and event:write scopes: a personal token\'s scopes are chosen when it is made.' }],
+    help: 'A personal token (under User settings, then Personal Tokens) or an internal integration\'s token, with the org:read and event:write scopes: a personal token\'s scopes are chosen when it is made.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{host}/api/0', host: '*' },
   identify: { request: { path: '/organizations/' } },
