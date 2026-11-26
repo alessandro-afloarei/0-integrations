@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { defineProvider } from './catalogue.js';
+import { defineProvider, signInWith } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
-import { gitlab } from './catalogue/gitlab.js';
+import { gitlab as gitlabEntry } from './catalogue/gitlab.js';
 import { metabase } from './catalogue/metabase.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
@@ -15,6 +15,9 @@ import { kitValues } from './kit.test-support.js';
 import { requestToken, tokenSource } from './oauth.js';
 import { checkCredentialStore, fakeFetch, fakeProvider, memoryStores, respondFrom, sequence, type FakeCall } from './testing.js';
 import type { Sealed } from './vault.js';
+
+/** GitLab's personal access token sign-in: these tests send `private-token`. */
+const gitlab = signInWith(gitlabEntry, 'key');
 
 describe('fakeProvider', () => {
   const unauthorized = { status: 401, body: { error: 'unauthorized' } };
