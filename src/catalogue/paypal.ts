@@ -1,7 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** PayPal's REST API with an app's client ID and secret: a token from `/v1/oauth2/token`, live or sandbox, requested
- * again when it runs out. The account is the app the token answer names. */
+ * again when it runs out. The account is the app the token answer names. PayPal requires `Accept: application/json`
+ * on a call that answers a body (https://developer.paypal.com/api/rest/requests/). */
 export const paypal = defineProvider({
   id: 'paypal', name: 'PayPal', docs: 'https://developer.paypal.com/api/rest/authentication/',
   categories: ['finance'],
@@ -10,6 +11,6 @@ export const paypal = defineProvider({
   { name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Secret', secret: true }],
   auth: [{ kind: 'token', request: { url: 'https://{apiHost}/v1/oauth2/token', body: { grant_type: 'client_credentials' },
     basic: ['{clientId}', '{clientSecret}'] } }],
-  http: { baseUrl: 'https://{apiHost}', host: '*.paypal.com' },
+  http: { baseUrl: 'https://{apiHost}', host: '*.paypal.com', headers: { accept: 'application/json' }, retry: {} },
   identify: { id: 'tokenAnswer.app_id' },
 });
