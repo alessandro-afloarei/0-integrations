@@ -6,8 +6,8 @@ Nothing here is released yet.
 
 - New: an operation may declare `anyOf`, sets of arguments of which a call must give one whole. `client()` refuses a
   call that gives none (`param_group_missing: <id>`) before anything is sent, and an `anyOf` path that names no declared
-  argument when the client is built (`param_group_unknown: <id> <path>`). Freshsales, Hunter, lemlist, People Data
-  Labs, Reply.io and Salesloft declare their groups.
+  argument, or an empty set, when the client is built (`param_group_unknown: <id> <path>`). Freshsales, Hunter,
+  lemlist, People Data Labs, Reply.io and Salesloft declare their groups.
 - Cognism's, LeadIQ's and RocketReach's parameter descriptions no longer say to give at least one input, which no page
   of theirs states; `catalogue.json` carries those descriptions to an app.
 - A retry never comes before the provider's stated wait, its `Retry-After` or the entry's `retry.wait`: an answer whose

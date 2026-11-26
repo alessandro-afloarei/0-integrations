@@ -377,4 +377,5 @@ test("an app's `anyOf` path that names no declared argument is refused when its 
     expect(() => client(entry([['email'], [path]]), { token: 'k' })).toThrow(new TypeError(`param_group_unknown: people.get ${path}`));
   }
   expect(() => client(entry([['email'], ['input.company.domain']]), { token: 'k' })).not.toThrow();
+  for (const anyOf of [[['email'], []], []]) expect(() => client(entry(anyOf), { token: 'k' })).toThrow(new TypeError('param_group_unknown: people.get'));
 });

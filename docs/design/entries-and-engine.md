@@ -581,8 +581,9 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read
   from the arguments as checked; one that is `undefined`, `null` or a blank string is not given. After each argument's
   own check and before anything is sent, a call that gives no set whole is `param_group_missing: <id>`; `client()`
-  refuses a path that names no declared argument when it is built (`param_group_unknown: <id> <path>`). The table test
-  asks for two or more sets, none empty, and no path naming a `required` parameter.
+  refuses a path that names no declared argument when it is built (`param_group_unknown: <id> <path>`), and an empty
+  list or an empty set, which a set is never (`param_group_unknown: <id>`). The table test asks for two or more sets,
+  none empty, and no path naming a `required` parameter.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
   any, with their `id`s (or `null`). Without `records`, a list `result` is the records themselves (a list at the answer's

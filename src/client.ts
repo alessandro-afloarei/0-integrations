@@ -128,6 +128,8 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
     const { paging, records, result } = op;
     for (const [name, param] of Object.entries(op.params ?? {})) if (!placed(op, name, param)) refuse(`param_unplaced: ${id} ${name}`);
     for (const path of op.anyOf?.flat() ?? []) if (argumentShape(op, path) === undefined) refuse(`param_group_unknown: ${id} ${path}`);
+    // An empty set is always given whole, so it would let every call through.
+    if (op.anyOf?.length === 0 || op.anyOf?.some(set => set.length === 0)) refuse(`param_group_unknown: ${id}`);
     if (paging === undefined) {
       return async (args: Given = {}, { signal }: Pick<RequestOptions, 'signal'> = {}) => {
         try {
