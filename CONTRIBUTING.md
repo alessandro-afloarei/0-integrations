@@ -37,8 +37,9 @@ one takes five steps:
      not enough; the envelope a list is read from stays required;
    - a parameter the docs' prose calls required is required;
    - read what each page requires, not only what you declare: every parameter it marks required (path, query or body),
-     the scoping member of a "one of" group and a parameter that turns paging on are required, and an operation that
-     needs a header parameter stays out and waits;
+     a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
+     the list to its container (a project, a board), are required; an operation that needs a header whose value changes
+     per call stays out and goes on the [waiting list](docs/waiting-list.md);
    - a call the docs say spends credits is `kind: 'write'`, whatever its method, and its leading comment names the
      credit page;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
