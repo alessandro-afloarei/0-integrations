@@ -33,9 +33,9 @@ Nothing here is released yet.
   member's at once (HubSpot's `accessToken` beside Attio's `apiKey`).
 - `FirefliesUser`'s `email` and `name` are `string | null` (they were `string`): a Fireflies user without one no longer
   fails `user()` with `invalid_response`.
-- For contributors: a key sign-in may name a `tokenAnswer.*` path in identify's `id` or `name` list before a path of
-  identify's answer when the entry also has an OAuth 2 or token sign-in (HubSpot's `['tokenAnswer.hub_id',
-  'portalId']`); one alone, last, or on a key-only entry is still refused.
+- For contributors: a key sign-in may name a `tokenAnswer.*` path in an identify `id` or `name` list ending on
+  identify's answer, beside an OAuth 2 or token sign-in (HubSpot's `['tokenAnswer.hub_id', 'portalId']`); any other
+  `tokenAnswer.*` on a key sign-in is still refused.
 - New: an entry may list several sign-ins (OAuth 2, then a key); `signInWith(entry, kind)` from
   `0-integrations/catalogue` narrows it to one, and every call takes the narrowed entry. First used by Linear and
   ClickUp.
