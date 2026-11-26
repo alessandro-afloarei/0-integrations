@@ -1,7 +1,9 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, signInWith } from './catalogue.js';
+import { defineProvider, signInWith, type SignIn } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
 import { linear } from './catalogue/linear.js';
+import { azuredevops } from './catalogue/azuredevops.js';
+import { mattermost } from './catalogue/mattermost.js';
 import { client } from './client.js';
 import { finishConnect, startConnect, type Connected } from './connect.js';
 import type { Grant } from './oauth.js';
@@ -85,13 +87,31 @@ async function stored(kind: 'oauth2' | 'key', clientId: string) {
   if (kind === 'oauth2') expectTypeOf(signInWith(linear, kind)).toHaveProperty('scopes');
   await startConnect(either, { clientId, redirectUri: 'https://app.test/cb', state: 's' });
   void client(either, { token: 't' }).issues.get({ id: 'ENG-1' });
-  // An OAuth sign-in's values are only what `save` keeps; the key's are its plain fields.
-  expectTypeOf<Connected<typeof mailed>['values']>().not.toHaveProperty('email');
-  expectTypeOf<Connected<ReturnType<typeof signInWith<typeof mailed, 'oauth2'>>>['values']>().not.toHaveProperty('email');
+  // Every sign-in's values hold the entry's plain fields, OAuth 2's included.
+  expectTypeOf<Connected<typeof mailed>['values']['email']>().toEqualTypeOf<string>();
   expectTypeOf<Connected<ReturnType<typeof signInWith<typeof mailed, 'key'>>>['values']['email']>().toEqualTypeOf<string>();
 }
 
+// Never called: the types are the test.
+async function typedHost(clientId: string, redirectUri: string, state: string, host: string) {
+  // Mattermost's OAuth 2 reads the host typed: its start needs it, and its connection keeps it.
+  expectTypeOf<Connected<SignIn<typeof mattermost, 'oauth2'>>['values']['host']>().toEqualTypeOf<string>();
+  const oauth = signInWith(mattermost, 'oauth2');
+  // @ts-expect-error the host has no default: the start needs it
+  await startConnect(oauth, { clientId, redirectUri, state });
+  const started = await startConnect(oauth, { clientId, redirectUri, state, values: { host } });
+  expectTypeOf(started.values.host).toEqualTypeOf<string>();
+  // A union of entries starts with a union of results: each its own plain fields, never both.
+  const either = (id: string) => (id === 'mattermost' ? mattermost : azuredevops);
+  const one = await startConnect(either('mattermost'), { clientId, redirectUri, state, values: { host } });
+  expectTypeOf(one.values).toEqualTypeOf<Readonly<Record<'host', string>> | Readonly<Record<'organization', string>>>();
+  // Linear's has no plain field, so it takes none.
+  await startConnect(linear, { clientId, redirectUri, state });
+  // @ts-expect-error Linear has no plain field
+  await startConnect(linear, { clientId, redirectUri, state, values: { host } });
+}
+
 test('the narrowed types compile', () => {
-  expect([narrowed, stored].every(item => typeof item === 'function')).toBe(true);
+  expect([narrowed, stored, typedHost].every(item => typeof item === 'function')).toBe(true);
   expect(mailed.auth.map(auth => auth.kind)).toEqual(['oauth2', 'key']);
 });

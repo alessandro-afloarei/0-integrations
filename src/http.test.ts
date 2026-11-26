@@ -17,9 +17,10 @@ import { trello } from './catalogue/trello.js';
 import { client } from './client.js';
 import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
-import { revokeGrant } from './oauth.js';
 import * as guard from './guard.js';
 import { callRequest, createClient, defaultFetch } from './http.js';
+import { exchangeCode, requestToken, revokeGrant } from './oauth.js';
+import { fill, hostPart } from './rules.js';
 import { walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
 
@@ -749,14 +750,21 @@ test('a request revoke on a templated base, given no values, fails closed with n
   expect(fake.calls).toHaveLength(0);
 });
 
-test('a templated base is not filled when the client is built, and an app\'s own base is used as given', async () => {
+test('a templated base is not filled when the client is built', async () => {
   const fake = filled(regional, {});
   const built = client(regional, { token: 't', fetch: fake.fetch });
   await expect(built.json('/a')).rejects.toThrow(new TypeError('template_missing: regional {sub}'));
-  const own = createClient(regional, { token: () => Promise.resolve('t'), fetch: fake.fetch, baseUrl: 'https://proxy.test/regional/' });
-  expect(own.baseUrl).toBe('https://proxy.test/regional');
-  await own.json('/a');
-  expect(fake.calls.map(call => call.url)).toEqual(['https://proxy.test/regional/a']);
+  expect(fake.calls).toEqual([]);
+});
+
+test("on a typed host an app's own base may move the path, never the origin: another origin is refused, nothing sent", async () => {
+  const fake = filled(regional, {});
+  const elsewhere = client(regional, { token: 't', values: { sub: 'eu' }, fetch: fake.fetch, baseUrl: 'https://proxy.test/regional/' });
+  await expect(elsewhere.json('/a')).rejects.toThrow(new TypeError('base_host_refused: regional'));
+  expect(fake.calls).toEqual([]);
+  const moved = client(regional, { token: 't', values: { sub: 'eu' }, fetch: fake.fetch, baseUrl: 'https://eu.example.com/v2/' });
+  await moved.json('/a');
+  expect(fake.calls.map(call => call.url)).toEqual(['https://eu.example.com/v2/a']);
 });
 
 test("the credential never leaves the filled base's origin", async () => {
@@ -793,7 +801,8 @@ test.each([['..', 'base_value_invalid: jira {cloudId}'], ['.', 'base_value_inval
   });
 
 test('a request revoke on a second base goes there, the credential with it, needing no values', async () => {
-  const revoking = defineProvider({ ...regional, http: { ...regional.http, bases: { auth: 'https://auth.example.test/v2' } },
+  // The value in the base's path, as Jira's: a typed host beside a second base is `host_split` (below).
+  const revoking = defineProvider({ ...regional, http: { baseUrl: 'https://example.com/{sub}/v1', bases: { auth: 'https://auth.example.test/v2' } },
     revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } } });
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
   await revokeGrant(revoking, { accessToken: 'a', fetch: fake.fetch });
@@ -801,6 +810,123 @@ test('a request revoke on a second base goes there, the credential with it, need
   const unknown = defineProvider({ ...revoking, revoke: { request: { base: 'nope', path: '/revoke' } } });
   await expect(revokeGrant(unknown, { accessToken: 'a', fetch: fake.fetch })).rejects.toThrow(new TypeError('base_unknown: nope'));
   expect(fake.calls).toHaveLength(1);
+});
+
+test('a key on a typed host beside a fixed second base is host_split where a call chooses that base, nothing sent', async () => {
+  const split = defineProvider({ ...regional, http: { ...regional.http, bases: { auth: 'https://auth.example.test/v2' } },
+    identify: { request: { base: 'auth', path: '/me' } } });
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await expect(finishConnect(split, { secret: { apiKey: 'k' }, values: { sub: 'eu' }, fetch: fake.fetch }))
+    .rejects.toThrow(new TypeError('host_split: regional'));
+  expect(fake.calls).toEqual([]);
+});
+
+test('a named base with a placeholder is refused where a call chooses it: a named base is never filled', async () => {
+  const templated = defineProvider({ ...regional, http: { ...regional.http, bases: { auth: 'https://{sub}.example.com/auth' } },
+    revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } } });
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await expect(revokeGrant(templated, { accessToken: 'a', values: { sub: 'eu' }, fetch: fake.fetch }))
+    .rejects.toThrow(new TypeError('base_templated: auth'));
+  expect(fake.calls).toEqual([]);
+});
+
+test("a token sign-in whose token URL is fixed while the base is typed is host_split before a token is requested", async () => {
+  const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'cloud-token', id: '1' }) }]);
+  const split = defineProvider({ id: 'tok', name: 'Tok', fields: [{ name: 'host', title: 'Host' }, { name: 'secret', title: 'Secret', secret: true }],
+    auth: [{ kind: 'token', request: { url: 'https://auth.k.test/token', body: { s: '{secret}' } } }],
+    http: { baseUrl: 'https://{host}/api', host: '*' }, identify: { request: { path: '/me' }, id: 'id' } });
+  const refused = new TypeError('host_split: tok');
+  await expect(requestToken(split, { secret: { secret: 's' }, values: { host: 'evil.k.test' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  await expect(finishConnect(split, { secret: { secret: 's' }, values: { host: 'evil.k.test' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  expect(fake.calls).toEqual([]);
+});
+
+test('a primary base that is not well formed refuses the entry on every path, before a named base, a token request or an own base sends', async () => {
+  const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 't', id: '1' }) }]);
+  const refused = new TypeError('base_host_refused: bent');
+  const fields = [{ name: 'host', title: 'Host' }, { name: 'secret', title: 'Secret', secret: true }] as const;
+  const http = { baseUrl: 'https://{host}?mode=1', host: '*', bases: { cloud: 'https://cloud.k.test' } } as const;
+  const keyed = defineProvider({ id: 'bent', name: 'Bent', fields, auth: [{ kind: 'key' }], http, identify: { request: { base: 'cloud', path: '/me' } } });
+  await expect(finishConnect(keyed, { secret: { secret: 'k' }, values: { host: 'a.k.test' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  const token = defineProvider({ id: 'bent', name: 'Bent', fields, http: { baseUrl: 'https://{host}?mode=1', host: '*' },
+    auth: [{ kind: 'token', request: { url: 'https://auth.k.test/token', body: { s: '{secret}' } } }] });
+  await expect(requestToken(token, { secret: { secret: 's' }, values: { host: 'a.k.test' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  await expect(createClient(keyed, { token: () => Promise.resolve('t'), values: { host: 'a.k.test' }, fetch: fake.fetch,
+    baseUrl: 'https://other.k.test' }).json('/a')).rejects.toThrow(refused);
+  expect(fake.calls).toEqual([]);
+});
+
+test('finishConnect refuses an entry checkHosts refuses before it reads a credential, even when identify sends nothing', async () => {
+  const fake = fakeFetch([{ url: /./u, respond: ok }]);
+  // A local id and no identify request: the client never sends, so only the finish can refuse the `http://` named base.
+  const local = defineProvider({ id: 'local', name: 'Local', fields: [{ name: 'id', title: 'Id' }, { name: 'apiKey', title: 'Key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.k.test', bases: { other: 'http://other.k.test' } }, identify: { id: 'connection.id' } });
+  let reads = 0;
+  const secret = { get apiKey() { reads++; return 'k'; } };
+  await expect(finishConnect(local, { secret, values: { id: 'u1' }, fetch: fake.fetch })).rejects.toThrow(new TypeError('base_host_refused: local'));
+  expect(reads).toBe(0);
+  expect(fake.calls).toEqual([]);
+});
+
+/** Every name the malformed templates below use, filled with a value the base rule accepts. */
+const bentFields = ['host', 'user', 'port'].map(name => ({ name, title: name }));
+const bentValues = { host: 'evil.k.test', user: 'u', port: '8443' };
+test.each(['https:///{host}/api', 'https:\\\\{host}/api', 'https:/{host}/api', 'HTTPS://{host}/api', 'https://\t{host}/api',
+  'https://{host}\n.k.test/api', 'https://{user}@k.test/api', 'https://k.test:{port}/api', 'https://{host}\\@k.test/api',
+  'https://{host}?x/api', 'https://{host}#/api', 'https://k.test@{host}/api', 'https://{host} /api'])(
+  'a URL template that is not well formed (%j) is base_host_refused wherever it is declared, nothing sent', async template => {
+    const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'a', token_type: 'bearer', id: '1' }) }]);
+    const refused = new TypeError('base_host_refused: bent');
+    const base = defineProvider({ id: 'bent', name: 'Bent', fields: [...bentFields, { name: 'apiKey', title: 'Key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: template, host: '*' } });
+    await expect(createClient(base, { token: () => Promise.resolve('t'), values: bentValues, fetch: fake.fetch }).json('/a')).rejects.toThrow(refused);
+    const oauth = defineProvider({ id: 'bent', name: 'Bent', fields: bentFields, http: { baseUrl: 'https://api.k.test' },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://api.k.test/authorize', tokenUrl: template, pkce: false }] });
+    await expect(exchangeCode(oauth, { clientId: 'c', clientSecret: 's' }, { code: 'x', redirectUri: 'https://app.test/cb', values: bentValues,
+      fetch: fake.fetch })).rejects.toThrow(refused);
+    const token = defineProvider({ id: 'bent', name: 'Bent', fields: [...bentFields, { name: 'secret', title: 'Secret', secret: true }],
+      auth: [{ kind: 'token', request: { url: template, body: { s: '{secret}' } } }], http: { baseUrl: 'https://api.k.test' } });
+    await expect(requestToken(token, { secret: { secret: 's' }, values: bentValues, fetch: fake.fetch })).rejects.toThrow(refused);
+    const named = defineProvider({ ...base, http: { baseUrl: 'https://api.k.test', bases: { other: template.replaceAll(/\{\w+\}/gu, 'evil.k.test') } },
+      identify: { request: { base: 'other', path: '/me' } } });
+    await expect(finishConnect(named, { secret: { apiKey: 'k' }, values: bentValues, fetch: fake.fetch })).rejects.toThrow(refused);
+    expect(fake.calls).toEqual([]);
+  });
+
+test('whenever the engine sends, the host is the template\'s host part filled with the values: a probe of generated templates', async () => {
+  let seed = 7;
+  const pick = <T>(items: readonly T[]): T => { seed = (seed * 1103515245 + 12345) % 2147483648; return items[seed % items.length] as T; };
+  // Mostly well formed, so many send; the rest are the shapes the URL parser reads differently.
+  const schemes = ['https://', 'https://', 'https://', 'https://', 'https:///', 'https:\\\\', 'https:/', 'HTTPS://', 'https://\t'];
+  const pieces = ['{a}', '{a}', '{b}', 'k.test', '.k.test', '{a}.k.test', '-', 'x', ':8443', '@', ':', '{a}@', ':{b}', '\\', '?', '#',
+    '%2e', '\n', '[', '/'];
+  const tails = ['', '/', '/api', '/{b}/api', '?q=1', '#f'];
+  const values = ['evil.k.test', 'a', 'b.c', '127.0.0.1', '0x7f.1', '8443', 'x-y', 'a.k.test', '1'];
+  let sent = 0;
+  for (let at = 0; at < 6000; at++) {
+    const template = pick(schemes) + Array.from({ length: 1 + (at % 3) }, () => pick(pieces)).join('') + pick(tails);
+    const filled = { a: pick(values), b: pick(values) };
+    const entry = defineProvider({ id: 'probe', name: 'Probe', fields: [{ name: 'a', title: 'A' }, { name: 'b', title: 'B' }],
+      auth: [{ kind: 'key' }], http: { baseUrl: template, host: '*' } });
+    const hosts: string[] = [];
+    const fetch: typeof globalThis.fetch = input => { hosts.push(new Request(input).url); return Promise.resolve(Response.json({})); };
+    if (hostPart(template) === undefined) {
+      // Beside a fixed named base, and behind a fixed token URL, a base that is not well formed sends nothing.
+      const named = defineProvider({ ...entry, fields: [...entry.fields, { name: 'k', title: 'K', secret: true }],
+        http: { ...entry.http, bases: { cloud: 'https://cloud.k.test' } }, identify: { request: { base: 'cloud', path: '/me' } } });
+      await finishConnect(named, { secret: { k: 'k' }, values: filled, fetch }).catch(() => undefined);
+      const tokened = defineProvider({ ...named, auth: [{ kind: 'token', request: { url: 'https://auth.k.test/token', body: { k: '{k}' } } }] });
+      await requestToken(tokened, { secret: { k: 'k' }, values: filled, fetch }).catch(() => undefined);
+      expect(hosts, template).toEqual([]);
+    }
+    const answered = await createClient(entry, { token: () => Promise.resolve('t'), values: filled, fetch }).json('/x').then(() => true, () => false);
+    if (!answered) { expect(hosts).toEqual([]); continue; }
+    sent++;
+    const part = hostPart(template);
+    expect(part, template).toBeDefined();
+    expect(new URL(hosts[0] ?? '').host, template).toBe(new URL(fill(part ?? '', name => filled[name as 'a' | 'b'], 'probe')).host);
+  }
+  expect(sent).toBeGreaterThan(300);
 });
 
 const addressBlocked = new ProviderHttpError('request_failed', null, 'address_blocked');
@@ -824,10 +950,20 @@ test("a typed host that is a name, or a public address, goes to the app's own fe
   }
 });
 
-test("an app's own base for a typed-host entry is used as given", async () => {
+test("an own base is compared with the filled base's origin alone: a path value it discards is not needed", async () => {
+  const tenanted = defineProvider({ id: 'ten', name: 'Ten', fields: [{ name: 'host', title: 'Host' }, { name: 'apiKey', title: 'Key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://{host}/tenants/{tenantId}', host: '*' } });
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
-  await createClient(gitlab, { token: () => Promise.resolve('t'), fetch: fake.fetch, baseUrl: 'https://10.0.0.1/api/v4' }).json('/user');
-  expect(fake.calls[0]?.url).toBe('https://10.0.0.1/api/v4/user');
+  await createClient(tenanted, { token: () => Promise.resolve('t'), values: { host: 'api.example.test' }, fetch: fake.fetch,
+    baseUrl: 'https://api.example.test/v2' }).json('/a');
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.example.test/v2/a']);
+});
+
+test("an app's own base for a typed-host entry on another origin is refused, an address included, nothing sent", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await expect(createClient(gitlab, { token: () => Promise.resolve('t'), values: { host: 'gitlab.example.com' }, fetch: fake.fetch,
+    baseUrl: 'https://10.0.0.1/api/v4' }).json('/user')).rejects.toThrow(new TypeError('base_host_refused: gitlab'));
+  expect(fake.calls).toEqual([]);
 });
 
 test('an entry whose host is typed defaults to guardedFetch; any other to the global fetch', () => {

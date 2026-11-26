@@ -23,14 +23,15 @@ const me = await api.json('/users/me');
 - `fetch`: the global one by default, or `guardedFetch` for an entry whose host the person types (`http.host: '*'`,
   GitLab). See [The address guard](#the-address-guard).
 - `values`: the connection's plain values, as `finishConnect` returned them, for a credential or a base built from
-  them (Aircall's `{apiId}`, Intercom's `{apiHost}`). Only `finishConnect` applies a field's `default`: a client never
-  does, so it needs the connection's `values` (a GitLab client given none would otherwise send a self-managed token to
+  them (Aircall's `{apiId}`, Intercom's `{apiHost}`). Only `startConnect` and `finishConnect` apply a field's `default`: a
+  client never does, so it needs the connection's `values` (a GitLab client given none would otherwise send a self-managed token to
   gitlab.com). A value the entry names that is missing, blank or neither a string nor a finite number is
   `TypeError('template_missing: <entry id> {<name>}')` before anything is sent (a base's value also before the token is
   read). A base is filled and checked on the first request (see [catalogue](catalogue.md)), not when the client is
   built.
-- `baseUrl` replaces the entry's, used as given: an app's own base is neither filled nor checked against `http.host`,
-  but like every URL the library sends to it must parse and be https with no username or password
+- `baseUrl` replaces the entry's base, for a test server or another path or version on the provider's host: used as
+  given, neither filled nor checked against `http.host`, but like every URL the library sends to it must parse and be
+  https with no username or password, and for an entry whose host is typed it must keep the filled base's origin
   (`TypeError('base_host_refused: <entry id>')`, before the token is read).
 - `minIntervalMs` replaces the entry's.
 - `headers` are merged with the entry's, a header of the same name winning, and the credential is set last.
@@ -76,7 +77,8 @@ link-local, unique-local and metadata addresses (the ranges are in the
 address, and a name that resolves to one, as
 `ProviderHttpError('request_failed', null, 'address_blocked')`, never retried. It dials only an address its own lookup
 checked, and checks the connected address again before a byte is written, so a name rebound to a private address
-between the two is refused. It answers a redirect without following it, as `redirect: 'manual'` does.
+between the two is refused. It answers a redirect without following it, as `redirect: 'manual'` does. It asks for no
+compression (`accept-encoding: identity`, replacing a caller's), and decodes none.
 
 An entry whose host the person types uses it when the app passes no `fetch`:
 
@@ -100,7 +102,7 @@ What the guard does not cover:
 - A proxy: `guardedFetch` dials through its own agent and never through a proxy, even when Node is told to follow
   `HTTPS_PROXY` (`NODE_USE_ENV_PROXY=1`); a proxy an app's own `fetch` sends through resolves and dials for it,
   unchecked.
-- An app's own `baseUrl`, used as given.
+- An app's own `baseUrl` on an entry whose host is fixed, used as given (on a typed host it keeps the filled origin).
 
 ## Raw calls
 
@@ -111,8 +113,8 @@ read, as `TypeError('url_outside_origin')` when it would change the host and `Ty
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
-  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered page that repeats
-  the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
+  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered or offset page that
+  repeats the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
   base's origin (Shortcut's search answers a path and query string); one outside the base's origin, path or
   `pathPrefix` is `invalid_response` (`next_link_foreign`), and nothing is sent to it.
 
@@ -136,11 +138,13 @@ The client's own calls take some names. An operation id whose first dot-separate
 another (`pages` beside `pages.markdown`) are refused: the reserved names by `defineProvider` at compile time, and all
 of them by `client` as `TypeError('operation_clash: <id>')` for an app's own entry.
 
-A wrong entry throws when its client is built: besides a clashing id, a parameter with no place in the request, such
-as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging shape the entry does not declare
-(`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`) and a `records` path that leads
-to no list in the `result` (`records_unshaped: <id>`). A wrong value throws when the call is made, before anything is
-sent.
+A wrong entry throws when its client is built: a URL that is not a well-formed template or hosts that split
+(`base_host_refused`, `host_split`, both before the token is read, and first in `finishConnect` too), a clashing id, a
+parameter with no place in the request, such as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging
+shape the entry does not declare (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
+to no list in the `result` (`records_unshaped: <id>`), an operation on a `page` or `offset` shape whose `records` is
+not the shape's `list` (`records_unpaged: <id>`), and a parameter (or a literal query in its path) in the place its
+paging shape's `send` writes, which the walk sends itself (`param_paged: <id> <name>`). A wrong value throws when the call is made, before anything is sent.
 
 An app's own entry declares operations the same way:
 

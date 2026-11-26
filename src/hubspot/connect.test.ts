@@ -46,7 +46,7 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 describe('HubSpot sign-in', () => {
   it('starts with the exact read scopes', async () => {
     const begun = await startConnect(hubspot, start);
-    expect(begun).toEqual({ kind: 'redirect', url: 'https://app.hubspot.com/oauth/authorize?client_id=client&scope=oauth+crm.objects.companies.read+crm.objects.contacts.read+crm.objects.deals.read+crm.objects.owners.read&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fhubspot%2Fcallback&state=state+%2B%26%2F%3F%3D' });
+    expect(begun).toEqual({ kind: 'redirect', url: 'https://app.hubspot.com/oauth/authorize?client_id=client&scope=oauth+crm.objects.companies.read+crm.objects.contacts.read+crm.objects.deals.read+crm.objects.owners.read&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fhubspot%2Fcallback&state=state+%2B%26%2F%3F%3D', values: {} });
   });
 
   it('starts, authorizes and finishes with the unchanged Grant and Portal label', async () => {

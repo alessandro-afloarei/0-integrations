@@ -5,7 +5,7 @@ import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
 import { backoffMs, bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { fill, parseJson, placeholders, plainValue } from './rules.js';
+import { checkHosts, fill, hostPart, parseJson, placeholders, plainValue } from './rules.js';
 
 export type RequestOptions = {
   method?: Method;
@@ -112,7 +112,7 @@ const BASE_VALUE = /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/u;
 /** The one check of every URL the library sends to (an entry's base, an app's own, a token URL): it parses, is https and
  * holds no username or password. Refused by entry id alone: Node's own errors name the URL (`ERR_INVALID_URL` keeps it
  * in `input`) and its query key. No `URL.parse`: Node 22.1+. */
-export function sendable(entry: Entry, url: string): URL {
+function sendable(entry: Entry, url: string): URL {
   const parsed = URL.canParse(url) ? new URL(url) : undefined;
   if (parsed?.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '') {
     throw new TypeError(`base_host_refused: ${entry.id}`);
@@ -126,8 +126,9 @@ export function sendable(entry: Entry, url: string): URL {
  * is read or sent. */
 export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.baseUrl): string {
   const { host = '' } = entry.http;
-  const pathAt = baseUrl.indexOf('/', baseUrl.indexOf('//') + 2);
-  const [head, tail] = pathAt === -1 ? [baseUrl, ''] : [baseUrl.slice(0, pathAt), baseUrl.slice(pathAt)];
+  const head = hostPart(baseUrl);
+  if (head === undefined) throw new TypeError(`base_host_refused: ${entry.id}`);
+  const tail = baseUrl.slice(head.length);
   const invalid = (name: string) => new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
   const filled = fill(head, name => {
     const value = plainValue(values, name);
@@ -150,11 +151,13 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
   return filled;
 }
 
-/** The base a declared call names (`Call.base`), as an app's own base: one of `http.bases`, used as written. */
+/** The base a declared call names (`Call.base`), as an app's own base: one of `http.bases`, used as written, so one with a
+ * placeholder is refused; the client checks every declared URL before it sends (`checkHosts`). */
 export function callBase(entry: Entry, { base }: Call): { baseUrl?: string } {
   if (base === undefined) return {};
   const baseUrl = Object.hasOwn(entry.http.bases ?? {}, base) ? entry.http.bases?.[base] : undefined;
   if (baseUrl === undefined) throw new TypeError(`base_unknown: ${base}`);
+  if (placeholders(baseUrl).length > 0) throw new TypeError(`base_templated: ${base}`);
   return { baseUrl };
 }
 
@@ -178,9 +181,14 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   let base: { url: string; origin: string } | undefined;
   const based = () => {
     if (base) return base;
+    checkHosts(entry); // every declared URL well formed, the hosts one: before an own base or a named one is used
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
-    // An app's own base passes the same check as the entry's.
-    return (base = { url, origin: sendable(entry, url).origin });
+    // An app's own base passes the same check as the entry's; on a typed host it may move the path, never the origin.
+    const origin = sendable(entry, url).origin;
+    const authority = hostPart(entry.http.baseUrl) ?? ''; // well formed: `checkHosts` ran
+    if (input.baseUrl !== undefined && placeholders(authority).length > 0
+      && origin !== new URL(filledBase(entry, input.values ?? {}, authority)).origin) throw new TypeError(`base_host_refused: ${entry.id}`);
+    return (base = { url, origin });
   };
   const [auth] = entry.auth;
   const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];

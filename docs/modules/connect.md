@@ -22,8 +22,12 @@ none and starts with a form, and an entry whose kind is not known in the types (
   token and reads only the token answer's keys the entry names (`tokenAnswer.*`, PayPal's `app_id`). The result's
   `secret` is the secret fields; the token is never returned.
 - An OAuth 2 entry starts with a redirect asking for the entry's `scopes.default`, with PKCE unless the entry says
-  `pkce: false`. `finishConnect(entry, { client, code, redirectUri, codeVerifier?, fetch?, onRevokeFailed })` exchanges
-  the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
+  `pkce: false`. It reads the entry's plain fields from `values` as a key entry does (defaults, choices), fills and
+  checks every OAuth 2 URL and the base with them before the URL is returned (the base only when it needs no value the
+  exchange saves, such as Jira's cloud id), and returns them in `values`
+  ([on the person's own server](#oauth-2-on-the-persons-own-server)).
+  `finishConnect(entry, { client, code, redirectUri, codeVerifier?, values?, fetch?, onRevokeFailed })` reads `values`
+  again, exchanges the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
   `scope_missing`; the granted scopes are split on the entry's `scopeSeparator`), and identifies the account. If that
   fails it revokes the new grant best-effort and throws the original error; `onRevokeFailed(error)` reports a failed
   cleanup. An entry whose `reusesGrant` says re-consent can return a live connection's grant skips the cleanup: only
@@ -33,7 +37,7 @@ To ask for other scopes, derive an entry: `defineProvider({ ...google, scopes: {
 does not refuse a misspelled key at compile time (the catalogue test does, for the entries in this repository), so check
 the key's name.
 
-`fetch` is optional in both: by default the global one, or `guardedFetch` for an entry whose host the person types
+`fetch` is optional in both, and in `exchangeCode`, `refreshGrant` and `revokeGrant`: by default the global one, or `guardedFetch` for an entry whose host the person types
 (`http.host: '*'`, GitLab and Metabase), which refuses private and metadata addresses
 ([client](client.md#the-address-guard)); with an app's own `fetch`, a host that is a blocked address literal is refused
 before anything is sent, a token entry's password included. An account id of a provider whose host is typed is local to
@@ -120,12 +124,56 @@ const later = client(signInWith(linear, kept.kind), { token: kept.token });
 ```
 
 Narrowed with a stored kind, the entry is a union: TypeScript gives `scopes` only once it knows the kind (`'scopes' in
-entry`, or a branch on the kind kept). An OAuth 2 connection's `values` hold only what `save` keeps: its connect reads
-no form field.
+entry`, or a branch on the kind kept). Either sign-in's `values` hold the entry's plain fields and what `save` keeps.
 
 Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
 The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and
 refreshes with `refreshGrant(linear, …)`, through [credentials](credentials.md).
+
+## OAuth 2 on the person's own server
+
+Mattermost runs on each person's own server, and each server is its own OAuth 2 provider: its authorize and token URLs
+sit on the host the person types (`https://{host}/oauth/authorize`). An OAuth 2 sign-in asks the person for the entry's
+fields that are not `secret`: Mattermost's `host`, never the key sign-in's `accessToken`. Pass the host to
+`startConnect` as `values`, keep the `values` it returns on the server with `state` and `codeVerifier`, and pass them
+to `finishConnect`, `refreshGrant`, `revokeGrant` and `client`. Never read a value from the callback's query: the
+callback is the person's browser, which can carry anything. Every OAuth 2 URL is filled and checked as a base is (a
+host name with no port, never a blocked address), and the exchange, refresh, revoke and calls all go to the host the
+`values` name.
+The values and the grant are one record: a token is sent to whatever host the `values` name, and the library cannot
+know which host issued it. Keep the host with the sealed grant, never apart.
+
+```ts
+import { mattermost } from '0-integrations/catalogue/mattermost';
+import { client } from '0-integrations/client';
+import { finishConnect, startConnect } from '0-integrations/connect';
+import { refreshGrant, revokeGrant } from '0-integrations/oauth';
+
+// The app's client for the server the person typed: one per server, never another's.
+const registered = clients.get(host);
+if (registered === undefined) throw new Error('not_registered_on_this_server');
+const start = await startConnect(mattermost, { clientId: registered.clientId, redirectUri, state, values: { host } });
+pending.set(state, { codeVerifier: start.codeVerifier, values: start.values }); // on the server; send the browser to `start.url`
+
+// In the callback: what was kept, found by `state`, and that server's client.
+const kept = pending.get(state);
+const own = kept && clients.get(kept.values.host);
+if (kept === undefined || own === undefined) throw new Error('unknown_state');
+const { secret, values } = await finishConnect(mattermost, { client: own, code, redirectUri, codeVerifier: kept.codeVerifier,
+  values: kept.values, onRevokeFailed: report });
+// secret: the grant to seal; values: { host } to keep with it
+
+const api = client(mattermost, { token: secret.accessToken, values });
+const renewed = await refreshGrant(mattermost, own, refreshToken, { values }); // through the address guard
+
+// When the person disconnects, with the same values:
+await revokeGrant(mattermost, { ...secret, client: own, values });
+```
+
+The client belongs to its server: the server's administrator (or the person) registers the app there, after a System
+Admin enables the OAuth 2.0 service provider. Key the app's clients by the host value and never send one server's
+client to another: an app that looks its client up by the stored host also finds none for a host it never registered
+on.
 
 ## Google and Microsoft
 

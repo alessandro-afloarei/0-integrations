@@ -6,7 +6,7 @@ import { readPath } from './rules.js';
 
 type Cursor = Extract<Paging, { kind: 'cursor' }>;
 type Linked = Extract<Paging, { kind: 'linkHeader' | 'nextUrl' }>;
-type PageNumber = Extract<Paging, { kind: 'page' }>;
+type PageNumber = Extract<Paging, { kind: 'page' | 'offset' }>;
 
 /** The next cursor, or null on the last page: with `more`, a falsy one ends the list and a truthy one needs a cursor;
  * without it, a blank cursor ends the list. */
@@ -59,7 +59,8 @@ function withCursor(where: Where, options: RequestOptions, cursor: string | numb
   return { ...options, json: { ...body, [where.body]: cursor } };
 }
 
-/** A page-number list's loader: no number first, then each next one, until `more` is falsy or the list is empty. A
+/** A page-number or offset list's loader: no number first, then each next one, until `more` is falsy or the list is
+ * empty. An offset grows by the entries the list holds, a skipped record included, never a number the answer names. A
  * missing list, or one that is no list, is `invalid_response`: a malformed answer never reads as an empty list. A list
  * equal to the page before's is `page_repeated`: the provider ignores the number, and would never end. */
 function numbered(http: HttpClient, shape: PageNumber, path: string, options: RequestOptions) {
@@ -72,7 +73,9 @@ function numbered(http: HttpClient, shape: PageNumber, path: string, options: Re
     if (previous !== undefined && seen === previous) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
     previous = seen;
     const last = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
-    return { items: [answer], skipped: [], cursor: last ? null : String(Number(page ?? (shape.zeroBased ? 0 : 1)) + 1) };
+    const next = shape.kind === 'offset' ? Number(page ?? 0) + list.length
+      : Number(page ?? (shape.zeroBased ? 0 : 1)) + 1;
+    return { items: [answer], skipped: [], cursor: last ? null : String(next) };
   };
 }
 
@@ -83,7 +86,7 @@ export async function* walk(http: HttpClient, shape: Paging, path: string, optio
       const answer = await http.json(path, cursor === undefined ? options : withCursor(shape.send, options, cursor));
       return { items: [answer], skipped: [], cursor: nextCursor(shape, answer) };
     }
-    : shape.kind === 'page' ? numbered(http, shape, path, options)
+    : shape.kind === 'page' || shape.kind === 'offset' ? numbered(http, shape, path, options)
     : async (link: string | undefined) => {
       const { data, headers } = await http.answer(link ?? path, link === undefined ? options : { ...options, query: {} });
       const next = shape.kind === 'linkHeader' ? relNext(headers.get('link')) : readPath(data, shape.next);

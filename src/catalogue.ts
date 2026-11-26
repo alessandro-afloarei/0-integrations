@@ -66,12 +66,13 @@ export type Webhook = (
   | { kind: 'standard' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 export type Where = { query: string } | { body: string };
-/** `page`: no page number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the
- * answer itself when absent) is empty; a `list` that is missing or no list is `invalid_response`. `linkHeader` and
- * `nextUrl`: the next link is the `Link` header's `rel="next"`, or the value at `next`; a path is read on the base's
- * origin, and the link must sit under the base's path and `pathPrefix`. */
+/** `page`: no number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the
+ * answer when absent) is empty; a missing or non-list `list` is `invalid_response`. `offset`: as `page`, the next value
+ * the offset sent (0 first) plus the entries in `list`. `linkHeader`, `nextUrl`: the `Link` header's `rel="next"`, or
+ * the value at `next`, read on the base's origin when a path, and kept under the base's path and `pathPrefix`. */
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true }
+  | { kind: 'offset'; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
   pathPrefix?: string };

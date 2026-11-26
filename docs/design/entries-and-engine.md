@@ -134,7 +134,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 | `id`, `name` | Identity. | — |
 | `categories` | What the provider is for: one or two of a closed list, the first the main one. Every library entry has them. The list: `tasks`, `docs`, `chat`, `code`, `monitoring`, `crm`, `sales`, `mail`, `calendar`, `meetings`, `support`, `marketing`, `finance`, `hr`, `storage`, `ecommerce`, `phone`, `design`, `analytics`, `search`: a closed list of 20; a new value arrives with the first entry that needs it. | — |
 | `docs` | The provider's own page that states what the entry declares, https. Every library entry has one. | — |
-| `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default` in `finishConnect`, the one place a default is applied; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
+| `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default` in `startConnect` (an OAuth 2 start) and `finishConnect`, the only places a default is applied; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
 | `auth` | A list of sign-in alternatives (below). | — |
 | `scopes` | `{ default, requireGranted? }`. `requireGranted` refuses a grant that lacks a requested scope. | none |
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
@@ -159,26 +159,46 @@ its `save` keeps.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
-  after the one check below that every URL the library sends to passes.
+  after the one check below that every URL the library sends to passes; on a typed host it must keep the filled base's
+  origin.
 - The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
-  one) is `template_missing`. Only `finishConnect` applies a field's `default` (and returns it in `values`): a client,
-  and a revoke, never do, so they need the connection's `values`. A value in the host that is not a host part (ASCII
-  letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only the name) is
-  `TypeError('base_value_invalid: <entry id> {<name>}')`.
-- Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 token,
-  refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
+  one) is `template_missing`. Only `startConnect` and `finishConnect` apply a field's `default` (and return it in
+  `values`): a client, a refresh and a revoke never do, so they need the connection's `values`. A value in the host
+  that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only
+  the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
+- Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 authorize,
+  token, refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
   `http.host`, else `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then
   never leaves the filled base's origin.
+- Every URL an entry declares (the base, `http.bases`, the OAuth 2 URLs, a token request's URL) is a well-formed
+  template (`hostPart`): `https://`, then ASCII letters, digits, `.`, `-` and `{name}`s with an optional literal port,
+  then `/` or the end. Nothing the URL parser reads otherwise (`\`, `@`, `?`, `#`, a third `/`, a tab or newline) can
+  stand in the authority, so the host the parser reads is that host part, filled. An entry with any other declared URL
+  is `base_host_refused` before anything is sent, on every path (`checkHosts`, which then runs `hostSplit`), and the
+  table refuses it.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
   placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
   (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.
+- Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled by this rule, from the plain fields alone:
+  a secret field or a `save` key named there is `template_missing`, since neither exists before the exchange. A URL
+  with no placeholder is used as written.
+- **On a typed host, a credential goes only to that host.** When the base, an `http.bases` value, an OAuth 2 URL or a
+  token request's URL takes its host from a value, every one of them has exactly the same host part (`https://{host}`):
+  on a person's own server the registration, the sign-in and the calls all belong to that server. So a cloud's fixed
+  token URL never pairs with a typed base (a cloud token would go to any host), nor a typed token URL with a fixed base,
+  nor a key on a typed host with a fixed second base, nor a fixed token request with a typed base. `hostSplit(entry)` is
+  the check: the engine refuses such an entry with `TypeError('host_split: <entry id>')` in `authorizeUrl`, before every
+  exchange, refresh, revoke and token request, and where a call chooses a named base, before anything is built or sent,
+  and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed (a value only in the base's path)
+  is unaffected. No value is ever read from the callback's query: the callback is the person's browser.
 
 #### The address guard
 
 `guardedFetch` (published from `0-integrations/client`) is a `fetch` over `node:https` that refuses
 `ProviderHttpError('request_failed', null, 'address_blocked')`, never retried, for a URL that is not https, a host that
 is a blocked address, and a name whose lookup answers none or any blocked address. It is the default `fetch` of
-`client()` and `finishConnect` for an entry with `http.host: '*'`; every other entry keeps the global one.
+`client()`, `finishConnect`, `refreshGrant` and `revokeGrant` for an entry with `http.host: '*'`; every other entry
+keeps the global one.
 
 - The blocked ranges, in `node:net`'s `BlockList`. IPv4: `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10`, `127.0.0.0/8`,
   `169.254.0.0/16` (the cloud metadata address), `172.16.0.0/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`,
@@ -193,8 +213,8 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
   never get a TCP connection.
 - It is a minimal `fetch` for what the engine sends: a `Request` or a URL with init, a body read whole, the caller's
   `signal` and the timeout's abort, a redirect answered and never followed (as `redirect: 'manual'`), and the answer's
-  body streamed; a body cut short fails as fetch's does, `TypeError('terminated')`. It asks for no compression and
-  decodes none.
+  body streamed; a body cut short fails as fetch's does, `TypeError('terminated')`. It asks for no compression
+  (`accept-encoding: identity`, replacing a caller's), and decodes none.
 - It dials through its own agent, never Node's global one, which follows `HTTPS_PROXY` when `NODE_USE_ENV_PROXY=1` or
   `--use-env-proxy` is set (Node 22.21 and later) and would hand the name to the proxy unchecked. So the guard never
   sends through a proxy, whatever the environment says.
@@ -206,7 +226,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
 `Operation.base`, placeholders in `identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs`
-reset unit, the paging kind `offset`, `Size`, and `Where.variables`.
+reset unit, `Size`, and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -290,10 +310,10 @@ its personal key, sent bare in `authorization`, to the same GraphQL endpoint and
    for apps that connect other people's accounts, which is what providers ask OAuth 2 for (ClickUp: "OAuth 2.0:
    Required for building apps for other users"). The key is `signInWith(entry, 'key')`. The rule constrains only an
    entry with two sign-ins.
-4. A narrowed entry keeps every field: an OAuth 2 connect reads none (the grant is the secret, and its `finishConnect`
-   takes no form). An `oauth2` sign-in reads no plain field, in its base or its lookups: its `finishConnect` takes no
-   `values`, so the grant would be issued and the first call would fail. A provider whose OAuth needs one (a subdomain or
-   region chosen before the redirect) waits. A plain field only the key reads (a Basic email) is the key's alone.
+4. A narrowed entry keeps every field. An OAuth 2 sign-in reads the entry's plain fields: `startConnect` asks for them
+   and returns them; the app keeps them with `state`; every later call takes them (`finishConnect`, `refreshGrant`,
+   `revokeGrant`, `client`). It reads every one (in its URLs, the base, or `connection.*`), so a plain field only the
+   key reads (a Basic email beside OAuth 2) waits.
 5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `identify`, `save`,
    `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
 6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
@@ -338,10 +358,12 @@ the same lookup, where `{id}` is the id already found: `'Portal {id}'`.
 - `rejectWhen` names answers that mean a bad credential despite their status. The error is `rejected`. A rule's
   `detail` is the detail reported, so a `rejectWhen` condition cannot test the provider's code.
 - A request's `base` names a key of `http.bases`: identify's request and a request revoke are sent to that base, and
-  the credential stays on its origin. An unknown name is `TypeError('base_unknown: <name>')` before anything is sent.
+  the credential stays on its origin. An unknown name is `TypeError('base_unknown: <name>')`, and a base with a
+  placeholder (never filled) `TypeError('base_templated: <name>')`, before anything is sent.
   Jira's identify goes to `api.atlassian.com` while its own base still waits for the `cloudId` it saves: a call on a
   second base never fills the entry's own. A request revoke on a second base needs no `values`; one on a templated
-  own base needs them, and `revokeGrant` takes none, so it fails closed (`template_missing`) with nothing sent.
+  own base needs the connection's `values`, which `revokeGrant` takes; without them it fails closed (`template_missing`)
+  with nothing sent.
 - With no `id`, identify is only a credential check. There is no separate `verify`: none of the 17 providers needs
   the two apart.
 - Only the paths an entry names leave the token answer. Nothing else of it is returned or stored.
@@ -397,7 +419,7 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 ```ts
 type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
-  | { kind: 'offset'; send: Where; size: Size }
+  | { kind: 'offset'; send: Where; list?: Path; more?: Path }
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
@@ -410,14 +432,24 @@ a shape's `send` writes: the walk sends it.
 
 - `cursor`: with `more`, stop when it is falsy; a truthy `more` with a blank cursor is `invalid_response`
   (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`.
-- `offset`: sends 0 first and stops on a page shorter than the size.
 - `page`: sends nothing on the first request, then 2, 3 and so on (with `zeroBased`, 1, 2 and so on), in `send`'s
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
   `invalid_response` (`missing_fields`): a malformed answer never reads as an empty list. A page whose list
   equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
-  number would otherwise never end. An operation on a `page` shape names the shape's `list` as its `records` (both
+  number would otherwise never end. Records are expected to differ between pages (they carry ids), so two adjacent pages
+  that are truly identical end the walk the same way. An operation on a `page` shape names the shape's `list` as its `records` (both
   absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
+- `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
+  request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the
+  parser skips included, in `send`'s place (a string in the query, a number in the body). The count is one rule for
+  every provider and needs no page size, and no answer can move the walk backwards: an offset the answer names
+  (`next_offset`, `pagination.offset + limit`) is spelt differently by each provider and is never read. A typed
+  operation cannot set the offset itself (`param_paged`); a raw `paginate` whose own query or body sets it sends that
+  first, then counts from 0. A short page does not end the walk (the walker does not know the page size); the empty page
+  after it does. The offset grows on every page, so a provider that ignores it is `page_repeated`. An operation on an
+  `offset` shape names the shape's `list` as its `records`. Declare it only for an offset that counts the records
+  skipped from 0, cited (an example of `0`, or a starting record position); one counted from 1 waits.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.
@@ -547,7 +579,7 @@ out: a smaller true entry beats a larger guessed one. What the engine cannot say
 wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
 
 **Sign-in.** Every sign-in the provider documents, in one pass: its self-serve OAuth 2 authorization code grant
-(`oauth2`) first, when it reaches the key's base and `identify` and reads no plain field, then its personal key or token
+(`oauth2`) first, when it reaches the key's base and `identify` and its hosts keep the host rule, then its personal key or token
 (`key`, its `send` as the docs show it); a documented one-request token (`token`) takes the key's place when there is
 no key. [Sign-in alternatives](#sign-in-alternatives) gives the rules. When the provider's own rules say an app for
 other people must use OAuth, the key's `help` says the key is for the person's own account, and a provider whose OAuth
@@ -587,9 +619,17 @@ way to list it). No `delete`.
 | `chat` | `<channels>.list`, `<messages>.list`, `<messages>.create`, `<users>.list` |
 | `code` | source control: `repositories.list`, `repositories.get`, `pullRequests.list`, `pullRequests.get`, `pullRequests.create`; CI and deploys: `<runs>.list`, `<runs>.get`, `<runs>.create`, `<projects>.list` |
 | `monitoring` | `<issues>.list`, `<issues>.get`, `<issues>.update`, `<projects>.list`; incident tools add `<incidents>.create` |
+| `crm` | `<contacts>.list` (or `.search`), `<contacts>.get`, `<contacts>.create`, `<contacts>.update`, `<companies>.list`, `<deals>.list` (contacts: contacts, people, persons, leads; companies: companies, organizations, accounts; deals: deals, opportunities) |
+| `sales` | engagement: `<sequences>.list`, `<prospects>.list`, `<prospects>.get`, `<prospects>.create`, `<prospects>.update`, `<enrollments>.create` (adds a prospect to a sequence, under the provider's noun); data: `<people>.search`, `<people>.get`, `<companies>.search`, `<companies>.get` |
 
 A category gains its template with the batch that first writes it. `<containers>.list` may instead be the list a
 create's required parameter is chosen from (incident.io's severities, Shortcut's workflows).
+
+A `search` beside `list` is the usual CRM case: an app finds a contact by email, so declare it when the docs give a
+search or filter endpoint for that object. A CRM that has no deals, or a data provider that has no companies, leaves
+those out and names them in the comment. A call the docs say spends credits is `kind: 'write'`, whatever its method:
+the engine never retries it, so a 5xx or a dropped connection never charges twice, and its leading comment names the
+credit page.
 
 **Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
 its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record
@@ -611,8 +651,8 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 |---|---|
 | `catalogue` (new) | `defineProvider`, the entry types, the template and path helpers. |
 | `http` (internal) | `createClient(entry, options)` reads `auth.send`, `http`, `errors`, `rateLimit` from the entry, and `classify` interprets the declared rules. `./http` is no longer a subpath: `client` is the public client. |
-| `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
-| `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
+| `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2; an OAuth 2 start takes and returns the plain `values`, and its finish takes them back. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
+| `oauth`, `credentials` | Driven by the entry. `refreshGrant(entry, client, refreshToken, { values?, fetch? })`. `revokeGrant(entry, { accessToken?, refreshToken?, client?, values?, fetch? })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
 | `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, then `challengeAnswer(entry.webhook, request)` and `deliveryId(entry.webhook, request)`. |
 | `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |
@@ -719,9 +759,9 @@ its docs, and engine tests as proof:
    five-step guide to adding a provider (`CONTRIBUTING.md`).
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
-code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
-authorize and token URLs (Shopify; Sentry, Outline and Mattermost for a host the person types); a base per sign-in
-(Confluence's and Wrike's OAuth 2 reach another base than their key); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; a base per sign-in
+(an OAuth 2 sign-in whose base differs from its key's; the [waiting list](../waiting-list.md) names who waits and
+why); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
 (Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
 
 Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments

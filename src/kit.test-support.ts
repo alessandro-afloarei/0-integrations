@@ -77,10 +77,10 @@ export function recordedSignIn(entry: Entry): Entry {
   return signInWith(entry, kind);
 }
 
-/** Signs in with a key: a key or token entry through `finishConnect` on its plain values (the kit's unless given), an
- * OAuth entry's token through `identifyAccount`. */
+/** Signs in with a key on the entry's plain values (the kit's unless given): a key or token entry through
+ * `finishConnect`, an OAuth entry's token through `identifyAccount`. */
 export function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch, values = kitValues(entry)) {
-  if (entry.auth[0].kind === 'oauth2') return identifyAccount(entry, { token: key, fetch });
+  if (entry.auth[0].kind === 'oauth2') return identifyAccount(entry, { token: key, fetch, values });
   const secret = (entry.fields ?? []).find(field => field.secret === true)?.name ?? '';
   return finishConnect(entry, { secret: { [secret]: key }, values, fetch });
 }

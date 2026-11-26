@@ -278,6 +278,67 @@ test("an app's entry that would send a wrong request is refused when its client 
   ] as const) expect(() => client(entry(op), { token: 'k' })).toThrow(new TypeError(message));
 });
 
+test("an app's operation with a parameter in the place its paging shape's `send` writes is refused when built", () => {
+  const entry = (shape: object, place: 'query' | 'body') => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { list: shape }, operations: { 'things.list': { method: 'POST', kind: 'read', path: '/things', paging: 'list',
+      params: { at: { in: place, type: 'integer' } } } } }) as Entry;
+  for (const [shape, place] of [[{ kind: 'page', send: { query: 'at' } }, 'query'], [{ kind: 'offset', send: { body: 'at' } }, 'body'],
+    [{ kind: 'cursor', next: 'next', send: { query: 'at' } }, 'query']] as const) {
+    expect(() => client(entry(shape, place), { token: 'k' })).toThrow(new TypeError('param_paged: things.list at'));
+  }
+  // The same name in the other place is the caller's own.
+  expect(() => client(entry({ kind: 'offset', send: { body: 'at' } }, 'query'), { token: 'k' })).not.toThrow();
+});
+
+test('client() refuses an entry checkHosts refuses when it is built, before it reads the token it is given', () => {
+  let reads = 0;
+  const bent = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: 'https:///api.acme.test' } } as Entry;
+  expect(() => client(bent, { get token() { reads++; return 'k'; } })).toThrow(new TypeError('base_host_refused: w'));
+  expect(reads).toBe(0);
+});
+
+test("an operation whose path's own query names the key its paging writes is refused when built; another key is the path's own", () => {
+  const entry = (path: string) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { offset: { kind: 'offset', send: { query: 'offset' } } }, operations: { 'things.list': { path, paging: 'offset' } } }) as Entry;
+  expect(() => client(entry('/things?offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
+  // Read as the request reads it: a second `?` belongs to the first value, so `offset` is still a key.
+  expect(() => client(entry('/things?q=a?b&offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
+  expect(() => client(entry('/things?api-version=7.1'), { token: 'k' })).not.toThrow();
+  // Read as the request builds it, the path appended to the base: `//` starts no authority.
+  expect(() => client(entry('//catalog:archive/items?view=recent'), { token: 'k' })).not.toThrow();
+  expect(() => client(entry('//x/items?offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
+});
+
+test("an app's operation on an `offset` shape whose `records` is not the shape's `list` is refused when built", () => {
+  const entry = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'items' } },
+    operations: { 'things.list': { path: '/things', paging: 'offset', records: 'data', result: { data: ['string'], items: ['string'] } } } } as Entry;
+  expect(() => client(entry, { token: 'k' })).toThrow(new TypeError('records_unpaged: things.list'));
+});
+
+test("an app's operation on a `page` shape reads its records at the shape's `list`, or is refused when built", async () => {
+  const entry = (list: string | undefined, op: object) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { page: { kind: 'page', send: { query: 'page' }, ...(list === undefined ? {} : { list }) },
+      cursor: { kind: 'cursor', next: 'next', send: { query: 'c' } } },
+    operations: { 'things.list': { path: '/things', ...op } } }) as Entry;
+  const things = async (built: Entry, ...pages: unknown[]) => {
+    const fake = fakeFetch([{ url: /https:/, respond: sequence(...pages.map(page => json(page))) }]);
+    const api = client(built, { token: 'k', fetch: fake.fetch }) as unknown as { things: { list: () => AsyncIterable<unknown> } };
+    const seen: unknown[] = [];
+    for await (const thing of api.things.list()) seen.push(thing);
+    return seen;
+  };
+  expect(() => client(entry('items', { paging: 'page', records: 'data', result: { data: ['string'], items: ['string'] } }), { token: 'k' }))
+    .toThrow(new TypeError('records_unpaged: things.list'));
+  expect(() => client(entry(undefined, { paging: 'page', records: 'items', result: { items: ['string'] } }), { token: 'k' }))
+    .toThrow(new TypeError('records_unpaged: things.list'));
+  await expect(things(entry('items', { paging: 'page', records: 'items', result: { items: ['string'] } }), { items: ['a'] }, { items: [] }))
+    .resolves.toEqual(['a']);
+  await expect(things(entry(undefined, { paging: 'page', result: ['string'] }), ['a', 'b'], [])).resolves.toEqual(['a', 'b']);
+  await expect(things(entry('items', { paging: 'cursor', records: 'data', result: { data: ['string'] } }), { data: ['a'] }))
+    .resolves.toEqual(['a']);
+});
+
 test("a wrong argument to an app's entry is a TypeError when the call is made, before anything is sent", async () => {
   const wrong = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: {
     lost: { path: '/b/{id}' }, flat: { path: '/d', params: { ids: { in: 'query', type: ['string'] } } } } } as const satisfies Entry;
