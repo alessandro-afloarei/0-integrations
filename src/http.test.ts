@@ -594,6 +594,16 @@ test("a plain field that would split Trello's header is refused before anything 
   expect(fake.calls).toHaveLength(0);
 });
 
+test('a code that echoes any value a credential template took is no detail: a header value, Basic, a query', async () => {
+  const queried = defineProvider({ id: 'queried', name: 'Queried', fields: [{ name: 'account', title: 'Account' }, { name: 'key', title: 'Key', secret: true }],
+    auth: [{ kind: 'key', send: { query: { account: '{account}', key: '{token}' } } }], http: { baseUrl: 'https://api.q.test' } });
+  for (const [entry, values, code] of [[trello, { apiKey: 'k1' }, 'k1'], [aircall, { apiId: 'id1' }, 'id1'], [queried, { account: 'acc1' }, 'acc1']] as const) {
+    const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ code }, { status: 400 }) }]);
+    const api = createClient({ ...entry, errors: { detail: 'code' } }, { token: () => Promise.resolve('tok'), values, fetch: fake.fetch });
+    await expect(api.json('/me')).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  }
+});
+
 test("a code that echoes the filled header value or the token is no detail", async () => {
   const echoing = { ...discord, errors: { detail: 'code' } };
   for (const code of ['Bot t', 't']) {
