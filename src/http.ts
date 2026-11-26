@@ -150,11 +150,13 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
   return filled;
 }
 
-/** The base a declared call names (`Call.base`), as an app's own base: one of `http.bases`, used as written. */
+/** The base a declared call names (`Call.base`), as an app's own base: one of `http.bases`, used as written, so one with a
+ * placeholder is refused before anything is sent. */
 export function callBase(entry: Entry, { base }: Call): { baseUrl?: string } {
   if (base === undefined) return {};
   const baseUrl = Object.hasOwn(entry.http.bases ?? {}, base) ? entry.http.bases?.[base] : undefined;
   if (baseUrl === undefined) throw new TypeError(`base_unknown: ${base}`);
+  if (placeholders(baseUrl).length > 0) throw new TypeError(`base_templated: ${base}`);
   return { baseUrl };
 }
 

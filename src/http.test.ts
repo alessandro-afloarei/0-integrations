@@ -803,6 +803,15 @@ test('a request revoke on a second base goes there, the credential with it, need
   expect(fake.calls).toHaveLength(1);
 });
 
+test('a named base with a placeholder is refused where a call chooses it: a named base is never filled', async () => {
+  const templated = defineProvider({ ...regional, http: { ...regional.http, bases: { auth: 'https://{sub}.example.com/auth' } },
+    revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } } });
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await expect(revokeGrant(templated, { accessToken: 'a', values: { sub: 'eu' }, fetch: fake.fetch }))
+    .rejects.toThrow(new TypeError('base_templated: auth'));
+  expect(fake.calls).toEqual([]);
+});
+
 const addressBlocked = new ProviderHttpError('request_failed', null, 'address_blocked');
 
 test.each(['127.0.0.1', '2130706433', '0x7f.1', '169.254.169.254', '10.0.0.1'])(
