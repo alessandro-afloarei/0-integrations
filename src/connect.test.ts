@@ -223,6 +223,22 @@ describe('a token entry', () => {
     expect(fake.calls[0]?.headers.authorization).toBe(basic('cid:zoom-secret'));
   });
 
+  it('reads each field once and own values only: the token request is sent the very secret returned', async () => {
+    const fake = fakeFetch([{ url: 'https://zoom.us/oauth/token', respond: () => Response.json({ access_token: 'at' }) }]);
+    let reads = 0;
+    const secret = { get clientSecret() { reads += 1; return `s${String(reads)}`; } };
+    const values = Object.assign(Object.create({ accountId: 'inherited' }) as Record<string, string>, { accountId: 'acc', clientId: 'cid' });
+    const result = await finishConnect(zoom, { secret, values, fetch: fake.fetch });
+    expect(reads).toBe(1);
+    expect(result.secret).toEqual({ clientSecret: 's1' });
+    expect(fake.calls[0]?.headers.authorization).toBe(basic('cid:s1'));
+    // An inherited value is none: PayPal's apiHost then takes its default.
+    const inherited = Object.create({ apiHost: 'evil.test' }) as Record<string, string>;
+    const paypalFake = fakeFetch([{ url: /https:/, respond: () => Response.json({ access_token: 'at', app_id: 'APP-1' }) }]);
+    await finishConnect(paypal, { secret: { clientSecret: 's' }, values: Object.assign(inherited, { clientId: 'cid' }), fetch: paypalFake.fetch });
+    expect(paypalFake.calls.map(call => call.url)).toEqual(['https://api-m.paypal.com/v1/oauth2/token']);
+  });
+
   it('a refused token request is the refused credential', async () => {
     const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ error: 'invalid_client' }, { status: 401 }) }]);
     await expect(finishConnect(zoom, { ...zoomInput, fetch: fake.fetch })).rejects.toMatchObject({ code: 'rejected', detail: 'invalid_client' });
