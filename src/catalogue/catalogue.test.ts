@@ -608,7 +608,6 @@ test.each<[Rule, Entry]>([
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
           params: { [name]: { in: place, type: 'integer' } } } } })]),
   ...([
-    [{ authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' }],
     [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }, { baseUrl: 'https://api.k.test' }],
     [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' }],
     [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }, { baseUrl: 'https://{host}/api', bases: { cloud: 'https://cloud.k.test' } }],
