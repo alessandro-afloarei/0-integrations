@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider } from './catalogue.js';
+import { defineProvider, type Entry } from './catalogue.js';
 import type { Client } from './client.js';
 
 // A fake provider, pure data: its client's types are inferred from this literal.
@@ -30,6 +30,10 @@ const acme = defineProvider({
       },
       result: { id: 'string', url: 'string' },
     },
+    // The records path reads `a.b` as one key before it reads `a` then `b`.
+    'events.list': { path: '/events', paging: 'cursor', records: 'a.b',
+      result: { 'a.b': [{ whole: 'string' }], a: { b: [{ split: 'string' }] } } },
+    user: { path: '/user' },
     viewer: {
       kind: 'read', graphql: 'query Viewer($first: Int) { viewer { id name teams(first: $first) { nodes { id } } } }',
       params: { first: { in: 'variables', type: 'integer' } },
@@ -39,30 +43,46 @@ const acme = defineProvider({
 });
 
 type Issue = { id: string; title: string; labels?: string[] };
+type Yielded<G> = G extends AsyncGenerator<infer I, unknown> ? I : never;
 declare const api: Client<typeof acme>;
 
-// Never called: the types are the test.
+// Never called: the types are the test. `branded` compares a shape's two halves (required and optional keys) as one type.
 function typed() {
-  // `branded` compares a declared object's two halves (required and optional keys) as one type.
-  expectTypeOf(api.issues.list({ teamId: 'T1', state: 'open' })).branded.toEqualTypeOf<AsyncGenerator<Issue, (string | null)[]>>();
-  expectTypeOf(api.issues.get({ id: 'I1' }, { signal: AbortSignal.timeout(1000) }))
-    .branded.toEqualTypeOf<Promise<{ id: string; assignee?: string; raw: unknown } | null>>();
-  expectTypeOf(api.issues.create({ title: 'Ship', estimate: { points: 3 }, parent: null }))
-    .branded.toEqualTypeOf<Promise<{ id: string; url: string }>>();
-  expectTypeOf(api.viewer({ first: 5 })).branded.toEqualTypeOf<Promise<{ viewer: { id: string; name: string; teams: { nodes: { id: string }[] } } }>>();
+  expectTypeOf<Yielded<ReturnType<typeof api.issues.list>>>().branded.toEqualTypeOf<Issue>();
+  expectTypeOf(api.issues.list({ teamId: 'T1' })).toEqualTypeOf<AsyncGenerator<Yielded<ReturnType<typeof api.issues.list>>, (string | null)[], undefined>>();
+  expectTypeOf<Yielded<ReturnType<typeof api.events.list>>>().branded.toEqualTypeOf<{ whole: string }>();
+  expectTypeOf<Awaited<ReturnType<typeof api.issues.get>>>().branded.toEqualTypeOf<{ id: string; assignee?: string; raw: unknown } | null>();
+  expectTypeOf<Awaited<ReturnType<typeof api.issues.create>>>().branded.toEqualTypeOf<{ id: string; url: string }>();
+  expectTypeOf<Awaited<ReturnType<typeof api.viewer>>>()
+    .branded.toEqualTypeOf<{ viewer: { id: string; name: string; teams: { nodes: { id: string }[] } } }>();
+  // `branded` compares about two levels down, so the deeper part is compared again from where it starts.
+  expectTypeOf<Awaited<ReturnType<typeof api.viewer>>['viewer']['teams']>().branded.toEqualTypeOf<{ nodes: { id: string }[] }>();
+  expectTypeOf(api.user()).toEqualTypeOf<Promise<unknown>>();
   expectTypeOf(api.json('/self')).toEqualTypeOf<Promise<unknown>>();
   expectTypeOf<Parameters<typeof api.paginate>[0]>().toEqualTypeOf<'cursor'>();
+  expectTypeOf<Parameters<Client<Entry>['paginate']>[0]>().toEqualTypeOf<string>();
 
+  // No required parameter, no argument needed; an empty one, options and a nullable argument still work.
+  void api.user({});
+  void api.viewer();
+  void api.issues.get({ id: 'I1' }, { signal: AbortSignal.timeout(1000) });
+  void api.issues.create({ title: 'Ship', estimate: { points: 3 }, parent: null });
+  // @ts-expect-error id is a required path parameter, so the argument is too
+  void api.issues.get();
   // @ts-expect-error teamId is a required path parameter
   void api.issues.list({ state: 'open' });
   // @ts-expect-error state is an enum
   void api.issues.list({ teamId: 'T1', state: 'merged' });
   // @ts-expect-error limit is an integer, not a string
   void api.issues.list({ teamId: 'T1', limit: '10' });
+  // @ts-expect-error title is a required body parameter
+  void api.issues.create({ labels: ['a'] });
   // @ts-expect-error estimate.points is required inside the nested body
   void api.issues.create({ title: 'x', estimate: { unit: 'h' } });
   // @ts-expect-error title is not nullable
   void api.issues.create({ title: null });
+  // @ts-expect-error first is an integer variable
+  void api.viewer({ first: 'five' });
   // An operation or a result field that is not declared is not there (asserted, since a read of it lints as unsafe).
   expectTypeOf(api.issues).not.toHaveProperty('delete');
   expectTypeOf<Awaited<ReturnType<typeof api.issues.create>>>().not.toHaveProperty('number');
@@ -70,9 +90,14 @@ function typed() {
   void api.paginate('offset', '/issues');
 
   const base = { name: 'Bad', auth: [{ kind: 'key' }], http: { baseUrl: 'https://bad.test' } } as const;
-  defineProvider({ ...base, id: 'bad', operations: {
+  defineProvider({ ...base, id: 'bad', paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } } }, operations: {
     // @ts-expect-error {id} is in the path but not declared as a path parameter
     get: { path: '/things/{id}', params: { other: { in: 'query', type: 'string' } } },
+    // @ts-expect-error {id} is a path parameter, but not a required one
+    find: { path: '/things/{id}', params: { id: { in: 'path', type: 'string' } } },
+    // @ts-expect-error the entry declares no paging shape `offset`
+    list: { path: '/things', paging: 'offset' },
+    all: { path: '/things', paging: 'cursor' },
   } });
   // The client's own calls cannot be an operation's first segment; a prefix can.
   defineProvider({ ...base, id: 'reserved', operations: {

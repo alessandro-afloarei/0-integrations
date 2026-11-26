@@ -61,22 +61,20 @@ export type Entry = { id: string; name: string; fields?: readonly Field[]; auth:
 type Scalars = { string: string; integer: number; number: number; boolean: boolean; unknown: unknown };
 /** An optional shape key without its `?`; never for a required one. */
 type OptionalKey<K> = K extends `${infer N}?` ? N : never;
-/** A required shape key; never for an optional one. */
-type RequiredKey<K> = K extends `${string}?` ? never : K;
 /** The TypeScript type a shape declares: a `key?` is optional, never null (a null is read as absent). */
 export type TypeOf<S> = S extends keyof Scalars ? Scalars[S] : S extends readonly [infer E] ? TypeOf<E>[]
-  : { -readonly [K in keyof S as RequiredKey<K>]: TypeOf<S[K]> } & { -readonly [K in keyof S as OptionalKey<K>]?: TypeOf<S[K]> };
-/** An operation id's first dot-separated segment: `'issues'` of `'issues.list'`. */
-export type Head<K> = K extends `${infer H}.${string}` ? H : K;
+  : { -readonly [K in keyof S as Exclude<K, `${string}?`>]: TypeOf<S[K]> } & { -readonly [K in keyof S as OptionalKey<K>]?: TypeOf<S[K]> };
 /** The client's own calls: an operation id whose first segment EQUALS one is refused (`'requests.create'` is fine). */
 type Reserved = 'json' | 'request' | 'paginate';
-type Unreserved<Ops> = { [K in keyof Ops]: Head<K & string> extends Reserved ? never : Ops[K] };
+type Unreserved<Ops> = { [K in keyof Ops]: K extends Reserved | `${Reserved}.${string}`
+  ? "json, request and paginate are the client's own calls: rename this operation" : Ops[K] };
 /** The `{name}`s of a path template. */
 type PathParams<P> = P extends `${string}{${infer N}}${infer R}` ? N | PathParams<R> : never;
-/** Each `{name}` of an operation's path must be a required `path` parameter. */
-type PathsDeclared<Ops> = { [K in keyof Ops]: Ops[K] extends { path: infer P } ? [PathParams<P>] extends [never] ? unknown
-  : { params: { [N in PathParams<P> & string]: { in: 'path'; required: true } } } : unknown };
+/** Each `{name}` of an operation's path is a required `path` parameter, and its `paging` a shape the entry declares. */
+type Declared<Ops, Pagings> = { [K in keyof Ops]: (Ops[K] extends { path: infer P } ? [PathParams<P>] extends [never] ? unknown
+  : { params: { [N in PathParams<P> & string]: { in: 'path'; required: true } } } : unknown)
+  & (Ops[K] extends { paging: string } ? { paging: keyof Pagings } : unknown) };
 
 /** One provider, as plain data. The literal's type is kept, so a client's types are inferred from it. */
 export function defineProvider<const D extends Entry>(
-  data: D & { operations?: Unreserved<D['operations']> & PathsDeclared<D['operations']> }): D { return data; }
+  data: D & { operations?: Unreserved<D['operations']> & Declared<D['operations'], D['paging']> }): D { return data; }
