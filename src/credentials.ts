@@ -26,7 +26,7 @@ function grant(value: unknown): Grant {
 }
 
 export async function accessToken(input: SecretInput & {
-  provider: Entry; withLock: WithLock; refresh: (refreshToken: string) => Promise<Grant>; rejected?: string;
+  provider: Entry; withLock: WithLock; refresh: (refreshToken: string) => Promise<Grant>; rejected?: string | undefined;
 }): Promise<string> {
   const usable = (value: Grant, marginMs: number) => value.accessToken !== input.rejected
     && (value.expiresAt === null || Date.parse(value.expiresAt) > Date.now() + marginMs);

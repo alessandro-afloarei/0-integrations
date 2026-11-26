@@ -19,7 +19,7 @@ type Args<O> = O extends { params: infer Ps }
 /** A paged operation's own option: called once for each page that skipped a record, with what it skipped. */
 type Paged = { onSkipped?: (ids: (string | null)[]) => void };
 /** A call's arguments and options; the arguments may be left out when none is required. */
-type Call<O> = [args: Args<O>, options?: Pick<RequestOptions, 'signal'> & (O extends { paging: string } ? Paged : unknown)];
+type CallArgs<O> = [args: Args<O>, options?: Pick<RequestOptions, 'signal'> & (O extends { paging: string } ? Paged : unknown)];
 /** The type at a dotted path of object keys, the whole rest tried as one key first, as `readPath` reads keys. */
 type Get<T, P> = P extends keyof T ? T[P] : P extends `${infer H}.${infer R}` ? H extends keyof T ? Get<T[H], R> : never : never;
 /** An operation's answer: its `result`'s type, else unknown. */
@@ -27,7 +27,7 @@ type Result<O> = O extends { result: infer S } ? TypeOf<S> : unknown;
 /** One record of a paged operation: an element of the list at `records`. */
 type Item<O> = O extends { records: infer P } ? Get<Result<O>, P> extends readonly (infer E)[] ? E : unknown : unknown;
 /** An operation as a method: a paged one yields its records. */
-type MethodOf<O> = (...call: Record<string, never> extends Args<O> ? Partial<Call<O>> : Call<O>) => O extends { paging: string }
+type MethodOf<O> = (...call: Record<string, never> extends Args<O> ? Partial<CallArgs<O>> : CallArgs<O>) => O extends { paging: string }
   ? AsyncGenerator<Item<O>, void, undefined> : Promise<Result<O> | (O extends { notFound: 'null' } ? null : never)>;
 /** An operation id's first dot-separated segment: `'issues'` of `'issues.list'`. */
 type Head<K> = K extends `${infer H}.${string}` ? H : K;

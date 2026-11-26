@@ -106,7 +106,7 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
 }
 
 export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
-  code: string; redirectUri: string; codeVerifier?: string; fetch: typeof fetch;
+  code: string; redirectUri: string; codeVerifier?: string | undefined; fetch: typeof fetch;
 }): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
   const c = context(entry, client, input.fetch);
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');

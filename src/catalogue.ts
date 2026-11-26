@@ -74,7 +74,7 @@ type PathParams<P> = P extends `${string}{${infer N}}${infer R}` ? N | PathParam
 /** Each `{name}` of an operation's path is a required `path` parameter, and its `paging` a shape the entry declares. */
 type Declared<Ops, Pagings> = { [K in keyof Ops]: (Ops[K] extends { path: infer P } ? [PathParams<P>] extends [never] ? unknown
   : { params: { [N in PathParams<P> & string]: { in: 'path'; required: true } } } : unknown)
-  & (Ops[K] extends { paging: string } ? { paging: keyof Pagings } : unknown) };
+  & (Ops[K] extends { paging: infer G } ? G extends keyof Pagings ? unknown : 'paging names no shape this entry declares' : unknown) };
 
 /** One provider, as plain data. The literal's type is kept, so a client's types are inferred from it. */
 export function defineProvider<const D extends Entry>(

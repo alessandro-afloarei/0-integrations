@@ -35,8 +35,7 @@ import { refreshGrant } from '0-integrations/oauth';
 
 const refresh = (refreshToken: string) => refreshGrant(google, oauthClient, refreshToken, { fetch });
 const gmail = client(google, {
-  token: rejected => accessToken({ connectionId, secrets, vault, withLock, provider: google, refresh,
-    ...(rejected === undefined ? {} : { rejected }) }),
+  token: rejected => accessToken({ connectionId, secrets, vault, withLock, provider: google, refresh, rejected }),
 });
 ```
 

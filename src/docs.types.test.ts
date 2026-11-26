@@ -25,13 +25,13 @@ async function readmeConnectKey(apiKey: string) {
 }
 
 async function readmeConnectOAuth(oauthClient: OAuthClient, redirectUri: string, state: string, code: string,
-  codeVerifier: string, report: (error: unknown) => void) {
+  report: (error: unknown) => void) {
   // Send the browser to `start.url`; keep `state` and `start.codeVerifier` on the server.
   const start = await startConnect(google, { clientId: oauthClient.clientId, redirectUri, state });
 
   // In the callback, once the state matches, with the verifier kept at the start:
   const { secret, account } = await finishConnect(google, {
-    client: oauthClient, code, redirectUri, codeVerifier, fetch, onRevokeFailed: error => { report(error); },
+    client: oauthClient, code, redirectUri, codeVerifier: start.codeVerifier, fetch, onRevokeFailed: error => { report(error); },
   });
   expectTypeOf(account).toEqualTypeOf<{ id: string; name: string }>();
   return [start, secret];
@@ -61,8 +61,7 @@ function catalogueEntry() {
 function clientOAuthToken(oauthClient: OAuthClient, connectionId: string, secrets: SecretStore, vault: Vault, withLock: WithLock) {
   const refresh = (refreshToken: string) => refreshGrant(google, oauthClient, refreshToken, { fetch });
   const gmail = client(google, {
-    token: rejected => accessToken({ connectionId, secrets, vault, withLock, provider: google, refresh,
-      ...(rejected === undefined ? {} : { rejected }) }),
+    token: rejected => accessToken({ connectionId, secrets, vault, withLock, provider: google, refresh, rejected }),
   });
   return gmail;
 }

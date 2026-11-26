@@ -29,7 +29,7 @@ export type Connected<E extends Entry = Entry> = E extends Entry ? {
   account: E['identify'] extends { id: Value } ? Account : Account | null;
 } : never;
 type OAuthStart = { clientId: string; redirectUri: string; state: string };
-type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string; fetch: typeof fetch;
+type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string | undefined; fetch: typeof fetch;
   onRevokeFailed: (error: unknown) => void };
 /** A key entry's finish: its secret fields by name, and its plain fields, required when it has any. */
 type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch: typeof fetch } & (Unnamed<E> extends true
