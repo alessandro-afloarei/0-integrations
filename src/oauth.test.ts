@@ -633,3 +633,19 @@ test.each([
   await expect(revokeGrant(entry, { refreshToken: 'r', client, values: chat, fetch: fake.fetch })).rejects.toThrow(refused);
   expect(fake.calls).toEqual([]);
 });
+
+const requested = defineProvider({ ...own, revoke: { request: { method: 'POST', path: '/oauth/revoke' } } });
+
+test('a request revoke on a typed host goes to the base its values fill', async () => {
+  const fake = fakeFetch([{ url: /https:\/\//u, respond: () => Response.json({}) }]);
+  await revokeGrant(requested, { accessToken: 'a', values: chat, fetch: fake.fetch });
+  expect(fake.calls.map(call => [call.method, call.url])).toEqual([['POST', 'https://chat.k.test/api/v4/oauth/revoke']]);
+});
+
+test('a request revoke beside fixed cloud OAuth 2 URLs and a typed base is oauth_host_split, nothing sent', async () => {
+  const split = defineProvider({ ...requested, auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }] });
+  const fake = fakeFetch([{ url: /https:\/\//u, respond: () => Response.json({}) }]);
+  await expect(revokeGrant(split, { accessToken: 'a', values: { host: 'evil.k.test' }, fetch: fake.fetch }))
+    .rejects.toThrow(new TypeError('oauth_host_split: own'));
+  expect(fake.calls).toEqual([]);
+});

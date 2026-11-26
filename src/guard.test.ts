@@ -311,3 +311,18 @@ test("an OAuth 2 refresh and revoke on a typed host go through the guard when th
   expect(lookup.mock.calls.map(([host]) => host)).toEqual(['chat.k.test', 'chat.k.test']);
   expect(seen.bytes).toBe(0);
 });
+
+test("an OAuth 2 request revoke on a typed host goes through the guard when the app passes no fetch", async () => {
+  const typed = defineProvider({ id: 'typed', name: 'Typed', fields: [{ name: 'host', title: 'Host' }],
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/access_token' }],
+    scopes: { default: [] }, revoke: { request: { method: 'POST', path: '/oauth/revoke' } }, http: { baseUrl: 'https://{host}/api/v4', host: '*' } });
+  answers.set('chat.k.test', [{ address: '10.0.0.1', family: 4 }]);
+  const unguarded = vi.fn<typeof fetch>();
+  vi.stubGlobal('fetch', unguarded);
+  try {
+    await expect(revokeGrant(typed, { accessToken: 'a', values: { host: 'chat.k.test' } })).rejects.toEqual(blocked);
+  } finally { vi.unstubAllGlobals(); }
+  expect(unguarded).not.toHaveBeenCalled();
+  expect(lookup.mock.calls.map(([host]) => host)).toEqual(['chat.k.test']);
+  expect(seen.bytes).toBe(0);
+});
