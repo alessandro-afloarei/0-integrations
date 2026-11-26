@@ -173,8 +173,9 @@ its `save` keeps.
 - Every URL an entry declares (the base, `http.bases`, the OAuth 2 URLs, a token request's URL) is a well-formed
   template (`hostPart`): `https://`, then ASCII letters, digits, `.`, `-` and `{name}`s with an optional literal port,
   then `/` or the end. Nothing the URL parser reads otherwise (`\`, `@`, `?`, `#`, a third `/`, a tab or newline) can
-  stand in the authority, so the host the parser reads is that host part, filled. Any other is `base_host_refused`
-  where it is filled or chosen, and the table refuses it.
+  stand in the authority, so the host the parser reads is that host part, filled. An entry with any other declared URL
+  is `base_host_refused` before anything is sent, on every path (`checkHosts`, which then runs `hostSplit`), and the
+  table refuses it.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
   placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
   (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.

@@ -841,6 +841,21 @@ test("a token sign-in whose token URL is fixed while the base is typed is host_s
   expect(fake.calls).toEqual([]);
 });
 
+test('a primary base that is not well formed refuses the entry on every path, before a named base, a token request or an own base sends', async () => {
+  const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 't', id: '1' }) }]);
+  const refused = new TypeError('base_host_refused: bent');
+  const fields = [{ name: 'host', title: 'Host' }, { name: 'secret', title: 'Secret', secret: true }] as const;
+  const http = { baseUrl: 'https://{host}?mode=1', host: '*', bases: { cloud: 'https://cloud.k.test' } } as const;
+  const keyed = defineProvider({ id: 'bent', name: 'Bent', fields, auth: [{ kind: 'key' }], http, identify: { request: { base: 'cloud', path: '/me' } } });
+  await expect(finishConnect(keyed, { secret: { secret: 'k' }, values: { host: 'a.k.test' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  const token = defineProvider({ id: 'bent', name: 'Bent', fields, http: { baseUrl: 'https://{host}?mode=1', host: '*' },
+    auth: [{ kind: 'token', request: { url: 'https://auth.k.test/token', body: { s: '{secret}' } } }] });
+  await expect(requestToken(token, { secret: { secret: 's' }, values: { host: 'a.k.test' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  await expect(createClient(keyed, { token: () => Promise.resolve('t'), values: { host: 'a.k.test' }, fetch: fake.fetch,
+    baseUrl: 'https://other.k.test' }).json('/a')).rejects.toThrow(refused);
+  expect(fake.calls).toEqual([]);
+});
+
 /** Every name the malformed templates below use, filled with a value the base rule accepts. */
 const bentFields = ['host', 'user', 'port'].map(name => ({ name, title: name }));
 const bentValues = { host: 'evil.k.test', user: 'u', port: '8443' };
@@ -883,6 +898,15 @@ test('whenever the engine sends, the host is the template\'s host part filled wi
       auth: [{ kind: 'key' }], http: { baseUrl: template, host: '*' } });
     const hosts: string[] = [];
     const fetch: typeof globalThis.fetch = input => { hosts.push(new Request(input).url); return Promise.resolve(Response.json({})); };
+    if (hostPart(template) === undefined) {
+      // Beside a fixed named base, and behind a fixed token URL, a base that is not well formed sends nothing.
+      const named = defineProvider({ ...entry, fields: [...entry.fields, { name: 'k', title: 'K', secret: true }],
+        http: { ...entry.http, bases: { cloud: 'https://cloud.k.test' } }, identify: { request: { base: 'cloud', path: '/me' } } });
+      await finishConnect(named, { secret: { k: 'k' }, values: filled, fetch }).catch(() => undefined);
+      const tokened = defineProvider({ ...named, auth: [{ kind: 'token', request: { url: 'https://auth.k.test/token', body: { k: '{k}' } } }] });
+      await requestToken(tokened, { secret: { k: 'k' }, values: filled, fetch }).catch(() => undefined);
+      expect(hosts, template).toEqual([]);
+    }
     const answered = await createClient(entry, { token: () => Promise.resolve('t'), values: filled, fetch }).json('/x').then(() => true, () => false);
     if (!answered) { expect(hosts).toEqual([]); continue; }
     sent++;

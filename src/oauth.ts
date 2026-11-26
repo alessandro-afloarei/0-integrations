@@ -4,7 +4,7 @@ import type { Entry, Values } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
-import { fill, holds, hostSplit, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
+import { checkHosts, fill, holds, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
@@ -15,7 +15,7 @@ function endpoints(entry: Entry, values: Values = {}) {
   const [auth] = entry.auth;
   const urls = oauthUrls(entry);
   if (auth.kind !== 'oauth2' || urls === undefined) throw new TypeError('oauth_unsupported');
-  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
+  checkHosts(entry);
   const plain = Object.fromEntries(plainFields(entry).map(({ name }) => [name, values[name]]));
   const url = (template: string) => new URL(filledBase(entry, plain, template));
   return { config: auth, authorize: url(urls.authorize), token: url(urls.token), refresh: url(urls.refresh),
@@ -195,7 +195,7 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
 export async function revokeGrant(entry: Entry, input: { accessToken?: string; refreshToken?: string | null;
   client?: OAuthClient } & Sent): Promise<void> {
   const { revoke } = entry;
-  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
+  checkHosts(entry);
   if (revoke === undefined) return;
   try {
     if ('url' in revoke) {
@@ -228,7 +228,7 @@ type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; f
 export async function requestToken(entry: Entry, input: TokenInput): Promise<{ token: string; expiresAt: number | null; extras: Record<string, unknown> }> {
   const [auth] = entry.auth;
   if (auth.kind !== 'token') throw new TypeError('token_unsupported');
-  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
+  checkHosts(entry);
   const { request } = auth;
   const values = { ...input.values }; // own values, each read once, for the URL, the body and Basic
   const secretNames = new Set((entry.fields ?? []).filter(field => field.secret).map(field => field.name));

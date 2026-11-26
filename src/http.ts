@@ -5,7 +5,7 @@ import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
 import { backoffMs, bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { fill, hostPart, hostSplit, parseJson, placeholders, plainValue } from './rules.js';
+import { checkHosts, fill, hostPart, parseJson, placeholders, plainValue } from './rules.js';
 
 export type RequestOptions = {
   method?: Method;
@@ -152,14 +152,12 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
 }
 
 /** The base a declared call names (`Call.base`), as an app's own base: one of `http.bases`, used as written, so one with a
- * placeholder is refused before anything is sent. */
+ * placeholder is refused; the client checks every declared URL before it sends (`checkHosts`). */
 export function callBase(entry: Entry, { base }: Call): { baseUrl?: string } {
   if (base === undefined) return {};
-  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
   const baseUrl = Object.hasOwn(entry.http.bases ?? {}, base) ? entry.http.bases?.[base] : undefined;
   if (baseUrl === undefined) throw new TypeError(`base_unknown: ${base}`);
   if (placeholders(baseUrl).length > 0) throw new TypeError(`base_templated: ${base}`);
-  if (hostPart(baseUrl) === undefined) throw new TypeError(`base_host_refused: ${entry.id}`);
   return { baseUrl };
 }
 
@@ -183,6 +181,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   let base: { url: string; origin: string } | undefined;
   const based = () => {
     if (base) return base;
+    checkHosts(entry); // every declared URL well formed, the hosts one: before an own base or a named one is used
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
     // An app's own base passes the same check as the entry's; on a typed host it may move the path, never the origin.
     const origin = sendable(entry, url).origin;

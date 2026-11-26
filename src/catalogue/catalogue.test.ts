@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { clashing, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -188,9 +188,6 @@ const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs,
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
-/** Every URL the entry declares: the base, `http.bases`, the OAuth 2 URLs and a token request's URL. */
-const declaredUrls = (entry: Entry) => [entry.http.baseUrl, ...Object.values(entry.http.bases ?? {}), ...oauthUrlList(entry),
-  ...tokenRequest(entry) ? [tokenRequest(entry)?.url ?? ''] : []];
 const runnable = {
   // The host the URL parser reads is then the host part every other rule reads.
   [WELL_FORMED_URLS]: (entry: Entry) => declaredUrls(entry).every(url => hostPart(url) !== undefined),

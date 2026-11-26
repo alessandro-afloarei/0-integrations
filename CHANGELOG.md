@@ -18,8 +18,8 @@ Nothing here is released yet.
 - A named base (`http.bases`) with a placeholder is refused where a call chooses it (`base_templated`); it was sent
   to a host spelt with braces.
 - A URL template that is not well formed (`https://`, then letters, digits, `.`, `-` and `{name}`s with an optional
-  literal port, then `/` or the end) is refused, `base_host_refused`, where it is filled or chosen: `https:///{x}` sent
-  a typed value to the host with no `http.host` check.
+  literal port, then `/` or the end) refuses its entry, `base_host_refused`, before anything is sent on any path:
+  `https:///{x}` sent a typed value to the host with no `http.host` check.
 - A `token` sign-in is under the host rule: a token request whose URL does not share the typed base's host is refused,
   `host_split`, before it is sent; the token it gave went to the host typed.
 - `client()`'s `baseUrl` on an entry whose host is typed must keep the filled base's origin, else `base_host_refused`

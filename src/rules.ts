@@ -95,11 +95,23 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
  * part when any of them takes its host from a value: on a typed host a credential goes only to that host, and a cloud's
  * never reaches it. */
 export function hostSplit(entry: Entry): boolean {
-  const [auth] = entry.auth;
-  const hosts = [...Object.values(oauthUrls(entry) ?? {}), ...auth.kind === 'token' ? [auth.request.url] : [], entry.http.baseUrl,
-    ...Object.values(entry.http.bases ?? {})]
-    .flatMap(url => hostPart(url) ?? []); // one not well formed is refused where it is filled or chosen
+  // One not well formed is kept whole: never equal to a host part, so it counts as another host.
+  const hosts = declaredUrls(entry).map(url => hostPart(url) ?? url);
   return hosts.some(host => placeholders(host).length > 0) && new Set(hosts).size > 1;
+}
+
+/** Every URL an entry declares: the base, `http.bases`, the OAuth 2 URLs (an RFC 7009 revoke's too) and a token request's. */
+export function declaredUrls(entry: Entry): string[] {
+  const [auth] = entry.auth;
+  return [entry.http.baseUrl, ...Object.values(entry.http.bases ?? {}), ...Object.values(oauthUrls(entry) ?? {}),
+    ...auth.kind === 'token' ? [auth.request.url] : []];
+}
+
+/** The one refusal every send runs first: a declared URL that is not a well-formed template (`base_host_refused`), then
+ * hosts that split (`host_split`), each before a host is compared or anything is sent. */
+export function checkHosts(entry: Entry): void {
+  if (declaredUrls(entry).some(url => hostPart(url) === undefined)) throw new TypeError(`base_host_refused: ${entry.id}`);
+  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
 }
 
 /** Replaces each `{name}` with a string or a finite number; anything else throws, naming `where` and the key. */
