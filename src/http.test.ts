@@ -10,6 +10,7 @@ import { granola } from './catalogue/granola.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { intercom } from './catalogue/intercom.js';
 import { notion } from './catalogue/notion.js';
+import { serpapi } from './catalogue/serpapi.js';
 import { client } from './client.js';
 import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
@@ -464,6 +465,24 @@ test('a next link or a Location that echoes the query credential never shows it 
   expect(seen).toEqual(['https://api.x.test/a', 'https://api.x.test/a?page=2']);
   expect(fake.calls.map(call => call.url)).toEqual(['https://api.x.test/a?key=k&token=t',
     'https://api.x.test/a?page=2&key=k&token=t', 'https://api.x.test/b?token=t&key=k']);
+});
+
+test('a code that echoes any value a query send rendered (the plain key too) is no detail', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ error: 'k' }, { status: 400 }) }]);
+  await expect(queryClient(fake.fetch).json('/a')).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(fake.calls[0]?.url).toBe('https://api.x.test/a?key=k&token=t');
+});
+
+test('a base that holds a username or password, an app\'s own included, is refused before the token is read', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  const token = vi.fn<() => Promise<string>>().mockResolvedValue('secret-key');
+  const error: unknown = await client(serpapi, { baseUrl: 'https://u:p@serpapi.com', token, fetch: fake.fetch }).json('/account')
+    .catch((caught: unknown) => caught);
+  expect(error).toEqual(new TypeError('base_host_refused: serpapi'));
+  expect(token).not.toHaveBeenCalled();
+  expect(fake.calls).toHaveLength(0);
+  if (!(error instanceof Error)) throw new Error('expected_error');
+  expect(JSON.stringify({ fields: Object.fromEntries(Object.entries(error)), message: error.message })).not.toMatch(/secret-key|u:p@|serpapi\.com/u);
 });
 
 test('a code that is the token sent in the query is no detail', async () => {

@@ -111,7 +111,7 @@ function filledBase(entry: Entry, values: Values): string {
   }, entry.id);
   const url = URL.canParse(filled) ? new URL(filled) : undefined;
   const hosted = url !== undefined && (host === '*' || url.hostname === host || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1))));
-  if (!hosted || url.protocol !== 'https:' || url.username !== '' || url.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
+  if (!hosted || url.protocol !== 'https:') throw new TypeError(`base_host_refused: ${entry.id}`);
   // A typed host that is an address is checked here too, since an app's own fetch cannot be seen to dial; a name is
   // only checked by guardedFetch.
   if (host === '*' && blockedHost(url.hostname)) throw refusal();
@@ -139,7 +139,10 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   const based = () => {
     if (base) return base;
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
-    return (base = { url, origin: new URL(url).origin });
+    // No base holds a username or password, an app's own included: Node's own error would name the URL and its query key.
+    const { username, password, origin } = new URL(url);
+    if (username !== '' || password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
+    return (base = { url, origin });
   };
   const [auth] = entry.auth;
   const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];
@@ -234,6 +237,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   }
 
   async function follow(start: URL, bearer: string, { header, query = [] }: Credential, options: RequestOptions): Promise<ProviderResponse> {
+    // Every value the credential rendered (the token, a header's value, each query value): a code echoing one is no detail.
+    const rendered = [bearer, ...query.map(([, value]) => value), ...header ? [header[1].slice(header[1].indexOf(' ') + 1)] : []];
     let url = start;
     for (let hop = 0; ; hop++) {
       // Set on each hop's copy, replacing the caller's or a Location's value; `start` never holds it.
@@ -241,7 +246,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
       for (const [name, value] of query) sent.searchParams.set(name, value);
       const response = await send(sent, header, options);
       const next = hop < MAX_REDIRECTS ? redirectTarget(url, options.method ?? 'GET', response) : null;
-      if (next === null) return sentWith(response, header ? [bearer, header[1].slice(header[1].indexOf(' ') + 1)] : [bearer]);
+      if (next === null) return sentWith(response, rendered);
       url = next;
     }
   }
