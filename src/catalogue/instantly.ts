@@ -17,7 +17,7 @@ export const instantly = defineProvider({
   id: 'instantly', name: 'Instantly', docs: 'https://developer.instantly.ai/getting-started/authorization',
   categories: ['sales'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'An API v2 key (Settings, then Integrations, then API Keys) with the workspaces:read, campaigns:read, leads:read, leads:create and leads:update scopes.' }],
+    help: 'An API v2 key, under Settings, then Integrations, then API Keys, with the workspaces:read, campaigns:read, leads:read, leads:create and leads:update scopes.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.instantly.ai/api/v2', retry: {} },
   identify: { request: { path: '/workspaces/current' }, id: 'id', name: 'name' },

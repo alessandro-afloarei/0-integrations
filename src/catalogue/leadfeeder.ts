@@ -11,7 +11,7 @@ const id = { id: { in: 'path', type: 'string', required: true } } as const;
 const ref = 'https://docs.leadfeeder.com/api/public';
 
 export const leadfeeder = defineProvider({
-  id: 'leadfeeder', name: 'Leadfeeder', docs: `${ref}/authentication-354547m0`,
+  id: 'leadfeeder', name: 'Leadfeeder (formerly Dealfront)', docs: `${ref}/authentication-354547m0`,
   categories: ['sales'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'For your own Leadfeeder user, under Settings, then Personal, then API Keys: Leadfeeder asks an integration used by more than one person to use OAuth 2.0. Reading a contact\'s or a company\'s details spends the account\'s credits.' }],

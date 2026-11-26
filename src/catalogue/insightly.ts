@@ -2,7 +2,7 @@ import { defineProvider } from '../catalogue.js';
 
 /** Insightly API v3.1 on the instance's pod: the API key as the Basic username, the password blank. At most 10 requests
  * a second and a daily quota by plan, both per instance, then a 429. Lists and searches page by `skip` (records
- * skipped) and `top` (100 by default, at most 500); an update sends the record's id in the body. */
+ * skipped). */
 const swagger = 'https://api.insightly.com/v3.1/swagger/docs/v3.1';
 const contact = { CONTACT_ID: 'integer', FIRST_NAME: 'string', 'LAST_NAME?': 'string', 'EMAIL_ADDRESS?': 'string',
   'ORGANISATION_ID?': 'integer', 'OWNER_USER_ID?': 'integer', 'DATE_CREATED_UTC?': 'string', 'DATE_UPDATED_UTC?': 'string' } as const;

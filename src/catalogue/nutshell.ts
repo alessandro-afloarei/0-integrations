@@ -1,9 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Nutshell's REST API: a user's email and API key as Basic. Contacts are people, accounts companies, and leads the
- * deals. Lists page by `page[page]` from 0. No page names the current user, so signing in reads the users. An update
- * is a JSON Patch, which the engine cannot send yet, so it is left out:
- * https://developers.nutshell.com/reference/cb995ae09d7e0e99e91b122bcc9358ed */
+ * deals. Lists page by `page[page]` from 0. An update is a JSON Patch, which the engine cannot send yet, so it is left
+ * out: https://developers.nutshell.com/reference/cb995ae09d7e0e99e91b122bcc9358ed */
 const ref = 'https://developers.nutshell.com/reference';
 const contact = { id: 'string', 'name?': 'string', 'firstName?': 'string', 'lastName?': 'string',
   'emails?': [{ 'value?': 'string', 'isPrimary?': 'boolean' }], 'htmlUrl?': 'string', 'createdTime?': 'integer' } as const;

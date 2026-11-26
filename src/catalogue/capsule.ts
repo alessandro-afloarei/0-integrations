@@ -16,7 +16,7 @@ const ref = 'https://developer.capsulecrm.com/v2/operations';
 export const capsule = defineProvider({
   id: 'capsule', name: 'Capsule', docs: 'https://developer.capsulecrm.com/v2/overview/authentication',
   categories: ['crm'],
-  fields: [{ name: 'accessToken', title: 'API authentication token', secret: true,
+  fields: [{ name: 'apiToken', title: 'API authentication token', secret: true,
     help: 'For your own Capsule account: under My Preferences, then API Authentication Tokens. An app for other people connects with the OAuth 2 sign-in.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://api.capsulecrm.com/oauth/authorise', tokenUrl: 'https://api.capsulecrm.com/oauth/token',
     pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],

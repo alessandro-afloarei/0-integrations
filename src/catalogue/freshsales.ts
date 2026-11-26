@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Freshsales (Freshworks CRM): a user's API key as `Token token=`; 1,000 requests an hour per account, then a 429.
- * A list reads a view, 25 a page. No page names the current user, so signing in reads the users. The bundle alias's
- * host is typed (reached only through the address guard unless the app passes its own `fetch`), on one of two domains:
+ * A list reads a view, 25 a page. The bundle alias's host is typed (reached only through the address guard unless the
+ * app passes its own `fetch`), on one of two domains:
  * https://developers.freshworks.com/docs/app-sdk/v2.3/freshsales-suite/app-settings/installation-parameters/ */
 const ref = 'https://developers.freshworks.com/crm/api/';
 const contact = { id: 'number', 'first_name?': 'string', 'last_name?': 'string', 'display_name?': 'string', 'email?': 'string',

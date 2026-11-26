@@ -47,7 +47,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 
 | [Instantly](https://developer.instantly.ai/getting-started/authorization) | sales | key | campaigns.list, leads.list, leads.get, leads.create, leads.update | — | declared |
 | [Intercom](https://developers.intercom.com/docs/references/rest-api/api.intercom.io/admins/identifyadmin) | support | key | — | hmac | declared |
 | [Jira](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/) | tasks | OAuth 2 | — | — | declared |
-| [Leadfeeder](https://docs.leadfeeder.com/api/public/authentication-354547m0) | sales | key | contacts.search, contacts.get, companies.search, companies.get | — | declared |
+| [Leadfeeder (formerly Dealfront)](https://docs.leadfeeder.com/api/public/authentication-354547m0) | sales | key | contacts.search, contacts.get, companies.search, companies.get | — | declared |
 | [LeadIQ](https://leadiqhelp.zendesk.com/hc/en-us/articles/29375289152795-LeadIQ-Public-API-Guide) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
 | [lemlist](https://developer.lemlist.com/api-reference/getting-started/authentication) | sales | key | campaigns.list, contacts.list, contacts.get, contacts.create, contacts.update, leads.create | — | declared |
 | [LINE](https://developers.line.biz/en/reference/messaging-api/#get-bot-info) | chat | key | messages.create, followers.list | hmac | declared |
