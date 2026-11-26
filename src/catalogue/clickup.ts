@@ -19,7 +19,7 @@ export const clickup = defineProvider({
     { kind: 'key', send: { header: 'authorization' } }],
   // No scopes: the person picks the Workspaces the app may reach on ClickUp's consent screen.
   scopes: { default: [] },
-  http: { baseUrl: 'https://api.clickup.com/api/v2', retry: {} },
+  http: { baseUrl: 'https://api.clickup.com/api/v2', retry: { wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   identify: { request: { path: '/user' }, id: 'user.id', name: ['user.username', 'user.email'] },
   paging: { page: { kind: 'page', send: { query: 'page' }, list: 'tasks', zeroBased: true } },
   errors: { detail: 'ECODE' },
