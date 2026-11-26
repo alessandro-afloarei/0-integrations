@@ -1,13 +1,13 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Asana: OAuth 2, its app registered for these four scopes (only pre-approved scopes are accepted; an app with Full
- * permissions asks `default` instead) and shared with "Any workspace" (https://developers.asana.com/docs/oauth), or a
- * personal access token, both as Bearer. A 429 names its wait in `Retry-After` (https://developers.asana.com/docs/rate-limits).
- * Bodies and answers sit under `data`; a list pages only when `limit` is sent (https://developers.asana.com/docs/pagination). */
+ * permissions asks `default`) and shared with "Any workspace" (https://developers.asana.com/docs/oauth), or a personal
+ * access token; a 429 with `Retry-After` (https://developers.asana.com/docs/rate-limits). A list pages only when
+ * `limit` (1 to 100) is sent, so it is required (https://developers.asana.com/docs/pagination). */
 const task = { gid: 'string', 'name?': 'string', 'completed?': 'boolean', 'parent?': { 'gid?': 'string' },
   'permalink_url?': 'string', 'created_at?': 'string', 'modified_at?': 'string' } as const;
 const taskGid = { in: 'path', type: 'string', required: true } as const;
-const limit = { in: 'query', type: 'integer' } as const;
+const limit = { in: 'query', type: 'integer', required: true } as const;
 const written = { 'name?': 'string', 'notes?': 'string', 'completed?': 'boolean' } as const;
 const reference = 'https://developers.asana.com/reference';
 
