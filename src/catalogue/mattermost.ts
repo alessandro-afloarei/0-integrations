@@ -1,10 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Mattermost, on the person's own server: the host is typed, so it is reached only through the address guard unless the
- * app passes its own `fetch`. OAuth 2 first: a System Admin enables the OAuth 2.0 service provider and the app's client is
- * registered on that server; then a personal access token as a bearer token. `me` stands for the token's user;
- * `channels.list` needs server 6.1 or later. Errors carry an `id`; a 429 past the server's own limit
- * (https://docs.mattermost.com/api/reference/mattermost-api). Types: https://github.com/mattermost/mattermost/tree/master/api/v4/source */
+/** Mattermost on the person's own server, the typed host reached through the address guard unless the app passes a
+ * `fetch`. OAuth 2 (a System Admin enables it; the client is registered there), then a personal access token; `me` is
+ * its user. `channels.list` needs server 6.1+. Errors carry an `id`; a 429 past the server's own limit. Types:
+ * https://github.com/mattermost/mattermost/tree/master/api/v4/source */
 const time = 'integer';
 const perPage = { in: 'query', type: 'integer', description: 'At most 200.' } as const;
 const post = { id: 'string', 'message?': 'string', 'channel_id?': 'string', 'root_id?': 'string', 'user_id?': 'string',
@@ -18,8 +17,9 @@ export const mattermost = defineProvider({
     help: 'The host name of your Mattermost server, with no port. For OAuth 2, a System Admin enables the OAuth 2.0 service provider there, and the app is registered on that server.' },
     { name: 'accessToken', title: 'Personal access token', secret: true,
       help: 'A System Admin enables them under System Console, then Integrations, then Integration Management; by default only System Admins can create one. It does not expire.' }],
-  // https://docs.mattermost.com/developers/integrate/apps/authentication/oauth2: the client secret in the body, PKCE with S256.
-  auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/access_token' }, { kind: 'key' }],
+  // https://docs.mattermost.com/developers/integrate/apps/authentication/oauth2
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize',
+    tokenUrl: 'https://{host}/oauth/access_token', authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: [] },
   http: { baseUrl: 'https://{host}/api/v4', host: '*', retry: {} },
   identify: { request: { path: '/users/me' }, id: 'id', name: ['username', 'email'] },
