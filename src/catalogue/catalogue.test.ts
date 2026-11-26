@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked } from '../errors.js';
-import { createClient } from '../http.js';
+import { callBase, createClient, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
@@ -413,7 +413,7 @@ describe.each(entries)('%s', (id, entry) => {
     // grant and each `save` value the fake answered, then refreshes, and revokes where the entry declares a revoke.
     if (one.auth[0].kind === 'oauth2') {
       test.each(['good', 'bad'] as const)(`connects on its derived fake with a %s code${named}`, async code => {
-        const { fetch } = fakeFetch(fakeProvider(one, { key: GOOD_KEY, values: kitValues(one) }));
+        const { fetch, calls } = fakeFetch(fakeProvider(one, { key: GOOD_KEY, values: kitValues(one) }));
         const client = { clientId: 'kit-client', clientSecret: 'kit-secret' };
         const redirectUri = 'https://app.example.test/callback';
         const start = await startConnect(one, { clientId: 'kit-client', redirectUri, state: 'kit-state', values: kitValues(one) });
@@ -429,7 +429,24 @@ describe.each(entries)('%s', (id, entry) => {
         expect(values).toMatchObject(Object.fromEntries(Object.entries(one.save ?? {}).map(([name, read]) => [name,
           typeof read === 'string' && read.startsWith('tokenAnswer.') ? `kit-${read.slice('tokenAnswer.'.length)}` : expect.anything()])));
         await expect(refreshGrant(one, client, 'kit-refresh', { fetch, values })).resolves.toMatchObject(grant);
-        if (one.revoke !== undefined) await expect(revokeGrant(one, { ...grant, client, values, fetch })).resolves.toBeUndefined();
+        const { revoke } = one;
+        if (revoke === undefined) return;
+        const before = calls.length;
+        await expect(revokeGrant(one, { ...grant, client, values, fetch })).resolves.toBeUndefined();
+        // One request reached the revoke, with the token `revoke.token` selects, or a request revoke's credential.
+        const sent = calls.slice(before);
+        if ('url' in revoke) {
+          expect(sent.map(call => call.url)).toEqual([new URL(filledBase(one, values, revoke.url)).href]);
+          const body = sent[0]?.body ?? '';
+          const json = one.auth[0].kind === 'oauth2' && one.auth[0].json === true;
+          expect(new URLSearchParams(json ? JSON.parse(body) as Record<string, string> : body).get('token'))
+            .toBe(revoke.token[0] === 'refresh' ? grant.refreshToken : grant.accessToken);
+        } else {
+          const base = filledBase(one, values, callBase(one, revoke.request).baseUrl).replace(/\/+$/u, '');
+          expect(sent.map(call => call.url)).toEqual([`${base}${revoke.request.path ?? ''}`]);
+          const [name = '', value] = credentialOf(one, GOOD_KEY, values).header ?? [];
+          expect(sent[0]?.headers[name]).toBe(value);
+        }
       });
     }
   }
