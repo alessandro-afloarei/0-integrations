@@ -1,13 +1,13 @@
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { identifyAccount, lookupNames } from './account.js';
-import type { Entry } from './catalogue.js';
+import type { Entry, Value } from './catalogue.js';
 import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import { paginate, type Page } from './paginate.js';
 import { safeDetail } from './http-response.js';
-import { parseJson } from './rules.js';
-import { fakeFetch, fakeProvider, type Route } from './testing.js';
+import { parseJson, readPath } from './rules.js';
+import { fakeFetch, type Route } from './testing.js';
 
 /** One request and its answer. `key` says which key sent it: the scenario's good key or a bad one. */
 export type Exchange = { key: 'good' | 'bad'; method: string; url: string; body?: unknown; status: number;
@@ -72,24 +72,44 @@ export function replay(recording: Recording, key: Exchange['key']): typeof fetch
   };
 }
 
+/** The paths identify or `save` reads a value at, each with its stand-in: `stand` in identify's answer, `kit-<path>` in
+ * the token answer (`tokenAnswer.` stripped), as the derived fake answers them. */
+export const identityPaths = (value: Value | undefined, stand: string) => (value === undefined ? [] : lookupNames({ identify: { id: value } })
+  .filter(name => !name.startsWith('connection.')).map(name => (name.startsWith('tokenAnswer.')
+    ? [name.slice('tokenAnswer.'.length), `kit-${name.slice('tokenAnswer.'.length)}`] as const : [name, stand] as const)));
+
+/** `value` with `stand` where `path` reads a string or a number (as `readPath` finds it), else as it is. */
+function placed(value: unknown, path: string, stand: string): unknown {
+  const at = readPath(value, path);
+  if (typeof at !== 'string' && typeof at !== 'number') return value;
+  const record = value as Record<string, unknown>;
+  const dot = path.indexOf('.');
+  const [key, inner] = Object.hasOwn(record, path) ? [path, stand] : [path.slice(0, dot), placed(record[path.slice(0, dot)], path.slice(dot + 1), stand)];
+  return Object.assign(Array.isArray(value) ? [...value as unknown[]] : { ...record }, { [key]: inner });
+}
+
 /**
  * The one replay check, which the table test runs on every recording beside an entry and the recorder runs before it
- * writes one: the good key signs in, sending each request once (a token entry's token request, then identify's), and the
- * bad key is `rejected` at its first request. A recording the recorder wrote from an account (`fromAccount`) holds the
- * kit's stand-ins, so its account is the one the entry's own rule gives over the kit values: the account its derived
- * fake signs in to. One written by hand holds the provider's documented values, so its account id is one of them, and
- * there is no account only when the entry names no id. Null when all of this holds, else the sign-in it changes.
+ * writes one: the good key signs in, sending no request twice (a token entry's token request, then identify's when a
+ * value reads it), and the bad key is `rejected` at its first request. A recording the recorder wrote from an account
+ * (`fromAccount`) holds the kit's stand-ins, so its account is the one the entry's own rule gives over the kit values at
+ * the paths the recording holds: the same file with each identity value it holds replaced by its stand-in, replayed.
+ * One written by hand holds the provider's documented values, so its account id is one of them, and there is no account
+ * only when the entry names no id. Null when all of this holds, else the sign-in it changes.
  */
 export async function replayProblem(entry: Entry, recording: Recording, fromAccount: boolean): Promise<string | null> {
   const sent = { good: 0, bad: 0 };
   const counted = (key: Exchange['key']): typeof fetch => (input, init) => { sent[key] += 1; return replay(recording, key)(input, init); };
   const good = await signIn(entry, GOOD_KEY, counted('good')).catch(() => undefined);
   const id = good?.account?.id ?? null;
-  const kit = fakeFetch(fakeProvider(entry, { key: GOOD_KEY, values: kitValues(entry) })).fetch;
+  // The id's stand-ins last: where id and name read one path, the id's is written there, as the recorder writes it.
+  const stands = [...identityPaths(entry.identify?.name, 'kit-name'), ...identityPaths(entry.identify?.id, 'kit-account')];
+  const kit = { ...recording, exchanges: recording.exchanges.map(exchange => ({ ...exchange,
+    response: stands.reduce((response, [path, stand]) => placed(response, path, stand), exchange.response) })) };
   const recorded = JSON.stringify([recording.exchanges.filter(item => item.key === 'good').map(item => item.response), kitValues(entry)]);
-  const holds = fromAccount ? id === (await signIn(entry, GOOD_KEY, kit).then(({ account }) => account?.id ?? null, () => undefined))
+  const holds = fromAccount ? id === (await signIn(entry, GOOD_KEY, replay(kit, 'good')).then(({ account }) => account?.id ?? null, () => undefined))
     : id === null ? entry.identify?.id === undefined : recorded.toLowerCase().includes(id.toLowerCase());
-  if (good === undefined || !holds || sent.good !== Number(entry.auth[0].kind === 'token') + Number(entry.identify?.request !== undefined)) {
+  if (good === undefined || !holds || sent.good > Number(entry.auth[0].kind === 'token') + Number(entry.identify?.request !== undefined)) {
     return 'the sign-in with the key';
   }
   const bad = await signIn(entry, BAD_KEY, counted('bad')).then(() => undefined, (error: unknown) => error);
