@@ -66,6 +66,12 @@ export function placeholders(template: Template): string[] {
   return [...template.matchAll(PLACEHOLDER)].map(match => match[1] ?? '');
 }
 
+/** A URL's host part, its scheme included: all before the first `/` after `//` (`https://{host}`). */
+export function hostPart(url: string): string {
+  const at = url.indexOf('/', url.indexOf('//') + 2);
+  return at === -1 ? url : url.slice(0, at);
+}
+
 /** An OAuth 2 first sign-in's URLs as written: authorize, token, refresh (the token URL unless the entry names one) and
  * an RFC 7009 revoke; none for another sign-in. */
 export function oauthUrls(entry: Entry): { authorize: string; token: string; refresh: string; revoke?: string } | undefined {
@@ -79,7 +85,7 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
  * takes its host from a value: on a typed host a credential goes only to that host, and a cloud's never reaches it. */
 export function hostSplit(entry: Entry): boolean {
   const hosts = [...Object.values(oauthUrls(entry) ?? {}), entry.http.baseUrl, ...Object.values(entry.http.bases ?? {})]
-    .map(url => url.split('/', 3).join('/'));
+    .map(hostPart);
   return hosts.some(host => placeholders(host).length > 0) && new Set(hosts).size > 1;
 }
 

@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { clashing, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { clashing, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -157,9 +157,6 @@ const TODO_RULE = "no TODO left from pnpm new: replace each with the provider's 
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
-/** A URL's host part: between `https://` and the first `/` after it. */
-const hostOf = (url: string) => url.slice('https://'.length).split('/')[0] ?? '';
-const baseHost = (entry: Entry) => hostOf(entry.http.baseUrl);
 /** A token entry's request. */
 const tokenRequest = (entry: Entry) => (entry.auth[0].kind === 'token' ? entry.auth[0].request : undefined);
 /** The names a token request's body and Basic fill. */
@@ -211,14 +208,14 @@ const runnable = {
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
-  [HOST_PATTERN]: (entry: Entry) => ([entry.http.baseUrl, ...oauthUrlList(entry)].some(url => placeholders(hostOf(url)).length > 0)
+  [HOST_PATTERN]: (entry: Entry) => ([entry.http.baseUrl, ...oauthUrlList(entry)].some(url => placeholders(hostPart(url)).length > 0)
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
-    || /^\{[^{}]+\}$/u.test(baseHost(entry)),
+    || /^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl)),
   // The token URL is filled by the base's rule, so a typed host there is checked against the same pattern.
   "a token request's `url` with a placeholder in its host only beside an `http.host` pattern": (entry: Entry) =>
-    placeholders(hostOf(tokenRequest(entry)?.url ?? 'https://')).length === 0 || entry.http.host !== undefined,
+    placeholders(hostPart(tokenRequest(entry)?.url ?? 'https://')).length === 0 || entry.http.host !== undefined,
   // A URL is filled from plain values, never a secret; the body and Basic from either.
   // What the engine cannot fill is `template_missing` at the first sign-in.
   "a token request names only the entry's fields, a plain one in its `url`": (entry: Entry) => {

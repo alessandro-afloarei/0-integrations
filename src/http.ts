@@ -5,7 +5,7 @@ import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
 import { backoffMs, bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { fill, hostSplit, parseJson, placeholders, plainValue } from './rules.js';
+import { fill, hostPart, hostSplit, parseJson, placeholders, plainValue } from './rules.js';
 
 export type RequestOptions = {
   method?: Method;
@@ -126,8 +126,8 @@ function sendable(entry: Entry, url: string): URL {
  * is read or sent. */
 export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.baseUrl): string {
   const { host = '' } = entry.http;
-  const pathAt = baseUrl.indexOf('/', baseUrl.indexOf('//') + 2);
-  const [head, tail] = pathAt === -1 ? [baseUrl, ''] : [baseUrl.slice(0, pathAt), baseUrl.slice(pathAt)];
+  const head = hostPart(baseUrl);
+  const tail = baseUrl.slice(head.length);
   const invalid = (name: string) => new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
   const filled = fill(head, name => {
     const value = plainValue(values, name);
