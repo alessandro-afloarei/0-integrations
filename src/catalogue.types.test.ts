@@ -78,8 +78,8 @@ async function stored(kind: 'oauth2' | 'key', clientId: string) {
   // An app narrows again with the kind it kept: a union of the two narrowings, each with what its sign-in has.
   const either = signInWith(linear, kind);
   expectTypeOf(either.auth[0].kind).toEqualTypeOf<'oauth2' | 'key'>();
-  // @ts-expect-error scopes are OAuth 2's: read them only once the kind is known
-  void either.scopes.default;
+  // Scopes are OAuth 2's: there only once the kind is known.
+  expectTypeOf(either).not.toHaveProperty('scopes');
   // TypeScript narrows a union by a key, not by the nested `auth[0].kind`: `'scopes' in`, or the kind the app kept.
   if ('scopes' in either) expectTypeOf(either.scopes.default).toEqualTypeOf<readonly ['read', 'issues:create']>();
   if (kind === 'oauth2') expectTypeOf(signInWith(linear, kind)).toHaveProperty('scopes');
@@ -91,4 +91,7 @@ async function stored(kind: 'oauth2' | 'key', clientId: string) {
   expectTypeOf<Connected<ReturnType<typeof signInWith<typeof mailed, 'key'>>>['values']['email']>().toEqualTypeOf<string>();
 }
 
-test('the narrowed types compile', () => { expect([narrowed, stored].every(item => typeof item === 'function')).toBe(true); });
+test('the narrowed types compile', () => {
+  expect([narrowed, stored].every(item => typeof item === 'function')).toBe(true);
+  expect(mailed.auth.map(auth => auth.kind)).toEqual(['oauth2', 'key']);
+});
