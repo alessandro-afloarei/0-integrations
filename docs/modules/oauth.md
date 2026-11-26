@@ -2,18 +2,17 @@
 
 `oauth` builds consent URLs with `authorizeUrl(entry, …)` and handles `exchangeCode`, `refreshGrant` and `revokeGrant`
 on `oauth4webapi`, each driven by a catalogue entry whose sign-in is OAuth 2. `pkcePair` supplies PKCE where the entry
-uses it. `exchangeCode` takes a `fetch` (`finishConnect` passes its default); the app owns the state nonce.
-`exchangeCode` returns only the token-answer fields the entry reads (`identify`, `save`, and `scope` when every scope
-must be granted), never the rest; a token answer the entry's `failed` condition marks is refused with the entry's own
-code.
+uses it. The app owns the state nonce. `exchangeCode` returns only the token-answer fields the entry reads
+(`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
+condition marks is refused with the entry's own code.
 
 Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` and
 checked as a base is: `authorizeUrl(entry, { …, values? })`, `exchangeCode(entry, client, { …, values? })`,
 `refreshGrant(entry, client, refreshToken, { values?, fetch? })` and `revokeGrant` take the connection's `values`, and a
 URL that names a value not given is `template_missing` before anything is sent. An entry whose OAuth 2 URLs, base or
 `http.bases` mix a typed host with any other host is refused with `TypeError('oauth_host_split: <entry id>')` before
-anything is built or sent: a token goes only to the host that issued it. `refreshGrant` and `revokeGrant` default
-`fetch` to `guardedFetch` for an entry whose host is typed, else the global one. No OAuth 2 request follows a
+anything is built or sent: a token goes only to the host that issued it. `exchangeCode`, `refreshGrant` and
+`revokeGrant` default `fetch` to `guardedFetch` for an entry whose host is typed, else the global one. No OAuth 2 request follows a
 redirect: a 3xx is `request_failed`.
 
 `refreshGrant` posts to the entry's `refreshUrl` when it names one (Figma), else to `tokenUrl`; a refresh answer

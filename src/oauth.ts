@@ -152,9 +152,8 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
     expiresAt: answer.expires_in === undefined ? null : new Date(Date.now() + answer.expires_in * 1000).toISOString() };
 }
 
-export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
-  code: string; redirectUri: string; codeVerifier?: string | undefined; values?: Values; fetch: typeof fetch;
-}): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
+export async function exchangeCode(entry: Entry, client: OAuthClient, input: { code: string; redirectUri: string;
+  codeVerifier?: string | undefined } & Sent): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
   const c = context(entry, client, input);
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
   const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });

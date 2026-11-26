@@ -8,7 +8,7 @@ import { defineProvider } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { blockedAddress, guardedFetch, guardedLookup } from './guard.js';
 import { createClient } from './http.js';
-import { refreshGrant, revokeGrant } from './oauth.js';
+import { exchangeCode, refreshGrant, revokeGrant } from './oauth.js';
 
 // No test here queries DNS or leaves this machine. `node:dns` answers from `answers`. `node:https` is the real one,
 // through a seam in this file only, for two names: `stand-in.test` is a TLS-free stand-in over `node:http` that dials
@@ -294,7 +294,7 @@ describe('guardedFetch is fetch for what the engine sends', () => {
   });
 });
 
-test("an OAuth 2 refresh and revoke on a typed host go through the guard when the app passes no fetch: a name resolving to a private address is refused", async () => {
+test("an OAuth 2 exchange, refresh and revoke on a typed host go through the guard when the app passes no fetch: a name resolving to a private address is refused", async () => {
   const typed = defineProvider({ id: 'typed', name: 'Typed', fields: [{ name: 'host', title: 'Host' }],
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/access_token' }],
     scopes: { default: [] }, revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] }, http: { baseUrl: 'https://{host}/api/v4', host: '*' } });
@@ -304,11 +304,13 @@ test("an OAuth 2 refresh and revoke on a typed host go through the guard when th
   vi.stubGlobal('fetch', unguarded);
   try {
     const client = { clientId: 'id', clientSecret: 'private-client-secret' };
+    await expect(exchangeCode(typed, client, { code: 'c', redirectUri: 'https://app.test/cb', codeVerifier: 'v'.repeat(43),
+      values: { host: 'chat.k.test' } })).rejects.toEqual(blocked);
     await expect(refreshGrant(typed, client, 'r', { values: { host: 'chat.k.test' } })).rejects.toEqual(blocked);
     await expect(revokeGrant(typed, { refreshToken: 'r', client, values: { host: 'chat.k.test' } })).rejects.toEqual(blocked);
   } finally { vi.unstubAllGlobals(); }
   expect(unguarded).not.toHaveBeenCalled();
-  expect(lookup.mock.calls.map(([host]) => host)).toEqual(['chat.k.test', 'chat.k.test']);
+  expect(lookup.mock.calls.map(([host]) => host)).toEqual(['chat.k.test', 'chat.k.test', 'chat.k.test']);
   expect(seen.bytes).toBe(0);
 });
 
