@@ -1,10 +1,11 @@
 import { defineProvider } from '../catalogue.js';
 
-/** ClickUp: a personal API token, bare in `Authorization`. 100 requests a minute per token on the Free, Unlimited and
- * Business plans, a 429 past it (https://developer.clickup.com/docs/rate-limits). A webhook delivery is signed with the
- * webhook's secret: the hex HMAC-SHA256 of the body in `X-Signature` (https://developer.clickup.com/docs/webhooksignature). */
-const task = { id: 'string', name: 'string', status: { status: 'string' }, url: 'string', date_created: 'string',
-  date_updated: 'string', 'parent?': 'string', list: { id: 'string' } } as const;
+/** ClickUp: a personal API token, bare in `Authorization`. 100 requests a minute per token on FreeForever, Unlimited and
+ * Business, a 429 past it (https://developer.clickup.com/docs/rate-limits). A webhook is signed: hex HMAC-SHA256 of the
+ * body in `X-Signature` (https://developer.clickup.com/docs/webhooksignature). The error code is `ECODE`
+ * (https://developer.clickup.com/reference/movefolder). Get Tasks leaves out subtasks and closed tasks unless asked. */
+const task = { id: 'string', 'name?': 'string', 'status?': { 'status?': 'string' }, 'url?': 'string', 'date_created?': 'string',
+  'date_updated?': 'string', 'parent?': 'string', 'list?': { 'id?': 'string' } } as const;
 const listId = { in: 'path', type: 'number', required: true } as const;
 const taskId = { in: 'path', type: 'string', required: true } as const;
 const fields = { name: { in: 'body', type: 'string' }, status: { in: 'body', type: 'string' } } as const;
@@ -17,10 +18,12 @@ export const clickup = defineProvider({
   http: { baseUrl: 'https://api.clickup.com/api/v2', minIntervalMs: 600, retry: {} },
   identify: { request: { path: '/user' }, id: 'user.id', name: ['user.username', 'user.email'] },
   paging: { page: { kind: 'page', send: { query: 'page' }, list: 'tasks', zeroBased: true } },
+  errors: { detail: 'ECODE' },
   webhook: { kind: 'hmac', header: 'x-signature' },
   operations: {
     'tasks.list': { docs: 'https://developer.clickup.com/reference/gettasks', path: '/list/{list_id}/task', paging: 'page',
-      params: { list_id: listId }, records: 'tasks', result: { tasks: [task] } },
+      params: { list_id: listId, subtasks: { in: 'query', type: 'boolean' }, include_closed: { in: 'query', type: 'boolean' } },
+      records: 'tasks', result: { tasks: [task] } },
     'tasks.get': { docs: 'https://developer.clickup.com/reference/gettask', path: '/task/{task_id}', params: { task_id: taskId },
       result: task },
     'tasks.create': { docs: 'https://developer.clickup.com/reference/createtask', method: 'POST', path: '/list/{list_id}/task',
