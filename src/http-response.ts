@@ -48,13 +48,13 @@ export function codeOf(errors: Errors | undefined, body: unknown): string | unde
 }
 
 /** The wait `wait` reads from an answer, in milliseconds from `now` (an instant already past is 0); `retryAfterMs`
- * validates it. The one reader of a declared wait, for the retry and for the error. */
+ * checks its range, in milliseconds. The one reader of a declared wait, for the retry and for the error. */
 export function waitOf(wait: Wait | undefined, { headers, body }: Pick<Answer, 'headers' | 'body'>, now: number): number | undefined {
   if (wait === undefined) return undefined;
   // A header holds a positive decimal number (the longest of those present counts), a body a number from 0.
   const read = 'path' in wait ? [readPath(body, wait.path)] : [wait.header].flat().map(name => headers.get(name) ?? '')
     .filter(text => /^\d+(?:\.\d+)?$/u.test(text)).map(Number).filter(value => value > 0);
-  const values = read.filter((value): value is number => typeof value === 'number' && value >= 0 && value <= Number.MAX_SAFE_INTEGER);
+  const values = read.filter((value): value is number => typeof value === 'number' && value >= 0);
   if (values.length === 0) return undefined;
   const ms = Math.max(...values) * (wait.unit === 's' || wait.unit === 'epochSeconds' ? 1000 : 1);
   return wait.unit === 's' || wait.unit === 'ms' ? ms : Math.max(0, ms - now);

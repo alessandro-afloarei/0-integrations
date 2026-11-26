@@ -67,9 +67,17 @@ test("the body's epoch wait, after Retry-After, read from the first error only",
   expect(fail(graph, 200, limited(NOW + 4000))).toMatchObject({ retryAfterMs: 4000 });
   expect(fail(graph, 200, limited(NOW + 4000), { 'Retry-After': '2' })).toMatchObject({ retryAfterMs: 2000 });
   expect(fail(graph, 200, { errors: [{ code: 'denied' }, { wait: NOW + 4000 }] })).toMatchObject({ retryAfterMs: null });
-  for (const [wait, ms] of [[NOW - 1, null], [NOW, null], [NOW + 0.5, 1], [String(NOW), null], [-1, null], [Number.MAX_SAFE_INTEGER + 1, null]] as const) {
+  for (const [wait, ms] of [[NOW - 1, null], [NOW, null], [NOW + 0.5, 1], [String(NOW), null], [-1, null]] as const) {
     expect(fail(graph, 200, limited(wait))).toMatchObject({ retryAfterMs: ms });
   }
+});
+
+test('a wait too large is measured in milliseconds: carried while it is a safe number of them, else none', () => {
+  // An instant past the safe integers in its own unit can still be a safe number of milliseconds away.
+  const far = Number.MAX_SAFE_INTEGER + 1;
+  expect(fail(graph, 200, { errors: [{ code: 'slow_down', wait: far }] })).toMatchObject({ retryAfterMs: far - NOW });
+  const reset: Rules = { http: { ...BASE, retry: { wait: { header: 'ratelimit-reset', unit: 's' } } } };
+  expect(fail(reset, 429, {}, { 'ratelimit-reset': String(Number.MAX_SAFE_INTEGER) })).toMatchObject({ retryAfterMs: null });
 });
 
 /** A rate limit without a 429: by a header with a reset, by a message, by the provider's code. */

@@ -104,7 +104,7 @@ describe('Fireflies retry hints', () => {
   });
 
   test.each([[NOW - 1, null], [NOW, null], [NOW + 0.5, 1], ['1720651545066', null], [null, null],
-    [-1, null], [Number.MAX_SAFE_INTEGER + 1, null]])('validates the epoch-ms timestamp %j before deriving its wait', async (timestamp, retryAfterMs) => {
+    [-1, null], [Number.MAX_SAFE_INTEGER + 1, Number.MAX_SAFE_INTEGER + 1 - NOW]])('validates the epoch-ms timestamp %j before deriving its wait', async (timestamp, retryAfterMs) => {
     const fake = scripted(() => Response.json({ errors: [{ extensions: { code: 'too_many_requests', metadata: { retryAfter: timestamp } } }] }));
     await expect(firefliesClient({ apiKey: 'fixture-key', fetch: fake.fetch }).user()).rejects.toMatchObject({ retryAfterMs });
   });
