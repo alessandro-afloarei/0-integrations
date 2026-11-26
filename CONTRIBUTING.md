@@ -30,9 +30,21 @@ one takes five steps:
    OAuth 2 grant alone, `src/catalogue/figma.ts` (drop the skeleton's secret field: the grant is the secret); a token
    request, `src/catalogue/zoom.ts`. Write every header name
    in lowercase (`x-api-key`). Pick one or two `categories`, the main one first; declare the operations of that
-   category's template, each with its own `docs` page; follow the result-shape rules. A fact you cannot cite from the
-   provider's page stays out. The design's [Breadth entries](docs/design/entries-and-engine.md#breadth-entries) gives
-   the templates and the rules.
+   category's template, each with its own `docs` page (`search` beside `list` when the docs give a search endpoint);
+   follow the result-shape rules. A fact you cannot cite from the provider's page stays out. In short:
+   - a result key is required only when the docs explicitly mark it required (a `required` list, words saying so, a
+     non-null `!` in a published GraphQL schema), or it is the record's id; a non-nullable type or an example value is
+     not enough; the envelope a list is read from stays required;
+   - a parameter the docs' prose calls required is required;
+   - every header the docs say each request needs is in `http.headers`, `content-type` included;
+   - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
+     own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
+   - `revoke` holds only what the docs state; when either token is accepted and the docs do not say which ends the
+     authorization, the refresh token goes first;
+   - the key's `help` names the credential the operations need (a token type, scopes, an access level, a role, an
+     expiry default) when the docs make it matter.
+
+   The design's [Breadth entries](docs/design/entries-and-engine.md#breadth-entries) gives the templates and the rules.
 3. `pnpm providers`, which writes the entry's row into [`docs/providers.md`](docs/providers.md), then `pnpm check`.
    The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake derived from it
    (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry has an identify

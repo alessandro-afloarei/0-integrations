@@ -546,17 +546,22 @@ out: a smaller true entry beats a larger guessed one. What the engine cannot say
 wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
 
 **Sign-in.** Every sign-in the provider documents, in one pass: its self-serve OAuth 2 authorization code grant
-(`oauth2`) first, when it shares the key's base, `identify` and plain fields, then its personal key or token (`key`, its
-`send` as the docs show it); a documented one-request token (`token`) takes the key's place when there is no key.
-[Sign-in alternatives](#sign-in-alternatives) gives the rules.
+(`oauth2`) first, when it reaches the key's base and `identify` and reads no plain field, then its personal key or token
+(`key`, its `send` as the docs show it); a documented one-request token (`token`) takes the key's place when there is
+no key. [Sign-in alternatives](#sign-in-alternatives) gives the rules. When the provider's own rules say an app for
+other people must use OAuth, the key's `help` says the key is for the person's own account, and a provider whose OAuth
+2 cannot be declared yet is not declared with a key alone: it goes on the waiting list.
 
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
-  credential or the base needs. A host the person types is `host` with `http.host: '*'`; a documented list of regional
+  credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
+  scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host` with `http.host: '*'`; a documented list of regional
   hosts on one domain is `choices` with `http.host: '*.<domain>'`.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
+- `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
+  authorization, the refresh token goes first.
 - `identify`: the documented request that answers who the credential is, `id` its id path, `name` its display name,
   then its email. With none, a credential check with no `id` on the cheapest read the credential can always make.
-- `http`: `headers` only for one the docs require on every request; `retry: {}` when the docs state a 429 or a
+- `http`: `headers` for every header the docs say each request needs, `content-type` included, and no other; `retry: {}` when the docs state a 429 or a
   `Retry-After`, with `maxWaitMs` and `defaultWaitMs` only from stated numbers; `minIntervalMs` only from a stated
   per-credential limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
   limit answer.
@@ -568,7 +573,8 @@ wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-li
 **Operations: the category's template, no more.** An entry declares each operation of its main category's template
 that the provider documents as one plain request, and nothing else. Its id is `<noun>.<verb>`: the noun the provider's
 own plural in lowerCamelCase (`tasks`, `cards`, `pullRequests`), the verb one of `list`, `get`, `create`, `update` and
-`search` (`search` in place of `list` only when the provider lists that object only by search). No `delete`.
+`search` (`search` beside `list` when the docs give the object a search endpoint, in its place when that is the only
+way to list it). No `delete`.
 
 | Category | Template |
 |---|---|
@@ -582,12 +588,14 @@ A category gains its template with the batch that first writes it.
 
 **Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
 its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record
-(JSON:API's `attributes` counts as one). A key is required only where the docs mark it required or never null; every
-other ends in `?`. A type the docs do not state, a polymorphic value (rich text, custom fields) and a map keyed by ids
+(JSON:API's `attributes` counts as one). A key is required only when the docs explicitly mark it required (a
+`required` list, words saying so, a non-null `!` in a published GraphQL schema), or it is the record's id; a
+non-nullable type or an example value is not enough. Every other key ends in `?`; the envelope a list is read from stays
+required. A type the docs do not state, a polymorphic value (rich text, custom fields) and a map keyed by ids
 are `'unknown'`. A `get`, `create` and `update` declare the same record as the list's element. An answer the docs show
 only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
-say are writable; `required` and `enum` only where the docs say so.
+say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
 
 ## The engine
 
