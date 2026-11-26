@@ -1,7 +1,7 @@
 # Providers
 
-Generated from `src/catalogue/` by `pnpm providers`: do not edit. 28 providers: 28 declared, 0 recorded;
-3 typed operations; webhooks: ed25519 1, hmac 5, standard 1, token 1. What waits is in the [waiting list](waiting-list.md).
+Generated from `src/catalogue/` by `pnpm providers`: do not edit. 30 providers: 30 declared, 0 recorded;
+11 typed operations; webhooks: ed25519 1, hmac 6, standard 1, token 1. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -9,6 +9,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 28 providers: 
 | [Apollo](https://docs.apollo.io/reference/authentication) | sales | key | — | — | declared |
 | [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | key | — | — | declared |
 | [Breakcold](https://docs.breakcold.com/api/authentication) | crm | key | — | hmac | declared |
+| [ClickUp](https://developer.clickup.com/docs/authentication) | tasks | key | tasks.list, tasks.get, tasks.create, tasks.update, lists.list | hmac | declared |
 | [Discord](https://docs.discord.com/developers/reference) | chat | key | — | ed25519 | declared |
 | [Exa](https://docs.exa.ai/reference/search) | search | key | — | — | declared |
 | [Fathom](https://developers.fathom.ai/quickstart) | meetings | key | — | — | declared |
@@ -27,6 +28,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 28 providers: 
 | [Microsoft](https://learn.microsoft.com/en-us/graph/auth-v2-user) | mail, calendar | OAuth 2 | — | — | declared |
 | [Notion](https://developers.notion.com/reference/authentication) | docs | key | pages.markdown | — | declared |
 | [PayPal](https://developer.paypal.com/api/rest/authentication/) | finance | token | — | — | declared |
+| [Rollbar](https://docs.rollbar.com/reference/getting-started-1) | monitoring | key | items.list, items.get, items.update | — | declared |
 | [SerpApi](https://serpapi.com/account-api) | search | key | — | — | declared |
 | [Slack](https://docs.slack.dev/authentication/installing-with-oauth) | chat | OAuth 2 | — | hmac | declared |
 | [Stripe](https://docs.stripe.com/api/authentication) | finance | key | — | hmac | declared |

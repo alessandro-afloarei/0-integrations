@@ -111,13 +111,13 @@ read, as `TypeError('url_outside_origin')` when it would change the host and `Ty
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
-  A cursor that comes back is `invalid_response` (`cursor_repeated`), and a next link outside the base's path is
-  `invalid_response` (`next_link_foreign`).
+  A cursor that comes back is `invalid_response` (`cursor_repeated`), so is a numbered page that repeats the one
+  before (`page_repeated`), and a next link outside the base's path is `invalid_response` (`next_link_foreign`).
 
 ## Operations
 
-An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pages.markdown(args, { signal })`. Three
-entries declare operations today: notion `pages.markdown`, fireflies `user` and aircall `calls.transcript`.
+An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pages.markdown(args, { signal })`.
+[providers](../providers.md) lists each entry's operations.
 
 - Each argument is checked by its declared type before anything is sent: `TypeError('param_missing: <name>')` or
   `TypeError('param_invalid: <name>')`. An argument that is not declared, or is `undefined`, is not sent. An operation

@@ -206,7 +206,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
 `Operation.base`, placeholders in `identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs`
-reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`, and `Where.variables`.
+reset unit, the paging kinds `offset` and `linkHeader`, `Size`, and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -362,7 +362,7 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
   | { kind: 'offset'; send: Where; size: Size }
-  | { kind: 'page'; send: Where; size?: Size; more?: Path }
+  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
   | { kind: 'linkHeader'; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
 type Where = { query: string } | { body: string } | { variables: string };
@@ -374,7 +374,11 @@ The engine owns the stop rules, and entries hold no stop expressions:
 - `cursor`: with `more`, stop when it is falsy; a truthy `more` with a blank cursor is `invalid_response`
   (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`.
 - `offset`: sends 0 first and stops on a page shorter than the size.
-- `page`: sends nothing on the first request, then 2, 3 and so on. It stops on a falsy `more`, or an empty page.
+- `page`: sends nothing on the first request, then 2, 3 and so on (with `zeroBased`, 1, 2 and so on), in `send`'s
+  place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
+  `list` (the answer itself when `list` is absent) is empty or not a list, a missing path included. A page whose list
+  equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
+  number would otherwise never end. `size` arrives later.
 - `linkHeader` follows `rel="next"`. `nextUrl` follows a full URL in the body. Both stay on the provider's origin, and
   `nextUrl` under `pathPrefix`, counted from the base URL's path. A link that leaves is `invalid_response`.
 

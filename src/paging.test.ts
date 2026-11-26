@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { defineProvider } from './catalogue.js';
-import { createClient } from './http.js';
+import { defineProvider, type Paging } from './catalogue.js';
+import { createClient, type RequestOptions } from './http.js';
 import { nextCursor, nextLink, ownPath, walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
 
@@ -87,5 +87,55 @@ test("a next link that leaves the base's origin or path is an error, never a req
     await expect(walk(createClient(acme, { baseUrl, token, fetch: fake.fetch }), { kind: 'nextUrl', next: 'next', pathPrefix }, '/me/x').next())
       .rejects.toMatchObject({ code: 'invalid_response', detail: 'next_link_foreign' });
     expect(fake.calls.map(call => call.url)).toEqual([`${baseUrl}/me/x`]);
+  }
+});
+
+/** Every request's URL and every page a page-number walk yields, or the error it ends on. */
+async function pageWalk(shape: Paging, answers: readonly unknown[], options: RequestOptions = {}) {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(...answers.map(answer => () => Response.json(answer))) }]);
+  const pages: unknown[] = [];
+  let error: unknown;
+  try { for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), shape, '/items', options)) pages.push(page); } catch (caught) { error = caught; }
+  return { urls: fake.calls.map(call => call.url), bodies: fake.calls.map(call => call.body), pages, error };
+}
+
+test('page: the first request sends no page, then 2, 3; an empty list ends the walk', async () => {
+  const walked = await pageWalk({ kind: 'page', send: { query: 'page' }, list: 'result.items' },
+    [{ result: { items: [1] } }, { result: { items: [2] } }, { result: { items: [] } }], { query: { status: 'active' } });
+  expect(walked.urls).toEqual(['https://api.acme.test/items?status=active', 'https://api.acme.test/items?status=active&page=2',
+    'https://api.acme.test/items?status=active&page=3']);
+  expect(walked.pages).toEqual([{ result: { items: [1] } }, { result: { items: [2] } }, { result: { items: [] } }]);
+  expect(walked.error).toBeUndefined();
+});
+
+test('page: zeroBased sends nothing, then 1; a body page is a number', async () => {
+  const zero = await pageWalk({ kind: 'page', send: { query: 'page' }, list: 'tasks', zeroBased: true }, [{ tasks: [1] }, { tasks: [] }]);
+  expect(zero.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?page=1']);
+  const body = await pageWalk({ kind: 'page', send: { body: 'page' } }, [[1], []], { method: 'POST', json: { q: 'x' } });
+  expect(body.bodies).toEqual(['{"q":"x"}', '{"q":"x","page":2}']);
+});
+
+test('page: a falsy more ends the walk before an empty page', async () => {
+  const walked = await pageWalk({ kind: 'page', send: { query: 'page' }, list: 'data', more: 'has_more' },
+    [{ data: [1], has_more: true }, { data: [2], has_more: false }, { data: [] }]);
+  expect(walked.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?page=2']);
+  expect(walked.error).toBeUndefined();
+});
+
+test('page: a provider that ignores the page number is page_repeated, and the repeat is never yielded', async () => {
+  const walked = await pageWalk({ kind: 'page', send: { query: 'page' }, list: 'data', more: 'has_more' },
+    [{ data: [1], has_more: true }]);
+  expect(walked.error).toMatchObject({ code: 'invalid_response', detail: 'page_repeated' });
+  expect(walked.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?page=2']);
+  expect(walked.pages).toEqual([{ data: [1], has_more: true }]);
+});
+
+test('page: a missing list path, or an answer that is not a list, ends the walk', async () => {
+  for (const [shape, answer] of [[{ kind: 'page', send: { query: 'page' }, list: 'result.items' }, { result: {} }],
+    [{ kind: 'page', send: { query: 'page' } }, { items: [1] }], [{ kind: 'page', send: { query: 'page' }, list: 'items' }, { items: 'x' }]] as const) {
+    const walked = await pageWalk(shape, [answer, answer]);
+    expect(walked.urls).toEqual(['https://api.acme.test/items']);
+    expect(walked.pages).toEqual([answer]);
+    expect(walked.error).toBeUndefined();
   }
 });

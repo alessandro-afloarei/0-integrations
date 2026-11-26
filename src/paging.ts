@@ -6,6 +6,7 @@ import { readPath } from './rules.js';
 
 type Cursor = Extract<Paging, { kind: 'cursor' }>;
 type NextUrl = Extract<Paging, { kind: 'nextUrl' }>;
+type PageNumber = Extract<Paging, { kind: 'page' }>;
 
 /** The next cursor, or null on the last page: with `more`, a falsy one ends the list and a truthy one needs a cursor;
  * without it, a blank cursor ends the list. */
@@ -40,10 +41,25 @@ export function nextLink(shape: NextUrl, baseUrl: string, answer: unknown): stri
   return path;
 }
 
-function withCursor(where: Where, options: RequestOptions, cursor: string): RequestOptions {
-  if ('query' in where) return { ...options, query: { ...options.query, [where.query]: cursor } };
+function withCursor(where: Where, options: RequestOptions, cursor: string | number): RequestOptions {
+  if ('query' in where) return { ...options, query: { ...options.query, [where.query]: String(cursor) } };
   const body = typeof options.json === 'object' && options.json !== null ? options.json : {};
   return { ...options, json: { ...body, [where.body]: cursor } };
+}
+
+/** A page-number list's loader: no number first, then each next one, until `more` is falsy or the list is empty or no
+ * list. A list equal to the page before's is `page_repeated`: the provider ignores the number, and would never end. */
+function numbered(http: HttpClient, shape: PageNumber, path: string, options: RequestOptions) {
+  let previous: string | undefined;
+  return async (page: string | undefined) => {
+    const answer = await http.json(path, page === undefined ? options : withCursor(shape.send, options, Number(page)));
+    const list = shape.list === undefined ? answer : readPath(answer, shape.list);
+    const seen = JSON.stringify(list);
+    if (previous !== undefined && seen === previous) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
+    previous = seen;
+    const last = !Array.isArray(list) || list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
+    return { items: [answer], skipped: [], cursor: last ? null : String(Number(page ?? (shape.zeroBased ? 0 : 1)) + 1) };
+  };
 }
 
 /** Every page's answer, in order, until the shape names no next page; a cursor that comes back is `cursor_repeated`. */
@@ -53,6 +69,7 @@ export async function* walk(http: HttpClient, shape: Paging, path: string, optio
       const answer = await http.json(path, cursor === undefined ? options : withCursor(shape.send, options, cursor));
       return { items: [answer], skipped: [], cursor: nextCursor(shape, answer) };
     }
+    : shape.kind === 'page' ? numbered(http, shape, path, options)
     : async (link: string | undefined) => {
       const answer = await http.json(link ?? path, link === undefined ? options : { ...options, query: {} });
       return { items: [answer], skipped: [], cursor: nextLink(shape, http.baseUrl, answer) };
