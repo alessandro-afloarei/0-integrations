@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { lookupNames } from './account.js';
-import type { Entry, Value, Values } from './catalogue.js';
+import type { Entry, Operation, Value, Values } from './catalogue.js';
 import type { WithLock } from './credentials.js';
 import { callBase, credentialOf, filledBase } from './http.js';
 import { requestToken } from './oauth.js';
@@ -148,11 +148,20 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
   const routes: [number[], Route][] = [];
   // GraphQL posts every query to its base; the app's answers come first, so an operation sharing identify's request answers it.
   const graphql: [at: string, query: string, answer: Answer][] = [];
+  const paths: [method: string, path: string, op: Operation, answer: Answer][] = [];
   for (const [id, op] of Object.entries(entry.operations ?? {})) {
     const answer = operations[id];
     if (answer === undefined) continue;
     if ('graphql' in op) graphql.push([base(), op.graphql, answer]);
-    else routes.push(route(op.method ?? 'GET', base(), op.path, answer));
+    else paths.push([op.method ?? 'GET', op.path, op, answer]);
+  }
+  // One route per method and path: of its operations, the one whose required query and body parameters the call all carries, the most first.
+  for (const [method, path] of paths.filter(([method, path], at) => paths.findIndex(([m, p]) => m === method && p === path) === at)) {
+    routes.push(route(method, base(), path, call => paths.filter(([m, p]) => m === method && p === path).map(([, , op, answer]) => {
+      const required = Object.entries(op.params ?? {}).filter(([, param]) => param.required && param.in !== 'path');
+      const carried = required.every(([name, param]) => (param.in === 'query' ? Object.hasOwn(call.query, name) : readPath(call.body, name) !== undefined));
+      return [carried ? required.length : -1, answer] as const;
+    }).reduce((best, next) => (next[0] > best[0] ? next : best))[1](call)));
   }
   const { request: identify, id, name } = entry.identify ?? {};
   if (identify !== undefined) {

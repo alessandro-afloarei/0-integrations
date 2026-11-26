@@ -3,7 +3,9 @@ import { defineProvider, signInWith } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
+import { folk } from './catalogue/folk.js';
 import { gitlab as gitlabEntry } from './catalogue/gitlab.js';
+import { lemlist } from './catalogue/lemlist.js';
 import { metabase } from './catalogue/metabase.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
@@ -250,6 +252,24 @@ describe('fakeProvider', () => {
   test('a literal path segment that is not ASCII matches its percent-encoded request', async () => {
     const { fetch } = fakeFetch(fakeProvider(items, { key: 'k', operations: { 'menu.get': call => call.path } }));
     await expect(client(items, { token: 'k', fetch }).menu.get({ id: 'crème' })).resolves.toEqual({ id: 'crème' });
+  });
+
+  test("folk's list and search share a route: the search answers a call carrying its required filter", async () => {
+    const person = (id: string) => ({ id, fullName: 'A', firstName: 'A', lastName: 'B', emails: [], companies: [] });
+    const { fetch } = fakeFetch(fakeProvider(folk, { key: 'k', operations: {
+      'people.list': () => ({ data: { items: [person('listed')] } }), 'people.search': () => ({ data: { items: [person('found')] } }) } }));
+    const api = client(folk, { token: 'k', fetch });
+    const ids = async (people: AsyncIterable<{ id: string }>) => { const seen = []; for await (const { id } of people) seen.push(id); return seen; };
+    expect(await ids(api.people.list())).toEqual(['listed']);
+    expect(await ids(api.people.search({ 'filter[emails][eq]': 'a@example.test' }))).toEqual(['found']);
+  });
+
+  test("lemlist's create and update share a route: the update answers a body carrying its required contactId", async () => {
+    const { fetch } = fakeFetch(fakeProvider(lemlist, { key: 'k', operations: {
+      'contacts.create': () => ({ data: { _id: 'created' } }), 'contacts.update': () => ({ data: { _id: 'updated' } }) } }));
+    const api = client(lemlist, { token: 'k', fetch });
+    await expect(api.contacts.create({ email: 'a@example.test' })).resolves.toEqual({ data: { _id: 'created' } });
+    await expect(api.contacts.update({ contactId: 'c1' })).resolves.toEqual({ data: { _id: 'updated' } });
   });
 
   test("a `tokenAnswer.*` kit value never replaces the token or `expires_in`", async () => {
