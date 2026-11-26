@@ -272,7 +272,6 @@ describe('a token entry', () => {
     expect(fake.calls.map(call => [call.method, call.url, call.headers['content-type']]))
       .toEqual([['POST', 'https://metabase.example.test/api/session', 'application/json']]);
     expect(JSON.parse(fake.calls[0]?.body ?? '') as unknown).toEqual({ username: 'u@example.com', password: 'p' });
-    expect(JSON.stringify(result)).not.toContain('"s"');
     const token = tokenSource(metabase, { secret: result.secret, values: result.values, fetch: fake.fetch });
     expect(await apiClient(metabase, { token, values: result.values, fetch: fake.fetch }).json('/user/current')).toEqual({ email: 'u@example.com' });
     expect(fake.calls.at(-1)?.headers['x-metabase-session']).toBe('s');

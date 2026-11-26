@@ -43,8 +43,8 @@ a new session; each process signs in its own).
 pass the connection's, as `finishConnect` returned them, since neither `tokenSource` nor `client` applies a field's
 `default` (PayPal's `apiHost`).
 The source requests a token on its first call and keeps it until 60 seconds before the answer's `expires_in` runs out
-(an answer with no positive `expires_in`, or one too large to give a time, keeps it until it is refused; a caller that
-requested a token, or joined that request, gets it however short its life). Concurrent calls share one request; a failed
+(an answer with no positive `expires_in` keeps it until it is refused; a caller that requested a token, or joined that
+request, gets it however short its life). Concurrent calls share one request; a failed
 request is not kept, so the next call tries again. When the API refuses the token with a 401, the client passes it back
 and the source requests a new one.
 

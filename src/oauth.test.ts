@@ -493,11 +493,6 @@ test('a token that lives 60 seconds or less is used by the caller that requested
   expect(fake.calls).toHaveLength(2);
 });
 
-test.each([1e308, 1e20, Number.MAX_VALUE])('expires_in %j gives no safe time: no expiry', async expiresIn => {
-  const fake = endpoint({ access_token: 'at', expires_in: expiresIn });
-  expect(await requestToken(zoom, zoomInput(fake.fetch))).toMatchObject({ token: 'at', expiresAt: null });
-});
-
 /** An OAuth 2 entry whose token, refresh and revoke URLs can each be replaced. */
 const urls = (part: { tokenUrl?: string; refreshUrl?: string; revoke?: string }) => defineProvider({ id: 'userinfo', name: 'Userinfo',
   http: { baseUrl: 'https://api.auth.test' }, revoke: { url: part.revoke ?? 'https://auth.test/revoke', token: ['refresh'] },
@@ -511,4 +506,13 @@ test.each([
   const fetch = vi.fn<typeof globalThis.fetch>();
   await expect(run(fetch)).rejects.toThrow(new TypeError('base_host_refused: userinfo'));
   expect(fetch).not.toHaveBeenCalled();
+});
+
+test("an app's getter-backed secret is read once: the value redacted is the value sent", async () => {
+  let reads = 0;
+  const secret = { get clientSecret() { reads += 1; return `secret${String(reads)}`; } };
+  const fake = endpoint({ error: 'secret1' }, 400);
+  await expect(requestToken(zoom, { secret, values: zoomValues, fetch: fake.fetch })).rejects.toMatchObject({ code: 'rejected', detail: null });
+  expect(reads).toBe(1);
+  expect(fake.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('cid:secret1').toString('base64')}`);
 });
