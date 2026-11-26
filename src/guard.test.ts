@@ -1,4 +1,6 @@
 import { once } from 'node:events';
+import type { AgentOptions } from 'node:https';
+import { createRequire } from 'node:module';
 import { createServer as createHttpServer, type IncomingMessage, type RequestOptions, type ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -24,7 +26,7 @@ vi.mock('node:dns', () => ({ lookup }));
 vi.mock('node:https', async () => {
   const https = await vi.importActual<typeof import('node:https')>('node:https');
   const http = await vi.importActual<typeof import('node:http')>('node:http');
-  return { request(url: URL, options: RequestOptions) {
+  return { Agent: https.Agent, request(url: URL, options: RequestOptions) {
     if (url.hostname === 'rebind.test') {
       return https.request(url, { ...options, lookup: (_host, all, callback) => {
         if (all.all === true) callback(null, [{ address: '127.0.0.1', family: 4 }]);
@@ -32,7 +34,7 @@ vi.mock('node:https', async () => {
       } });
     }
     if (url.hostname !== 'stand-in.test') return https.request(url, options);
-    const outgoing = http.request({ ...options, host: '127.0.0.1', port: url.port, path: url.pathname + url.search });
+    const outgoing = http.request({ ...options, agent: undefined, host: '127.0.0.1', port: url.port, path: url.pathname + url.search });
     outgoing.on('socket', socket => Object.defineProperty(socket, 'remoteAddress', { get: () => '8.8.8.8', configurable: true }));
     return outgoing;
   } };
@@ -105,6 +107,32 @@ test('a name rebound after the lookup is refused on connect, before a byte is wr
   await settled();
   expect(seen.connections).toBe(1);
   expect(seen.bytes).toBe(0);
+});
+
+test("a proxy the global agent follows (HTTPS_PROXY with NODE_USE_ENV_PROXY) never sees the guard's requests", async () => {
+  // What `NODE_USE_ENV_PROXY=1` gives at start: a global agent with the proxy environment. The guard has its own agent.
+  const proxied = { connections: 0 };
+  const proxy = createServer(socket => { proxied.connections++; socket.destroy(); });
+  proxy.listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  const https = createRequire(import.meta.url)('node:https') as typeof import('node:https');
+  const global = https.globalAgent;
+  const env = { HTTPS_PROXY: `http://127.0.0.1:${String((proxy.address() as AddressInfo).port)}`, NODE_USE_ENV_PROXY: '1' };
+  vi.stubEnv('HTTPS_PROXY', env.HTTPS_PROXY);
+  vi.stubEnv('NODE_USE_ENV_PROXY', env.NODE_USE_ENV_PROXY);
+  // `proxyEnv` (Node 22.21) is not in the installed @types/node yet.
+  https.globalAgent = new https.Agent({ proxyEnv: env } as AgentOptions);
+  try {
+    answers.set('proxied.test', [{ address: '10.0.0.1', family: 4 }]);
+    await expect(guardedFetch('https://proxied.test/')).rejects.toEqual(blocked);
+    expect(lookup).toHaveBeenCalledOnce();
+    await settled();
+    expect(proxied.connections).toBe(0);
+  } finally {
+    https.globalAgent = global;
+    vi.unstubAllEnvs();
+    proxy.close();
+  }
 });
 
 describe('guardedLookup', () => {
@@ -190,7 +218,13 @@ describe('guardedFetch is fetch for what the engine sends', () => {
     const reader = response.body?.getReader();
     await reader?.read();
     reading.abort();
-    await expect(reader?.read()).rejects.toBeDefined();
+    await expect(reader?.read()).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  test('a body dropped midway fails as the global fetch does: terminated', async () => {
+    answer = (_request, response) => { response.write('{"a":'); setTimeout(() => response.socket?.resetAndDestroy(), 10); };
+    const response = await guardedFetch(`${at}/half`);
+    await expect(response.text()).rejects.toThrow(new TypeError('terminated'));
   });
 
   test('a failed connection is fetch failed, as the global fetch says', async () => {
@@ -217,6 +251,16 @@ describe('guardedFetch is fetch for what the engine sends', () => {
       const http = createClient(standIn(), { token: () => Promise.resolve('t'), fetch: guardedFetch });
       expect(await http.json('/old')).toEqual({ url: '/new', body: '', auth: 'Bearer t' });
       expect(await http.json('/w', { method: 'POST', json: { a: 1 } })).toEqual({ url: '/w', body: '{"a":1}', auth: 'Bearer t' });
+    });
+
+    test('a body dropped midway is unavailable; the body is read after the retry loop, so it is sent once', async () => {
+      answer = (_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' }).write('{"a":');
+        setTimeout(() => response.socket?.resetAndDestroy(), 10);
+      };
+      const http = createClient(standIn(), { token: () => Promise.resolve('t'), fetch: guardedFetch });
+      await expect(http.json('/half')).rejects.toEqual(new ProviderHttpError('unavailable', null));
+      expect(hits).toBe(1);
     });
 
     test('the entry timeout aborts a hanging request as unavailable', async () => {

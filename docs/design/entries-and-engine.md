@@ -182,11 +182,14 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
   never get a TCP connection.
 - It is a minimal `fetch` for what the engine sends: a `Request` or a URL with init, a body read whole, the caller's
   `signal` and the timeout's abort, a redirect answered and never followed (as `redirect: 'manual'`), and the answer's
-  body streamed. It asks for no compression and decodes none.
+  body streamed; a body cut short fails as fetch's does, `TypeError('terminated')`. It asks for no compression and
+  decodes none.
+- It dials through its own agent, never Node's global one, which follows `HTTPS_PROXY` when `NODE_USE_ENV_PROXY=1` or
+  `--use-env-proxy` is set (Node 22.21 and later) and would hand the name to the proxy unchecked. So the guard never
+  sends through a proxy, whatever the environment says.
 - Outside the guard: an app's own `fetch` (a test fake, a wrapper, a proxy). The engine cannot see what it resolves, so
-  only a host that is an address literal is checked. An HTTP proxy is outside it too: `node:https` ignores the proxy
-  variables, and a proxy the app's `fetch` uses dials for it. In production pass `guardedFetch`, or no `fetch`, for an
-  entry whose host is typed.
+  only a host that is an address literal is checked. A proxy that an app's own `fetch` sends through resolves and dials
+  for it, unchecked. In production pass `guardedFetch`, or no `fetch`, for an entry whose host is typed.
 
 #### Arriving later
 

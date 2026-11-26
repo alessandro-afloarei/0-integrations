@@ -1,7 +1,6 @@
 import { lookup, type LookupAddress, type LookupOptions } from 'node:dns';
-import { request as dial } from 'node:https';
+import { Agent, request as dial } from 'node:https';
 import { BlockList, isIP, type LookupFunction } from 'node:net';
-import { Readable } from 'node:stream';
 import { ProviderHttpError } from './errors.js';
 
 /** Addresses a typed host may never reach: unspecified, private, shared, loopback, link-local (the cloud metadata
@@ -22,7 +21,24 @@ export function blockedAddress(ip: string): boolean {
   return family === 0 || BLOCKED.check(ip, family === 4 ? 'ipv4' : 'ipv6');
 }
 
+/** Whether a URL's host is an address literal (brackets stripped) that is blocked; a name is checked when it resolves. */
+export function blockedHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/gu, '');
+  return isIP(host) !== 0 && blockedAddress(host);
+}
+
 const refusal = () => new ProviderHttpError('request_failed', null, 'address_blocked');
+/** The guard's own sockets: the global agent may follow `HTTPS_PROXY` (`NODE_USE_ENV_PROXY`), dialling past the lookup. */
+const agent = new Agent({ keepAlive: true });
+
+/** An answer's body as fetch streams it: a connection lost midway is `TypeError('terminated')`, an abort its reason. */
+async function* bodyOf(incoming: AsyncIterable<Uint8Array>, signal: AbortSignal) {
+  try {
+    yield* incoming;
+  } catch (error) {
+    throw signal.aborted ? signal.reason as Error : new TypeError('terminated', { cause: error });
+  }
+}
 
 /** `dns.lookup` that answers only when every resolved address is allowed: the lookup `guardedFetch` dials with. */
 export function guardedLookup(host: string, options: LookupOptions,
@@ -42,12 +58,11 @@ export const guardedFetch: typeof fetch = async (input, init) => {
   const request = new Request(input, init);
   request.signal.throwIfAborted();
   const url = new URL(request.url);
-  const host = url.hostname.replace(/^\[|\]$/gu, '');
-  if (url.protocol !== 'https:' || (isIP(host) !== 0 && blockedAddress(host))) throw refusal();
+  if (url.protocol !== 'https:' || blockedHost(url.hostname)) throw refusal();
   const body = request.body === null ? undefined : Buffer.from(await request.arrayBuffer());
   return new Promise<Response>((resolve, reject) => {
     const outgoing = dial(url, { method: request.method, headers: Object.fromEntries(request.headers), signal: request.signal,
-      lookup: guardedLookup as LookupFunction });
+      agent, lookup: guardedLookup as LookupFunction });
     // A reused socket is checked again; a new one as it connects, before TLS or the request writes anything.
     outgoing.on('socket', socket => {
       const check = () => { if (blockedAddress(socket.remoteAddress ?? '')) outgoing.destroy(refusal()); };
@@ -65,7 +80,7 @@ export const guardedFetch: typeof fetch = async (input, init) => {
       const empty = request.method === 'HEAD' || [204, 205, 304].includes(status);
       if (empty) incoming.resume();
       try {
-        resolve(new Response(empty ? null : Readable.toWeb(incoming) as ReadableStream<Uint8Array>, { status, headers }));
+        resolve(new Response(empty ? null : ReadableStream.from(bodyOf(incoming, request.signal)), { status, headers }));
       } catch (error) {
         outgoing.destroy();
         reject(new TypeError('fetch failed', { cause: error }));

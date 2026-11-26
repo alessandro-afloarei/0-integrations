@@ -83,7 +83,9 @@ What the guard does not cover:
 - An app's own `fetch` (a test fake, a wrapper, a proxy): the library cannot see what it resolves, so for a typed host
   it refuses only an address literal (`127.0.0.1`, `2130706433`) before the token is read. Pass `guardedFetch`, or no
   `fetch`, in production for an entry whose host is typed.
-- A proxy: `guardedFetch` ignores the proxy variables, and a proxy an app's own `fetch` sends through dials for it.
+- A proxy: `guardedFetch` dials through its own agent and never through a proxy, even when Node is told to follow
+  `HTTPS_PROXY` (`NODE_USE_ENV_PROXY=1`); a proxy an app's own `fetch` sends through resolves and dials for it,
+  unchecked.
 - An app's own `baseUrl`, used as given.
 
 ## Raw calls
