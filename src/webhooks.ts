@@ -22,13 +22,10 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   // Compared as digests of equal length, so the token's length leaks nothing.
   if (scheme.kind === 'token') return timingSafeEqual(sha256(received), sha256(secret));
   const part = scheme.kind === 'hmac' ? scheme.part : undefined;
-  // With `part`, the header is `name=value` pieces split on `,` (Standard Webhooks: `name,value` on spaces); no `=`, no name.
+  // With `part`, the header is `name=value` pieces split on `,` (Standard Webhooks: `name,value` on spaces). A name holds
+  // neither separator (the table's rule), so a piece is that name's exactly when it starts with the name and `assign`.
   const [between, assign] = standard ? [' ', ','] : [',', '='];
-  const pieces = part === undefined ? [] : received.split(between).flatMap(piece => {
-    const at = piece.indexOf(assign);
-    return at < 0 ? [] : [{ name: piece.slice(0, at), value: piece.slice(at + 1) }];
-  });
-  const named = (name: string) => pieces.filter(piece => piece.name === name).map(piece => piece.value);
+  const named = (name: string) => received.split(between).filter(piece => piece.startsWith(name + assign)).map(piece => piece.slice(name.length + 1));
   const stamp = scheme.timestamp;
   const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
   if (stamp) {
@@ -57,8 +54,7 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   const key = standard ? Buffer.from(secret.replace(/^whsec_/u, ''), 'base64') : secret;
   if (key.length === 0) return false;
   const hmac = createHmac(scheme.hash ?? 'sha256', key).update(content);
-  // A part's value is the signature alone: `prefix` is not compared there.
-  const expected = Buffer.from((part === undefined ? scheme.prefix ?? '' : '') + hmac.digest(scheme.encoding ?? 'hex'));
+  const expected = Buffer.from((scheme.prefix ?? '') + hmac.digest(scheme.encoding ?? 'hex'));
   return (part === undefined ? [received] : named(part)).some(candidate => {
     const actual = Buffer.from(candidate);
     return actual.length === expected.length && timingSafeEqual(actual, expected);

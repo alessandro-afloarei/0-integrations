@@ -232,7 +232,7 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
 ```
 
 - `send` says how the credential travels. With no `send` it is `{ header: 'authorization', value: 'Bearer {token}' }`.
-  A `send` with a header and no `value` sends the bare `{token}`.
+  A `send` with a header and no `value` sends the bare `{token}`, so the table refuses a `value` of exactly `'{token}'`.
 - `key` covers API keys, bearer tokens and basic auth: `{ basic: ['{apiId}', '{apiToken}'] }`.
 - `query` sets each parameter, filled, on the URL of every request and every redirect hop, after the caller's query, so
   it replaces a value of the same name. It adds no header, and `beforeRequest` sees the URL without it. A query send
@@ -405,9 +405,12 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`).
 2. `hmac` with `part` (Stripe's `t=…,v1=…,v1=…`): the header is split on `,`, each piece on its first `=`. Every value
    whose name is `part` is a signature, the other pieces (another scheme, debug entries) are ignored, and the request
-   passes when one of them equals the digest. A part's value is the signature alone, so `prefix` is never beside it.
+   passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
+   beside it (an app's own entry with both compares `prefix` and the digest inside the piece), and a `part` name holds
+   no `,`, `=` or whitespace.
 3. `timestamp: { part }` reads the timestamp from the same header's piece of that name; `{timestamp}` in `signed` is
-   that value. `timestamp.part` needs `part`, and `{timestamp}` in `signed` needs a `timestamp`.
+   that value. `timestamp.part` needs `part`, and `{timestamp}` is in `signed` exactly when there is a `timestamp`: a
+   tolerance on a timestamp that is not signed would let a replay pass with a fresh one.
 4. `ed25519` (Discord): the secret is the provider's public key as 64 hex characters; the header holds a
    128-hex-character signature over the filled `signed`. A bad key, a bad signature or a wrong length is `false`.
 5. `token` (Google Calendar push): the header must equal the secret, compared over the SHA-256 digests of both, so its

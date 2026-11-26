@@ -79,13 +79,10 @@ test('the signed template covers method, URL and base64', () => {
   expect(verifyWebhook(config, request({ signature: digest }), secret)).toBe(true);
 });
 
-/** Stripe's header: `t=<timestamp>` and each `v1` signature of `<timestamp>.<body>`, with any other entries after. */
-function stripeSigned(timestamp: string, extra = '', rawBody: Uint8Array = body): WebhookRequest {
-  const digest = createHmac('sha256', secret).update(`${timestamp}.`).update(rawBody).digest('hex');
-  return request({ 'stripe-signature': `t=${timestamp},v1=${digest}${extra}` }, rawBody);
-}
 const t = String(now);
 const stripeDigest = (timestamp: string) => createHmac('sha256', secret).update(`${timestamp}.`).update(body).digest('hex');
+/** Stripe's header: `t=<timestamp>` and the `v1` signature of `<timestamp>.<body>`, with any other entries after. */
+const stripeSigned = (timestamp: string, extra = '') => request({ 'stripe-signature': `t=${timestamp},v1=${stripeDigest(timestamp)}${extra}` });
 
 test("verifies Stripe's `t=…,v1=…` header", () => {
   expect(verifyWebhook(stripe.webhook, stripeSigned(t), secret)).toBe(true);
@@ -109,6 +106,10 @@ test("refuses a Stripe header that is not a fresh `v1` signature of this body", 
   expect(verifyWebhook(stripe.webhook, request({ 'stripe-signature': `t=${t},v1${stripeDigest(t)}` }), secret)).toBe(false);
   // The signed timestamp is the one checked: a fresh `t` beside a signature of an old one fails.
   expect(verifyWebhook(stripe.webhook, request({ 'stripe-signature': `t=${t},v1=${stripeDigest(String(now - 3600))}` }), secret)).toBe(false);
+  // The first `t` is the timestamp: a second one can neither refresh an old one nor sign in its place.
+  const old = String(now - 3600);
+  expect(verifyWebhook(stripe.webhook, request({ 'stripe-signature': `t=${old},t=${t},v1=${stripeDigest(t)}` }), secret)).toBe(false);
+  expect(verifyWebhook(stripe.webhook, request({ 'stripe-signature': `t=${t},t=${old},v1=${stripeDigest(old)}` }), secret)).toBe(false);
 });
 
 test('a signature header over 8 KiB is false before it is parsed', () => {
@@ -126,11 +127,11 @@ test("verifies Intercom's SHA-1 signature", () => {
   expect(verifyWebhook(intercom.webhook, request({ 'x-hub-signature': sha1 }), secret)).toBe(false);
 });
 
-test('with `part`, the comparison ignores `prefix`', () => {
+test("an app's own entry with `prefix` beside `part` (the table refuses it) compares the prefix inside the piece", () => {
   const config: Webhook = { kind: 'hmac', header: 'signature', part: 'v1', prefix: 'sha256=' };
   const digest = createHmac('sha256', secret).update(body).digest('hex');
-  expect(verifyWebhook(config, request({ signature: `v1=${digest}` }), secret)).toBe(true);
-  expect(verifyWebhook(config, request({ signature: `v1=sha256=${digest}` }), secret)).toBe(false);
+  expect(verifyWebhook(config, request({ signature: `v1=sha256=${digest}` }), secret)).toBe(true);
+  expect(verifyWebhook(config, request({ signature: `v1=${digest}` }), secret)).toBe(false);
 });
 
 /** Discord's key pair: the public key as 64 hex characters, as the Developer Portal shows it. */
@@ -152,6 +153,15 @@ test("verifies Discord's Ed25519 signature over the timestamp and the raw body",
   // The timestamp is signed: another one beside the same signature fails.
   const fresh = discordSigned(t).headers.get('x-signature-ed25519') ?? '';
   expect(verifyWebhook(discord.webhook, discordSigned(String(now - 1), fresh), publicKey)).toBe(false);
+});
+
+test('an Ed25519 signature covers the body bytes as sent, not valid UTF-8 included', () => {
+  const invalidUtf8 = Buffer.from([0xff, 0xfe, 0x80]);
+  const signature = sign(null, Buffer.concat([Buffer.from(t), invalidUtf8]), pair.privateKey).toString('hex');
+  const req = { ...discordSigned(t, signature), rawBody: invalidUtf8 };
+  expect(verifyWebhook(discord.webhook, req, publicKey)).toBe(true);
+  // Read as UTF-8 and back, the bytes would change, and so would the signed content.
+  expect(verifyWebhook(discord.webhook, { ...req, rawBody: Buffer.from(invalidUtf8.toString('utf8')) }, publicKey)).toBe(false);
 });
 
 test('refuses an Ed25519 signature that is altered, short, not hex, or under another key, never throwing', () => {
@@ -220,6 +230,17 @@ test('refuses a Standard Webhooks request that is not a fresh `v1` signature of 
   }
   // The 8 KiB cap: a list over it is false before it is parsed, though its last signature is good.
   expect(verifyWebhook(gitlab.webhook, standardSigned(`${'v1a,x '.repeat(1400)}${good}`), standardSecret)).toBe(false);
+});
+
+test('an empty secret accepts nothing, whatever the kind', () => {
+  const unkeyed = createHmac('sha256', '').update(`${t}.`).update(body).digest('hex');
+  expect(verifyWebhook(stripe.webhook, request({ 'stripe-signature': `t=${t},v1=${unkeyed}` }), '')).toBe(false);
+  expect(verifyWebhook(slack.webhook, request({ 'x-slack-signature': `v0=${createHmac('sha256', '').update(`v0:${t}:`).update(body).digest('hex')}`,
+    'x-slack-request-timestamp': t }), '')).toBe(false);
+  expect(verifyWebhook(discord.webhook, discordSigned(t), '')).toBe(false);
+  // A token header is never empty, so an empty channel token matches no request.
+  for (const header of ['', ' ', 'x']) expect(verifyWebhook(google.webhook, request({ 'x-goog-channel-token': header }), '')).toBe(false);
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.alloc(0))), '')).toBe(false);
 });
 
 /** A request with this JSON body: `challengeAnswer` runs after `verifyWebhook`, so no signature is needed here. */

@@ -578,6 +578,13 @@ test("Trello's header carries the plain key and the secret token, and a missing 
   expect(fake.calls).toHaveLength(1);
 });
 
+test("a plain field that would split Trello's header is refused before anything is sent", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await expect(createClient(trello, { token: () => Promise.resolve('tok'), values: { apiKey: 'k\r\nX-Evil: 1' }, fetch: fake.fetch })
+    .json('/members/me')).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(fake.calls).toHaveLength(0);
+});
+
 test("a code that echoes the filled header value or the token is no detail", async () => {
   const echoing = { ...discord, errors: { detail: 'code' } };
   for (const code of ['Bot t', 't']) {
