@@ -81,10 +81,11 @@ export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | re
 /** An operation's argument and where it is sent; `nullable` lets it be sent as JSON `null`. */
 export type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
-/** A named read or write. `kind` defaults from the method; `paging` names an entry's shape, `records` the list in a page. */
+/** A named read or write. `kind` defaults from the method; `paging` names an entry's shape, `records` the list in a page.
+ * `anyOf`: sets of argument paths (`email`, `contact.email`), of which a call gives every one of at least one set. */
 export type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Readonly<Record<string, Param>>; result?: Shape; records?: Path;
-  paging?: string; notFound?: 'null' };
+  paging?: string; notFound?: 'null'; anyOf?: readonly (readonly Path[])[] };
 /** What a provider is for: a closed list of 20; a new value arrives with the first entry that needs it. */
 export type Category = 'tasks' | 'docs' | 'chat' | 'code' | 'monitoring' | 'crm' | 'sales' | 'mail' | 'calendar' | 'meetings'
   | 'support' | 'marketing' | 'finance' | 'hr' | 'storage' | 'ecommerce' | 'phone' | 'design' | 'analytics' | 'search';

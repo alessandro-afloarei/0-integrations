@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { argumentShape, clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -53,7 +53,8 @@ const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 
   params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'variables']), type: shape,
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
     description: z.string().optional() })).optional(),
-  result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional() };
+  result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional(),
+  anyOf: z.array(z.array(z.string())).optional() };
 const toleranceSeconds = z.number().int().positive().optional();
 const timestamp = z.strictObject({ header: headerName, toleranceSeconds });
 /** A piece's name in a `name=value,…` header: what splits the pieces never sits in it. */
@@ -309,6 +310,10 @@ const runnable = {
   // A path segment and a query value are one string each: never null, a list or an object.
   'only a scalar, non-`nullable` parameter `in` a path or a query': (entry: Entry) => params(entry).every(param =>
     (param.in !== 'path' && param.in !== 'query') || (param.nullable === undefined && typeof param.type === 'string')),
+  // The rule `client()` applies to each path, and a group worth the name: a required parameter is given anyway.
+  '`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter': (entry: Entry) =>
+    operations(entry).every(op => op.anyOf === undefined || (op.anyOf.length > 1 && op.anyOf.every(set => set.length > 0
+      && set.every(path => argumentShape(op, path) !== undefined && op.params?.[path]?.required !== true)))),
   // A paged operation yields its records: a 404 is no record to answer null for.
   '`notFound` only on an operation with no `paging`': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
   // A saved value would replace the field the person entered, which `Connected` types as a string.
@@ -586,6 +591,10 @@ test.each<[Rule, Entry]>([
     ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path or a query', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
+    ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email']], params: { email: { in: 'body', type: 'string' } } } }],
+    ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], []], params: { email: { in: 'body', type: 'string' } } } }],
+    ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], ['emial']], params: { email: { in: 'body', type: 'string' } } } }],
+    ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], ['phone']], params: { email: { in: 'body', type: 'string' }, phone: { in: 'body', type: 'string', required: true } } } }],
   ] as const).map(([rule, operations]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations })]),
   ...([
     ["no `webhook.prefix` beside `webhook.part`", { kind: 'hmac', header: 'stripe-signature', part: 'v1', prefix: 'v1=' }],
@@ -843,6 +852,8 @@ test('an entry whose operations keep every rule passes them all', () => {
       'requests.create': { docs: 'https://k.test/docs/requests', method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
         state: { in: 'query', type: 'string', enum: ['open'] }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
       'then.later': { docs: 'https://k.test/docs/later', path: '/later' },
+      'people.get': { docs: 'https://k.test/docs/people', method: 'POST', path: '/people', anyOf: [['email'], ['person.name', 'person.company.domain']],
+        params: { email: { in: 'body', type: 'string' }, person: { in: 'body', type: { 'name?': 'string', 'company?': { domain: 'string' } }, required: true } } },
       me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);

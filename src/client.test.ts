@@ -348,3 +348,33 @@ test("a wrong argument to an app's entry is a TypeError when the call is made, b
   await expect(api.flat?.({ ids: ['a'] })).rejects.toThrow(new TypeError('param_invalid: ids'));
   expect(fake.calls).toEqual([]);
 });
+
+test('an operation with `anyOf` sends a call that gives one set whole, and refuses one that gives none before anything is sent', async () => {
+  const people = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: {
+    'people.get': { method: 'POST', path: '/people', anyOf: [['email'], ['phone', 'last_name'], ['contact.email']],
+      params: { email: { in: 'body', type: 'string' }, phone: { in: 'body', type: 'string' }, last_name: { in: 'body', type: 'string' },
+        contact: { in: 'body', type: { 'email?': 'string' }, nullable: true } } } } } as const satisfies Entry;
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const get = untyped(client(people, { token: 'k', fetch: fake.fetch }).people.get);
+  for (const args of [{}, { phone: '+1' }, { email: '' }, { email: '  ' }, { contact: null }, { contact: {} }, { contact: { email: ' ' } },
+    { phone: '+1', last_name: '\t' }]) {
+    await expect(get(args)).rejects.toThrow(new TypeError('param_group_missing: people.get'));
+  }
+  expect(fake.calls).toEqual([]);
+  await get({ email: 'a@b.test' });
+  await get({ phone: '+1', last_name: 'Ng' });
+  await get({ contact: { email: 'a@b.test' } });
+  expect(fake.calls.map(call => call.body)).toEqual(['{"email":"a@b.test"}', '{"phone":"+1","last_name":"Ng"}', '{"contact":{"email":"a@b.test"}}']);
+  // Each argument is checked by its type first.
+  await expect(get({ email: 7 })).rejects.toThrow(new TypeError('param_invalid: email'));
+});
+
+test("an app's `anyOf` path that names no declared argument is refused when its client is built", () => {
+  const entry = (anyOf: readonly (readonly string[])[]) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    operations: { 'people.get': { method: 'POST', path: '/people', anyOf,
+      params: { email: { in: 'body', type: 'string' }, input: { in: 'body', type: { 'company?': { 'domain?': 'string' } } } } } } }) as Entry;
+  for (const path of ['emial', 'email.x', 'input.company.name', 'input.constructor', 'constructor', '']) {
+    expect(() => client(entry([['email'], [path]]), { token: 'k' })).toThrow(new TypeError(`param_group_unknown: people.get ${path}`));
+  }
+  expect(() => client(entry([['email'], ['input.company.domain']]), { token: 'k' })).not.toThrow();
+});
