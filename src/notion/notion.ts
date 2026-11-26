@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
+import { nextCursor } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { notion } from '../catalogue/notion.js';
 import { datetime } from '../shapes.js';
@@ -66,8 +66,7 @@ export function notionClient(input: { apiKey: string; fetch: typeof fetch; minIn
       const { items, skipped } = parseEntries(pageSchema, answer.results);
       const older = since === null ? -1 : items.findIndex(page => Date.parse(page.last_edited_time) < since);
       if (older >= 0) return { items: items.slice(0, older), skipped, cursor: null };
-      if (answer.has_more && !answer.next_cursor) throw new ProviderHttpError('invalid_response', null, 'cursor_missing');
-      return { items, skipped, cursor: answer.has_more ? answer.next_cursor : null };
+      return { items, skipped, cursor: nextCursor(notion.paging.cursor, answer) };
     },
     async text(pageId) {
       const answer = parseAnswer(markdownSchema, await http.json(`/pages/${encodeURIComponent(pageId)}/markdown`,

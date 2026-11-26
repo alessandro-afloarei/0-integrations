@@ -13,4 +13,5 @@ export const microsoft = defineProvider({
   // The address names the account; only the immutable id says who it is.
   identify: { request: { path: '/me', query: { $select: 'id,mail,userPrincipalName' } }, id: 'id',
     name: ['mail', 'userPrincipalName'], lowercase: true },
+  paging: { nextLink: { kind: 'nextUrl', next: '@odata.nextLink', pathPrefix: '/me/' } },
 });

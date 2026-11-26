@@ -77,3 +77,8 @@ test('reports a second 429 in a row as rate_limited, with its wait', async () =>
   await expect(client(fake.fetch).transcript(1)).rejects.toMatchObject({ code: 'rate_limited', retryAfterMs: 7000 });
   expect(fake.calls).toHaveLength(2);
 });
+
+test('a blank next_cursor ends the list', async () => {
+  const fake = fakeFetch([{ url: `${BASE}/meetings`, respond: () => Response.json({ limit: 10, next_cursor: '', items: [] }) }]);
+  expect(await client(fake.fetch).meetings({})).toMatchObject({ cursor: null });
+});

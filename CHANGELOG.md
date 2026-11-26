@@ -75,6 +75,13 @@ Every line below breaks 0.12 unless it says otherwise.
 - `0-integrations/providers` and its types (`ProviderDefinition`, `OAuth2Definition`, `RetryPolicy`, `HmacScheme`) are
   gone: import the entry from `0-integrations/catalogue/<id>`. `GOOGLE_CALENDAR_BASE` is gone: read
   `google.http.bases.calendar`.
+- hubspot: in `owners()`, a blank `after` ends the list (it was sent again), and an `after` that comes back is
+  `invalid_response` (`cursor_repeated`).
+- hubspot: in `owners()`, an `after` that is no string, or a `paging` without one, ends the list (it was
+  `invalid_response`).
+- fathom and google: a blank `next_cursor` or `nextPageToken` ends the list (it was returned as the cursor `''`).
+- granola: a notes or transcript page whose `hasMore` holds with no cursor is `invalid_response` (`cursor_missing`); the
+  list ended silently (a blank transcript cursor read the first page again).
 
 ## 0.12.0
 

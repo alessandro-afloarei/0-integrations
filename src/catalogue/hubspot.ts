@@ -11,4 +11,5 @@ export const hubspot = defineProvider({
   // Known categories only: a credential can also look like a short error code.
   errors: { detail: 'category', allow: ['MISSING_SCOPES', 'VALIDATION_ERROR'] },
   identify: { request: { path: '/account-info/2026-09/details' }, id: ['tokenAnswer.hub_id', 'portalId'], name: 'Portal {id}' },
+  paging: { after: { kind: 'cursor', next: 'paging.next.after', send: { query: 'after' } } },
 });

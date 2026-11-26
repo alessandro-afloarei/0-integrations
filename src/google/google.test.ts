@@ -67,6 +67,13 @@ test('lists mail after a time by its metadata, leaving out drafts, spam, trash a
   await expect(reader(gone.fetch).messages({})).resolves.toEqual({ items: [], skipped: [], cursor: null });
 });
 
+test('a blank nextPageToken ends the mail and the events', async () => {
+  const fake = answering({ [`${GMAIL}/users/me/messages`]: [() => Response.json({ nextPageToken: '' })],
+    [`${CALENDAR}/calendars/primary/events`]: [() => Response.json({ items: [], nextPageToken: '' })] });
+  expect(await reader(fake.fetch).messages({})).toMatchObject({ cursor: null });
+  expect(await reader(fake.fetch).events('primary', { start: '2026-11-01T00:00:00Z', end: '2026-11-02T00:00:00Z' })).toMatchObject({ cursor: null });
+});
+
 test("reads Google's quota refusal as a rate limit, and a revoked grant as rejected", async () => {
   const quota = () => Response.json({ error: { code: 403, status: 'PERMISSION_DENIED', errors: [{ reason: 'userRateLimitExceeded' }] } }, { status: 403 });
   await expect(reader(answering({ [`${GMAIL}/users/me/profile`]: [quota] }).fetch).identify())

@@ -16,4 +16,5 @@ export const google = defineProvider({
       { status: 403, detail: 'userRateLimitExceeded' }, { status: 403, detail: 'quotaExceeded' }] } },
   errors: { detail: ['error.code', 'error.errors.0.reason', 'error.status'] },
   identify: { request: { path: '/users/me/profile' }, id: 'emailAddress', name: 'emailAddress', lowercase: true },
+  paging: { pageToken: { kind: 'cursor', next: 'nextPageToken', send: { query: 'pageToken' } } },
 });

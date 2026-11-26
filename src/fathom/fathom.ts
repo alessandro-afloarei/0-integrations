@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
+import { nextCursor } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { fathom } from '../catalogue/fathom.js';
 import { datetime, orNull } from '../shapes.js';
@@ -60,7 +61,7 @@ export function fathomClient(input: { apiKey: string; fetch: typeof fetch; minIn
       if (cursor) query.cursor = cursor;
       const page = parseAnswer(listSchema, await http.json('/meetings', { query }));
       const recordingId = (entry: object) => ('recording_id' in entry ? entry.recording_id : null);
-      return { ...parseEntries(meetingSchema, page.items, recordingId), cursor: page.next_cursor };
+      return { ...parseEntries(meetingSchema, page.items, recordingId), cursor: nextCursor(fathom.paging.cursor, page) };
     },
     async transcript(recordingId) {
       return parseAnswer(transcriptSchema, await http.json(`/recordings/${String(recordingId)}/transcript`)).transcript;

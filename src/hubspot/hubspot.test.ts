@@ -237,6 +237,19 @@ describe("the HubSpot client", () => {
       "https://api.hubapi.com/crm/owners/2026-09?limit=100&after=a%2Bb%3D+c%26d%2F%3F%23"]);
   });
 
+  it.each([{ after: "" }, { after: 7 }, {}])("ends the owners at a blank or non-string cursor %j", async next => {
+    const { calls, fetch } = scripted(json({ results: [], paging: { next } }));
+    expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners()).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("refuses an owners cursor that comes back", async () => {
+    const { calls, fetch } = scripted(json({ results: [], paging: { next: { after: "a1" } } }), json({ results: [], paging: { next: { after: "a1" } } }));
+    await expect(hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners())
+      .rejects.toMatchObject({ code: "invalid_response", detail: "cursor_repeated" });
+    expect(calls).toHaveLength(2);
+  });
+
   const invalidPortalIds = ["", 0, -1, 1.5, [], {}, true];
 
   it.each(invalidPortalIds.map(hub_id => ({ hub_id })))("identify refuses malformed hub_id ($hub_id) without a request", async ({ hub_id }) => {

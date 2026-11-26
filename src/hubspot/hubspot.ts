@@ -3,6 +3,7 @@ import { createClient } from "../http.js";
 import { hubspot } from "../catalogue/hubspot.js";
 import { parseAnswer } from "../parse.js";
 import { paginate, type Page } from "../paginate.js";
+import { walk } from "../paging.js";
 import { datetime } from "../shapes.js";
 
 export type HubSpotObject = "companies" | "contacts" | "deals";
@@ -38,7 +39,7 @@ const portalIdSchema = z.union([z.number().int().positive(), z.string().regex(/^
 const accountSchema = z.object({ portalId: portalIdSchema });
 const pipelinesSchema = z.object({ results: z.array(z.object({ stages: z.array(z.object({ id: z.string(), label: z.string() })) })) });
 const ownersSchema = z.object({ results: z.array(z.object({ email: z.string().optional(), firstName: z.string().optional(),
-  lastName: z.string().optional() })), paging: z.object({ next: z.object({ after: z.string() }).optional() }).optional() });
+  lastName: z.string().optional() })) });
 
 export function hubspotClient(input: {
   /** The run's access token; asked again once, naming the token HubSpot answered 401 to, so a refresh replaces it. */
@@ -154,17 +155,13 @@ export function hubspotClient(input: {
     /** The portal's owners who have an email, lower-cased; a name falls back to the email. */
     async owners(): Promise<HubSpotOwner[]> {
       const owners: HubSpotOwner[] = [];
-      let after: string | undefined;
-      do {
-        const answer = await call("/crm/owners/2026-09", ownersSchema, undefined,
-          { limit: "100", ...(after === undefined ? {} : { after }) });
-        for (const owner of answer.results) {
+      for await (const body of walk(http, hubspot.http.baseUrl, hubspot.paging.after, "/crm/owners/2026-09", { query: { limit: "100" } })) {
+        for (const owner of parseAnswer(ownersSchema, body).results) {
           if (!owner.email) continue;
           const email = owner.email.toLowerCase();
           owners.push({ email, name: [owner.firstName, owner.lastName].filter(Boolean).join(" ") || email });
         }
-        after = answer.paging?.next?.after;
-      } while (after !== undefined);
+      }
       return owners;
     },
   };

@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
+import { nextCursor } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { breakcold } from '../catalogue/breakcold.js';
 
@@ -79,9 +79,7 @@ export function breakcoldClient(input: { apiKey: string; fetch: typeof fetch; us
 
   async function paged<T>(route: string, schema: z.ZodType<T>, cursor: string | undefined, query: Record<string, string> = {}): Promise<Page<T>> {
     const page = parseAnswer(pageSchema, await get(route, { limit: '100', ...query, ...(cursor ? { cursor } : {}) }));
-    const next = page.pagination.hasMore ? page.pagination.cursor : null;
-    if (page.pagination.hasMore && !next) throw new ProviderHttpError('invalid_response', null, 'cursor_missing');
-    return { ...parseEntries(schema, page.data), cursor: next };
+    return { ...parseEntries(schema, page.data), cursor: nextCursor(breakcold.paging.cursor, page) };
   }
   async function listed<T>(route: string, key: string, schema: z.ZodType<T>, query: Record<string, string> = {}): Promise<T[]> {
     const answer = parseAnswer(z.object({ [key]: z.array(z.unknown()) }), await get(route, query));
