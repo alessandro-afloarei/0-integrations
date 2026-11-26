@@ -33,6 +33,12 @@ test("builds HubSpot's and Slack's authorize URLs", () => {
     .toContain('scope=chat%3Awrite%2Cchannels%3Aread');
 });
 
+test('sends `scope` only when scopes are asked: none for an empty list, the two joined by a space', () => {
+  const input = { clientId: 'id', redirectUri: exchange.redirectUri, state: 's', codeChallenge: 'c' };
+  expect(authorizeUrl(pkced, { ...input, scopes: [] }).searchParams.has('scope')).toBe(false);
+  expect(authorizeUrl(pkced, { ...input, scopes: ['a', 'b'] }).searchParams.get('scope')).toBe('a b');
+});
+
 test('adds the PKCE challenge and fixed params when the provider asks', async () => {
   const pair = await pkcePair();
   expect(pair.verifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);

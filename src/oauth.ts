@@ -47,7 +47,7 @@ export function authorizeUrl(entry: Entry, input: {
   if (!input.state.trim()) throw new TypeError('state_required');
   if (config.pkce !== false && !input.codeChallenge) throw new TypeError('code_challenge_required');
   url.searchParams.set('client_id', input.clientId);
-  url.searchParams.set('scope', input.scopes.join(config.scopeSeparator ?? ' '));
+  if (input.scopes.length > 0) url.searchParams.set('scope', input.scopes.join(config.scopeSeparator ?? ' '));
   url.searchParams.set('redirect_uri', input.redirectUri);
   url.searchParams.set('state', input.state);
   if (input.codeChallenge) {
