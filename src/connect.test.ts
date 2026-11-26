@@ -5,6 +5,7 @@ import { defineProvider, signInWith, type Entry, type Field, type SignIn } from 
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
 import { attio as attioEntry } from './catalogue/attio.js';
+import { github } from './catalogue/github.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
@@ -386,6 +387,21 @@ describe('connect types', () => {
     type EitherFinish = Parameters<typeof finishConnect<typeof attio | SignIn<typeof hubspot, 'key'>>>[1];
     expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<EitherFinish>();
     expectTypeOf({ secret: { accessToken: 't' }, fetch }).toExtend<EitherFinish>();
+  });
+
+  it("takes a form input's secret from its key members alone: an OAuth 2 member adds no form", () => {
+    const fetch = attioFetch;
+    // A key entry, and an entry narrowed to its key: their own secret.
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<typeof attio>>[1]>();
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<SignIn<typeof github, 'key'>>>[1]>();
+    // Any record for the widened `Entry`.
+    expectTypeOf({ secret: {}, fetch }).toExtend<Parameters<typeof finishConnect<Entry>>[1]>();
+    // A key entry beside an OAuth 2 one: the key's own secret, or the OAuth input, never an empty secret.
+    type Mixed = Parameters<typeof finishConnect<SignIn<typeof github, 'key'> | typeof slack>>[1];
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Mixed>();
+    expectTypeOf(oauth(fetch, 'code')).toExtend<Mixed>();
+    // @ts-expect-error -- Slack's OAuth 2 sign-in has no form, so its empty secret is no input
+    expectTypeOf({ secret: {}, fetch }).toExtend<Mixed>();
   });
 });
 

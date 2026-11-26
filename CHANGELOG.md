@@ -37,7 +37,7 @@ Nothing here is released yet.
   `Retry-After`, else one second, at most 60 seconds), a 408, a 5xx or a network failure (`retry: {}`); a write, and
   PayPal's token request, are never retried.
 - `finishConnect` over a union of key or token entries takes each member's own secret fields; it asked for every
-  member's at once (HubSpot's `accessToken` beside Attio's `apiKey`).
+  member's at once (HubSpot's `accessToken` beside Attio's `apiKey`). An OAuth 2 member adds no form input.
 - `FirefliesUser`'s `email` and `name` are `string | null` (they were `string`): a Fireflies user without one no longer
   fails `user()` with `invalid_response`. The entry's `client(fireflies).user()` leaves out a null `email` or `name`.
 - For contributors: a key sign-in may name a `tokenAnswer.*` path in an identify `id` or `name` list ending on
