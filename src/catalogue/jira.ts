@@ -9,7 +9,7 @@ export const jira = defineProvider({
     json: true, pkce: false, authorizeParams: { audience: 'api.atlassian.com', prompt: 'consent', response_type: 'code' } }],
   scopes: { default: ['read:jira-work', 'read:jira-user', 'offline_access'] },
   http: { baseUrl: 'https://api.atlassian.com/ex/jira/{cloudId}', bases: { api: 'https://api.atlassian.com' },
-    headers: { accept: 'application/json' }, retry: {} },
+    headers: { accept: 'application/json' } },
   identify: { request: { base: 'api', path: '/oauth/token/accessible-resources' }, id: '0.id', name: '0.name' },
   save: { cloudId: '0.id' },
 });
