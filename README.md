@@ -88,7 +88,7 @@ an entry needs no line here. The providers below also have a module and a fake a
 | [Firecrawl](docs/modules/firecrawl.md) | Key | site maps, page scrapes | — | — |
 | [Fireflies](docs/modules/fireflies.md) | Key | transcripts, search | — | signature, event, delivery id |
 | [GitHub](docs/modules/github.md) | Key | repositories, issues, pull requests | — | — |
-| [Google](docs/modules/google.md) | OAuth | Gmail, Google Calendar | — | — |
+| [Google](docs/modules/google.md) | OAuth | Gmail, Google Calendar | — | Calendar push channel token |
 | [Granola](docs/modules/granola.md) | Key | notes, transcripts | — | — |
 | [HubSpot](docs/modules/hubspot.md) | OAuth | CRM objects, associations, stages, owners, stage history | — | — |
 | [Lusha](docs/modules/lusha.md) | Key | person and company lookups, credits | — | — |
