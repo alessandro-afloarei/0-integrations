@@ -28,6 +28,10 @@ export const folk = defineProvider({
   operations: {
     'people.list': { docs: `${ref}/people/list-people`, path: '/v1/people', paging: 'next', records: 'data.items',
       params: limit, result: { data: { items: [person] } } },
+    'people.search': { docs: `${ref}/filtering`, path: '/v1/people', paging: 'next', records: 'data.items',
+      params: { 'filter[emails][eq]': { in: 'query', type: 'string', required: true,
+        description: 'An email the person has: the list filtered to the people who have it.' }, ...limit },
+      result: { data: { items: [person] } } },
     'people.get': { docs: `${ref}/people/get-a-person`, path: '/v1/people/{personId}', notFound: 'null',
       params: { personId }, result: { data: person } },
     'people.create': { docs: `${ref}/people/create-a-person`, method: 'POST', path: '/v1/people', params: written,
