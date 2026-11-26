@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** PagerDuty: OAuth 2 (Classic User OAuth, Bearer) or an API token as `Token token=`, which PagerDuty's developer agreement
- * keeps from third parties. An EU account's token is forwarded from api.pagerduty.com; its OAuth token's region is in the
- * ID token (https://docs.pagerduty.com/get-started/service-regions/). Lists page by offset: one page each. 960 requests a
- * minute per key (https://docs.pagerduty.com/developer/rest-api-rate-limits/). Webhooks: `v1=` hex HMAC-SHA256 pieces. */
+/** PagerDuty: OAuth 2 (Classic User OAuth, Bearer) or an API token as `Token token=`; every account's requests, EU ones
+ * too, go to api.pagerduty.com (https://docs.pagerduty.com/developer/rest-api-overview). Lists page by offset: one page
+ * each. 960 requests a minute per key (https://docs.pagerduty.com/developer/rest-api-rate-limits/). Webhooks: `v1=` hex
+ * HMAC-SHA256 pieces; `X-Webhook-Id` repeats across retries (https://docs.pagerduty.com/developer/webhook-behavior). */
 const incident = { id: 'string', 'title?': 'string', 'status?': 'string', 'html_url?': 'string', 'created_at?': 'string',
   'updated_at?': 'string', 'service?': { 'id?': 'string' } } as const;
 const page = { limit: { in: 'query', type: 'integer' }, offset: { in: 'query', type: 'integer' } } as const;
@@ -20,7 +20,7 @@ export const pagerduty = defineProvider({
   scopes: { default: ['read'], requireGranted: true },
   http: { baseUrl: 'https://api.pagerduty.com', headers: { accept: 'application/vnd.pagerduty+json;version=2' }, minIntervalMs: 63, retry: {} },
   identify: { request: { path: '/abilities' } },
-  webhook: { kind: 'hmac', header: 'x-pagerduty-signature', part: 'v1' },
+  webhook: { kind: 'hmac', header: 'x-pagerduty-signature', part: 'v1', deliveryId: { header: 'x-webhook-id' } },
   operations: {
     'incidents.list': { docs: `${rest}/incidents/list-incidents`, path: '/incidents',
       params: { 'service_ids[]': { in: 'query', type: 'string' }, ...page }, result: { incidents: [incident], ...paged } },

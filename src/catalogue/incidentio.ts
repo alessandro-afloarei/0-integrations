@@ -1,8 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** incident.io: an API key, Bearer; `GET /v1/identity` names the key. 1,200 requests a minute per key, 60 for listing
- * incidents, a 429 with `Retry-After`; errors carry `errors[].code` (https://docs.incident.io/api-reference/introduction).
- * Webhooks come from Svix; the page states no hash or secret form, so none is declared. */
+ * incidents, 10 incidents created an hour when a Slack or Teams channel is made (300 otherwise), a 429 with `Retry-After`;
+ * errors carry `errors[].code` (https://docs.incident.io/api-reference/introduction). Webhooks come from Svix; the page
+ * states no hash or secret form, so none is declared. */
 const incident = { id: 'string', reference: 'string', name: 'string', incident_status: { id: 'string', name: 'string', category: 'string' },
   'severity?': { id: 'string', name: 'string' }, 'permalink?': 'string', created_at: 'string', updated_at: 'string' } as const;
 const id = { in: 'path', type: 'string', required: true } as const;
@@ -13,7 +14,7 @@ export const incidentio = defineProvider({
   id: 'incidentio', name: 'incident.io', docs: `${api}/introduction`,
   categories: ['monitoring'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'From Settings → API keys, made with the actions the app needs: incidents.view, incidents.create, incidents.update_name, incidents.update_summary, incidents.update_severity, incidents.update_status and severities.view. A user API key acts with your own permissions.' }],
+    help: 'An organization API key made for the app under Settings → API keys, not a user API key (user credentials may not be shared), with the View data, Create incidents and Edit incidents permissions, and View all incident data for private incidents.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.incident.io', minIntervalMs: 50, retry: {} },
   identify: { request: { path: '/v1/identity' }, name: 'identity.name' },

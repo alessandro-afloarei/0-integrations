@@ -2,7 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Honeybadger API v3, on the US or EU host: a user or account API token, Bearer; `GET /token` names the account it is
  * bound to. 360 requests an hour per person or account unless raised, a 429 with `Retry-After`; errors carry
- * `error.code`; lists follow `links.next` (https://docs.honeybadger.io/api/v3/). */
+ * `error.code`; lists follow `links.next` (https://docs.honeybadger.io/api/v3/). Webhooks carry the project's token in
+ * `Honeybadger-Token`, which changes when the project's API key is reset (https://docs.honeybadger.io/resources/security/). */
 const fault = { id: 'string', project_id: 'string', message: 'string', 'resolved?': 'boolean', 'ignored?': 'boolean',
   created_at: 'string', 'last_notice_at?': 'string', links: { web: 'string' } } as const;
 const projectId = { in: 'path', type: 'string', required: true } as const;
@@ -22,6 +23,7 @@ export const honeybadger = defineProvider({
   identify: { request: { path: '/token' }, id: 'data.account_id', name: 'data.name' },
   paging: { next: { kind: 'nextUrl', next: 'links.next' } },
   errors: { detail: 'error.code' },
+  webhook: { kind: 'token', header: 'honeybadger-token' },
   operations: {
     'faults.list': { docs: `${faults}/list-faults/`, path: '/projects/{project_id}/faults', paging: 'next',
       params: { project_id: projectId, per_page: perPage }, records: 'data', result: { data: [fault] } },
