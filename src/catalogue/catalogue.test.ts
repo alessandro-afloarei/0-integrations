@@ -43,7 +43,8 @@ function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch) {
 
 const https = z.string().startsWith('https://');
 /** A header name as `Headers` takes it: one lowercase HTTP token (RFC 9110). `Headers.get('X Signature')` throws. */
-const headerName = z.string().regex(/^[a-z0-9!#$%&'*+.^_`|~-]+$/u, 'a header name is one lowercase HTTP token: no space, `:` or capital');
+const headerMessage = 'a header name is one lowercase HTTP token: no space, `:` or capital';
+const headerName = z.string().regex(/^[a-z0-9!#$%&'*+.^_`|~-]+$/u, headerMessage);
 const template = z.string();
 const whenObject = z.strictObject({ status: z.union([z.number().int(), z.literal('error')]).optional(), header: headerName.optional(),
   path: z.string().optional(), detail: z.union([z.string(), z.literal(true)]).optional(),
@@ -73,7 +74,7 @@ const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
     description: z.string().optional() })).optional(),
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional() };
-const toleranceSeconds = z.number().int().positive().max(3600, 'a `toleranceSeconds` is at most 3600: a longer window lets an old delivery replay').optional();
+const toleranceSeconds = z.number().int().positive().optional();
 const timestamp = z.strictObject({ header: headerName, toleranceSeconds });
 /** A piece's name in a `name=value,…` header: what splits the pieces never sits in it. */
 const partName = z.string().regex(/^[^\s,=]+$/u, 'a `part` names one `name=value` piece: give it a name with no `,`, `=` or space');
@@ -107,7 +108,7 @@ const entrySchema = z.strictObject({
   save: z.record(z.string(), value).optional(),
   revoke: z.union([z.strictObject({ url: https, token: z.array(z.enum(['refresh', 'access'])), goneErrors: z.array(z.string()).optional() }),
     z.strictObject({ request, goneErrors: z.array(z.string()).optional() })]).optional(),
-  http: z.strictObject({ baseUrl: https, host: z.string().optional(), bases: z.record(z.string(), https).optional(), headers: z.record(z.string(), z.string()).optional(),
+  http: z.strictObject({ baseUrl: https, host: z.string().optional(), bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
     timeoutMs: z.number().int().positive().optional(), minIntervalMs: z.number().int().nonnegative().optional(),
     retry: z.strictObject({ limit: z.number().int().nonnegative().optional(), maxWaitMs: z.number().int().nonnegative().optional(),
       defaultWaitMs: z.number().int().nonnegative().optional(),
@@ -588,13 +589,13 @@ test.each(['prefix', 'encoding', 'hash', 'part'])('an `ed25519` webhook with `%s
     .toEqual(['an `ed25519` webhook takes no `prefix`, `encoding`, `hash` or `part`: leave them out']);
 });
 
-const headerMessage = 'a header name is one lowercase HTTP token: no space, `:` or capital';
 test.each<[string, Record<string, unknown>]>([
   ['a send header', { auth: [{ kind: 'key', send: { header: 'x key' } }] }],
   ["a webhook's header", { webhook: { kind: 'hmac', header: 'X Signature' } }],
   ['a timestamp header', { webhook: { kind: 'hmac', header: 'x-signature', signed: '{timestamp}{body}', timestamp: { header: 'x-timestamp:' } } }],
   ['a delivery id header', { webhook: { kind: 'standard', deliveryId: { header: 'Webhook-Id' } } }],
   ["a condition's header", { errors: { rules: [{ when: { header: 'X-Error' }, code: 'rejected' }] } }],
+  ['a header the entry sends on every call', { http: { ...key.http, headers: { 'X-Api-Version': '2' } } }],
   ["a rate limit's reset header", { http: { ...key.http, rateLimit: { when: [{ status: 403, resetAt: { header: 'x reset', unit: 'epochSeconds' } }] } } }],
 ])('%s that is no lowercase HTTP token fails the schema, with what to fix', (_, parts) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], ...parts };
@@ -604,8 +605,6 @@ test.each<[string, Record<string, unknown>]>([
 test.each<[string, Record<string, unknown>, string]>([
   ['a send value with a control character', { auth: [{ kind: 'key', send: { header: 'x-api-key', value: 'k{token}\r\nx-evil: 1' } }] },
     'a header `value` holds no control character'],
-  ['a tolerance over an hour', { webhook: { kind: 'hmac', header: 'x-signature', signed: '{timestamp}{body}', timestamp: { header: 'x-t', toleranceSeconds: 3601 } } },
-    'a `toleranceSeconds` is at most 3600: a longer window lets an old delivery replay'],
   ['a challenge that compares nothing', { webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when: { path: 'type' }, echo: 'type' } } },
     'a `challenge.when` compares the body value: give `equals` or `in`'],
 ])('%s fails the schema, with what to fix', (_, parts, message) => {

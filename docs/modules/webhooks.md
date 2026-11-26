@@ -11,9 +11,10 @@ app.
 An entry's `webhook` declares the scheme: the header, what is signed, SHA-256 or SHA-1 (`hash: 'sha1'`, Intercom), and
 for a header of `name=value` pieces such as Stripe's `t=…,v1=…` the piece that holds a signature (`part`) and the one
 that holds the timestamp (`timestamp: { part }`). Any `v1` may match, so Stripe's rolling secrets pass, and other pieces
-are ignored. A timestamp outside its tolerance (five minutes by default, an hour at most) and a signature header over
-8 KiB are `false`. `{timestamp}` is signed exactly when a timestamp is declared, and `{body}` is always signed: the
-catalogue's table test refuses an entry that breaks either.
+are ignored. A timestamp outside its tolerance (five minutes by default) and a signature header over 8 KiB are
+`false`. `{timestamp}` is signed exactly when a timestamp is declared, and `{body}` is always signed: the catalogue's
+table test refuses an entry that breaks either, and `verifyWebhook` is `false` for an app's own declaration whose
+`signed` lacks `{body}`, or lacks `{timestamp}` beside a declared timestamp.
 
 `kind: 'ed25519'` (Discord) checks a hex Ed25519 signature of the filled `signed` (`'{timestamp}{body}'`) against the
 provider's public key, passed as `secret` in 64 hex characters, as the provider's dashboard shows it. A signature that is

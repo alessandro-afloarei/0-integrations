@@ -410,7 +410,9 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    no `,`, `=` or whitespace.
 3. `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in `signed` is
    that value. `timestamp.part` needs `part`, and `{timestamp}` is in `signed` exactly when there is a `timestamp`: a
-   tolerance on a timestamp that is not signed would let a replay pass with a fresh one.
+   tolerance on a timestamp that is not signed would let a replay pass with a fresh one. `verifyWebhook` is `false` for
+   an app's own declaration whose `signed` lacks `{body}`, or lacks `{timestamp}` beside a timestamp; any other name in
+   `signed` is signed as written.
 4. `ed25519` (Discord): the secret is the provider's public key as 64 hex characters; the header holds a
    128-hex-character signature over the filled `signed`. A bad key, a bad signature or a wrong length is `false`.
 5. `token` (Google Calendar push): the header must equal the secret, compared over the SHA-256 digests of both, so its

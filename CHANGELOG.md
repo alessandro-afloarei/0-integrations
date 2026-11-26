@@ -41,6 +41,8 @@ Nothing here is released yet.
 - An HMAC webhook checked with an empty secret is `false`: anyone can sign with an empty key.
 - New: `challengeAnswer(entry.webhook, request)` answers Slack's `url_verification` and Discord's PING; Slack's entry
   declares its signature.
+- A provider code equal to any value a credential template took (Aircall's `apiId` in its Basic pair, Trello's key in
+  its header) is no error's detail; before, only the token and the header's value were withheld.
 
 ## 0.13.0
 
