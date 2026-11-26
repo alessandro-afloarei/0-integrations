@@ -24,8 +24,8 @@ type CallArgs<O> = [args: Args<O>, options?: Pick<RequestOptions, 'signal'> & (O
 type Get<T, P> = P extends keyof T ? T[P] : P extends `${infer H}.${infer R}` ? H extends keyof T ? Get<T[H], R> : never : never;
 /** An operation's answer: its `result`'s type, else unknown. */
 type Result<O> = O extends { result: infer S } ? TypeOf<S> : unknown;
-/** One record of a paged operation: an element of the list at `records`. */
-type Item<O> = O extends { records: infer P } ? Get<Result<O>, P> extends readonly (infer E)[] ? E : unknown : unknown;
+/** What a paged operation yields: an element of the list at `records`, else each page's whole answer. */
+type Item<O> = O extends { records: infer P } ? Get<Result<O>, P> extends readonly (infer E)[] ? E : unknown : Result<O>;
 /** An operation as a method: a paged one yields its records. */
 type MethodOf<O> = (...call: Record<string, never> extends Args<O> ? Partial<CallArgs<O>> : CallArgs<O>) => O extends { paging: string }
   ? AsyncGenerator<Item<O>, void, undefined> : Promise<Result<O> | (O extends { notFound: 'null' } ? null : never)>;
