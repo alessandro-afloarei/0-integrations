@@ -2,7 +2,7 @@ import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
 import type { Auth, Entry } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { callRequest, createClient } from './http.js';
+import { callBase, callRequest, createClient } from './http.js';
 import { codeOf, responseJson, safeDetail } from './http-response.js';
 import { holds } from './rules.js';
 
@@ -175,7 +175,7 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
     }
     const { accessToken } = input;
     if (accessToken === undefined) return;
-    const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch });
+    const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch, ...callBase(entry, revoke.request) });
     responseJson(entry, await http.request(...callRequest(revoke.request)));
   } catch (error) {
     const gone = error instanceof GrantRevoked || (error instanceof ProviderHttpError && error.detail !== null

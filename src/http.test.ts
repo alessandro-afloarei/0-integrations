@@ -9,6 +9,7 @@ import { gitlab } from './catalogue/gitlab.js';
 import { granola } from './catalogue/granola.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { intercom } from './catalogue/intercom.js';
+import { jira } from './catalogue/jira.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { client } from './client.js';
@@ -711,6 +712,35 @@ test("the credential never leaves the filled base's origin", async () => {
   await expect(createClient(regional, { token: () => Promise.resolve('t'), values: { sub: 'eu' }, fetch: moved.fetch }).json('/a'))
     .rejects.toMatchObject({ code: 'request_failed', status: 307 });
   expect(moved.calls).toHaveLength(1);
+});
+
+test("Jira's base takes the saved cloud id as one path segment", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  for (const [cloudId, url] of [['c1', 'https://api.atlassian.com/ex/jira/c1/rest/api/3/myself'],
+    ['a/b', 'https://api.atlassian.com/ex/jira/a%2Fb/rest/api/3/myself'],
+    ['../../oauth', 'https://api.atlassian.com/ex/jira/..%2F..%2Foauth/rest/api/3/myself']]) {
+    await client(jira, { token: 't', values: { cloudId }, fetch: fake.fetch }).json('/rest/api/3/myself');
+    expect(fake.calls.at(-1)?.url).toBe(url);
+  }
+});
+
+test.each([['..', 'base_value_invalid: jira {cloudId}'], ['.', 'base_value_invalid: jira {cloudId}'], ['', 'template_missing: jira {cloudId}']])(
+  "a hostile path value %j is refused before the token is read or anything is sent", async (cloudId, message) => {
+    const fake = filled(jira, { cloudId });
+    await expect(fake.client.json('/rest/api/3/myself')).rejects.toThrow(new TypeError(message));
+    expect(fake.token).not.toHaveBeenCalled();
+    expect(fake.calls).toHaveLength(0);
+  });
+
+test('a request revoke on a second base goes there, the credential with it, needing no values', async () => {
+  const revoking = defineProvider({ ...regional, http: { ...regional.http, bases: { auth: 'https://auth.example.test/v2' } },
+    revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } } });
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await revokeGrant(revoking, { accessToken: 'a', fetch: fake.fetch });
+  expect(fake.calls.map(call => [call.method, call.url, call.headers.authorization])).toEqual([['POST', 'https://auth.example.test/v2/revoke', 'Bearer a']]);
+  const unknown = defineProvider({ ...revoking, revoke: { request: { base: 'nope', path: '/revoke' } } });
+  await expect(revokeGrant(unknown, { accessToken: 'a', fetch: fake.fetch })).rejects.toThrow(new TypeError('base_unknown: nope'));
+  expect(fake.calls).toHaveLength(1);
 });
 
 const addressBlocked = new ProviderHttpError('request_failed', null, 'address_blocked');

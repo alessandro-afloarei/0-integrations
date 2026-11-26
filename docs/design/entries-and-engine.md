@@ -102,7 +102,7 @@ That is a whole provider: sign-in form, credential check, account identity, retr
   - `auth.send`: every plain field of the entry by its name, the entry's only secret field by its name, and `{token}`:
     the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one. A plain
     value that is blank fills no template: it is missing, and nothing is sent.
-  - `http.baseUrl`: every plain field by its name. See "A base filled from a value" below.
+  - `http.baseUrl`: every plain field and every `save` key by its name. See "A base filled from a value" below.
   - `identify` and `save` values: the lookup described under `identify`.
   - `webhook.signed`: `{body}`, `{timestamp}`, `{method}`, `{url}`.
   - an operation's `path`: its declared `path` parameters.
@@ -146,19 +146,22 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 #### A base filled from a value
 
-A placeholder in `http.baseUrl` names a plain field and sits in its host (between `https://` and the next `/`; a
-path segment from a value arrives later). A base with one needs `http.host`, the host the filled base must have: a
-name (`api.example.com`), `*.` and a domain (any name ending in `.example.com`, never `example.com` itself), or `*`
-(any). Intercom's region is the first:
-`baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts.
+A placeholder in `http.baseUrl` names a plain field or a `save` key. In the host (between `https://` and the next `/`)
+it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
+and a domain (any name ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's region is the
+first: `baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three
+hosts. In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as `a%2Fb`; a value that is
+`.` or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no placeholder in its host needs
+no `http.host`. Jira's is the first: `baseUrl: 'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value
+its `save` keeps.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given.
-- The value is the connection's plain value; none is `template_missing`. Only `finishConnect` applies a field's
-  `default` (and returns it in `values`): a client, and a revoke, never do, so they need the connection's `values`. A
-  value that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host`
+- The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
+  one) is `template_missing`. Only `finishConnect` applies a field's `default` (and returns it in `values`): a client,
+  and a revoke, never do, so they need the connection's `values`. A value in the host that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host`
   checks only the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
-- The filled base must parse, be https with no user or password, and its host must match `http.host`, else
+- The filled base must parse, be https with no user or password, and a templated host must match `http.host`, else
   `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
   placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
@@ -285,7 +288,9 @@ lookup, where `{id}` is the id already found: `'Portal {id}'`.
   `detail` is the detail reported, so a `rejectWhen` condition cannot test the provider's code.
 - A request's `base` names a key of `http.bases`: identify's request and a request revoke are sent to that base, and
   the credential stays on its origin. An unknown name is `TypeError('base_unknown: <name>')` before anything is sent.
-  Jira's identify goes to `api.atlassian.com` while its own base still waits for the `cloudId` it saves.
+  Jira's identify goes to `api.atlassian.com` while its own base still waits for the `cloudId` it saves: a call on a
+  second base never fills the entry's own. A request revoke on a second base needs no `values`; one on a templated
+  own base needs them, and `revokeGrant` takes none, so it fails closed (`template_missing`) with nothing sent.
 - With no `id`, identify is only a credential check. There is no separate `verify`: none of the 17 providers needs
   the two apart.
 - Only the paths an entry names leave the token answer. Nothing else of it is returned or stored.

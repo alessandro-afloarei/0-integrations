@@ -1,6 +1,6 @@
 import type { Entry, Identify, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
-import { callRequest, createClient, type HttpClient } from './http.js';
+import { callBase, callRequest, createClient, type HttpClient } from './http.js';
 import { responseJson } from './http-response.js';
 import { fill, holds, placeholders, readPath } from './rules.js';
 
@@ -49,7 +49,9 @@ export async function identifyAccount(entry: Entry, input: { fetch: typeof fetch
   tokenAnswer?: Values }): Promise<{ account: Account | null; values: Values }> {
   const { identify = {}, save = {} } = entry;
   const values = input.values ?? {};
-  const http = createClient(entry, { token: () => Promise.resolve(input.token), fetch: input.fetch, values });
+  // A call on a second base never fills the entry's own: Jira identifies before the cloud id its base takes exists.
+  const http = createClient(entry, { token: () => Promise.resolve(input.token), fetch: input.fetch, values,
+    ...callBase(entry, identify.request ?? {}) });
   let answer: Promise<{ status: number; body: unknown }> | undefined;
   const answered = () => (answer ??= ask(entry, http, identify));
   let id: string | undefined;

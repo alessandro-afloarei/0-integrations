@@ -63,7 +63,7 @@ const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ b
 const value = z.union([z.string(), z.array(z.string())]);
 const method = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const request = z.strictObject({ method: method.optional(), path: template.optional(),
-  query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional() });
+  query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional(), base: z.string().optional() });
 const shape: z.ZodType<Shape> = z.lazy(() =>
   z.union([z.enum(['string', 'integer', 'number', 'boolean', 'unknown']), z.tuple([shape]), z.record(z.string(), shape)]));
 const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
@@ -131,6 +131,8 @@ const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name =
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
 /** The base's host part: between `https://` and the first `/` after it. */
 const baseHost = (entry: Entry) => entry.http.baseUrl.slice('https://'.length).split('/')[0] ?? '';
+/** The declared calls that may name a base: identify's request and a request revoke. */
+const calls = (entry: Entry) => [entry.identify?.request, entry.revoke !== undefined && 'request' in entry.revoke ? entry.revoke.request : undefined];
 const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
 /** The templates a Basic or query send fills, and the secret field's name. */
 const sentTemplates = (entry: Entry) => {
@@ -146,23 +148,25 @@ const runnable = {
     .every(name => name === 'token' || (entry.fields ?? []).some(field => field.name === name)),
   // Every claim an entry makes is checked against the provider's own page.
   'a `docs` link to the provider\'s page, https': (entry: Entry) => entry.docs?.startsWith('https://') === true,
-  // A typed host is checked against a pattern before the token is read; a fixed one needs none.
-  // Path segments from values arrive later (Jira): until then the engine checks every base value as a host part.
-  '`http.baseUrl` placeholders in its host only, never its path': (entry: Entry) =>
-    placeholders(baseHost(entry)).length === placeholders(entry.http.baseUrl).length,
-  'an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder': (entry: Entry) => (placeholders(entry.http.baseUrl).length > 0
+  // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
+  'an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder': (entry: Entry) => (placeholders(baseHost(entry)).length > 0
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
     || /^\{[^{}]+\}$/u.test(baseHost(entry)),
-  'a plain field (not secret) for every `http.baseUrl` placeholder': (entry: Entry) => placeholders(entry.http.baseUrl)
-    .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true)),
+  'a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder': (entry: Entry) => placeholders(entry.http.baseUrl)
+    .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true) || Object.hasOwn(entry.save ?? {}, name)),
+  // Otherwise the call is refused, `base_unknown`, when it is made.
+  "a call's `base` one of `http.bases`": (entry: Entry) => calls(entry).every(call => call?.base === undefined
+    || Object.hasOwn(entry.http.bases ?? {}, call.base)),
   // A choice the engine would refuse fails here, not when a person picks it.
   "`fields[].choices` and `default` that fill the base to a host `http.host` takes": (entry: Entry) => {
     const named = (entry.fields ?? []).filter(field => placeholders(entry.http.baseUrl).includes(field.name));
     const first = (field: Field) => field.default ?? field.choices?.[0] ?? 'x';
     return named.every(field => [...field.choices ?? [], ...field.default === undefined ? [] : [field.default]].every(value => {
-      const values = { ...Object.fromEntries(named.map(other => [other.name, first(other)])), [field.name]: value };
+      // A saved value has no choices: a stand-in fills it.
+      const saved = Object.keys(entry.save ?? {}).map((name): [string, string] => [name, 'x']);
+      const values = { ...Object.fromEntries([...saved, ...named.map((other): [string, string] => [other.name, first(other)])]), [field.name]: value };
       try {
         return createClient(entry, { token: () => Promise.resolve('t'), fetch: globalThis.fetch, values }).baseUrl !== '';
       } catch { return false; }
@@ -313,11 +317,11 @@ test.each<[Rule, Entry]>([
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://api.k.test', host: 'api.k.test' }],
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}', host: 'example.com/x' }],
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}', host: '*.com' }],
-    ['`http.baseUrl` placeholders in its host only, never its path', { baseUrl: 'https://api.example.com/{region}' }],
-    ['`http.baseUrl` placeholders in its host only, never its path', { baseUrl: 'https://{region}.k.test/{region}', host: '*.k.test' }],
+    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://api.k.test/{region}', host: 'api.k.test' }],
     ["`http.host: '*'` only on a base whose whole host is one placeholder", { baseUrl: 'https://{region}.example.com', host: '*' }],
-    ['a plain field (not secret) for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
-    ['a plain field (not secret) for every `http.baseUrl` placeholder', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
+    ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
+    ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://api.k.test/{zone}' }],
+    ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
   ] as const).map(([rule, http]): [Rule, Entry] => [rule, { ...key, http, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }] }]),
   ...([
@@ -335,6 +339,10 @@ test.each<[Rule, Entry]>([
       fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, default: 'k' }] })],
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, choices: ['k'] }] })],
+  ["a call's `base` one of `http.bases`", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    http: { ...key.http, bases: { api: 'https://other.k.test' } }, identify: { request: { base: 'nope', path: '/me' } } })],
+  ["a call's `base` one of `http.bases`", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    revoke: { request: { base: 'api', method: 'POST', path: '/revoke' } } })],
   ["`save` keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([
@@ -383,6 +391,12 @@ test.each([[{ refreshUrl: 'http://k.test/refresh' }, 'refreshUrl', 'Invalid stri
 test('a query send that names no parameter fails the schema, with what to fix', () => {
   const bad = { ...key, auth: [{ kind: 'key', send: { query: {} } }], fields: [secret] };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(['a query send names at least one parameter']);
+});
+
+test("a base with a host from a field's choices and a path segment from a saved value passes every rule", () => {
+  const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', choices: ['eu.k.test'] }],
+    http: { baseUrl: 'https://{region}/sites/{siteId}', host: '*.k.test' }, identify: { request: { path: '/me' } }, save: { siteId: 'id' } });
+  expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
 });
 
 test('an entry whose operations keep every rule passes them all', () => {

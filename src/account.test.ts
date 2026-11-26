@@ -3,10 +3,12 @@ import { identifyAccount } from './account.js';
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
+import { defineProvider } from './catalogue.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
+import { jira } from './catalogue/jira.js';
 import { microsoft } from './catalogue/microsoft.js';
 import { slack } from './catalogue/slack.js';
 import { ProviderHttpError } from './errors.js';
@@ -82,4 +84,24 @@ test("Fireflies' GraphQL identify is one POST of its query to the base", async (
   expect(await identifyAccount(fireflies, { fetch: fake.fetch, token: 't' })).toEqual({ account: { id: 'u1', name: 'Lee' }, values: {} });
   expect(fake.calls).toHaveLength(1);
   expect(JSON.parse(fake.calls[0]?.body ?? '')).toEqual({ query: fireflies.identify.request.graphql, variables: {} });
+});
+
+test("Jira identifies on its second base, before its own base has the cloud id it saves", async () => {
+  const fake = fakeFetch([{ url: 'https://api.atlassian.com/oauth/token/accessible-resources',
+    respond: json([{ id: 'c1', name: 'Site', url: 'https://site.atlassian.test' }, { id: 'c2', name: 'Other' }]) }]);
+  const { account, values } = await identifyAccount(jira, { fetch: fake.fetch, token: 't' });
+  expect(account).toEqual({ id: 'c1', name: 'Site' });
+  expect(values.cloudId).toBe('c1');
+  expect(fake.calls.map(call => [call.url, call.headers.authorization])).toEqual([['https://api.atlassian.com/oauth/token/accessible-resources', 'Bearer t']]);
+});
+
+test('a call naming a base the entry lacks is refused before anything is sent', async () => {
+  const entry = defineProvider({ id: 'k', name: 'K', auth: [{ kind: 'key' }], fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+    http: { baseUrl: 'https://api.k.test', bases: { api: 'https://other.k.test' } }, identify: { request: { base: 'nope', path: '/me' }, id: 'id' } });
+  const fake = fakeFetch([{ url: /https:/, respond: json({ id: 'u' }) }]);
+  await expect(identifyAccount(entry, { fetch: fake.fetch, token: 't' })).rejects.toThrow(new TypeError('base_unknown: nope'));
+  // An inherited name is no base either.
+  await expect(identifyAccount({ ...entry, identify: { request: { base: 'toString', path: '/me' }, id: 'id' } }, { fetch: fake.fetch, token: 't' }))
+    .rejects.toThrow(new TypeError('base_unknown: toString'));
+  expect(fake.calls).toHaveLength(0);
 });

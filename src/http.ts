@@ -99,23 +99,40 @@ function credentialOf(entry: Entry, token: string, values: Values): Credential {
  * `/`, `@`, `#`, space or empty label; no `i` flag, which would let the Kelvin sign and the long s pass as `k` and `s`. */
 const BASE_VALUE = /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/u;
 
-/** The entry's base, its placeholders filled from plain values: an https URL with no user, its host matching `http.host`
- * (equal, `*.d` a name ending in `.d`, `*` any). Throws before anything is read or sent. */
+/** The entry's base, its placeholders filled from plain or saved values: one in the host a host name, one in the path
+ * one encoded segment. An https URL with no user, its host, when templated, matching `http.host` (equal, `*.d` a name
+ * ending in `.d`, `*` any). Throws before anything is read or sent. */
 function filledBase(entry: Entry, values: Values): string {
   const { baseUrl, host = '' } = entry.http;
   if (placeholders(baseUrl).length === 0) return baseUrl;
-  const filled = fill(baseUrl, name => {
+  const pathAt = baseUrl.indexOf('/', baseUrl.indexOf('//') + 2);
+  const [head, tail] = pathAt === -1 ? [baseUrl, ''] : [baseUrl.slice(0, pathAt), baseUrl.slice(pathAt)];
+  const invalid = (name: string) => new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
+  const filled = fill(head, name => {
     const value = plainValue(values, name);
-    if (value !== undefined && !BASE_VALUE.test(String(value))) throw new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
+    if (value !== undefined && !BASE_VALUE.test(String(value))) throw invalid(name);
     return value;
+  }, entry.id) + fill(tail, name => {
+    const value = plainValue(values, name);
+    if (value === '.' || value === '..') throw invalid(name);
+    return value === undefined ? value : encodeURIComponent(value);
   }, entry.id);
   const url = URL.canParse(filled) ? new URL(filled) : undefined;
-  const hosted = url !== undefined && (host === '*' || url.hostname === host || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1))));
+  const hosted = url !== undefined && (placeholders(head).length === 0 || host === '*' || url.hostname === host
+    || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1))));
   if (!hosted || url.protocol !== 'https:') throw new TypeError(`base_host_refused: ${entry.id}`);
   // A typed host that is an address is checked here too, since an app's own fetch cannot be seen to dial; a name is
   // only checked by guardedFetch.
   if (host === '*' && blockedHost(url.hostname)) throw refusal();
   return filled;
+}
+
+/** The base a declared call names (`Call.base`), as an app's own base: one of `http.bases`, used as written. */
+export function callBase(entry: Entry, { base }: Call): { baseUrl?: string } {
+  if (base === undefined) return {};
+  const baseUrl = Object.hasOwn(entry.http.bases ?? {}, base) ? entry.http.bases?.[base] : undefined;
+  if (baseUrl === undefined) throw new TypeError(`base_unknown: ${base}`);
+  return { baseUrl };
 }
 
 /** The fetch an entry uses when the app passes none: guardedFetch for `http.host: '*'`, else the global one. */

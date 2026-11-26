@@ -24,7 +24,8 @@ export type Auth =
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
     clientAuth?: 'basic'; scopeSeparator?: ','; authorizeParams?: Readonly<Record<string, string>>;
     tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true };
-export type Call = { method?: Method; path?: Template; query?: Readonly<Record<string, string>>; graphql?: string };
+/** A declared request. `base` names one of `http.bases` to send it to instead of the entry's own base. */
+export type Call = { method?: Method; path?: Template; query?: Readonly<Record<string, string>>; graphql?: string; base?: string };
 /** A path, the first present of several paths, or a template (a string with braces) over the same lookup. */
 export type Value = Path | readonly Path[];
 export type Identify = { request?: Call; id?: Value; name?: Value; lowercase?: true;
