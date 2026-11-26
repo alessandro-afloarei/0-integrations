@@ -61,9 +61,11 @@ type CustomFetch = NonNullable<oauth.HttpRequestOptions<'POST', URLSearchParams>
 const jsonBodies = (fetch: typeof globalThis.fetch): CustomFetch => (url, options) => fetch(url, { ...options,
   headers: { ...options.headers, 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(options.body)) });
 
-/** A token answer that states no `token_type` is read as Bearer, as most OAuth clients read it (ClickUp's states none). */
+/** A token answer that states no `token_type` is read as Bearer, as most OAuth clients read it (ClickUp's states none).
+ * Only a 2xx answer to a grant (an exchange or a refresh) is read; a revoke sends no `grant_type`. */
 const bearerByDefault = (send: CustomFetch): CustomFetch => async (url, options) => {
   const response = await send(url, options);
+  if (!response.ok || !options.body.has('grant_type')) return response;
   const body: unknown = await response.clone().json().catch(() => null);
   if (typeof body !== 'object' || body === null || !('access_token' in body) || 'token_type' in body) return response;
   const headers = new Headers(response.headers);
