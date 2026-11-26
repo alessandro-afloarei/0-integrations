@@ -91,8 +91,9 @@ function credentialOf(entry: Entry, token: string, values: Values): Credential {
   return { header: ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`] };
 }
 
-/** A value a base's placeholder takes: a host name's labels, and a port. Never a `/`, `@`, `#`, space or empty label. */
-const BASE_VALUE = /^[a-z0-9-]+(\.[a-z0-9-]+)*(:\d{1,5})?$/iu;
+/** A value a base's placeholder takes: a host name's ASCII labels. Never a port (`http.host` checks the name alone), a
+ * `/`, `@`, `#`, space or empty label; no `i` flag, which would let the Kelvin sign and the long s pass as `k` and `s`. */
+const BASE_VALUE = /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/u;
 
 /** The entry's base, its placeholders filled from plain values: an https URL with no user, its host matching `http.host`
  * (equal, `*.d` a name ending in `.d`, `*` any). Throws before anything is read or sent. */

@@ -146,15 +146,15 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 #### A base filled from a value
 
-A placeholder in `http.baseUrl` names a plain field, and a placeholder in its host (between `https://` and the next
-`/`) needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.` and a domain (any name
+A placeholder in `http.baseUrl` names a plain field and sits in its host (between `https://` and the next `/`; a
+path segment from a value arrives later). A base with one needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.` and a domain (any name
 ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's region is the first:
 `baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given.
 - The value is the plain value, else the field's `default`; none is `template_missing`. A value that is not a host
-  part (letters, digits and `-` in dot-separated labels, and a port) is `TypeError('base_value_invalid: <entry id>
+  part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only the name) is `TypeError('base_value_invalid: <entry id>
   {<name>}')`.
 - The filled base must parse, be https with no user or password, and its host must match `http.host`, else
   `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.

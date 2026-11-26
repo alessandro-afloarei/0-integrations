@@ -7,6 +7,7 @@ import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
 import { granola } from './catalogue/granola.js';
 import { hubspot } from './catalogue/hubspot.js';
+import { intercom } from './catalogue/intercom.js';
 import { notion } from './catalogue/notion.js';
 import { client } from './client.js';
 import { callRequest, createClient } from './http.js';
@@ -573,7 +574,8 @@ test("a base's host is filled from a plain value once, on the first request", as
 
 test.each([['a.example.com@evil.test', 'base_value_invalid: regional {sub}'], ['evil.test/x', 'base_value_invalid: regional {sub}'],
   ['evil.test#', 'base_value_invalid: regional {sub}'], ['a b', 'base_value_invalid: regional {sub}'], ['x.', 'base_value_invalid: regional {sub}'],
-  ['', 'template_missing: regional {sub}']])(
+  ['eu:8443', 'base_value_invalid: regional {sub}'], ['\u212A', 'base_value_invalid: regional {sub}'],
+  ['\u017F', 'base_value_invalid: regional {sub}'], ['', 'template_missing: regional {sub}']])(
   "a hostile base value %j is refused before the token is read, beforeRequest runs or anything is sent", async (sub, message) => {
     const fake = filled(regional, { sub });
     await expect(fake.client.json('/a')).rejects.toThrow(new TypeError(message));
@@ -586,19 +588,29 @@ test.each([['a.example.com@evil.test', 'base_value_invalid: regional {sub}'], ['
 test.each([['*.example.com', 'api.example.com', true], ['*.example.com', 'a.b.example.com', true], ['*.example.com', 'example.com', false],
   ['*.example.com', 'xexample.com', false], ['*.example.com', 'example.com.evil.test', false], ['*.example.com', 'evil.test', false],
   ['api.example.com', 'api.example.com', true], ['api.example.com', 'other.example.com', false], ['*', 'any.where.test', true],
-  ['*.example.com', 'API.EXAMPLE.COM', true], ['*.example.com', 'api.example.com:8443', true]])(
+  ['*.example.com', 'API.EXAMPLE.COM', true]])(
   'host %s takes %s: %s', async (host, h, accepted) => {
     const entry = defineProvider({ id: 'hosted', name: 'Hosted', fields: [{ name: 'h', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
       auth: [{ kind: 'key' }], http: { baseUrl: 'https://{h}', host } });
     const fake = filled(entry, { h });
     if (accepted) {
       await fake.client.json('/a');
-      expect(new URL(fake.calls[0]?.url ?? '').hostname).toBe(h.toLowerCase().split(':')[0]);
+      expect(new URL(fake.calls[0]?.url ?? '').hostname).toBe(h.toLowerCase());
     } else {
       await expect(fake.client.json('/a')).rejects.toThrow(new TypeError('base_host_refused: hosted'));
       expect(fake.token).not.toHaveBeenCalled();
       expect(fake.calls).toHaveLength(0);
     }
+  });
+
+test.each(['api.intercom.io:8443', 'api.intercom.\u212Aio', 'api.intercom.io\u017F'])(
+  "Intercom's client refuses %j before the token is read or anything is sent", async apiHost => {
+    const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+    const token = vi.fn<() => Promise<string>>().mockResolvedValue('t');
+    await expect(client(intercom, { token, values: { apiHost }, fetch: fake.fetch }).json('/me'))
+      .rejects.toThrow(new TypeError('base_value_invalid: intercom {apiHost}'));
+    expect(token).not.toHaveBeenCalled();
+    expect(fake.calls).toHaveLength(0);
   });
 
 test("an app's templated base with no host pattern is refused", async () => {

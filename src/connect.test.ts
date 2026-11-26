@@ -158,11 +158,11 @@ describe('field defaults and choices', () => {
     expect(fake.calls.map(call => call.url)).toEqual(['https://api.intercom.io/me']);
   });
 
-  it('a value among the choices is used', async () => {
+  it.each(intercom.fields[0].choices)('a value among the choices (%s) is used and passes the host pattern', async apiHost => {
     const fake = http();
-    const { values } = await finishConnect(intercom, { secret: { accessToken: 'tok' }, values: { apiHost: 'api.eu.intercom.io' }, fetch: fake.fetch });
-    expect(values.apiHost).toBe('api.eu.intercom.io');
-    expect(fake.calls.map(call => call.url)).toEqual(['https://api.eu.intercom.io/me']);
+    const { values } = await finishConnect(intercom, { secret: { accessToken: 'tok' }, values: { apiHost }, fetch: fake.fetch });
+    expect(values.apiHost).toBe(apiHost);
+    expect(fake.calls.map(call => call.url)).toEqual([`https://${apiHost}/me`]);
   });
 
   it.each(['api.evil.test', 'API.EU.INTERCOM.IO', 'api.intercom.io/x'])('a value not among the choices (%s) is refused before anything is sent', async apiHost => {

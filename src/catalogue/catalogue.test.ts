@@ -74,8 +74,10 @@ const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
   id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1), docs: z.string().optional(),
-  fields: z.array(z.strictObject({ name: z.string(), title: z.string().min(1), secret: z.literal(true).optional(),
-    default: z.string().optional(), help: z.string().min(1).optional(), choices: z.array(z.string()).optional() })).optional(),
+  fields: z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
+    secret: z.literal(true).optional(), default: z.string().optional(),
+    help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
+    choices: z.array(z.string()).optional() })).optional(),
   auth: z.array(z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('key'), send: send.optional() }),
     z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, pkce: z.literal(false).optional(),
@@ -143,7 +145,10 @@ const runnable = {
   // Every claim an entry makes is checked against the provider's own page.
   'an https docs page': (entry: Entry) => entry.docs?.startsWith('https://') === true,
   // A typed host is checked against a pattern before the token is read; a fixed one needs none.
-  'a host pattern exactly when the base\'s host holds a placeholder': (entry: Entry) => (placeholders(baseHost(entry)).length > 0
+  // Path segments from values arrive later (Jira): until then the engine checks every base value as a host part.
+  "placeholders in the base's host only, never its path": (entry: Entry) =>
+    placeholders(baseHost(entry)).length === placeholders(entry.http.baseUrl).length,
+  'a host pattern exactly when the base\'s host holds a placeholder': (entry: Entry) => (placeholders(entry.http.baseUrl).length > 0
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
   'a plain field for every placeholder in the base': (entry: Entry) => placeholders(entry.http.baseUrl)
     .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true)),
@@ -292,6 +297,8 @@ test.each<[Rule, Entry]>([
     ["a host pattern exactly when the base's host holds a placeholder", { baseUrl: 'https://api.k.test', host: 'api.k.test' }],
     ["a host pattern exactly when the base's host holds a placeholder", { baseUrl: 'https://{region}', host: 'example.com/x' }],
     ["a host pattern exactly when the base's host holds a placeholder", { baseUrl: 'https://{region}', host: '*.com' }],
+    ["placeholders in the base's host only, never its path", { baseUrl: 'https://api.example.com/{region}' }],
+    ["placeholders in the base's host only, never its path", { baseUrl: 'https://{region}.k.test/{region}', host: '*.k.test' }],
     ['a plain field for every placeholder in the base', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
     ['a plain field for every placeholder in the base', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
   ] as const).map(([rule, http]): [Rule, Entry] => [rule, { ...key, http, auth: [{ kind: 'key' }],
@@ -335,10 +342,12 @@ test.each<[Rule, Entry]>([
     operations: { then: { path: '/then' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
-test.each([['title', { title: '' }], ['help', { help: '' }]])('a field with an empty %s fails the schema', (_, part) => {
-  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', ...part }] };
-  expect(entrySchema.safeParse(bad).success).toBe(false);
-});
+test.each([[{ title: '' }, "a field's title says what to enter: give it words"],
+  [{ help: '' }, "a field's help is a line a person reads: give it words, or leave it out"]])(
+  'a field with %j fails the schema, with what to fix', (part, message) => {
+    const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', ...part }] };
+    expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+  });
 
 test('a query send that names no parameter fails the schema, with what to fix', () => {
   const bad = { ...key, auth: [{ kind: 'key', send: { query: {} } }], fields: [secret] };
