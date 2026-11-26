@@ -347,13 +347,15 @@ describe.each(entries)('%s', (id, entry) => {
     });
   }
 
-  // With a recording beside it, identify replays a good and a bad key on its recordings' exchanges merged, sending its
-  // request once; a missing exchange fails with the request it wanted. The account names what the recording holds.
+  // With a recording beside it, the sign-in replays a good and a bad key on its recordings' exchanges merged, sending a
+  // token entry's token request and identify's request once each (a bad key stops at the token request); a missing
+  // exchange fails with the request it wanted. The account names what the recording holds.
   const [first, ...rest] = recordings.filter(({ file }) => file.startsWith(`${id}.`));
-  if (entry.identify?.request === undefined || first === undefined) return;
+  const token = entry.auth[0].kind === 'token';
+  if ((entry.identify?.request === undefined && !token) || first === undefined) return;
   const recording = { ...first, provider: id, exchanges: [first, ...rest].flatMap(item => item.exchanges) };
   const recorded = JSON.stringify([recording.exchanges.filter(item => item.key === 'good').map(item => item.response), kitValues(entry)]);
-  test.each(['good', 'bad'] as const)('signs in on its recording with a %s key, sending identify once', async key => {
+  test.each(['good', 'bad'] as const)('signs in on its recording with a %s key, sending each request once', async key => {
     const fetch = vi.fn(replay(recording, key));
     const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
     if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
@@ -363,7 +365,7 @@ describe.each(entries)('%s', (id, entry) => {
       if (account === null) expect(entry.identify?.id).toBeUndefined();
       else expect(recorded.toLowerCase()).toContain(account.id.toLowerCase());
     }
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(token && key === 'bad' ? 1 : Number(token) + Number(entry.identify?.request !== undefined));
   });
 });
 

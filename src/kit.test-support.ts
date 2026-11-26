@@ -5,7 +5,7 @@ import type { Entry } from './catalogue.js';
 import { finishConnect } from './connect.js';
 import type { ProviderHttpError } from './errors.js';
 import { paginate, type Page } from './paginate.js';
-import { placeholders } from './rules.js';
+import { parseJson, placeholders } from './rules.js';
 import { fakeFetch, type Route } from './testing.js';
 
 /** One request and its answer. `key` says which key sent it: the scenario's good key or a bad one. */
@@ -48,17 +48,18 @@ export function kitValues(entry: Entry): Record<string, string> {
     [name, given ?? choices?.[0] ?? (inHost.includes(name) ? `kit-${name}.example.test` : `kit-${name}`)]));
 }
 
-/** Signs in with a key: a key or token entry through `finishConnect` on its kit values, an OAuth entry's token through
- * `identifyAccount`. */
-export function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch) {
+/** Signs in with a key: a key or token entry through `finishConnect` on its plain values (the kit's unless given), an
+ * OAuth entry's token through `identifyAccount`. */
+export function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch, values = kitValues(entry)) {
   if (entry.auth[0].kind === 'oauth2') return identifyAccount(entry, { token: key, fetch });
   const secret = (entry.fields ?? []).find(field => field.secret === true)?.name ?? '';
-  return finishConnect(entry, { secret: { [secret]: key }, values: kitValues(entry), fetch });
+  return finishConnect(entry, { secret: { [secret]: key }, values, fetch });
 }
 
+/** A request's JSON body, or its text when it is a form (a token request's). */
 const requestBody = async (request: Request): Promise<unknown> => {
   const text = await request.text();
-  return text ? JSON.parse(text) as unknown : undefined;
+  return text === '' ? undefined : parseJson(text) ?? text;
 };
 
 /** A fetch answering from a recording: each request must match one exchange of that key, or the test names it. */
@@ -73,8 +74,9 @@ export function replay(recording: Recording, key: Exchange['key']): typeof fetch
   };
 }
 
-/** Records every exchange a real fetch makes, the key replaced with the kit's, for `src/record.test.ts`. */
-export function recorder(real: typeof fetch, apiKey: string, key: Exchange['key']): { fetch: typeof fetch; exchanges: Exchange[] } {
+/** Records every exchange a real fetch makes, as sent and answered, for `src/record.test.ts`: `scrub` makes them safe to
+ * write. */
+export function recorder(real: typeof fetch, key: Exchange['key']): { fetch: typeof fetch; exchanges: Exchange[] } {
   const exchanges: Exchange[] = [];
   return { exchanges, async fetch(input, init) {
     const request = new Request(input, init);
@@ -86,11 +88,58 @@ export function recorder(real: typeof fetch, apiKey: string, key: Exchange['key'
       const value = response.headers.get(name);
       return value === null ? [] : [[name, value]];
     }));
-    exchanges.push({ key, method: request.method, url: request.url.replaceAll(apiKey, GOOD_KEY),
-      ...(body === undefined ? {} : { body }), status: response.status, headers,
-      response: text ? JSON.parse(text) as unknown : null });
+    exchanges.push({ key, method: request.method, url: request.url, ...(body === undefined ? {} : { body }),
+      status: response.status, headers, response: text ? JSON.parse(text) as unknown : null });
     return response;
   } };
+}
+
+/** A real value the recorder found, and the kit's stand-in written in its place. */
+export type Swap = [real: string, kit: string];
+/** A shorter value would match unrelated text: swapping it would not be safe. */
+const SHORTEST_SWAP = 4;
+/** A value as a recording may hold it: as it is, JSON-escaped, percent-encoded and form-encoded. */
+const forms = (value: string) => [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value),
+  new URLSearchParams({ v: value }).toString().slice(2)];
+/** Every key, string and number in a value. */
+const texts = (value: unknown): string[] => (typeof value === 'string' || typeof value === 'number' ? [String(value)]
+  : typeof value === 'object' && value !== null ? Object.entries(value).flatMap(([name, item]) => [name, ...texts(item)]) : []);
+/** `value` with `swap` applied to every key, string and number in it (a number swapped becomes a string). */
+function swapped(value: unknown, swap: (text: string) => string): unknown {
+  if (typeof value === 'string' || typeof value === 'number') {
+    const text = swap(String(value));
+    return text === String(value) ? value : text;
+  }
+  if (typeof value !== 'object' || value === null) return value;
+  if (Array.isArray(value)) return value.map(item => swapped(item, swap));
+  return Object.fromEntries(Object.entries(value).map(([name, item]) => [swap(name), swapped(item, swap)]));
+}
+/** Percent and `+` escapes decoded, so no encoding hides a value from the last check. */
+const decoded = (text: string) => text.replaceAll('+', ' ').replace(/%([0-9a-f]{2})/giu, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
+
+/**
+ * The exchanges with each real value (the key, a plain value, a token issued, the account) replaced by its stand-in in
+ * the URL, the body, the headers kept and the answer, at any depth, keys included. A value too short to swap safely, or
+ * one still found once decoded, refuses the whole recording: nothing is written partly scrubbed, and no message holds a
+ * real value.
+ */
+export function scrub(exchanges: readonly Exchange[], swaps: readonly Swap[]): Exchange[] {
+  const short = swaps.find(([real]) => real.length < SHORTEST_SWAP);
+  if (short) throw new Error(`recording refused: the value for ${short[1]} is under ${String(SHORTEST_SWAP)} characters, too short to swap safely`);
+  const standIn = new Map<string, string>();
+  for (const [real, kit] of swaps) for (const form of forms(real)) if (!standIn.has(form)) standIn.set(form, kit);
+  // One pass, longest first: a stand-in written is never read again.
+  const pattern = new RegExp([...standIn.keys()].sort((a, b) => b.length - a.length)
+    .map(form => form.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&')).join('|'), 'gu');
+  const swap = (text: string) => text.replace(pattern, form => standIn.get(form) ?? form);
+  const out = exchanges.map(exchange => Object.fromEntries(Object.entries(exchange).map(([part, value]) =>
+    [part, ['key', 'method', 'status'].includes(part) ? value : swapped(value, swap)])) as Exchange);
+  // What is left once the stand-ins are taken out, as written and decoded.
+  const kits = [...new Set(swaps.map(([, kit]) => kit))];
+  const seen = texts(out).flatMap(text => [text, decoded(text)]).map(text => kits.reduce((rest, kit) => rest.replaceAll(kit, ''), text));
+  const left = swaps.find(([real]) => forms(real).some(form => seen.some(text => text.includes(form))));
+  if (left) throw new Error(`recording refused: the value for ${left[1]} is still in it after the swap, in a form the recorder does not know`);
+  return out;
 }
 
 /** Runs the scenario's calls on a real key: what `src/record.test.ts` saves as a provider's recording. */

@@ -51,3 +51,28 @@ synthetic recordings are played from the fakes until a test mailbox replaces the
 A lookup provider has no pages, so its tests run `lookupKit(scenario, { recording, fake })` instead: the key proof, a bad
 key, a person found, one not found (null, with the credits the provider reports for it), a company and a 429. Its
 recording stays synthetic: `record.test.ts` plays list scenarios only, and a real lookup spends a customer's credits.
+
+## Recording an entry with no module
+
+An entry with no module becomes `recorded` from a test account with one command:
+
+```sh
+RECORD_PROVIDER=<id> RECORD_KEY=<secret> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts
+```
+
+`RECORD_KEY` is the entry's secret field (a `token` entry's too), or an OAuth access token for an OAuth entry.
+`RECORD_VALUES` holds the test account's plain values; a field left out takes its kit value (its `default`, else its
+first choice, else `kit-<name>`). A module's scenario of that name is still recorded first. With none, the recorder signs
+in to the entry (a `token` entry's token request, then identify) once with the key and once with a bad one, and writes
+`src/catalogue/<id>.recording.json` with `synthetic: false`, so the table test replays it with the kit's key and values
+and the entry's tier is `recorded`.
+
+Before it writes, the recorder swaps each real value for the kit's stand-in wherever the provider put it (the URL, the
+request body, the `link`, `content-type` and `retry-after` headers, the answer at any depth, keys included, as written,
+JSON-escaped or percent-encoded): the key for `kit-good-key`, each plain value for its kit value, every token at the
+entry's `token` path for `kit-token`, and the account's id and name, read at identify's paths, for `kit-account` and
+`kit-name`. It writes nothing when a value is under 4 characters (it would match unrelated text: record from an account
+whose values are longer), or when a value is still found once the text is decoded (an encoding it does not know). Its
+messages never quote a value, and nothing read from the environment is printed. The privacy check
+(`src/fixtures-privacy.test.ts`) still runs on the file: anything else of the account's in an answer (another address, a
+person's name) must be replaced by hand with a synthetic one, so read the file before committing it.

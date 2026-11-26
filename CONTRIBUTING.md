@@ -47,13 +47,20 @@ entry:
   leads to a list, and no id is a client call or a dotted prefix of another.
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
-the test signs in once with a good key and once with a bad one, each sending identify once. The bad key must be
-`rejected`, and the account id must appear in the recorded answers. A recording is `{ provider, synthetic, source,
-recordedAt, exchanges }`, each exchange `{ key: 'good' | 'bad', method, url, body?, status, headers?, response }`; the
-replay matches the method, the whole URL and the body, and fills a plain field with `kit-<name>`.
-`src/record.test.ts` records only a module's kit scenario, so an entry without a module gets a recording written by hand
-from the provider's documented examples, marked `synthetic: true`. That tests the entry and leaves its tier `declared`.
-Only a real capture (`synthetic: false`) makes it `recorded`. Every recording must sit beside an entry.
+the test signs in once with a good key and once with a bad one, each sending a `token` entry's token request and
+identify once (a bad key stops at the token request). The bad key must be `rejected`, and the account id must appear in
+the recorded answers. A recording is `{ provider, synthetic, source, recordedAt, exchanges }`, each exchange
+`{ key: 'good' | 'bad', method, url, body?, status, headers?, response }` (a form body is kept as its text); the replay
+matches the method, the whole URL and the body, and fills a plain field with its kit value (its `default`, else its first
+choice, else `kit-<name>`).
+
+To record an entry from a test account, run `RECORD_PROVIDER=<id> RECORD_KEY=<secret>
+RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`
+([testing](docs/modules/testing.md#recording-an-entry-with-no-module)). The recorder swaps the key, the plain values, the
+tokens issued and the account's id and name for the kit's stand-ins, and writes nothing it cannot scrub. Only such a
+capture (`synthetic: false`) makes the entry `recorded`. A recording written by hand from the provider's documented
+examples is marked `synthetic: true`: it tests the entry and leaves its tier `declared`. Every recording must sit beside
+an entry.
 
 Add a module, `src/<id>/<id>.ts`, only when the provider needs real code: answers with meaning, incremental reads,
 parsed webhooks, a sign-in the provider hosts. It builds on its entry with `client(entry, …)`, so its errors, retry and
@@ -72,7 +79,8 @@ paging are the entry's, and ships with:
 Every recording must pass `src/fixtures-privacy.test.ts`, which `pnpm check` runs. It refuses any email address or
 phone number that could belong to a real person: use addresses on reserved domains (`example.com`, `.test`) and the
 fictional 555-0100 to 555-0199 numbers. A live recording keeps every answer whole, so read the file before you commit
-it and replace each real name, address and id with a synthetic one.
+it and replace each real name, address and id with a synthetic one. An entry's recording has the account's id and name
+swapped for `kit-account` and `kit-name` already; anything else the answers hold is yours to replace.
 
 ## Code you did not write
 
