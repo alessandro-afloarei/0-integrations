@@ -165,6 +165,13 @@ describe('field defaults and choices', () => {
     expect(fake.calls.map(call => call.url)).toEqual([`https://${apiHost}/me`]);
   });
 
+  it.each([5, null, {}])('a value that is not a string (%j) is refused, never replaced by the default', async apiHost => {
+    const fake = http();
+    await expect(finishConnect(intercom, { secret: { accessToken: 'tok' }, values: { apiHost } as never, fetch: fake.fetch }))
+      .rejects.toThrow(new TypeError('connect_field_invalid: apiHost'));
+    expect(fake.calls).toHaveLength(0);
+  });
+
   it.each(['api.evil.test', 'API.EU.INTERCOM.IO', 'api.intercom.io/x'])('a value not among the choices (%s) is refused before anything is sent', async apiHost => {
     const fake = http();
     await expect(finishConnect(intercom, { secret: { accessToken: 'tok' }, values: { apiHost }, fetch: fake.fetch }))

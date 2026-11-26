@@ -65,8 +65,10 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     const credential = fields.find(field => field.secret);
     if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const read = (field: Field) => {
-      const given = (field.secret ? secrets : plain)[field.name];
-      const value = typeof given === 'string' && given.trim() !== '' ? given : field.secret ? undefined : field.default;
+      const given: unknown = (field.secret ? secrets : plain)[field.name];
+      // Only a value left out or blank takes the default: one of another type (a number, null) is refused.
+      if (given !== undefined && typeof given !== 'string') throw new TypeError(`connect_field_invalid: ${field.name}`);
+      const value = given !== undefined && given.trim() !== '' ? given : field.secret ? undefined : field.default;
       if (value === undefined) throw new TypeError(`connect_field_required: ${field.name}`);
       if (field.choices !== undefined && !field.choices.includes(value)) throw new TypeError(`connect_field_invalid: ${field.name}`);
       return [field.name, value] as const;
