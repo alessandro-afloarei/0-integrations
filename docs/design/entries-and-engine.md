@@ -569,8 +569,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   parameters are sent as one JSON object, `{}` when none is given, `variables` as GraphQL's variables (`{}` when none),
   posted with the query to the base.
 - `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
-  creates one record by any of several equal inputs (Salesloft's `[['email_address'], ['phone', 'last_name']]`). A path
-  names a parameter or, past a dot, a key of its object `type` (`contact.email`, through `key` or `key?`), and is read
+  creates one record by any of several equal inputs (`[['email'], ['phone', 'last_name']]`). A path names a parameter
+  or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read
   from the arguments as checked; one that is `undefined`, `null` or a blank string is not given. After each argument's
   own check and before anything is sent, a call that gives no set whole is `param_group_missing: <id>`; `client()`
   refuses a path that names no declared argument when it is built (`param_group_unknown: <id> <path>`). The table test
@@ -664,9 +664,11 @@ are `'unknown'`. A `get`, `create` and `update` declare the same record as the l
 only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
-When a page requires at least one of several equal inputs to find or create one record (an email, a LinkedIn URL, a domain), none
-is `required`: the operation declares the page's sets as `anyOf`, and the descriptions do not repeat them. For a list,
-the filter that scopes it stays required.
+When a page states that at least one of several equal inputs is required to find or create one record (in a sentence, a
+schema's "one of", or an error documented for a call with none), none is `required`: the operation declares the
+page's sets as `anyOf`, and the descriptions do not repeat them. A rule that reads two ways gives the sets of the
+reading that refuses fewer calls. A page that only lists ways to identify a record declares no group, and its
+descriptions do not claim one either. For a list, the filter that scopes it stays required.
 
 ## The engine
 

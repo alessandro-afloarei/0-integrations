@@ -12,8 +12,8 @@ Nothing here is released yet.
 - Buildkite and PagerDuty wait their reset headers (PagerDuty a minute when a 429 comes without one); Todoist waits its
   error body's `retry_after`; Jira retries only when an answer names `Retry-After`.
 - New: an operation may declare `anyOf`, sets of arguments of which a call must give one whole; `client()` refuses a
-  call that gives none (`param_group_missing`) before anything is sent. Cognism, Freshsales, Hunter, LeadIQ, lemlist,
-  People Data Labs, Reply.io and Salesloft declare their groups.
+  call that gives none (`param_group_missing`) before anything is sent. Freshsales, Hunter, lemlist, People Data Labs,
+  Reply.io and Salesloft declare their groups.
 - The 28 entries written before every value had to be cited from the provider's documentation are checked against
   their providers' pages.
 - Exa's and Firecrawl's `docs` links point to their current pages.
