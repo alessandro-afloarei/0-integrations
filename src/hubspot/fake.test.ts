@@ -38,7 +38,7 @@ describe('fakeHubSpot', () => {
     expect(await client.companyNames(['1', '10'])).toEqual(new Map([['1', 'Northstar'], ['10', 'Cohort']]));
     expect(await client.portalId()).toBe('42');
     expect(await client.stageLabels()).toEqual(new Map([['won', 'Closed won']]));
-    expect(await client.owners()).toEqual([{ email: 'alice@example.test', name: 'Alice Reed' }]);
+    expect(await client.owners()).toEqual({ items: [{ email: 'alice@example.test', name: 'Alice Reed' }], skipped: [] });
   });
 
   it('search honours the date filter, the id filter, the sort and the limit, and pages past 200', async () => {

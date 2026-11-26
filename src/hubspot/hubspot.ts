@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createClient } from "../http.js";
 import { hubspot } from "../catalogue/hubspot.js";
-import { parseAnswer } from "../parse.js";
+import { parseAnswer, parseEntries } from "../parse.js";
 import { paginate, type Page } from "../paginate.js";
 import { walk } from "../paging.js";
 import { datetime } from "../shapes.js";
@@ -38,8 +38,8 @@ const PRIMARY_COMPANY_TYPE = 5;
 const portalIdSchema = z.union([z.number().int().positive(), z.string().regex(/^[1-9]\d*$/u)]);
 const accountSchema = z.object({ portalId: portalIdSchema });
 const pipelinesSchema = z.object({ results: z.array(z.object({ stages: z.array(z.object({ id: z.string(), label: z.string() })) })) });
-const ownersSchema = z.object({ results: z.array(z.object({ email: z.string().optional(), firstName: z.string().optional(),
-  lastName: z.string().optional() })) });
+const ownersSchema = z.object({ results: z.array(z.unknown()) });
+const ownerSchema = z.object({ email: z.string().optional(), firstName: z.string().optional(), lastName: z.string().optional() });
 
 export function hubspotClient(input: {
   /** The run's access token; asked again once, naming the token HubSpot answered 401 to, so a refresh replaces it. */
@@ -152,17 +152,21 @@ export function hubspotClient(input: {
       const answer = await call("/crm/pipelines/2026-09/deals", pipelinesSchema);
       return new Map(answer.results.flatMap(pipeline => pipeline.stages.map(stage => [stage.id, stage.label] as const)));
     },
-    /** The portal's owners who have an email, lower-cased; a name falls back to the email. */
-    async owners(): Promise<HubSpotOwner[]> {
-      const owners: HubSpotOwner[] = [];
+    /** The portal's owners who have an email, lower-cased; a name falls back to the email. A malformed owner is skipped
+     * and its id reported. */
+    async owners(): Promise<{ items: HubSpotOwner[]; skipped: (string | null)[] }> {
+      const items: HubSpotOwner[] = [];
+      const skipped: (string | null)[] = [];
       for await (const body of walk(http, hubspot.paging.after, "/crm/owners/2026-09", { query: { limit: "100" } })) {
-        for (const owner of parseAnswer(ownersSchema, body).results) {
+        const page = parseEntries(ownerSchema, parseAnswer(ownersSchema, body).results);
+        skipped.push(...page.skipped);
+        for (const owner of page.items) {
           if (!owner.email) continue;
           const email = owner.email.toLowerCase();
-          owners.push({ email, name: [owner.firstName, owner.lastName].filter(Boolean).join(" ") || email });
+          items.push({ email, name: [owner.firstName, owner.lastName].filter(Boolean).join(" ") || email });
         }
       }
-      return owners;
+      return { items, skipped };
     },
   };
 }

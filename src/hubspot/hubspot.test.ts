@@ -217,14 +217,14 @@ describe("the HubSpot client", () => {
     expect(calls[0]).toMatchObject({ url: "https://api.hubapi.com/crm/pipelines/2026-09/deals", method: "GET" });
   });
 
-  it("lists the owners who have an email, across pages", async () => {
+  it("lists the owners who have an email, across pages, skipping and reporting a malformed one", async () => {
     const { calls, fetch } = scripted(
-      json({ results: [{ email: "Alice@Acme.test", firstName: "Alice", lastName: "Reed" }, { firstName: "No", lastName: "Email" }],
-        paging: { next: { after: "a+b=" } } }),
-      json({ results: [{ email: "bob@acme.test", firstName: "", lastName: "" }] }),
+      json({ results: [{ email: "Alice@Acme.test", firstName: "Alice", lastName: "Reed" }, { firstName: "No", lastName: "Email" },
+        { id: "7", email: 42 }], paging: { next: { after: "a+b=" } } }),
+      json({ results: [{ email: "bob@acme.test", firstName: "", lastName: "" }, "junk"] }),
     );
-    expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners())
-      .toEqual([{ email: "alice@acme.test", name: "Alice Reed" }, { email: "bob@acme.test", name: "bob@acme.test" }]);
+    expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners()).toEqual({
+      items: [{ email: "alice@acme.test", name: "Alice Reed" }, { email: "bob@acme.test", name: "bob@acme.test" }], skipped: ["7", null] });
     expect(calls.map(call => call.url)).toEqual(["https://api.hubapi.com/crm/owners/2026-09?limit=100",
       "https://api.hubapi.com/crm/owners/2026-09?limit=100&after=a%2Bb%3D"]);
   });
@@ -232,14 +232,14 @@ describe("the HubSpot client", () => {
   it("encodes an owners cursor with URLSearchParams, preserving spaces and reserved characters", async () => {
     const cursor = "a+b= c&d/?#";
     const { calls, fetch } = scripted(json({ results: [], paging: { next: { after: cursor } } }), json({ results: [] }));
-    expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners()).toEqual([]);
+    expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners()).toEqual({ items: [], skipped: [] });
     expect(calls.map(call => call.url)).toEqual(["https://api.hubapi.com/crm/owners/2026-09?limit=100",
       "https://api.hubapi.com/crm/owners/2026-09?limit=100&after=a%2Bb%3D+c%26d%2F%3F%23"]);
   });
 
   it.each([{ after: "" }, { after: 7 }, {}])("ends the owners at a blank or non-string cursor %j", async next => {
     const { calls, fetch } = scripted(json({ results: [], paging: { next } }));
-    expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners()).toEqual([]);
+    expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners()).toEqual({ items: [], skipped: [] });
     expect(calls).toHaveLength(1);
   });
 

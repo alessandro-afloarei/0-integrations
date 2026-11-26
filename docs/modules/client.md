@@ -17,8 +17,7 @@ const me = await api.json('/users/me');
 
 - `token`: a string, or a function `(rejected?: string) => Promise<string>`. The client calls the function once, and
   again with the refused token after a 401, so it can renew the token and the request is sent once more. A missing or
-  blank token is `TypeError('token_missing')`, thrown when the client is built for a string and before anything is sent
-  for a function.
+  blank token is `TypeError('token_missing')`, thrown when a request needs it, before anything is sent.
 - `fetch`: the global one by default. In production pass the app's own guarded `fetch`: the library does not refuse
   private addresses yet.
 - `values`: the connection's plain values, for a credential built from them (Aircall's `{apiId}`).
@@ -69,8 +68,8 @@ entries declare operations today: notion `pages.markdown`, fireflies `user` and 
   `TypeError('param_invalid: <name>')`. An argument that is not declared, or is `undefined`, is not sent. An operation
   with no required parameter may be called with no argument.
 - The answer is read by the operation's `result`: undeclared keys are dropped, and an answer that does not fit is
-  `invalid_response`. With no `result` the answer is `unknown`, and an empty 2xx answers `null`. With `notFound: 'null'`
-  a 404 answers `null`.
+  `invalid_response`. With no `result` the answer is `unknown`, and a 204 answers `null`; any other answer without JSON is
+  `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
 - A paged operation is read with `for await`. It yields the records at `records`, page by page; a record that does not
   fit is skipped, and the `onSkipped(ids)` option hears once from each page that skipped any.
 
@@ -78,6 +77,11 @@ The client's own calls take some names. An operation id whose first dot-separate
 `paginate` (`requests.list` is fine), an id `then`, an id with an empty segment, and an id that is a dotted prefix of
 another (`pages` beside `pages.markdown`) are refused: the reserved names by `defineProvider` at compile time, and all of
 them by `client` as `TypeError('operation_clash: <id>')` for an app's own entry.
+
+A wrong entry throws when its client is built: besides a clashing id, a parameter with no place in the request
+(`param_unplaced: <id> <name>`), a paging shape the entry does not declare (`paging_unknown: <name>`) and a `records`
+path that leads to no list in the `result` (`records_unshaped: <id>`). A wrong value throws when the call is made,
+before anything is sent.
 
 An app's own entry declares operations the same way:
 

@@ -52,9 +52,11 @@ Every line below breaks 0.12 unless it says otherwise.
   and Aircall's credential is built from `values: { apiId }` and the API token.
 - New: the first declared operations: notion `pages.markdown`, fireflies `user`, aircall `calls.transcript`, called as
   `client(entry, …).pages.markdown(…)` and so on.
-- A missing or blank token is refused with `TypeError('token_missing')` before anything is sent: a token function that
-  answers one, at first or on renewal, in every module and client, and a missing or blank API key or token given to
-  `notionClient`, `firefliesClient` or `aircallClient` (each was sent as an empty credential).
+- A missing or blank token is refused with `TypeError('token_missing')` when a request needs it, before anything is
+  sent: a token function that answers one, at first or on renewal, and a missing or blank string token, in every module
+  and client (each was sent as an empty credential).
+- A base URL with a trailing slash (`https://x.test/v1/`) is read without it: a request went to `/v1//a`, and a next
+  link under it was read wrongly.
 - A request whose URL leaves its base's origin (`https://api.x.test` + `@evil.test/y`) is refused with
   `TypeError('url_outside_origin')` before the token is read or anything is sent.
 - A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
@@ -107,6 +109,8 @@ Every line below breaks 0.12 unless it says otherwise.
   `unavailable` (it was `request_failed`).
 - hubspot: a portal id is any non-empty string or positive integer (a string had to match `^[1-9]\d*$`), and a `null`
   `hub_id` reads account-info (it was refused).
+- hubspot: `owners()` answers `{ items, skipped }`: a malformed owner is skipped and its id reported (it failed the
+  whole list).
 - lusha: an account without v3 access carries the answer's status (it was always 403) and its `Retry-After` in
   `retryAfterMs` (it was always `null`).
 - microsoft: the account id is Graph's `id` lowercased (Graph ids are lowercase GUIDs). A user with no address (neither

@@ -97,7 +97,8 @@ export type HttpOptions = {
 };
 
 export function createClient(entry: Entry, input: HttpOptions): HttpClient {
-  const baseUrl = input.baseUrl ?? entry.http.baseUrl;
+  // Read without a trailing slash, so a path after it never makes `//` (`https://x/v1/` + `/a`).
+  const baseUrl = (input.baseUrl ?? entry.http.baseUrl).replace(/\/+$/u, '');
   const origin = new URL(baseUrl).origin;
   const retry = retryPolicy(entry.http.retry);
   const timeoutMs = entry.http.timeoutMs ?? 30_000;

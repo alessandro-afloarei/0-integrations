@@ -65,7 +65,7 @@ function typed() {
   expectTypeOf(api.request('/self')).toEqualTypeOf<Promise<ProviderResponse>>();
   expectTypeOf<Parameters<typeof api.paginate>[0]>().toEqualTypeOf<'cursor'>();
   expectTypeOf<Parameters<Client<Entry>['paginate']>[0]>().toEqualTypeOf<string>();
-  // The README's example: an environment variable is a token as it is (a missing one is refused when the client is built).
+  // The README's example: an environment variable is a token as it is (a missing one is refused when a call needs it).
   expectTypeOf(client(attio, { token: process.env.ATTIO_KEY }).json('/self')).toEqualTypeOf<Promise<unknown>>();
 
   // No required parameter, no argument needed; an empty one, options and a nullable argument still work.

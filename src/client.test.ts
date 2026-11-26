@@ -86,11 +86,14 @@ test('an answer keeps its declared keys; a key? missing or null is absent; anyth
   await expect(raw.api.issues.raw()).rejects.toEqual(new ProviderHttpError('invalid_response', null));
 });
 
-test('an empty 2xx answers null when the operation declares no result; with a result it is invalid_response', async () => {
+test('a 204 answers null when the operation declares no result; with a result, or any other 2xx without JSON, it is invalid_response', async () => {
   const { fake, api } = setup(() => new Response(null, { status: 204 }));
   expect(await api.issues.delete({ id: 'x' })).toBeNull();
   await expect(api.issues.archive()).rejects.toMatchObject({ code: 'invalid_response', status: 204 });
   expect(wire(fake)).toEqual([['DELETE', `${BASE}/issues/x`, ''], ['PUT', `${BASE}/archive`, '']]);
+  const { api: odd } = setup(sequence(() => new Response('', { status: 200 }), () => new Response('<html>proxy</html>', { status: 200 })));
+  await expect(odd.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
+  await expect(odd.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
   const { api: refused } = setup(() => new Response(null, { status: 403 }));
   await expect(refused.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'rejected', status: 403 });
 });
@@ -159,13 +162,17 @@ test('json and request are authenticated, classified and carry no provider body;
   expect(() => client(acme as Entry, { token: 'k' }).paginate('offset', '/issues')).toThrow(new TypeError('paging_unknown: offset'));
 });
 
-test('a string token and a function token send the same header; a missing or blank one is refused at once', async () => {
+test('a string token and a function token send the same header; a missing or blank one is refused when a call needs it', async () => {
   const one = setup(json({}));
   const two = setup(json({}), { token: () => Promise.resolve('k') });
   await one.api.json('/x');
   await two.api.json('/x');
   expect(two.fake.calls[0]?.headers).toEqual(one.fake.calls[0]?.headers);
-  for (const token of [undefined, '', ' ']) expect(() => client(acme, { token })).toThrow(new TypeError('token_missing'));
+  for (const token of [undefined, '', ' ']) {
+    const { fake, api } = setup(json({}), { token });
+    await expect(api.issues.get({ id: 'x' })).rejects.toThrow(new TypeError('token_missing'));
+    expect(fake.calls).toEqual([]);
+  }
 });
 
 test("the HTTP client's options pass through: beforeRequest once per call, baseUrl for every call and next link, the global fetch", async () => {
@@ -186,6 +193,21 @@ test("the HTTP client's options pass through: beforeRequest once per call, baseU
   expect(global.calls.map(call => call.url)).toEqual([`${BASE}/requests`]);
 });
 
+test('a base URL with a trailing slash sends and pages as one without', async () => {
+  const sent: string[][] = [];
+  for (const baseUrl of ['https://api.acme.test/v2', 'https://api.acme.test/v2/']) {
+    const { fake, api } = setup(sequence(json({ id: 'x', count: 1 }), json({ next: 'https://api.acme.test/v2/feed?page=2' }), json({})),
+      { baseUrl });
+    await api.issues.get({ id: 'x' });
+    const pages: unknown[] = [];
+    for await (const page of api.paginate('link', '/feed')) pages.push(page);
+    expect(pages).toHaveLength(2);
+    sent.push(fake.calls.map(call => call.url));
+  }
+  expect(sent).toEqual(Array(2).fill(['https://api.acme.test/v2/issues/x', 'https://api.acme.test/v2/feed',
+    'https://api.acme.test/v2/feed?page=2']));
+});
+
 test('an operation id is nested by its dots beside the raw calls', () => {
   const { api } = setup(json({}));
   expect([typeof api.requests.list, typeof api.request, typeof api.issues.get]).toEqual(['function', 'function', 'function']);
@@ -202,26 +224,22 @@ test("an app's operation ids that would clash are refused before anything is bui
   expect(Object.keys(client(entry({ thenable: { path: '/x' }, 'then.x': { path: '/y' } }), { token: 'k' }))).toContain('then');
 });
 
-test("an app's entry that would send a wrong request is a TypeError naming the cause", async () => {
-  const wrong = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
-    operations: {
-      stray: { path: '/a', params: { id: { in: 'path', type: 'string' } } },
-      lost: { path: '/b/{id}' },
-      list: { path: '/c', paging: 'none' },
-      flat: { path: '/d', params: { ids: { in: 'query', type: ['string'] } } },
-      shapeless: { path: '/e', paging: 'cursor', records: 'items', result: { items: 'string' } },
-    },
-    paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'c' } } } } as const satisfies Entry;
+test("an app's entry that would send a wrong request is refused when its client is built", () => {
+  const entry = (op: object) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: { op },
+    paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'c' } } } }) as Entry;
+  for (const [op, message] of [
+    [{ path: '/a', params: { id: { in: 'path', type: 'string' } } }, 'param_unplaced: op id'],
+    [{ path: '/c', paging: 'none' }, 'paging_unknown: none'],
+    [{ path: '/e', paging: 'cursor', records: 'items', result: { items: 'string' } }, 'records_unshaped: op'],
+  ] as const) expect(() => client(entry(op), { token: 'k' })).toThrow(new TypeError(message));
+});
+
+test("a wrong argument to an app's entry is a TypeError when the call is made, before anything is sent", async () => {
+  const wrong = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: {
+    lost: { path: '/b/{id}' }, flat: { path: '/d', params: { ids: { in: 'query', type: ['string'] } } } } } as const satisfies Entry;
   const fake = fakeFetch([]);
-  const api = client(wrong as Entry, { token: 'k', fetch: fake.fetch }) as unknown as Record<string, (args?: object) => unknown>;
-  const call = async (name: string, args = {}) => {
-    const result = api[name]?.(args);
-    return await (result && typeof result === 'object' && 'next' in result ? (result as AsyncGenerator).next() : result);
-  };
-  await expect(call('stray', { id: 'x' })).rejects.toThrow(new TypeError('param_unplaced: stray id'));
-  await expect(call('lost')).rejects.toThrow(new TypeError('param_missing: id'));
-  await expect(call('list')).rejects.toThrow(new TypeError('paging_unknown: none'));
-  await expect(call('flat', { ids: ['a'] })).rejects.toThrow(new TypeError('param_invalid: ids'));
-  await expect(call('shapeless')).rejects.toThrow(new TypeError('records_unshaped: shapeless'));
+  const api = client(wrong as Entry, { token: 'k', fetch: fake.fetch }) as unknown as Record<string, (args?: object) => Promise<unknown>>;
+  await expect(api.lost?.()).rejects.toThrow(new TypeError('param_missing: id'));
+  await expect(api.flat?.({ ids: ['a'] })).rejects.toThrow(new TypeError('param_invalid: ids'));
   expect(fake.calls).toEqual([]);
 });

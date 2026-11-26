@@ -65,7 +65,7 @@ type OptionalKey<K> = K extends `${infer N}?` ? N : never;
 export type TypeOf<S> = S extends keyof Scalars ? Scalars[S] : S extends readonly [infer E] ? TypeOf<E>[]
   : { -readonly [K in keyof S as Exclude<K, `${string}?`>]: TypeOf<S[K]> } & { -readonly [K in keyof S as OptionalKey<K>]?: TypeOf<S[K]> };
 /** The client's own calls: an operation id whose first segment EQUALS one is refused (`'requests.create'` is fine), and
- * so is `then` itself, which would make the client a thenable. */
+ * so is `then` itself, which would make the client a thenable. `clashing` in rules.ts is the run time's copy. */
 type Reserved = 'json' | 'request' | 'paginate';
 type Unreserved<Ops> = { [K in keyof Ops]: K extends Reserved | `${Reserved}.${string}` | 'then'
   ? "json, request, paginate and then are the client's own: rename this operation" : Ops[K] };

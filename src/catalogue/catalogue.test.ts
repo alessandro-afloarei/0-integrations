@@ -7,7 +7,7 @@ import { identifyAccount, lookupNames } from '../account.js';
 import { defineProvider, type Entry, type Shape } from '../catalogue.js';
 import { finishConnect } from '../connect.js';
 import { BAD_KEY, GOOD_KEY, replay, type Recording } from '../kit.test-support.js';
-import { placed, placeholders, shapeAt } from '../rules.js';
+import { clashing, placed, placeholders, shapeAt } from '../rules.js';
 import { tierOf } from '../tier.js';
 
 /** Every entry in this folder: no list to edit when one is added. */
@@ -118,13 +118,9 @@ function functionsIn(value: unknown, at = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => functionsIn(item, at ? `${at}.${key}` : key));
 }
 
-/** An id the client's own calls take: its first dot-separated segment equals one (a prefix is fine), or `then` itself. */
-const clientCall = (id: string) => ['json', 'request', 'paginate'].includes(id.split('.')[0] ?? '') || id === 'then';
-
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
-const operationIds = (entry: Entry) => Object.keys(entry.operations ?? {});
 const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
 const runnable = {
   // The engine sends only that field as `{token}`.
@@ -142,10 +138,9 @@ const runnable = {
     operations(entry).every(op => op.paging === undefined || Object.hasOwn(entry.paging ?? {}, op.paging)),
   "a required path parameter for every {name} in an operation's path": (entry: Entry) => operations(entry).every(op =>
     !('path' in op) || placeholders(op.path).every(name => op.params?.[name]?.in === 'path' && op.params[name].required === true)),
-  "no operation id that is the client's own call": (entry: Entry) => !operationIds(entry).some(clientCall),
-  // `pages` and `pages.markdown` would be one property of the client; `a..b` none.
-  'operation ids of non-empty segments, none a dotted prefix of another': (entry: Entry) => operationIds(entry).every(id =>
-    id.split('.').every(Boolean) && !operationIds(entry).some(other => other.startsWith(`${id}.`))),
+  // The rule `client()` applies: `pages` and `pages.markdown` would be one property of the client, `a..b` none, and
+  // `json` or `then` would hide one of the client's own.
+  'operation ids a client can hold': (entry: Entry) => clashing(Object.keys(entry.operations ?? {})) === undefined,
   // A parameter with no place in the request would be left off it silently.
   'a place in the request for every parameter': (entry: Entry) => operations(entry).every(op =>
     Object.entries(op.params ?? {}).every(([name, param]) => placed(op, name, param))),
@@ -250,9 +245,9 @@ test.each<[Rule, Entry]>([
     revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
   ['scopes on an oauth2 entry', defineProvider(oauth2)],
   ...([
-    ['operation ids of non-empty segments, none a dotted prefix of another', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
-    ['operation ids of non-empty segments, none a dotted prefix of another', { '': { path: '/a' } }],
-    ['operation ids of non-empty segments, none a dotted prefix of another', { 'a..b': { path: '/a' } }],
+    ['operation ids a client can hold', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
+    ['operation ids a client can hold', { '': { path: '/a' } }],
+    ['operation ids a client can hold', { 'a..b': { path: '/a' } }],
     ['a place in the request for every parameter', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
     ['a place in the request for every parameter', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
     ['a place in the request for every parameter', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
@@ -270,9 +265,9 @@ test.each<[Rule, Entry]>([
     operations: { get: { path: '/items/{id}', params: { id: { in: 'query', type: 'string', required: true } } } } }],
   ["a required path parameter for every {name} in an operation's path", { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { get: { path: '/items/{id}', params: { id: { in: 'path', type: 'string' } } } } }],
-  ["no operation id that is the client's own call", { ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['operation ids a client can hold', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { 'request.create': { method: 'POST', path: '/requests' } } }],
-  ["no operation id that is the client's own call", { ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['operation ids a client can hold', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { then: { path: '/then' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
@@ -294,6 +289,6 @@ test('an entry whose operations keep every rule passes them all', () => {
 });
 
 test.each([['json', true], ['request.create', true], ['paginate.all', true], ['then', true],
-  ['requests.create', false], ['pages.markdown', false], ['jsonish', false], ['then.later', false], ['thenable', false]])('operation id %s is a client call: %s', (id, taken) => {
-  expect(clientCall(id)).toBe(taken);
+  ['requests.create', false], ['pages.markdown', false], ['jsonish', false], ['then.later', false], ['thenable', false]])('operation id %s alone is refused: %s', (id, taken) => {
+  expect(clashing([id]) !== undefined).toBe(taken);
 });

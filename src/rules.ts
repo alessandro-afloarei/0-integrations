@@ -35,6 +35,14 @@ export function placed(op: Operation, name: string, param: Param): boolean {
     : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name));
 }
 
+/** The first operation id a client cannot hold: one with an empty segment, a dotted prefix of another (`pages` beside
+ * `pages.markdown`), one whose first segment is the client's own call, or `then`, which would make the client a thenable.
+ * `Reserved` in catalogue.ts is the compiler's copy of these names. */
+export function clashing(ids: readonly string[]): string | undefined {
+  return ids.find(id => id.split('.').includes('') || ids.some(other => other.startsWith(`${id}.`))
+    || ['json', 'request', 'paginate'].includes(id.split('.')[0] ?? '') || id === 'then');
+}
+
 /** A `{name}`: no braces inside, never empty. */
 const PLACEHOLDER = /\{([^{}]+)\}/gu;
 
