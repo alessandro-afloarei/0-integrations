@@ -8,8 +8,12 @@ export const gitlab = defineProvider({
   categories: ['code'],
   fields: [{ name: 'host', title: 'GitLab host', default: 'gitlab.com', help: 'gitlab.com, or the host name of your own GitLab, with no port.' },
     { name: 'accessToken', title: 'Personal access token', secret: true }],
-  auth: [{ kind: 'key', send: { header: 'private-token' } }],
-  http: { baseUrl: 'https://{host}/api/v4', host: '*' },
+  // OAuth 2 on that host, the app's client registered there (https://docs.gitlab.com/api/oauth2/); then the token.
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/token',
+    authorizeParams: { response_type: 'code' } }, { kind: 'key', send: { header: 'private-token' } }],
+  scopes: { default: ['read_user'] },
+  revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh', 'access'] },
+  http: { baseUrl: 'https://{host}/api/v4', host: '*', retry: {} },
   identify: { request: { path: '/user' }, id: 'id', name: 'username' },
   // A signing token follows Standard Webhooks; `webhook-id` stays the same across retries
   // (https://docs.gitlab.com/user/project/integrations/webhooks/).
