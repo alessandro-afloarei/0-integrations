@@ -347,6 +347,19 @@ describe('fakeProvider', () => {
     expect(await answer(await sent({ client_id: 'kit-client', client_secret: 'kit-secret' }))).toEqual({ status: 401, body: { error: 'invalid_client' } });
   });
 
+  const twoOnOne = defineProvider({ id: 'twoonone', name: 'Two on one', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.twoonone.test' },
+    operations: { 'items.byA': { path: '/items', params: { a: { in: 'query', type: 'string', required: true } } },
+      'items.byB': { path: '/items', params: { b: { in: 'query', type: 'string', required: true } } } } });
+  test.each([['both carried, one parameter each: a tie', '?a=1&b=2'], ['none carried', '?c=3']])(
+    'of two operations on one route with %s, the first declared answers', async (_, query) => {
+      const { fetch } = fakeFetch(fakeProvider(twoOnOne, { key: 'k', operations: { 'items.byA': () => ({ by: 'a' }), 'items.byB': () => ({ by: 'b' }) } }));
+      expect(await answer(await fetch(`https://api.twoonone.test/items${query}`, { headers: { authorization: 'Bearer k' } })))
+        .toEqual({ status: 200, body: { by: 'a' } });
+      expect(await answer(await fetch('https://api.twoonone.test/items?b=2', { headers: { authorization: 'Bearer k' } })))
+        .toEqual({ status: 200, body: { by: 'b' } });
+    });
+
   test("Slack's token answer holds the value given for the `save` key that reads it, and its kit values elsewhere", async () => {
     const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { botUserId: 'U1' } }));
     await expect(finishConnect(slack, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
