@@ -32,7 +32,7 @@ export const salesloft = defineProvider({
     'people.list': { docs: `${api}/people-index/`, path: '/v2/people', paging: 'page', records: 'data', params: perPage,
       result: { data: [person] } },
     'people.get': { docs: `${api}/people-show/`, path: '/v2/people/{id}', notFound: 'null', params: { id }, result: { data: person } },
-    'people.create': { docs: `${api}/people-create/`, method: 'POST', path: '/v2/people', anyOf: [['email_address'], ['phone', 'last_name']],
+    'people.create': { docs: `${api}/people-create/`, method: 'POST', path: '/v2/people', anyOf: [['email_address'], ['phone'], ['last_name']],
       params: { ...written, email_address: { in: 'body', type: 'string' } },
       result: { data: person } },
     'people.update': { docs: `${api}/people-update/`, method: 'PUT', path: '/v2/people/{id}',
