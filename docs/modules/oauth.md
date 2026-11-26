@@ -17,3 +17,30 @@ first token the entry's `revoke.token` names (it needs `client`, else `oauth_cli
 done, and so is an RFC 7009 revoke's 404, an entry with no `revoke` or a grant without the token it names. A request
 revoke's answer is read as any JSON call's: its 404 is `not_found` (a missing route, not a gone token), and a 2xx
 without JSON is `invalid_response`.
+
+## A `token` entry: `tokenSource`
+
+A `token` entry (Zoom's Server-to-Server OAuth) turns what the person entered into a short-lived token with one declared
+request. `tokenSource(entry, { secret, values?, fetch? })` is the token function `client()` takes for it:
+
+```ts
+import { zoom } from '0-integrations/catalogue/zoom';
+import { client } from '0-integrations/client';
+import { tokenSource } from '0-integrations/oauth';
+
+const api = client(zoom, { token: tokenSource(zoom, { secret, values }), values });
+```
+
+`secret` is the entry's secret field by name (`{ clientSecret }`), `values` the plain ones (`{ accountId, clientId }`).
+The source requests a token on its first call and keeps it until 60 seconds before the answer's `expires_in` runs out
+(an answer with no positive `expires_in` keeps it until it is refused). Concurrent calls share one request; a failed
+request is not kept, so the next call tries again. When the API refuses the token with a 401, the client passes it back
+and the source requests a new one.
+
+The request posts the entry's body as a form (or as one JSON object with `json: true`), with Basic client
+authentication when the entry says `basic`, and the entry's `http.headers`. It is sent once: never retried, since it is
+no read of the provider's API, and never redirected (a 3xx is `request_failed`). A 400, 401 or 403 is `rejected`, with
+the RFC 6749 `error` as its detail; a 2xx without a non-empty token is `invalid_response` (`missing_fields`); any other
+answer is classified as usual. No detail holds a secret field, a body value filled from one, or the Basic value sent.
+A template naming a value that is missing or blank is `TypeError('template_missing: <entry id> {<name>}')` before
+anything is sent. The token lives in the process; the vault keeps only the long-lived secret fields.

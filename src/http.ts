@@ -89,7 +89,9 @@ function credentialOf(entry: Entry, token: string, values: Values): Credential {
   if (send === undefined) return { header: ['authorization', `Bearer ${token}`] };
   if ('header' in send) return { header: [send.header, token] };
   const secret = entry.fields?.find(field => field.secret === true)?.name;
-  const lookup = (name: string) => (name === 'token' || name === secret ? token : plainValue(values, name));
+  // A token entry's secret field goes only to its token request, never with a call, whatever `values` holds.
+  const lookup = (name: string) => (name === secret ? (auth.kind === 'key' ? token : undefined)
+    : name === 'token' ? token : plainValue(values, name));
   if ('query' in send) return { query: Object.entries(send.query).map(([name, template]) => [name, fill(template, lookup, entry.id)]) };
   const pair = `${fill(send.basic[0], lookup, entry.id)}:${fill(send.basic[1], lookup, entry.id)}`;
   return { header: ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`] };
@@ -99,11 +101,11 @@ function credentialOf(entry: Entry, token: string, values: Values): Credential {
  * `/`, `@`, `#`, space or empty label; no `i` flag, which would let the Kelvin sign and the long s pass as `k` and `s`. */
 const BASE_VALUE = /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/u;
 
-/** The entry's base, its placeholders filled from plain or saved values: one in the host a host name, one in the path
- * one encoded segment. An https URL with no user, its host, when templated, matching `http.host` (equal, `*.d` a name
- * ending in `.d`, `*` any). Throws before anything is read or sent. */
-function filledBase(entry: Entry, values: Values): string {
-  const { baseUrl, host = '' } = entry.http;
+/** The entry's base (or another URL of it: a token request's), its placeholders filled from plain or saved values: one
+ * in the host a host name, one in the path one encoded segment. An https URL with no user, its host, when templated,
+ * matching `http.host` (equal, `*.d` a name ending in `.d`, `*` any). Throws before anything is read or sent. */
+export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.baseUrl): string {
+  const { host = '' } = entry.http;
   if (placeholders(baseUrl).length === 0) return baseUrl;
   const pathAt = baseUrl.indexOf('/', baseUrl.indexOf('//') + 2);
   const [head, tail] = pathAt === -1 ? [baseUrl, ''] : [baseUrl.slice(0, pathAt), baseUrl.slice(pathAt)];

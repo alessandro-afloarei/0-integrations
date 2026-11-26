@@ -249,8 +249,9 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     followed, through the entry's default `fetch` (`guardedFetch` for `http.host: '*'`) unless the app passes one.
   - Its answer: a 2xx whose `token` path (`access_token` by default) holds a non-empty string is the token, and a root
     `expires_in` that is a positive finite number of seconds is its life (none: kept until refused). A 2xx without a
-    token is `invalid_response` (`missing_fields`); 400, 401 and 403 are `rejected` (RFC 6749 §5.2); any other answer
-    is classified as usual. No detail holds a secret field or the Basic value sent.
+    token is `invalid_response` (`missing_fields`); 400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the
+    answer's `error`; any other answer is classified as usual. No detail holds a secret field, a body value filled from
+    one, or the Basic value sent. The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
     the token until 60 seconds before its expiry or until it is passed back as refused, concurrent calls share one
     request, and a failed request is not kept.
@@ -258,7 +259,8 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     entry does (defaults, choices), requests a token (the credential check), identifies with it, with the token
     answer's keys the entry names as `tokenAnswer.*`, and returns the secret fields as `secret`; the token is not
     returned.
-  - Its `send` may name `{token}` (the token obtained) and plain fields, never a secret field.
+  - Its `send` may name `{token}` (the token obtained) and plain fields, never a secret field: a call never sends one,
+    whatever `values` holds.
 - A sign-in the provider hosts on its own page is not a kind: the entry is a `key` entry for the app's own key, and the
   provider's module offers the hosted link and the account lookup as calls.
 
@@ -334,8 +336,9 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   on. The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
 - Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
   retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
-  the OAuth token endpoint and an RFC 7009 revoke. An answer that step 3 reclassifies is reported, not retried. The
-  last answer is classified as any other; a timeout, and a network failure after the last retry, are `unavailable`.
+  the OAuth token endpoint, a `token` entry's request and an RFC 7009 revoke. An answer that step 3 reclassifies is
+  reported, not retried. The last answer is classified as any other; a timeout, and a network failure after the last
+  retry, are `unavailable`.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
   1 second. A `limit` of 0 means no retry; an error still carries the wait the provider names.
 - The error taxonomy does not change.

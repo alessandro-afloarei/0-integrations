@@ -7,9 +7,10 @@ import { authorizeUrl, exchangeCode, pkcePair, revokeGrant, type Grant, type OAu
 type Redirect = { kind: 'redirect'; url: string; codeVerifier?: string };
 type Form = { kind: 'form'; fields: readonly Field[] };
 export type ConnectStart = Redirect | Form;
-/** `OAuth` for an OAuth 2 entry, `Key` for a key entry, either for an entry whose kind is not known (a union, `Entry`). */
+/** `OAuth` for an OAuth 2 entry, `Key` for a form entry (key or token), either for an entry whose kind is not known (a
+ * union, `Entry`). */
 type ByKind<E extends Entry, OAuth, Key> = [E['auth'][0]['kind']] extends ['oauth2'] ? OAuth
-  : [E['auth'][0]['kind']] extends ['key'] ? Key : OAuth | Key;
+  : [E['auth'][0]['kind']] extends ['key' | 'token'] ? Key : OAuth | Key;
 /** The entry's declared fields, one union member each; none for an entry that declares none. */
 type Fields<E extends Entry> = E extends { fields?: readonly (infer F)[] } ? F : never;
 /** Whether the types do not know the entry's field names (a widened `Entry`, or fields typed `readonly Field[]`). */
@@ -46,7 +47,7 @@ export function startConnect<const E extends Entry>(entry: E, ...options: ByKind
   Promise<ByKind<E, Redirect, Form>>;
 export async function startConnect(entry: Entry, options?: OAuthStart): Promise<ConnectStart> {
   const [auth] = entry.auth;
-  if (auth.kind === 'key') return { kind: 'form', fields: entry.fields ?? [] };
+  if (auth.kind !== 'oauth2') return { kind: 'form', fields: entry.fields ?? [] };
   if (!options) throw new TypeError('oauth_options_required');
   const pkce = auth.pkce === false ? undefined : await pkcePair();
   return { kind: 'redirect', url: authorizeUrl(entry, { ...options, scopes: entry.scopes?.default ?? [],
@@ -79,7 +80,7 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     const values = Object.fromEntries(fields.filter(field => !field.secret).map(read));
     return { secret: Object.fromEntries([credential, ...others]), ...await identifyAccount(entry, { fetch, token: credential[1], values }) };
   }
-  if (!('code' in input)) throw new TypeError('oauth_options_required');
+  if (!('code' in input) || auth.kind !== 'oauth2') throw new TypeError('oauth_options_required');
   const { grant, extras } = await exchangeCode(entry, input.client, { ...input, fetch });
   try {
     // RFC 6749 §5.1: a token answer without `scope` granted the scopes requested.

@@ -6,11 +6,12 @@ import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
 import { aircall } from './catalogue/aircall.js';
 import { gitlab } from './catalogue/gitlab.js';
+import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
 import { accessToken, type WithLock } from './credentials.js';
 import { fakeHubSpot, type HubSpotFakeData } from './hubspot/fake.js';
-import { refreshGrant, type OAuthClient } from './oauth.js';
+import { refreshGrant, tokenSource, type OAuthClient } from './oauth.js';
 import { fakeFetch } from './testing.js';
 import type { SecretStore, Vault } from './vault.js';
 
@@ -118,6 +119,12 @@ async function clientGuarded(accessToken: string, host: string) {
   return user;
 }
 
+// docs/modules/oauth.md › A `token` entry.
+function oauthTokenSource(secret: { clientSecret: string }, values: { accountId: string; clientId: string }) {
+  const api = client(zoom, { token: tokenSource(zoom, { secret, values }), values });
+  return api;
+}
+
 // docs/design/entries-and-engine.md › The engine (its operation line is a comment there).
 async function designClient() {
   const api = client(attio, { token: process.env.ATTIO_KEY });
@@ -127,5 +134,5 @@ async function designClient() {
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded].every(example => typeof example === 'function')).toBe(true);
+    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource].every(example => typeof example === 'function')).toBe(true);
 });

@@ -17,13 +17,19 @@ export type Field = { name: string; title: string; secret?: true; default?: stri
 /** How the credential travels. None: `authorization: Bearer {token}`. A header alone: the bare `{token}`. `query`:
  * each parameter's template, set on the URL of every request and redirect hop. */
 export type Send = { header: string } | { basic: readonly [Template, Template] } | { query: Readonly<Record<string, Template>> };
+/** One request that turns what the person entered into a short-lived token: client credentials, or a session sign-in.
+ * Its body is a flat record of templates, sent as a form or, with `json`, as JSON; `token` is the token's path in the
+ * answer (`access_token` by default), and a root `expires_in` (seconds) is its life. */
+export type TokenRequest = { url: Template; body: Readonly<Record<string, Template>>; json?: true;
+  basic?: readonly [Template, Template]; token?: Path };
 /** `oauth2.refreshUrl`: where a refresh posts (else `tokenUrl`). `json`: the token endpoint, its refresh and an RFC 7009
- * revoke take the parameters as one JSON object instead of a form. */
+ * revoke take the parameters as one JSON object instead of a form. `token`: one declared request gives the token. */
 export type Auth =
   | { kind: 'key'; send?: Send }
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
     clientAuth?: 'basic'; scopeSeparator?: ','; authorizeParams?: Readonly<Record<string, string>>;
-    tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true };
+    tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true }
+  | { kind: 'token'; request: TokenRequest; send?: Send };
 /** A declared request. `base` names one of `http.bases` to send it to instead of the entry's own base. */
 export type Call = { method?: Method; path?: Template; query?: Readonly<Record<string, string>>; graphql?: string; base?: string };
 /** A path, the first present of several paths, or a template (a string with braces) over the same lookup. */

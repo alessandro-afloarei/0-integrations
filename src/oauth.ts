@@ -1,10 +1,10 @@
 import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
-import type { Auth, Entry } from './catalogue.js';
+import type { Auth, Entry, Values } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { callBase, callRequest, createClient } from './http.js';
-import { codeOf, responseJson, safeDetail } from './http-response.js';
-import { holds } from './rules.js';
+import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
+import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
+import { fill, holds, parseJson, placeholders, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
@@ -182,4 +182,62 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
       && (revoke.goneErrors ?? []).includes(error.detail));
     if (!gone) throw error;
   }
+}
+
+type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; fetch?: typeof fetch };
+
+/** @internal Requests a token entry's token: the token, its expiry (ms since epoch) or null, and the parsed answer. Sent
+ * once, never retried (it is no read of the provider's API) and never redirected. Its templates read the secret fields
+ * from `secret` and every other name as a plain value; no error detail holds a secret, a body value filled from one, or
+ * the Basic value sent. */
+export async function requestToken(entry: Entry, input: TokenInput): Promise<{ token: string; expiresAt: number | null; answer: unknown }> {
+  const [auth] = entry.auth;
+  if (auth.kind !== 'token') throw new TypeError('token_unsupported');
+  const { request } = auth;
+  const values = input.values ?? {};
+  const secretNames = new Set((entry.fields ?? []).filter(field => field.secret).map(field => field.name));
+  const filled = (template: string) => fill(template, name => plainValue(secretNames.has(name) ? input.secret : values, name), entry.id);
+  const url = filledBase(entry, values, request.url);
+  const body = Object.fromEntries(Object.entries(request.body).map(([name, template]) => [name, filled(template)]));
+  const basic = request.basic && Buffer.from(`${filled(request.basic[0])}:${filled(request.basic[1])}`).toString('base64');
+  const secrets = [...[...secretNames].map(name => input.secret[name] ?? ''), basic ?? '', ...Object.entries(request.body)
+    .filter(([, template]) => placeholders(template).some(name => secretNames.has(name))).map(([name]) => body[name] ?? '')];
+  const headers = new Headers(entry.http.headers);
+  headers.set('content-type', request.json ? 'application/json' : 'application/x-www-form-urlencoded;charset=UTF-8');
+  if (basic !== undefined) headers.set('authorization', `Basic ${basic}`);
+  let response: ProviderResponse;
+  try {
+    const answer = await (input.fetch ?? defaultFetch(entry))(url, { method: 'POST', headers, redirect: 'manual',
+      body: request.json ? JSON.stringify(body) : new URLSearchParams(body), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) });
+    response = sentWith({ status: answer.status, headers: answer.headers, data: parseJson(await answer.text()) }, secrets);
+  } catch (error) {
+    if (error instanceof ProviderHttpError) throw error; // the address guard's refusal
+    throw new ProviderHttpError('unavailable', null);
+  }
+  const { status, data } = response;
+  // RFC 6749 §5.2: a refused client or grant; the provider's code is its `error`.
+  if (status === 400 || status === 401 || status === 403) {
+    const code = codeOf({ detail: 'error' }, data);
+    throw new ProviderHttpError('rejected', status, code === undefined ? null : safeDetail(code, secrets));
+  }
+  const error = status >= 200 && status < 300 ? null : classify(entry, response);
+  if (error) throw error;
+  const token = readPath(data, request.token ?? 'access_token');
+  if (typeof token !== 'string' || token.trim() === '') throw new ProviderHttpError('invalid_response', status, 'missing_fields');
+  const life = readPath(data, 'expires_in');
+  return { token, expiresAt: typeof life === 'number' && Number.isFinite(life) && life > 0 ? Date.now() + life * 1000 : null, answer: data };
+}
+
+/** The token function `client()` takes, for a `token` entry: requests a token, keeps it until it expires (60 s early) or
+ * is refused, and shares one request among concurrent callers. A failed request is not kept. */
+export function tokenSource(entry: Entry, input: TokenInput): (rejected?: string) => Promise<string> {
+  let kept: Promise<{ token: string; expiresAt: number | null }> | undefined;
+  const request = () => (kept = requestToken(entry, input).catch((error: unknown) => { kept = undefined; throw error; }));
+  return async rejected => {
+    const held = kept ?? request();
+    const { token, expiresAt } = await held;
+    if (token !== rejected && (expiresAt === null || expiresAt - Date.now() > 60_000)) return token;
+    // The first caller to find it stale requests again; the others wait for that request.
+    return (await (kept === held ? request() : kept ?? request())).token;
+  };
 }
