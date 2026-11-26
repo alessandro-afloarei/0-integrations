@@ -34,6 +34,8 @@ Nothing here is released yet.
   (`tokenAnswer.authed_user`) is not kept.
 - An app's own `baseUrl` must be https, as every URL the library sends to: one that is not, or that does not parse or
   holds a username or password, is `base_host_refused`.
+- New: webhook `hash: 'sha1'` (Intercom) and `part` for headers such as Stripe's `t=…,v1=…`. A signature header over
+  8 KiB is refused before it is parsed.
 
 ## 0.13.0
 

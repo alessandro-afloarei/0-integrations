@@ -111,7 +111,10 @@ const entrySchema = z.strictObject({
     rules: z.array(z.strictObject({ when, code: z.enum(['rejected', 'rate_limited', 'unavailable', 'not_found', 'request_failed', 'invalid_response']),
       detail: z.string().optional() })).optional() }).optional(),
   webhook: z.strictObject({ kind: z.literal('hmac'), header: z.string(), signed: template.optional(), prefix: z.string().optional(),
-    encoding: z.literal('base64').optional(), timestamp: z.strictObject({ header: z.string(), toleranceSeconds: z.number().int().positive().optional() }).optional(),
+    encoding: z.literal('base64').optional(), hash: z.literal('sha1', "`hash` is 'sha1' or left out (SHA-256)").optional(),
+    part: z.string().min(1).optional(),
+    timestamp: z.union([z.strictObject({ header: z.string(), toleranceSeconds: z.number().int().positive().optional() }),
+      z.strictObject({ part: z.string().min(1), toleranceSeconds: z.number().int().positive().optional() })]).optional(),
     deliveryId: z.union([z.strictObject({ header: z.string() }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional() }).optional(),
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(),
@@ -251,6 +254,14 @@ const runnable = {
   // A saved value would replace the field the person entered, which `Connected` types as a string.
   "`save` keys apart from the fields' names": (entry: Entry) =>
     Object.keys(entry.save ?? {}).every(name => !(entry.fields ?? []).some(field => field.name === name)),
+  // A part's value is the signature alone (Stripe's `v1=<hex>`): a prefix would never be compared.
+  "no `webhook.prefix` beside `webhook.part`": (entry: Entry) => entry.webhook?.part === undefined || entry.webhook.prefix === undefined,
+  // The timestamp is read from the same header's pieces, which only `part` splits.
+  "a `webhook.timestamp.part` only beside `webhook.part`": (entry: Entry) => entry.webhook?.timestamp === undefined
+    || !('part' in entry.webhook.timestamp) || entry.webhook.part !== undefined,
+  // Without a timestamp, `{timestamp}` signs an empty string and no tolerance is checked.
+  '`{timestamp}` in `webhook.signed` only beside a `webhook.timestamp`': (entry: Entry) => entry.webhook?.timestamp !== undefined
+    || !placeholders(entry.webhook?.signed ?? '').includes('timestamp'),
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
@@ -435,6 +446,12 @@ test.each<[Rule, Entry]>([
     ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path or a query', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
   ] as const).map(([rule, operations]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations })]),
+  ...([
+    ["no `webhook.prefix` beside `webhook.part`", { kind: 'hmac', header: 'stripe-signature', part: 'v1', prefix: 'v1=' }],
+    ["a `webhook.timestamp.part` only beside `webhook.part`", { kind: 'hmac', header: 'stripe-signature', signed: '{timestamp}.{body}',
+      timestamp: { part: 't' } }],
+    ['`{timestamp}` in `webhook.signed` only beside a `webhook.timestamp`', { kind: 'hmac', header: 'x-signature', signed: '{timestamp}.{body}' }],
+  ] as const).map(([rule, webhook]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook })]),
   // The compiler refuses these through `defineProvider`; they are entries read as data.
   ['an `operations[].paging` name declared in `paging`', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { list: { path: '/items', paging: 'cursor' } } }],
@@ -476,6 +493,11 @@ test('a token request whose body holds an object fails the schema, with what to 
 test('a query send that names no parameter fails the schema, with what to fix', () => {
   const bad = { ...key, auth: [{ kind: 'key', send: { query: {} } }], fields: [secret] };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(['a query send names at least one parameter']);
+});
+
+test("a webhook `hash` other than 'sha1' fails the schema, with what to fix", () => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'hmac', header: 'x-signature', hash: 'md5' } };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(["`hash` is 'sha1' or left out (SHA-256)"]);
 });
 
 test("a base with a host from a field's choices and a path segment from a saved value passes every rule", () => {

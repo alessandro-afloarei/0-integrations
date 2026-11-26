@@ -49,9 +49,12 @@ export type Http = { baseUrl: Template;
   timeoutMs?: number; minIntervalMs?: number; retry?: Retry; rateLimit?: RateLimit };
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
-export type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64';
-  timestamp?: { header: string; toleranceSeconds?: number };
-  deliveryId?: { header: string } | { body: readonly Path[] } };
+/** How a delivery is signed. `hash: 'sha1'`: HMAC-SHA1 (else SHA-256). `part`: the header is a comma-separated list
+ * of `name=value` pieces, each piece named `part` a signature, any of which may match; `timestamp.part` reads the
+ * timestamp from the same list. `deliveryId` is what an app dedupes on. */
+export type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
+  part?: string; timestamp?: { header: string; toleranceSeconds?: number } | { part: string; toleranceSeconds?: number } }
+  & { deliveryId?: { header: string } | { body: readonly Path[] } };
 export type Where = { query: string } | { body: string };
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */

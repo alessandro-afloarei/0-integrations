@@ -1,6 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Intercom: one of three regional hosts, picked by the person (the US by default); `GET /me` names the workspace. */
+/** Intercom: one of three regional hosts, picked by the person (the US by default); `GET /me` names the workspace.
+ * Webhooks: `X-Hub-Signature: sha1=<hex HMAC-SHA1 of the body>`, keyed with the app's client secret
+ * (https://developers.intercom.com/docs/references/2.13/webhooks/webhook-models, "Signed notifications"). */
 export const intercom = defineProvider({
   id: 'intercom', name: 'Intercom',
   docs: 'https://developers.intercom.com/docs/references/rest-api/api.intercom.io/admins/identifyadmin',
@@ -11,4 +13,5 @@ export const intercom = defineProvider({
   http: { baseUrl: 'https://{apiHost}', host: '*.intercom.io' },
   errors: { detail: 'errors.0.code' },
   identify: { request: { path: '/me' }, id: 'app.id_code', name: 'app.name' },
+  webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha1=', hash: 'sha1' },
 });

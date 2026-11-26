@@ -5,23 +5,36 @@ import { parseJson, readPath } from './rules.js';
 
 export type WebhookRequest = { method: string; url: string; headers: Headers; rawBody: Uint8Array };
 
+/** A signature header longer than this is refused before it is parsed. */
+const MAX_HEADER_BYTES = 8 * 1024;
+
 export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret: string): boolean {
-  const timestamp = webhook.timestamp ? request.headers.get(webhook.timestamp.header) ?? '' : '';
-  if (webhook.timestamp) {
+  const received = request.headers.get(webhook.header);
+  if (!received || received.length > MAX_HEADER_BYTES) return false;
+  // With `part`, the header is `name=value` pieces split on `,`, each on its first `=`; a piece with no `=` names nothing.
+  const pieces = webhook.part === undefined ? [] : received.split(',').flatMap(piece => {
+    const at = piece.indexOf('=');
+    return at < 0 ? [] : [{ name: piece.slice(0, at), value: piece.slice(at + 1) }];
+  });
+  const named = (name: string) => pieces.filter(piece => piece.name === name).map(piece => piece.value);
+  const stamp = webhook.timestamp;
+  const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
+  if (stamp) {
     if (!/^\d+$/.test(timestamp)) return false;
     const seconds = Number(timestamp);
-    if (!Number.isSafeInteger(seconds) || Math.abs(Math.floor(Date.now() / 1000) - seconds) > (webhook.timestamp.toleranceSeconds ?? 300)) return false;
+    if (!Number.isSafeInteger(seconds) || Math.abs(Math.floor(Date.now() / 1000) - seconds) > (stamp.toleranceSeconds ?? 300)) return false;
   }
-  const received = request.headers.get(webhook.header);
-  if (!received) return false;
-  const hmac = createHmac('sha256', secret);
+  const hmac = createHmac(webhook.hash ?? 'sha256', secret);
   const substitutions: Record<string, string | Uint8Array> = {
     '{body}': request.rawBody, '{timestamp}': timestamp, '{method}': request.method, '{url}': request.url,
   };
   for (const part of (webhook.signed ?? '{body}').split(/(\{body\}|\{timestamp\}|\{method\}|\{url\})/)) hmac.update(substitutions[part] ?? part);
-  const expected = Buffer.from((webhook.prefix ?? '') + hmac.digest(webhook.encoding ?? 'hex'));
-  const actual = Buffer.from(received);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  // A part's value is the signature alone: `prefix` is not compared there.
+  const expected = Buffer.from((webhook.part === undefined ? webhook.prefix ?? '' : '') + hmac.digest(webhook.encoding ?? 'hex'));
+  return (webhook.part === undefined ? [received] : named(webhook.part)).some(candidate => {
+    const actual = Buffer.from(candidate);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  });
 }
 
 /** What an app dedupes a delivery on: the declared header, or the body's paths joined with `:`; null when one is missing.
