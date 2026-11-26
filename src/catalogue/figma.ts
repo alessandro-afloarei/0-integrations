@@ -12,7 +12,7 @@ export const figma = defineProvider({
     refreshUrl: 'https://api.figma.com/v1/oauth/refresh', clientAuth: 'basic',
     authorizeParams: { response_type: 'code' } },
   { kind: 'key', send: { header: 'x-figma-token' } }],
-  scopes: { default: ['current_user:read', 'file_content:read'] },
-  http: { baseUrl: 'https://api.figma.com/v1' },
+  scopes: { default: ['current_user:read'] },
+  http: { baseUrl: 'https://api.figma.com/v1', retry: {} },
   identify: { request: { path: '/me' }, id: 'id' },
 });
