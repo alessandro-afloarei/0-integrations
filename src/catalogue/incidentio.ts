@@ -14,7 +14,7 @@ export const incidentio = defineProvider({
   id: 'incidentio', name: 'incident.io', docs: `${api}/introduction`,
   categories: ['monitoring'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'An organization API key made for the app under Settings → API keys, not a user API key (user credentials may not be shared), with the View data, Create incidents and Edit incidents permissions, and View all incident data for private incidents.' }],
+    help: 'An organization API key made for the app under Settings, then API keys, not a user API key (user credentials may not be shared), with the View data, Create incidents and Edit incidents permissions, and View all incident data for private incidents.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.incident.io', minIntervalMs: 50, retry: {} },
   identify: { request: { path: '/v1/identity' }, name: 'identity.name' },

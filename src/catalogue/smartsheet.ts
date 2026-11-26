@@ -17,7 +17,7 @@ export const smartsheet = defineProvider({
   id: 'smartsheet', name: 'Smartsheet', docs: 'https://developers.smartsheet.com/api/smartsheet/guides/basics/authentication.md',
   categories: ['tasks'],
   fields: [{ name: 'accessToken', title: 'API access token', secret: true,
-    help: 'Your own token, made on Smartsheet.com (Gov and Europe use their own); Smartsheet recommends OAuth for apps acting for other people. The API needs a Business or Enterprise plan, and a viewer cannot write to a sheet.' }],
+    help: 'For your own Smartsheet account, made on Smartsheet.com (Gov and Europe use their own): Smartsheet recommends OAuth for apps acting for other people. The API needs a Business or Enterprise plan, and a viewer cannot write to a sheet.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.smartsheet.com/2.0', minIntervalMs: 200, retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/users/me' }, id: 'id', name: 'email' },

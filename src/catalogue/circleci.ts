@@ -14,7 +14,7 @@ export const circleci = defineProvider({
   id: 'circleci', name: 'CircleCI', docs: 'https://circleci.com/docs/api/v3/conventions.md',
   categories: ['code'],
   fields: [{ name: 'apiToken', title: 'Personal API token', secret: true,
-    help: 'Create it under User Settings > Personal API Tokens: it has your full read and write permissions and expires on the date you set, at most a year ahead. In an organization that uses SSO, select the organization in the token\'s SSO column, or it reaches none of its resources.' }],
+    help: 'Create it under User Settings, then Personal API Tokens: it has your full read and write permissions and expires on the date you set, at most a year ahead. In an organization that uses SSO, select the organization in the token\'s SSO column, or it reaches none of its resources.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://circleci.com/api/v3', retry: {} },
   identify: { request: { path: '/users', query: { 'filter[user_id]': 'me' } }, id: 'data.0.id',

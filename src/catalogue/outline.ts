@@ -18,7 +18,7 @@ export const outline = defineProvider({
   fields: [{ name: 'host', title: 'Outline host', default: 'app.getoutline.com',
     help: 'app.getoutline.com, or the host name of your own Outline, with no port.' },
   { name: 'apiKey', title: 'API key', secret: true,
-    help: 'Create it under Settings => API & Apps. A key can be limited by scopes: keep write, which allows every read and write.' }],
+    help: 'Create it under Settings, then API & Apps. A key can be limited by scopes: keep write, which allows every read and write.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{host}/api', host: '*', headers: { 'content-type': 'application/json' }, retry: {} },
   identify: { request: { method: 'POST', path: '/auth.info' }, id: 'data.user.id', name: ['data.user.name', 'data.user.email'] },

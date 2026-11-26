@@ -15,7 +15,7 @@ export const guru = defineProvider({
   categories: ['docs'],
   fields: [{ name: 'username', title: 'Guru username' },
     { name: 'userToken', title: 'User token', secret: true,
-      help: 'A user token (a collection token is read-only): Manage > Apps & Integrations > API Access > Generate User Token. Only an Admin, or a role with Manage Apps & Integrations, can make one; it does what its user can.' }],
+      help: 'A user token (a collection token is read-only): under Manage, then Apps & Integrations, then API Access, choose Generate User Token. Only an Admin, or a role with Manage Apps & Integrations, can make one; it does what its user can.' }],
   auth: [{ kind: 'key', send: { basic: ['{username}', '{userToken}'] } }],
   http: { baseUrl: 'https://api.getguru.com/api/v1' },
   identify: { request: { path: '/whoami' }, id: 'user.id', name: 'user.email' },

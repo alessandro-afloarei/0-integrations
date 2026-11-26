@@ -15,7 +15,7 @@ export const mattermost = defineProvider({
   categories: ['chat'],
   fields: [{ name: 'host', title: 'Mattermost host', help: 'The host name of your Mattermost server, with no port.' },
     { name: 'accessToken', title: 'Personal access token', secret: true,
-      help: 'A System Admin enables them under System Console > Integrations > Integration Management; by default only System Admins can create one. It does not expire.' }],
+      help: 'A System Admin enables them under System Console, then Integrations, then Integration Management; by default only System Admins can create one. It does not expire.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{host}/api/v4', host: '*', retry: {} },
   identify: { request: { path: '/users/me' }, id: 'id', name: ['username', 'email'] },

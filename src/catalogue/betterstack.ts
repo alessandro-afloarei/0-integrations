@@ -12,7 +12,7 @@ export const betterstack = defineProvider({
   id: 'betterstack', name: 'Better Stack', docs: `${api}/getting-started-with-uptime-api/`,
   categories: ['monitoring'],
   fields: [{ name: 'apiToken', title: 'Incidents API token', secret: true,
-    help: 'A team-based token from Better Stack → API tokens → Team-based tokens, labeled Incidents: a global token would need a team named on each call.' }],
+    help: 'A team-based token, labeled Incidents, made under API tokens, then Team-based tokens: a global token would need a team named on each call.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://incidents.betterstack.com/api' },
   identify: { request: { path: '/v2/monitors' } },

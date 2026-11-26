@@ -12,7 +12,7 @@ export const zulip = defineProvider({
   fields: [{ name: 'host', title: 'Zulip host', help: 'Your organization\'s host name, such as your-org.zulipchat.com, with no port.' },
     { name: 'email', title: 'API email', help: 'The email address of the account (or bot) the API key belongs to.' },
     { name: 'apiKey', title: 'API key', secret: true,
-      help: 'Personal settings > Account & privacy > Manage your API key; a bot\'s is under Personal settings > Bots.' }],
+      help: 'Under Personal settings, then Account & privacy, with Manage your API key; a bot\'s is under Personal settings, then Bots.' }],
   auth: [{ kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }],
   http: { baseUrl: 'https://{host}/api/v1', host: '*' },
   identify: { request: { path: '/users/me' }, id: 'user_id', name: ['full_name', 'email'] },

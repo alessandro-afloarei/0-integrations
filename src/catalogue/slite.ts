@@ -13,7 +13,7 @@ export const slite = defineProvider({
   id: 'slite', name: 'Slite', docs: 'https://developers.slite.com/docs/getting-started',
   categories: ['docs'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'Settings > API > Create a new key; it is shown once. It reaches all your content.' }],
+    help: 'Make it under Settings, then API, with Create a new key; it is shown once. It reaches all your content.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.slite.com/v1', retry: {} },
   identify: { request: { path: '/me' }, id: 'email', name: ['displayName', 'email'] },

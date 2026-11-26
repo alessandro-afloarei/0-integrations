@@ -15,7 +15,7 @@ export const asana = defineProvider({
   id: 'asana', name: 'Asana', docs: 'https://developers.asana.com/docs/oauth',
   categories: ['tasks'],
   fields: [{ name: 'accessToken', title: 'Personal access token', secret: true,
-    help: 'For your own Asana account: an app for other people signs them in with OAuth 2, as Asana requires.' }],
+    help: 'For your own Asana account: an app for other people connects with the OAuth 2 sign-in, as Asana requires.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.asana.com/-/oauth_authorize', tokenUrl: 'https://app.asana.com/-/oauth_token',
     authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: ['users:read', 'tasks:read', 'tasks:write', 'projects:read'] },

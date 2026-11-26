@@ -13,7 +13,7 @@ export const airtable = defineProvider({
   id: 'airtable', name: 'Airtable', docs: `${api}/authentication.md`,
   categories: ['tasks'],
   fields: [{ name: 'accessToken', title: 'Personal access token', secret: true,
-    help: 'For an integration of your own, never a third-party service: an app for other people signs them in with OAuth 2, as Airtable requires. Give it the data.records:read, data.records:write, schema.bases:read and user.email:read scopes and add the bases it works on; writing needs editor access.' }],
+    help: 'For an integration of your own, never a third-party service: an app for other people connects with the OAuth 2 sign-in, as Airtable requires. Give it the data.records:read, data.records:write, schema.bases:read and user.email:read scopes and add the bases it works on; writing needs editor access.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://airtable.com/oauth2/v1/authorize', tokenUrl: 'https://airtable.com/oauth2/v1/token',
     clientAuth: 'basic', authorizeParams: { response_type: 'code' }, tokenTypes: ['Bearer '] }, { kind: 'key' }],
   scopes: { default: ['data.records:read', 'data.records:write', 'schema.bases:read', 'user.email:read'] },
