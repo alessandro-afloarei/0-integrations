@@ -149,8 +149,8 @@ const sentTemplates = (entry: Entry) => {
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
   // A Basic or query send that names no secret would send a credential anyone could make.
-  '`auth.send` basic or query: name the secret ({token} or the secret field)': (entry: Entry) => sentTemplates(entry).length === 0
-    || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || name === secretField(entry)),
+  '`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)': (entry: Entry) => sentTemplates(entry).length === 0
+    || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || (entry.auth[0].kind === 'key' && name === secretField(entry))),
   "`auth.send` templates: name only the entry's fields and {token}": (entry: Entry) => sentTemplates(entry).flatMap(placeholders)
     .every(name => name === 'token' || (entry.fields ?? []).some(field => field.name === name)),
   // The secret field goes only to the token request: a call carries the token it gave.
@@ -168,12 +168,15 @@ const runnable = {
   "a token request's `url` with a placeholder in its host only beside an `http.host` pattern": (entry: Entry) =>
     placeholders(hostOf(tokenRequest(entry)?.url ?? 'https://')).length === 0 || entry.http.host !== undefined,
   // A URL is filled from plain values, never a secret; the body and Basic from either.
-  "a token request's placeholders: a plain field in its `url`, a declared field in its `body` and `basic`": (entry: Entry) => {
+  // What the engine cannot fill is `template_missing` at the first sign-in; a request that sends no secret proves nothing.
+  "a `token` request the engine can run: only the entry's fields (a plain one in `url`), the secret field in `body` or `basic`, a non-empty `token` path": (entry: Entry) => {
     const request = tokenRequest(entry);
     if (request === undefined) return true;
-    const declared = (entry.fields ?? []).map(field => field.name);
+    const sent = [...Object.values(request.body), ...request.basic ?? []].flatMap(placeholders);
     return placeholders(request.url).every(name => plainFields(entry).includes(name))
-      && [...Object.values(request.body), ...request.basic ?? []].flatMap(placeholders).every(name => declared.includes(name));
+      && sent.every(name => (entry.fields ?? []).some(field => field.name === name))
+      && sent.some(name => name === secretField(entry))
+      && request.token?.trim() !== '';
   },
   'a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder': (entry: Entry) => placeholders(entry.http.baseUrl)
     .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true) || Object.hasOwn(entry.save ?? {}, name)),
@@ -320,9 +323,9 @@ const tokened = { ...key, fields: [{ name: 'clientId', title: 'Client ID' }, { n
 test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
-  ['`auth.send` basic or query: name the secret ({token} or the secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+  ['`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
-  ['`auth.send` basic or query: name the secret ({token} or the secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+  ['`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { basic: ['{apiId}', ''] } }] })],
   ["`auth.send` templates: name only the entry's fields and {token}", defineProvider({ ...key, fields: [secret],
     auth: [{ kind: 'key', send: { query: { key: '{apiKey}', account: '{acount}' } } }] })],
@@ -347,14 +350,18 @@ test.each<[Rule, Entry]>([
   ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...tokened,
     fields: [...tokened.fields, { name: 'other', title: 'Other', secret: true }] })],
   ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...tokened, fields: [{ name: 'clientId', title: 'Client ID' }] })],
+  // A token entry's call carries the token it gave: naming its secret field is no secret sent.
+  ["`auth.send` basic or query: name the secret ({token}, or a key entry's secret field)", defineProvider({ ...tokened,
+    auth: [{ ...tokened.auth[0], send: { query: { s: '{clientSecret}' } } }] })],
   ["a `token` entry's `send`: name no secret field", defineProvider({ ...tokened,
     auth: [{ ...tokened.auth[0], send: { basic: ['{clientId}', '{clientSecret}'] } }] })],
   ["a token request's `url` with a placeholder in its host only beside an `http.host` pattern", defineProvider({ ...tokened,
     fields: [...tokened.fields, { name: 'apiHost', title: 'Host' }], auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request,
       url: 'https://{apiHost}/token' } }] })],
   ...([{ url: 'https://k.test/{tenant}/token' }, { url: 'https://k.test/{clientSecret}/token' }, { body: { scope: '{scop}' } },
-    { basic: ['{clientId}', '{secret}'] }] as const).map((part): [Rule, Entry] => [
-    "a token request's placeholders: a plain field in its `url`, a declared field in its `body` and `basic`",
+    { body: { a: '{nope}' } }, { basic: ['{clientld}', '{clientSecret}'] }, { basic: ['{clientId}', '{secret}'] },
+    { basic: ['{clientId}', 'fixed'] }, { token: '' }] as const).map((part): [Rule, Entry] => [
+    "a `token` request the engine can run: only the entry's fields (a plain one in `url`), the secret field in `body` or `basic`, a non-empty `token` path",
     defineProvider({ ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, ...part } }] })]),
   ['`scopes` on an oauth2 entry', defineProvider(oauth2)],
   ...([
