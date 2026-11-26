@@ -60,6 +60,10 @@ export function waitOf(wait: Wait | undefined, { headers, body }: Pick<Answer, '
   return wait.unit === 's' || wait.unit === 'ms' ? ms : Math.max(0, ms - now);
 }
 
+/** The wait `retry.wait` states: a header's on a 429 alone (it rides on every answer), a body's on any; never 0. */
+export const declaredWait = (wait: Wait | undefined, answer: Pick<Answer, 'status' | 'headers' | 'body'>, now: number) =>
+  (wait && ('path' in wait || answer.status === 429) ? waitOf(wait, answer, now) || undefined : undefined);
+
 /** A rate limit the entry declares beyond a 429: the first rule that holds, waiting its `wait`, else the default. */
 function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined } | undefined {
   const rule = http.rateLimit?.when.find(item => holds(item, answer));
@@ -90,7 +94,7 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   // Never a code holding a credential the request sent.
   const detail = code === undefined ? null : safeDetail(code, credentials.get(response) ?? []);
   if (code !== undefined && errors.revoked?.includes(code)) return new GrantRevoked(detail);
-  const stated = waitOf(entry.http.retry?.wait, answer, now);
+  const stated = declaredWait(entry.http.retry?.wait, answer, now);
   // An error a rule decides is no declared rate limit, so it never carries that limit's wait.
   const rule = errors.rules?.find(item => holds(item.when, answer));
   if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, { retryAfterMs: retryAfterMs(headers, now, stated) });

@@ -51,7 +51,7 @@ describe('provider wait metadata', () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test.each([[0, 0], [12.1, 13], [1500, 1500], [-1, null], ['1500', null], [null, null], [Infinity, null],
+  test.each([[0, null], [12.1, 13], [1500, 1500], [-1, null], ['1500', null], [null, null], [Infinity, null],
     [Number.MAX_SAFE_INTEGER + 1, null]])('keeps a valid Breakcold body delay %j as %j milliseconds', async (wait, retryAfterMs) => {
     const fake = scripted(() => Response.json({ error: { code: 'usage_limit', retryAfterMs: wait } }, { status: 429 }));
     await expect(http(breakcold, fake.fetch).json('/items', { method: 'POST' }))
@@ -103,7 +103,7 @@ describe('Fireflies retry hints', () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test.each([[NOW - 1, 0], [NOW, 0], [NOW + 0.5, 1], ['1720651545066', null], [null, null],
+  test.each([[NOW - 1, null], [NOW, null], [NOW + 0.5, 1], ['1720651545066', null], [null, null],
     [-1, null], [Number.MAX_SAFE_INTEGER + 1, null]])('validates the epoch-ms timestamp %j before deriving its wait', async (timestamp, retryAfterMs) => {
     const fake = scripted(() => Response.json({ errors: [{ extensions: { code: 'too_many_requests', metadata: { retryAfter: timestamp } } }] }));
     await expect(firefliesClient({ apiKey: 'fixture-key', fetch: fake.fetch }).user()).rejects.toMatchObject({ retryAfterMs });

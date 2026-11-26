@@ -1217,3 +1217,40 @@ describe("a retry never comes before the provider's stated wait", () => {
       .rejects.toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 90_000 });
   });
 });
+
+describe('which answers state a declared wait', () => {
+  const reset = (unit: 's' | 'epochSeconds', extra: Retry = {}) => retrying({ ...extra, wait: { header: 'ratelimit-reset', unit } });
+  const todo = (extra: Retry = {}) => retrying({ ...extra, wait: { path: 'error_extra.retry_after', unit: 's' } });
+  const body = (status: number, after: number) => () => Response.json({ error_extra: { retry_after: after } }, { status });
+
+  test("a declared header is a 429's alone: a 404 and a 503 carrying it carry no wait", async () => {
+    expect(await sentOnce(reset('s', { limit: 0 }), answer(404, { 'ratelimit-reset': '33' }))).toMatchObject({ code: 'not_found', retryAfterMs: null });
+    expect(await sentOnce(reset('s', { limit: 0 }), answer(503, { 'ratelimit-reset': '33' }))).toMatchObject({ code: 'unavailable', retryAfterMs: null });
+  });
+
+  test('a 503 with only a reset header backs off as before', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try { await retriesAfter(reset('s'), answer(503, { 'ratelimit-reset': '3' }), 500); } finally { vi.restoreAllMocks(); }
+  });
+
+  test('a declared body wait counts on any retried status: a 503 waits its 10 s, and one of 120 s is sent once', async () => {
+    await retriesAfter(todo(), body(503, 10), 10_000);
+    expect(await sentOnce(todo(), body(503, 120))).toMatchObject({ code: 'unavailable', retryAfterMs: 120_000 });
+  });
+
+  test('a wait already past states none: with onlyStated and a limit of 5, one request and no wait carried', async () => {
+    const past = String(Date.now() / 1000 - 10);
+    expect(await sentOnce(reset('epochSeconds', { onlyStated: true, limit: 5 }), answer(429, { 'ratelimit-reset': past })))
+      .toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+  });
+
+  test('a body wait of 0 waits the default, and its error carries no wait', async () => {
+    await retriesAfter(todo(), body(429, 0), 1000);
+    expect(await sentOnce(todo({ limit: 0 }), body(429, 0))).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+  });
+
+  test('onlyStated on a 5xx: retried after its Retry-After, sent once without one', async () => {
+    await retriesAfter(retrying({ onlyStated: true }), answer(503, { 'retry-after': '2' }), 2000);
+    expect(await sentOnce(retrying({ onlyStated: true }), answer(503))).toMatchObject({ code: 'unavailable', retryAfterMs: null });
+  });
+});

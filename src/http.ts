@@ -3,7 +3,7 @@ import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
-import { backoffMs, responseJson, retryPolicy, sentWith, waitOf } from './http-response.js';
+import { backoffMs, declaredWait, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
 import { checkHosts, fill, hostPart, parseJson, placeholders, plainValue } from './rules.js';
 
@@ -222,15 +222,14 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     return renewal;
   }
 
-  /** The wait an answer states: a positive Retry-After, else a 429's declared `wait`. */
+  /** The wait an answer states: a positive Retry-After, else the entry's declared `wait`. */
   async function statedWait(response: Response): Promise<number | undefined> {
     const header = retryAfterMs(response.headers, Date.now());
     if (header !== null && header > 0) return header;
-    const { wait } = entry.http.retry ?? {};
-    if (response.status !== 429 || wait === undefined) return undefined;
+    const wait = entry.http.retry?.wait;
     // The body is read only for a wait the entry says it names: a slow body must not hold up the retry.
-    const body = 'path' in wait ? parseJson(await retryBody(response, timeoutMs)) : undefined;
-    return waitOf(wait, { headers: response.headers, body }, Date.now());
+    const body = wait && 'path' in wait ? parseJson(await retryBody(response, timeoutMs)) : undefined;
+    return declaredWait(wait, { status: response.status, headers: response.headers, body }, Date.now());
   }
 
   async function pace(): Promise<void> {
