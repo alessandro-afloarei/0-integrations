@@ -8,6 +8,7 @@ import { slack } from './catalogue/slack.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { linear } from './catalogue/linear.js';
+import { mattermost } from './catalogue/mattermost.js';
 import { notion } from './catalogue/notion.js';
 import { aircall } from './catalogue/aircall.js';
 import { gitlab } from './catalogue/gitlab.js';
@@ -123,6 +124,29 @@ async function connectTwoSignIns(oauthClient: OAuthClient, redirectUri: string, 
   expectTypeOf(issues.data.issues.pageInfo.hasNextPage).toEqualTypeOf<boolean>();
   expectTypeOf(own.secret).toEqualTypeOf<Readonly<Record<'apiKey', string>>>();
   return [url, account, issues, later];
+}
+
+// docs/modules/connect.md › OAuth 2 on the person's own server.
+async function connectOwnServer(clients: Map<string, OAuthClient>, pending: Map<string, { codeVerifier: string | undefined; values: { host: string } }>,
+  host: string, redirectUri: string, state: string, code: string, refreshToken: string, report: (error: unknown) => void) {
+  // The app's client for the server the person typed: one per server, never another's.
+  const registered = clients.get(host);
+  if (registered === undefined) throw new Error('not_registered_on_this_server');
+  const start = await startConnect(mattermost, { clientId: registered.clientId, redirectUri, state, values: { host } });
+  pending.set(state, { codeVerifier: start.codeVerifier, values: start.values }); // on the server; send the browser to `start.url`
+
+  // In the callback: what was kept, found by `state`, and that server's client.
+  const kept = pending.get(state);
+  const own = kept && clients.get(kept.values.host);
+  if (kept === undefined || own === undefined) throw new Error('unknown_state');
+  const { secret, values } = await finishConnect(mattermost, { client: own, code, redirectUri, codeVerifier: kept.codeVerifier,
+    values: kept.values, onRevokeFailed: report });
+  // secret: the grant to seal; values: { host } to keep with it
+
+  const api = client(mattermost, { token: secret.accessToken, values });
+  const renewed = await refreshGrant(mattermost, own, refreshToken, { values }); // through the address guard
+  expectTypeOf(values.host).toEqualTypeOf<string>();
+  return [api, renewed];
 }
 
 // docs/modules/connect.md: "To ask for other scopes, derive an entry".
@@ -248,7 +272,7 @@ async function testingDerivedToken() {
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectTwoSignIns, connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
+    connectTwoSignIns, connectOwnServer, connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
     webhooksReceiveCalls, webhooksDeclared, testingDerivedFake, testingDerivedOperation,
     testingDerivedToken].every(example => typeof example === 'function')).toBe(true);
 });

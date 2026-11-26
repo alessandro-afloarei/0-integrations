@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { clashing, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { clashing, hostSplit, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -184,6 +184,17 @@ const signing = (entry: Entry) => (entry.webhook?.kind === 'hmac' || entry.webho
 const plainReads = (entry: Entry) => [...placeholders(entry.http.baseUrl), ...reads(entry, 'connection.')
   .map(name => name.slice('connection.'.length))].filter(name => plainFields(entry).includes(name));
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
+/** An OAuth 2 sign-in's URLs: authorize, token, refresh and an RFC 7009 revoke. */
+const oauthUrls = (entry: Entry) => {
+  const auth = entry.auth[0];
+  if (auth.kind !== 'oauth2') return [];
+  return [auth.authorizeUrl, auth.tokenUrl, auth.refreshUrl, entry.revoke !== undefined && 'url' in entry.revoke ? entry.revoke.url : undefined]
+    .filter(url => url !== undefined);
+};
+const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's) has a placeholder";
+const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
+const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
+const HOST_SPLIT = 'OAuth 2 URLs, the base and `http.bases` on one host when any of them is typed (`hostSplit`): a token goes only to the host that issued it';
 const runnable = {
   [TODO_RULE]: (entry: Entry) => !stringsIn(entry).some(text => text.includes('TODO')),
   // A Basic or query send that names no secret would send a credential anyone could make.
@@ -205,7 +216,7 @@ const runnable = {
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
-  'an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder': (entry: Entry) => (placeholders(baseHost(entry)).length > 0
+  [HOST_PATTERN]: (entry: Entry) => ([entry.http.baseUrl, ...oauthUrls(entry)].some(url => placeholders(hostOf(url)).length > 0)
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
@@ -334,9 +345,13 @@ const runnable = {
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
-  // OAuth 2's `finishConnect` takes no plain values: the grant would be issued, then identify or a call would fail.
-  'no plain field read by an `oauth2` sign-in (its connect asks for none): a provider whose OAuth needs one (a subdomain or region) waits for a plain value at OAuth sign-in': (entry: Entry) =>
-    entry.auth[0].kind !== 'oauth2' || plainReads(entry).length === 0,
+  // OAuth 2's connect reads every plain field: one only the key reads would be asked for and never used.
+  [OAUTH_READS]: (entry: Entry) => entry.auth[0].kind !== 'oauth2'
+    || plainFields(entry).every(name => [...oauthUrls(entry).flatMap(placeholders), ...plainReads(entry)].includes(name)),
+  // What the engine cannot fill is `template_missing` at the start.
+  [OAUTH_PLAIN_URLS]: (entry: Entry) => oauthUrls(entry).flatMap(placeholders).every(name => plainFields(entry).includes(name)),
+  // The rule the engine runs before every OAuth 2 request.
+  [HOST_SPLIT]: (entry: Entry) => !hostSplit(entry),
   // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
   "an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
     operations(entry).every(op => { const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
@@ -508,11 +523,11 @@ test.each<[Rule, Entry]>([
     .map((entry): [Rule, Entry] => ["no `identify` or `save` value that reads a token from `tokenAnswer.*`, its own or one nested (never returned: read another key)", entry]),
   ['`scopes` on an oauth2 entry', defineProvider(oauth2)],
   ...([
-    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}.k.test' }],
-    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://api.k.test', host: 'api.k.test' }],
-    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}', host: 'example.com/x' }],
-    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}', host: '*.com' }],
-    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://api.k.test/{region}', host: 'api.k.test' }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}.k.test' }],
+    [HOST_PATTERN, { baseUrl: 'https://api.k.test', host: 'api.k.test' }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: 'example.com/x' }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: '*.com' }],
+    [HOST_PATTERN, { baseUrl: 'https://api.k.test/{region}', host: 'api.k.test' }],
     ["`http.host: '*'` only on a base whose whole host is one placeholder", { baseUrl: 'https://{region}.example.com', host: '*' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://api.k.test/{zone}' }],
@@ -597,6 +612,21 @@ test.each<[Rule, Entry]>([
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
           params: { [name]: { in: place, type: 'integer' } } } } })]),
+  ...([
+    [{ authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' }],
+    [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }, { baseUrl: 'https://api.k.test' }],
+    [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' }],
+    [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }, { baseUrl: 'https://{host}/api', bases: { cloud: 'https://cloud.k.test' } }],
+  ] as const).map(([urls, http]): [Rule, Entry] => [HOST_SPLIT, defineProvider({ ...oauth2, scopes: { default: [] },
+    fields: [{ name: 'host', title: 'Host' }], auth: [{ kind: 'oauth2', ...urls }], http: { ...http, host: '*' } })]),
+  // A typed host in the OAuth 2 URLs alone needs the pattern too: they are filled by the base's rule.
+  [HOST_PATTERN, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'host', title: 'Host' }],
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }] })],
+  [OAUTH_READS, defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }], scopes: { default: [] },
+    auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] })],
+  ...(['https://k.test/{apiKey}/token', 'https://k.test/{site}/token'] as const).map((tokenUrl): [Rule, Entry] => [OAUTH_PLAIN_URLS,
+    defineProvider({ ...oauth2, scopes: { default: [] }, fields: [secret], save: { site: 'site' }, identify: { request: { path: '/me' } },
+      auth: [{ ...oauth2.auth[0], tokenUrl }] })]),
   // The compiler refuses these through `defineProvider`; they are entries read as data.
   ['an `operations[].paging` name declared in `paging`', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { list: { path: '/items', paging: 'cursor' } } }],
@@ -639,7 +669,6 @@ test.each<[string, Record<string, unknown>, string]>([
   expect(entrySchema.safeParse({ ...key, ...parts }).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
 
-const OAUTH_PLAIN = 'no plain field read by an `oauth2` sign-in (its connect asks for none): a provider whose OAuth needs one (a subdomain or region) waits for a plain value at OAuth sign-in';
 test("pnpm new's unfilled skeleton breaks only rules that say what to fill: the TODOs and the categories", async () => {
   const folder = mkdtempSync(fileURLToPath(new URL('../../.scaffold-test-', import.meta.url)));
   try {
@@ -659,17 +688,26 @@ test.each<[string, Entry, string[]]>([
     revoke: { url: 'https://k.test/revoke', token: ['refresh'] } }), ['no `scopes` or RFC 7009 `revoke` on a key or token entry (key)']],
   ['an OAuth entry with two secret fields', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [secret, { name: 'other', title: 'Other', secret: true }] }),
     ['at most one secret field in `fields`, exactly one on a key or token entry (oauth2)']],
-  ['a plain field in the base beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret, { name: 'site', title: 'Site' }], scopes: { default: [] },
+  // A fixed cloud token URL beside a typed base: the cloud's token would go to any host typed.
+  ['a plain field in the base beside fixed OAuth 2 URLs and a key', defineProvider({ ...key, fields: [secret, { name: 'site', title: 'Site' }], scopes: { default: [] },
     http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [oauth2.auth[0], { kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }] }),
-    [`${OAUTH_PLAIN} (oauth2)`]],
-  ['a plain field identify reads on an OAuth entry', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'site', title: 'Site' }],
-    identify: { request: { path: '/me' }, id: 'id', name: '{connection.site}' } }), [`${OAUTH_PLAIN} (oauth2)`]],
+    [`${HOST_SPLIT} (oauth2)`]],
+  // A field only the key reads would be asked for by the OAuth 2 connect and never used.
+  ['a Basic email the key alone reads, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }],
+    scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }), [`${OAUTH_READS} (oauth2)`]],
 ])('%s breaks only its rule', (_, entry, rules) => { expect(broken(entry)).toEqual(rules); });
 
-test('a Basic email the key alone reads, beside OAuth 2 and a key, breaks no rule', () => {
-  expect(broken(defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }], scopes: { default: [] },
-    auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }))).toEqual([]);
-});
+test.each<[string, Entry]>([
+  ['a plain field identify reads on an OAuth entry', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'site', title: 'Site' }],
+    identify: { request: { path: '/me' }, id: 'id', name: '{connection.site}' } })],
+  // Mattermost's shape: every URL and the base on the host typed, and a key beside OAuth 2.
+  ['an OAuth 2 sign-in and a key on a typed host', defineProvider({ ...key, fields: [{ name: 'host', title: 'Host' }, secret], scopes: { default: [] },
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/token' }, { kind: 'key' }],
+    revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] }, http: { baseUrl: 'https://{host}/api', host: '*' } })],
+  // Azure DevOps' shape: fixed OAuth 2 URLs, a value only in the base's path.
+  ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
+    http: { baseUrl: 'https://api.k.test/{org}' } })],
+])('%s breaks no rule', (_, entry) => { expect(broken(entry)).toEqual([]); });
 
 test('a token request whose body holds an object fails the schema, with what to fix', () => {
   const bad = { ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, body: { grant: { type: 'x' } } } }] };

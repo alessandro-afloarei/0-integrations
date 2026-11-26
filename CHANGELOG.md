@@ -7,6 +7,11 @@ Nothing here is released yet.
 - New: an entry may list several sign-ins (OAuth 2, then a key); `signInWith(entry, kind)` from
   `0-integrations/catalogue` narrows it to one, and every call takes the narrowed entry. First used by Linear and
   ClickUp.
+- New: an OAuth 2 sign-in may read the entry's plain fields: `startConnect` takes and returns `values`, and
+  `finishConnect`, `refreshGrant` and `revokeGrant` take them; every OAuth 2 URL is filled and checked as a base is,
+  and a token never goes to a host other than the one that issued it. First used by Mattermost, which now lists OAuth 2
+  first.
+- `refreshGrant` and `revokeGrant` take `fetch` as an option, by default `guardedFetch` for an entry whose host is typed.
 - An OAuth 2 token answer that states no `token_type` is read as Bearer; it was `invalid_response`. One that states
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.
 - New entries: Buildkite (code), ClickUp (tasks; OAuth 2 and a key), Linear (tasks; OAuth 2 and a key), Rollbar

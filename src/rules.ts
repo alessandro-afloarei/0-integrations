@@ -1,4 +1,4 @@
-import type { Operation, Paging, Param, Path, Shape, Template, Values, When } from './catalogue.js';
+import type { Entry, Operation, Paging, Param, Path, Shape, Template, Values, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -64,6 +64,18 @@ const PLACEHOLDER = /\{([^{}]+)\}/gu;
 /** The names a template's placeholders hold, in order: the ones `fill` replaces. */
 export function placeholders(template: Template): string[] {
   return [...template.matchAll(PLACEHOLDER)].map(match => match[1] ?? '');
+}
+
+/** Whether an OAuth 2 entry's URLs (authorize, token, refresh, an RFC 7009 revoke), its base and `http.bases` differ in
+ * their host part when any of them takes its host from a value: a token goes only to the host that issued it, so a
+ * cloud token never reaches a typed host, nor a server's token the cloud. */
+export function hostSplit(entry: Entry): boolean {
+  const [auth] = entry.auth;
+  if (auth.kind !== 'oauth2') return false;
+  const { revoke, http } = entry;
+  const hosts = [auth.authorizeUrl, auth.tokenUrl, auth.refreshUrl, revoke && 'url' in revoke ? revoke.url : undefined, http.baseUrl,
+    ...Object.values(http.bases ?? {})].filter(url => url !== undefined).map(url => url.split('/', 3).join('/'));
+  return hosts.some(host => placeholders(host).length > 0) && new Set(hosts).size > 1;
 }
 
 /** Replaces each `{name}` with a string or a finite number; anything else throws, naming `where` and the key. */

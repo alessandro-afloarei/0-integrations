@@ -23,8 +23,8 @@ const me = await api.json('/users/me');
 - `fetch`: the global one by default, or `guardedFetch` for an entry whose host the person types (`http.host: '*'`,
   GitLab). See [The address guard](#the-address-guard).
 - `values`: the connection's plain values, as `finishConnect` returned them, for a credential or a base built from
-  them (Aircall's `{apiId}`, Intercom's `{apiHost}`). Only `finishConnect` applies a field's `default`: a client never
-  does, so it needs the connection's `values` (a GitLab client given none would otherwise send a self-managed token to
+  them (Aircall's `{apiId}`, Intercom's `{apiHost}`). Only `startConnect` and `finishConnect` apply a field's `default`: a
+  client never does, so it needs the connection's `values` (a GitLab client given none would otherwise send a self-managed token to
   gitlab.com). A value the entry names that is missing, blank or neither a string nor a finite number is
   `TypeError('template_missing: <entry id> {<name>}')` before anything is sent (a base's value also before the token is
   read). A base is filled and checked on the first request (see [catalogue](catalogue.md)), not when the client is

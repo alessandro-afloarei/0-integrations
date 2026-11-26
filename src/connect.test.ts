@@ -7,6 +7,7 @@ import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
+import { jira } from './catalogue/jira.js';
 import { metabase } from './catalogue/metabase.js';
 import { paypal } from './catalogue/paypal.js';
 import { slack } from './catalogue/slack.js';
@@ -48,7 +49,7 @@ afterEach(() => vi.useRealTimers());
 describe('connect', () => {
   it('builds the existing Slack authorization URL byte for byte', async () => {
     expect(await startConnect(slack, start)).toEqual({ kind: 'redirect',
-      url: 'https://slack.com/oauth/v2/authorize?client_id=client&scope=chat%3Awrite%2Cchat%3Awrite.public%2Cchannels%3Aread%2Cgroups%3Aread&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fslack%2Fcallback&state=state' });
+      url: 'https://slack.com/oauth/v2/authorize?client_id=client&scope=chat%3Awrite%2Cchat%3Awrite.public%2Cchannels%3Aread%2Cgroups%3Aread&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fslack%2Fcallback&state=state', values: {} });
   });
 
   it('finishes Slack from its entry: the grant, the team, the bot user', async () => {
@@ -501,5 +502,81 @@ describe('connect review regressions', () => {
     await expect(exchange(callback, 'client', 'unissued')).rejects.toMatchObject({ detail: 'invalid_code' });
     await exchange(callback);
     await expect(exchange(callback)).rejects.toMatchObject({ detail: 'invalid_code' });
+  });
+});
+
+describe('an OAuth 2 sign-in that reads plain fields', () => {
+  /** On the person's own server: the host typed, a team in the base's path with a default and choices. */
+  const own = defineProvider({ id: 'own', name: 'Own',
+    fields: [{ name: 'host', title: 'Host' }, { name: 'team', title: 'Team', default: 'main', choices: ['main', 'ops'] }],
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/access_token' }],
+    scopes: { default: [] }, revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] },
+    http: { baseUrl: 'https://{host}/api/{team}', host: '*' }, identify: { request: { path: '/users/me' }, id: 'id' } });
+  const tokenAnswer = { access_token: 'a', refresh_token: 'r', token_type: 'bearer' };
+  const finish = (fetch: typeof globalThis.fetch, values: Record<string, string>, codeVerifier = 'v'.repeat(43)) => finishConnect(own,
+    { client, code: 'code', redirectUri: callback, codeVerifier, values: { host: 'chat.k.test', ...values }, fetch, onRevokeFailed: vi.fn() });
+
+  it('starts on the host typed and returns the values read, a default applied; finishes there with them', async () => {
+    const started = await startConnect(own, { ...start, values: { host: 'chat.k.test' } });
+    expect(new URL(started.url).origin).toBe('https://chat.k.test');
+    expect(new URL(started.url).pathname).toBe('/oauth/authorize');
+    expect(started.values).toEqual({ host: 'chat.k.test', team: 'main' });
+    const http = fakeFetch([{ url: 'https://chat.k.test/oauth/access_token', respond: () => Response.json(tokenAnswer) },
+      { url: 'https://chat.k.test/api/main/users/me', respond: () => Response.json({ id: 'u1' }) }]);
+    const connected = await finish(http.fetch, started.values, started.codeVerifier);
+    expect(connected.values).toEqual({ host: 'chat.k.test', team: 'main' });
+    expect(connected.account).toEqual({ id: 'u1', name: 'u1' });
+  });
+
+  it.each([
+    ['127.0.0.1', new ProviderHttpError('request_failed', null, 'address_blocked')],
+    ['[::1]', new TypeError('base_value_invalid: own {host}')],
+    ['0x7f.1', new ProviderHttpError('request_failed', null, 'address_blocked')],
+    ['a.k.test:443', new TypeError('base_value_invalid: own {host}')],
+    ['a@b', new TypeError('base_value_invalid: own {host}')],
+    ['a/b', new TypeError('base_value_invalid: own {host}')],
+    ['', new TypeError('connect_field_required: host')],
+    ['Kelvin.k.test', new TypeError('base_value_invalid: own {host}')],
+  ])('refuses the host %j before a URL is returned', async (host, refused) => {
+    await expect(startConnect(own, { ...start, values: { host } })).rejects.toEqual(refused);
+  });
+
+  it("refuses a value only the base reads before a URL is returned; a base that waits for a saved value starts", async () => {
+    const org = defineProvider({ ...own, fields: [own.fields[0], { name: 'org', title: 'Organization' }],
+      http: { baseUrl: 'https://{host}/api/{org}', host: '*' } });
+    await expect(startConnect(org, { ...start, values: { host: 'chat.k.test', org: '..' } }))
+      .rejects.toThrow(new TypeError('base_value_invalid: own {org}'));
+    // Jira's base takes the `cloudId` its identify saves: nothing to fill at the start.
+    expect((await startConnect(jira, start)).values).toEqual({});
+  });
+
+  it('refuses a value outside its choices before a URL is returned', async () => {
+    await expect(startConnect(own, { ...start, values: { host: 'chat.k.test', team: 'other' } }))
+      .rejects.toThrow(new TypeError('connect_field_invalid: team'));
+  });
+
+  it("refuses at the finish values that differ from the start's, to a blocked address, with no request", async () => {
+    const http = fakeFetch([{ url: /./u, respond: () => Response.json(tokenAnswer) }]);
+    await expect(finish(http.fetch, { host: '127.0.0.1' })).rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
+    expect(http.calls).toEqual([]);
+  });
+
+  it('refuses a finish with no values, with no request: a declared field is required, an undeclared placeholder is template_missing', async () => {
+    const http = fakeFetch([{ url: /./u, respond: () => Response.json(tokenAnswer) }]);
+    const input = { client, code: 'code', redirectUri: callback, codeVerifier: 'v'.repeat(43), fetch: http.fetch, onRevokeFailed: vi.fn() };
+    const widened: Entry = own;
+    await expect(finishConnect(widened, input)).rejects.toThrow(new TypeError('connect_field_required: host'));
+    const undeclared: Entry = defineProvider({ ...own, fields: [] });
+    await expect(finishConnect(undeclared, input)).rejects.toThrow(new TypeError('template_missing: own {host}'));
+    expect(http.calls).toEqual([]);
+  });
+
+  it("revokes a grant whose identify failed on the host that issued it", async () => {
+    const http = fakeFetch([{ url: 'https://chat.k.test/oauth/access_token', respond: () => Response.json(tokenAnswer) },
+      { url: 'https://chat.k.test/api/main/users/me', respond: () => Response.json({ id: 'token.invalid' }, { status: 401 }) },
+      { url: 'https://chat.k.test/oauth/revoke', respond: () => new Response(null, { status: 200 }) }]);
+    await expect(finish(http.fetch, {})).rejects.toMatchObject({ code: 'rejected' });
+    expect(http.calls.map(call => call.url)).toEqual(['https://chat.k.test/oauth/access_token', 'https://chat.k.test/api/main/users/me',
+      'https://chat.k.test/oauth/revoke']);
   });
 });

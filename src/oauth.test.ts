@@ -559,3 +559,77 @@ test('an allowed code that echoes an entered secret is no detail', async () => {
   await expect(requestToken(zoom, { secret: { clientSecret: 'invalid_client' }, values: zoomValues,
     fetch: endpoint({ error: 'invalid_client' }, 401).fetch })).rejects.toMatchObject({ code: 'rejected', detail: null });
 });
+
+/** An OAuth 2 provider on the person's own server (Mattermost's shape): every URL and the base on the host typed. */
+const own = defineProvider({ id: 'own', name: 'Own', fields: [{ name: 'host', title: 'Host' }],
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/access_token' }],
+  scopes: { default: [] }, revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] },
+  http: { baseUrl: 'https://{host}/api/v4', host: '*' } });
+const chat = { host: 'chat.k.test' };
+const verifier = 'v'.repeat(43);
+
+test("an OAuth 2 entry's exchange, refresh and revoke go to the host its values name", async () => {
+  const fake = endpoint(token);
+  await exchangeCode(own, client, { ...exchange, codeVerifier: verifier, values: chat, fetch: fake.fetch });
+  await refreshGrant(own, client, 'r', { values: chat, fetch: fake.fetch });
+  await revokeGrant(own, { refreshToken: 'r', client, values: chat, fetch: fake.fetch });
+  expect(fake.calls.map(call => call.url)).toEqual(['https://chat.k.test/oauth/access_token', 'https://chat.k.test/oauth/access_token',
+    'https://chat.k.test/oauth/revoke']);
+});
+
+test('a refresh or a revoke without the values its URLs take is template_missing, nothing sent', async () => {
+  const fake = endpoint(token);
+  await expect(refreshGrant(own, client, 'r', { fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: own {host}'));
+  await expect(revokeGrant(own, { refreshToken: 'r', client, fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: own {host}'));
+  expect(fake.calls).toEqual([]);
+});
+
+test('an OAuth 2 URL is filled from plain fields only: a secret field or a saved value is template_missing whatever the values hold', async () => {
+  const fake = endpoint(token);
+  const secretUrl = defineProvider({ ...own, fields: [...own.fields, { name: 'apiKey', title: 'API key', secret: true }],
+    auth: [{ ...own.auth[0], authorizeUrl: 'https://{host}/{apiKey}/authorize' }] });
+  expect(() => authorizeUrl(secretUrl, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's', codeChallenge: 'c',
+    values: { ...chat, apiKey: 'private-key' } })).toThrow(new TypeError('template_missing: own {apiKey}'));
+  const savedUrl = defineProvider({ ...own, save: { site: 'site' }, auth: [{ ...own.auth[0], tokenUrl: 'https://{host}/{site}/token' }] });
+  await expect(refreshGrant(savedUrl, client, 'r', { values: { ...chat, site: 's1' }, fetch: fake.fetch }))
+    .rejects.toThrow(new TypeError('template_missing: own {site}'));
+  expect(fake.calls).toEqual([]);
+});
+
+test('a token endpoint that answers a redirect to another host is not followed: the exchange, the refresh and the revoke fail', async () => {
+  const sent: string[] = [];
+  // Follows a redirect as fetch does unless the request says `manual`, which is what the engine must send.
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    sent.push(request.url);
+    if (request.url.startsWith('https://evil.test/')) return Response.json(token);
+    return request.redirect === 'manual' ? new Response(null, { status: 302, headers: { location: 'https://evil.test/token' } })
+      : fetch('https://evil.test/token', { method: request.method, headers: request.headers, body: await request.text() });
+  };
+  await expect(exchangeCode(own, client, { ...exchange, codeVerifier: verifier, values: chat, fetch })).rejects.toMatchObject({ code: 'request_failed', status: 302 });
+  await expect(refreshGrant(own, client, 'r', { values: chat, fetch })).rejects.toMatchObject({ code: 'request_failed', status: 302 });
+  await expect(revokeGrant(own, { refreshToken: 'r', client, values: chat, fetch })).rejects.toMatchObject({ code: 'request_failed', status: 302 });
+  expect(sent.every(url => url.startsWith('https://chat.k.test/'))).toBe(true);
+  expect(sent).toHaveLength(3);
+});
+
+/** Where a token issued on a typed host could go elsewhere: each shape `hostSplit` refuses. */
+const split = (auth: { authorizeUrl: string; tokenUrl: string }, http: { baseUrl: string; bases?: Record<string, string> }) => defineProvider({
+  ...own, auth: [{ kind: 'oauth2', ...auth }], revoke: { url: auth.tokenUrl.replace(/token$/u, 'revoke'), token: ['refresh'] },
+  http: { ...http, host: '*' } });
+test.each([
+  ['fixed cloud URLs with a typed base', split({ authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' })],
+  ['a typed token URL with a fixed base', split({ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }, { baseUrl: 'https://api.k.test' })],
+  ['a typed authorize URL with a fixed token URL', split({ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' })],
+  ['a typed host beside an `http.bases` value', split({ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' },
+    { baseUrl: 'https://{host}/api', bases: { cloud: 'https://cloud.k.test' } })],
+])('%s is oauth_host_split at start, exchange, refresh and revoke, nothing sent', async (_, entry) => {
+  const fake = endpoint(token);
+  const refused = new TypeError('oauth_host_split: own');
+  expect(() => authorizeUrl(entry, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's', codeChallenge: 'c', values: chat }))
+    .toThrow(refused);
+  await expect(exchangeCode(entry, client, { ...exchange, codeVerifier: verifier, values: chat, fetch: fake.fetch })).rejects.toThrow(refused);
+  await expect(refreshGrant(entry, client, 'r', { values: chat, fetch: fake.fetch })).rejects.toThrow(refused);
+  await expect(revokeGrant(entry, { refreshToken: 'r', client, values: chat, fetch: fake.fetch })).rejects.toThrow(refused);
+  expect(fake.calls).toEqual([]);
+});

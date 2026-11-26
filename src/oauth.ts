@@ -1,18 +1,29 @@
 import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
-import type { Auth, Entry, Values } from './catalogue.js';
+import type { Entry, Values } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { callBase, callRequest, createClient, defaultFetch, filledBase, sendable, type ProviderResponse } from './http.js';
+import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
-import { fill, holds, parseJson, placeholders, plainValue, readPath } from './rules.js';
+import { fill, holds, hostSplit, parseJson, placeholders, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
 
-function oauth2(entry: Entry): Extract<Auth, { kind: 'oauth2' }> {
+/** Refuses, before anything is built or sent, an entry whose OAuth 2 URLs and base disagree on a typed host. */
+function unsplit(entry: Entry): void {
+  if (hostSplit(entry)) throw new TypeError(`oauth_host_split: ${entry.id}`);
+}
+
+/** The entry's OAuth 2 URLs, each filled and checked by the base's rule from the plain fields alone: a secret is never
+ * in a URL, and a saved value does not exist before the exchange. */
+function endpoints(entry: Entry, values: Values = {}) {
   const [auth] = entry.auth;
   if (auth.kind !== 'oauth2') throw new TypeError('oauth_unsupported');
-  return auth;
+  unsplit(entry);
+  const plain = Object.fromEntries((entry.fields ?? []).filter(field => !field.secret).map(({ name }) => [name, values[name]]));
+  const url = (template: string) => new URL(filledBase(entry, plain, template));
+  return { config: auth, authorize: url(auth.authorizeUrl), token: url(auth.tokenUrl), refresh: url(auth.refreshUrl ?? auth.tokenUrl),
+    revoke: entry.revoke && 'url' in entry.revoke ? url(entry.revoke.url) : undefined };
 }
 
 /** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted.
@@ -31,13 +42,14 @@ function tokenAnswerOf(entry: Entry, answer: unknown): Record<string, unknown> {
     .filter(([, value]) => value !== undefined));
 }
 
+/** The consent URL. Every OAuth 2 URL of the entry is filled from `values` and checked first, so a value its token,
+ * refresh or revoke URL would refuse is refused before the person is sent anywhere. */
 export function authorizeUrl(entry: Entry, input: {
-  clientId: string; redirectUri: string; scopes: readonly string[]; state: string; codeChallenge?: string;
+  clientId: string; redirectUri: string; scopes: readonly string[]; state: string; codeChallenge?: string; values?: Values;
 }): URL {
-  const config = oauth2(entry);
+  const { config, authorize: url } = endpoints(entry, input.values);
   if (!input.state.trim()) throw new TypeError('state_required');
   if (config.pkce !== false && !input.codeChallenge) throw new TypeError('code_challenge_required');
-  const url = new URL(config.authorizeUrl);
   url.searchParams.set('client_id', input.clientId);
   url.searchParams.set('scope', input.scopes.join(config.scopeSeparator ?? ' '));
   url.searchParams.set('redirect_uri', input.redirectUri);
@@ -73,13 +85,16 @@ const bearerByDefault = (send: CustomFetch): CustomFetch => async (url, options)
   return Response.json({ ...body, token_type: 'bearer' }, { status: response.status, headers });
 };
 
-/** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. */
-function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThis.fetch, refresh = false) {
-  const config = oauth2(entry);
+type Sent = { values?: Values; fetch?: typeof globalThis.fetch };
+
+/** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. The app's
+ * `fetch`, else the entry's default: the address guard for a typed host. */
+function context(entry: Entry, credentials: OAuthClient, input: Sent, refresh = false) {
   // Each URL passes the one check every URL the library sends to passes, before anything is sent.
-  const as: oauth.AuthorizationServer = { issuer: sendable(entry, config.tokenUrl).origin,
-    token_endpoint: sendable(entry, refresh ? config.refreshUrl ?? config.tokenUrl : config.tokenUrl).href,
-    ...(entry.revoke && 'url' in entry.revoke ? { revocation_endpoint: sendable(entry, entry.revoke.url).href } : {}) };
+  const { config, token, refresh: renew, revoke } = endpoints(entry, input.values);
+  const fetch = input.fetch ?? defaultFetch(entry);
+  const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (refresh ? renew : token).href,
+    ...(revoke ? { revocation_endpoint: revoke.href } : {}) };
   const client = { client_id: credentials.clientId };
   const auth = config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret);
   // The Basic value as sent (the id and secret form-encoded first), so no error detail echoes it.
@@ -106,7 +121,8 @@ async function send(c: Context, entry: Entry, secrets: readonly string[], work: 
   let response: Response;
   try {
     response = await work();
-  } catch {
+  } catch (error) {
+    if (error instanceof ProviderHttpError) throw error; // the address guard's refusal
     throw new ProviderHttpError('unavailable', null);
   }
   if (response.status >= 500) throw new ProviderHttpError('unavailable', response.status);
@@ -137,9 +153,9 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
 }
 
 export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
-  code: string; redirectUri: string; codeVerifier?: string | undefined; fetch: typeof fetch;
+  code: string; redirectUri: string; codeVerifier?: string | undefined; values?: Values; fetch: typeof fetch;
 }): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
-  const c = context(entry, client, input.fetch);
+  const c = context(entry, client, input);
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
   const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });
   if (input.codeVerifier) params.set('code_verifier', input.codeVerifier);
@@ -153,9 +169,8 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
   }
 }
 
-export async function refreshGrant(entry: Entry, client: OAuthClient, refreshToken: string,
-  input: { fetch: typeof fetch }): Promise<Grant> {
-  const c = context(entry, client, input.fetch, true);
+export async function refreshGrant(entry: Entry, client: OAuthClient, refreshToken: string, input: Sent = {}): Promise<Grant> {
+  const c = context(entry, client, input, true);
   const secrets = [...c.secrets, refreshToken];
   const response = await send(c, entry, secrets, () => oauth.refreshTokenGrantRequest(c.as, c.client, c.auth, refreshToken, c.options));
   try {
@@ -165,8 +180,8 @@ export async function refreshGrant(entry: Entry, client: OAuthClient, refreshTok
   }
 }
 
-async function revokeToken(entry: Entry, client: OAuthClient, token: string, input: { fetch: typeof fetch }): Promise<void> {
-  const c = context(entry, client, input.fetch);
+async function revokeToken(entry: Entry, client: OAuthClient, token: string, input: Sent): Promise<void> {
+  const c = context(entry, client, input);
   const secrets = [...c.secrets, token];
   const response = await send(c, entry, secrets, () => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options));
   // Any 2xx, as providers answer a revoke with 200 or 204; oauth4webapi accepts only 200.
@@ -183,8 +198,9 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
  * revoke's 404 (a request revoke's 404 is a missing route, not a gone token).
  * `client` is the OAuth app, sent only by an RFC 7009 revoke, which refuses to start without it. */
 export async function revokeGrant(entry: Entry, input: { accessToken?: string; refreshToken?: string | null;
-  client?: OAuthClient; fetch: typeof fetch }): Promise<void> {
+  client?: OAuthClient } & Sent): Promise<void> {
   const { revoke } = entry;
+  unsplit(entry);
   if (revoke === undefined) return;
   try {
     if ('url' in revoke) {
@@ -197,7 +213,8 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
     }
     const { accessToken } = input;
     if (accessToken === undefined) return;
-    const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch, ...callBase(entry, revoke.request) });
+    const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch ?? defaultFetch(entry),
+      values: input.values ?? {}, ...callBase(entry, revoke.request) });
     responseJson(entry, await http.request(...callRequest(revoke.request)));
   } catch (error) {
     const gone = error instanceof GrantRevoked || (error instanceof ProviderHttpError && error.detail !== null

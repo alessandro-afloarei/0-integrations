@@ -161,24 +161,36 @@ its `save` keeps.
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
   after the one check below that every URL the library sends to passes.
 - The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
-  one) is `template_missing`. Only `finishConnect` applies a field's `default` (and returns it in `values`): a client,
-  and a revoke, never do, so they need the connection's `values`. A value in the host that is not a host part (ASCII
-  letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only the name) is
-  `TypeError('base_value_invalid: <entry id> {<name>}')`.
-- Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 token,
-  refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
+  one) is `template_missing`. Only `startConnect` and `finishConnect` apply a field's `default` (and return it in
+  `values`): a client, a refresh and a revoke never do, so they need the connection's `values`. A value in the host
+  that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only
+  the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
+- Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 authorize,
+  token, refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
   `http.host`, else `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then
   never leaves the filled base's origin.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
   placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
   (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.
+- Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled by this rule, from the plain fields alone:
+  a secret field or a `save` key named there is `template_missing`, since neither exists before the exchange. A URL
+  with no placeholder is used as written.
+- **A token goes only to the host that issued it.** When any OAuth 2 URL, the base or an `http.bases` value takes its
+  host from a value, every one of them has exactly the same host part (`https://{host}`): on a person's own server the
+  registration, the sign-in and the calls all belong to that server. So a cloud's fixed token URL never pairs with a
+  typed base (a cloud token would go to any host), nor a typed token URL with a fixed base. `hostSplit(entry)` is the
+  check: the engine refuses such an entry with `TypeError('oauth_host_split: <entry id>')` in `authorizeUrl` and
+  before every exchange, refresh and revoke, before anything is built or sent, and the table runs it as a rule. An entry
+  whose hosts are all fixed (a value only in the base's path) is unaffected. No value is ever read from the callback's
+  query: the callback is the person's browser.
 
 #### The address guard
 
 `guardedFetch` (published from `0-integrations/client`) is a `fetch` over `node:https` that refuses
 `ProviderHttpError('request_failed', null, 'address_blocked')`, never retried, for a URL that is not https, a host that
 is a blocked address, and a name whose lookup answers none or any blocked address. It is the default `fetch` of
-`client()` and `finishConnect` for an entry with `http.host: '*'`; every other entry keeps the global one.
+`client()`, `finishConnect`, `refreshGrant` and `revokeGrant` for an entry with `http.host: '*'`; every other entry
+keeps the global one.
 
 - The blocked ranges, in `node:net`'s `BlockList`. IPv4: `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10`, `127.0.0.0/8`,
   `169.254.0.0/16` (the cloud metadata address), `172.16.0.0/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`,
@@ -290,10 +302,10 @@ its personal key, sent bare in `authorization`, to the same GraphQL endpoint and
    for apps that connect other people's accounts, which is what providers ask OAuth 2 for (ClickUp: "OAuth 2.0:
    Required for building apps for other users"). The key is `signInWith(entry, 'key')`. The rule constrains only an
    entry with two sign-ins.
-4. A narrowed entry keeps every field: an OAuth 2 connect reads none (the grant is the secret, and its `finishConnect`
-   takes no form). An `oauth2` sign-in reads no plain field, in its base or its lookups: its `finishConnect` takes no
-   `values`, so the grant would be issued and the first call would fail. A provider whose OAuth needs one (a subdomain or
-   region chosen before the redirect) waits. A plain field only the key reads (a Basic email) is the key's alone.
+4. A narrowed entry keeps every field. An OAuth 2 sign-in reads the entry's plain fields: `startConnect` asks for them
+   and returns them; the app keeps them with `state`; every later call takes them (`finishConnect`, `refreshGrant`,
+   `revokeGrant`, `client`). It reads every one (in its URLs, the base, or `connection.*`), so a plain field only the
+   key reads (a Basic email beside OAuth 2) waits.
 5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `identify`, `save`,
    `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
 6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
@@ -341,7 +353,8 @@ the same lookup, where `{id}` is the id already found: `'Portal {id}'`.
   the credential stays on its origin. An unknown name is `TypeError('base_unknown: <name>')` before anything is sent.
   Jira's identify goes to `api.atlassian.com` while its own base still waits for the `cloudId` it saves: a call on a
   second base never fills the entry's own. A request revoke on a second base needs no `values`; one on a templated
-  own base needs them, and `revokeGrant` takes none, so it fails closed (`template_missing`) with nothing sent.
+  own base needs the connection's `values`, which `revokeGrant` takes; without them it fails closed (`template_missing`)
+  with nothing sent.
 - With no `id`, identify is only a credential check. There is no separate `verify`: none of the 17 providers needs
   the two apart.
 - Only the paths an entry names leave the token answer. Nothing else of it is returned or stored.
@@ -556,7 +569,7 @@ out: a smaller true entry beats a larger guessed one. What the engine cannot say
 wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
 
 **Sign-in.** Every sign-in the provider documents, in one pass: its self-serve OAuth 2 authorization code grant
-(`oauth2`) first, when it reaches the key's base and `identify` and reads no plain field, then its personal key or token
+(`oauth2`) first, when it reaches the key's base and `identify` and its hosts keep the host rule, then its personal key or token
 (`key`, its `send` as the docs show it); a documented one-request token (`token`) takes the key's place when there is
 no key. [Sign-in alternatives](#sign-in-alternatives) gives the rules. When the provider's own rules say an app for
 other people must use OAuth, the key's `help` says the key is for the person's own account, and a provider whose OAuth
@@ -629,7 +642,7 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 | `catalogue` (new) | `defineProvider`, the entry types, the template and path helpers. |
 | `http` (internal) | `createClient(entry, options)` reads `auth.send`, `http`, `errors`, `rateLimit` from the entry, and `classify` interprets the declared rules. `./http` is no longer a subpath: `client` is the public client. |
 | `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
-| `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
+| `oauth`, `credentials` | Driven by the entry. `refreshGrant(entry, client, refreshToken, { values?, fetch? })`. `revokeGrant(entry, { accessToken?, refreshToken?, client?, values?, fetch? })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
 | `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, then `challengeAnswer(entry.webhook, request)` and `deliveryId(entry.webhook, request)`. |
 | `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |
@@ -736,9 +749,9 @@ its docs, and engine tests as proof:
    five-step guide to adding a provider (`CONTRIBUTING.md`).
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
-code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
-authorize and token URLs (Shopify; Sentry, Outline and Mattermost for a host the person types); a base per sign-in
-(Confluence's and Wrike's OAuth 2 reach another base than their key); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; a base per sign-in
+(Confluence's and Wrike's OAuth 2 reach another base than their key; an OAuth 2 sign-in on a cloud host beside a key
+on a typed host: Outline, Sentry); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
 (Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
 
 Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments

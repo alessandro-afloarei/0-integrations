@@ -1,8 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Mattermost, on the person's own server: the host is typed, so it is reached only through the address guard unless the
- * app passes its own `fetch`. A personal access token as a bearer token; `me` stands for its user; `channels.list` needs
- * server 6.1 or later. Errors carry an `id`; a 429 past the server's own limit
+ * app passes its own `fetch`. OAuth 2 first: a System Admin enables the OAuth 2.0 service provider and the app's client is
+ * registered on that server; then a personal access token as a bearer token. `me` stands for the token's user;
+ * `channels.list` needs server 6.1 or later. Errors carry an `id`; a 429 past the server's own limit
  * (https://docs.mattermost.com/api/reference/mattermost-api). Types: https://github.com/mattermost/mattermost/tree/master/api/v4/source */
 const time = 'integer';
 const perPage = { in: 'query', type: 'integer', description: 'At most 200.' } as const;
@@ -13,10 +14,13 @@ const ref = 'https://docs.mattermost.com/api/reference';
 export const mattermost = defineProvider({
   id: 'mattermost', name: 'Mattermost', docs: `${ref}/mattermost-api`,
   categories: ['chat'],
-  fields: [{ name: 'host', title: 'Mattermost host', help: 'The host name of your Mattermost server, with no port.' },
+  fields: [{ name: 'host', title: 'Mattermost host',
+    help: 'The host name of your Mattermost server, with no port. For OAuth 2, a System Admin enables the OAuth 2.0 service provider there, and the app is registered on that server.' },
     { name: 'accessToken', title: 'Personal access token', secret: true,
       help: 'A System Admin enables them under System Console, then Integrations, then Integration Management; by default only System Admins can create one. It does not expire.' }],
-  auth: [{ kind: 'key' }],
+  // https://docs.mattermost.com/developers/integrate/apps/authentication/oauth2: the client secret in the body, PKCE with S256.
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/access_token' }, { kind: 'key' }],
+  scopes: { default: [] },
   http: { baseUrl: 'https://{host}/api/v4', host: '*', retry: {} },
   identify: { request: { path: '/users/me' }, id: 'id', name: ['username', 'email'] },
   errors: { detail: 'id' },
