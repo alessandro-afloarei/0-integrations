@@ -23,7 +23,8 @@ none and starts with a form, and an entry whose kind is not known in the types (
   `secret` is the secret fields; the token is never returned.
 - An OAuth 2 entry starts with a redirect asking for the entry's `scopes.default`, with PKCE unless the entry says
   `pkce: false`. It reads the entry's plain fields from `values` as a key entry does (defaults, choices), fills and
-  checks every OAuth 2 URL and the base with them before the URL is returned, and returns them in `values`
+  checks every OAuth 2 URL and the base with them before the URL is returned (the base only when it needs no value the
+  exchange saves, such as Jira's cloud id), and returns them in `values`
   ([on the person's own server](#oauth-2-on-the-persons-own-server)).
   `finishConnect(entry, { client, code, redirectUri, codeVerifier?, values?, fetch?, onRevokeFailed })` reads `values`
   again, exchanges the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
