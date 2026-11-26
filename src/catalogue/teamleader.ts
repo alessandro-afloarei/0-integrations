@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Teamleader Focus: OAuth 2 only, its scopes chosen when the integration is registered on the Marketplace. Each method
- * is a POST with a JSON body. Lists answer one page each: the page number is nested in the body (`page.number`), which
- * the paging kinds cannot send. A 429 past the limit per integration and account; errors are titles only
- * (https://developer.focus.teamleader.eu/docs/general-principles). */
+/** Teamleader Focus: OAuth 2 only, scopes chosen at registration. Every method is a POST with a JSON body; a list
+ * answers one page (`page.number` is nested in the body). A 429 past the limit; errors are titles only:
+ * https://developer.focus.teamleader.eu/docs/general-principles. The docs show the latest API version; an older
+ * integration sends `x-api-version`: https://developer.focus.teamleader.eu/docs/changelog/upgrading-api-version */
 const contact = { id: 'string', 'first_name?': 'string', 'last_name?': 'string', 'status?': 'string',
   'emails?': [{ 'type?': 'string', 'email?': 'string' }], 'web_url?': 'string', 'added_at?': 'string', 'updated_at?': 'string' } as const;
 const page = { page: { in: 'body', type: { 'size?': 'number', 'number?': 'number' },
@@ -24,7 +24,7 @@ export const teamleader = defineProvider({
       params: { filter: { in: 'body', type: { 'email?': { type: 'string', email: 'string' }, 'company_id?': 'string', 'term?': 'string',
         'updated_since?': 'string' }, description: 'email: { type: "primary", email }; term searches names, email and telephone.' }, ...page },
       result: { data: [contact] } },
-    'contacts.get': { docs: `${ref}/contacts-info`, method: 'POST', path: '/contacts.info', kind: 'read', notFound: 'null',
+    'contacts.get': { docs: `${ref}/contacts-info`, method: 'POST', path: '/contacts.info', kind: 'read',
       params: { id: { in: 'body', type: 'string', required: true } }, result: { data: contact } },
     'contacts.create': { docs: `${ref}/contacts-add`, method: 'POST', path: '/contacts.add',
       params: { last_name: { in: 'body', type: 'string', required: true }, first_name: { in: 'body', type: 'string' }, ...emails },
