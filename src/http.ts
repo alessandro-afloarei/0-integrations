@@ -139,10 +139,11 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   const based = () => {
     if (base) return base;
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
-    // No base holds a username or password, an app's own included: Node's own error would name the URL and its query key.
-    const { username, password, origin } = new URL(url);
-    if (username !== '' || password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
-    return (base = { url, origin });
+    // A base parses and holds no username or password, an app's own included; refused by entry id alone, since Node's
+    // own errors name the URL (`ERR_INVALID_URL` keeps it in `input`) and its query key.
+    const parsed = URL.parse(url);
+    if (parsed === null || parsed.username !== '' || parsed.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
+    return (base = { url, origin: parsed.origin });
   };
   const [auth] = entry.auth;
   const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];

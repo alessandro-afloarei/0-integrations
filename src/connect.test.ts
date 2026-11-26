@@ -151,9 +151,11 @@ describe('field defaults and choices', () => {
     ? Response.json({ type: 'admin', app: { id_code: 'abc123', name: 'Workspace' } }) : Response.json({}, { status: 401 })) });
   const http = () => fakeFetch(['api.intercom.io', 'api.eu.intercom.io', 'api.au.intercom.io'].map(me));
 
-  it.each([undefined, '', '  '])('a plain field left out or blank (%j) takes its default, which the values hold', async apiHost => {
+  // An inherited `apiHost` is no value given: only own properties are read.
+  it.each([undefined, { apiHost: '' }, { apiHost: '  ' }, Object.create({ apiHost: 'api.evil.test' }) as { apiHost: string }])(
+    'a plain field left out or blank (%j) takes its default, which the values hold', async values => {
     const fake = http();
-    const result = await finishConnect(intercom, { secret: { accessToken: 'tok' }, ...(apiHost === undefined ? {} : { values: { apiHost } }), fetch: fake.fetch });
+    const result = await finishConnect(intercom, { secret: { accessToken: 'tok' }, ...(values === undefined ? {} : { values }), fetch: fake.fetch });
     expect(result).toEqual({ secret: { accessToken: 'tok' }, values: { apiHost: 'api.intercom.io' }, account: { id: 'abc123', name: 'Workspace' } });
     expect(fake.calls.map(call => call.url)).toEqual(['https://api.intercom.io/me']);
   });

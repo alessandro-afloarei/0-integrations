@@ -485,6 +485,19 @@ test('a base that holds a username or password, an app\'s own included, is refus
   expect(JSON.stringify({ fields: Object.fromEntries(Object.entries(error)), message: error.message })).not.toMatch(/secret-key|u:p@|serpapi\.com/u);
 });
 
+test('a base that does not parse is refused by entry id alone, its userinfo in no property of the error', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  const token = vi.fn<() => Promise<string>>().mockResolvedValue('secret-key');
+  const error: unknown = await client(serpapi, { baseUrl: 'https://user-x:pass-y@exa mple.com', token, fetch: fake.fetch })
+    .json('/account').catch((caught: unknown) => caught);
+  expect(error).toEqual(new TypeError('base_host_refused: serpapi'));
+  expect(token).not.toHaveBeenCalled();
+  expect(fake.calls).toHaveLength(0);
+  if (!(error instanceof Error)) throw new Error('expected_error');
+  expect(JSON.stringify({ fields: Object.fromEntries(Object.entries(error)), message: error.message, cause: String(error.cause) }))
+    .not.toMatch(/user-x|pass-y|exa mple|secret-key/u);
+});
+
 test('a code that is the token sent in the query is no detail', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ error: 't' }, { status: 400 }) }]);
   await expect(queryClient(fake.fetch).json('/a')).rejects.toMatchObject({ code: 'request_failed', detail: null });
