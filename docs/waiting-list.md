@@ -66,9 +66,10 @@ entry's comment, not here.
 | Guru | OAuth 2: a client is enabled by Guru's support and belongs to one workspace | — |
 | GitBook | OAuth 2: no page says how a developer registers a client | — |
 | Honeybadger | OAuth 2: no page says how an app registers a client | — |
+| Honeybadger | The Bearer token a person may set on the Webhook integration: `webhook` checks `Honeybadger-Token` | A `token` webhook whose header carries a prefix |
 | incident.io | The webhook: its page leaves the hash and the secret's form to Svix | — |
 | Outline | Paging: each list answers one page, `offset` and `limit` body parameters, `pagination` in the result | `offset` paging |
-| Outline | OAuth 2: each server has its own OAuth URLs | An OAuth 2 sign-in that reads a value the person types before the redirect |
+| Outline | OAuth 2: its documented URLs are the cloud's (`app.getoutline.com`), while the entry's base is the host the person types | An OAuth 2 sign-in that reads a value the person types before the redirect |
 | Mattermost | OAuth 2: each server is its own OAuth 2 provider | An OAuth 2 sign-in that reads a value the person types before the redirect |
 | Mattermost | Paging and records of `posts.list`: one page, its posts a map keyed by id (`'unknown'`) beside `order`, `page` and `per_page` ordinary parameters, `has_next` in the result | A list whose records are a map keyed by id |
 | Zulip | `messages.create` | A form-encoded body |
