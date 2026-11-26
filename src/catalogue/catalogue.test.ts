@@ -214,6 +214,12 @@ const runnable = {
   // No silent GET to the base URL.
   "an `identify.request` whenever a value reads identify's answer": (entry: Entry) => entry.identify?.request !== undefined
     || lookupNames(entry).every(name => name.startsWith('tokenAnswer.') || name.startsWith('connection.')),
+  // The engine withholds these keys; an entry naming one would read nothing where it meant the token.
+  'no `identify` or `save` value that reads the token itself from `tokenAnswer.*` (it is never returned: read another key)': (entry: Entry) => {
+    const auth = entry.auth[0];
+    const own = auth.kind === 'token' ? [(auth.request.token ?? 'access_token').split('.')[0]] : ['access_token', 'refresh_token'];
+    return reads(entry, 'tokenAnswer.').every(name => !own.includes(name.split('.')[1]));
+  },
   'no `tokenAnswer.*` on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key' || reads(entry, 'tokenAnswer.').length === 0,
   // A token entry asks no scopes and gives no OAuth grant to revoke.
   'no `scopes` or RFC 7009 `revoke` on a key or token entry': (entry: Entry) => entry.auth[0].kind === 'oauth2'
@@ -363,6 +369,11 @@ test.each<[Rule, Entry]>([
     { basic: ['{clientId}', 'fixed'] }, { token: '' }] as const).map((part): [Rule, Entry] => [
     "a `token` request the engine can run: only the entry's fields (a plain one in `url`), the secret field in `body` or `basic`, a non-empty `token` path",
     defineProvider({ ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, ...part } }] })]),
+  ...[defineProvider({ ...tokened, save: { t: 'tokenAnswer.access_token' } }),
+    defineProvider({ ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, token: 'id' } }], identify: { id: 'tokenAnswer.id' } }),
+    defineProvider({ ...oauth2, scopes: { default: [] }, identify: { id: 'tokenAnswer.refresh_token' } }),
+    defineProvider({ ...oauth2, scopes: { default: [] }, save: { a: 'tokenAnswer.access_token.x' } })]
+    .map((entry): [Rule, Entry] => ["no `identify` or `save` value that reads the token itself from `tokenAnswer.*` (it is never returned: read another key)", entry]),
   ['`scopes` on an oauth2 entry', defineProvider(oauth2)],
   ...([
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}.k.test' }],

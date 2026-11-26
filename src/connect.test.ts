@@ -285,6 +285,18 @@ describe('a token entry', () => {
       account: { id: 'u@example.com', name: 'u@example.com' } });
   });
 
+  it("an entry that names the token's own key never gets the token back: not in values, not as the account", async () => {
+    const zoomFake = fakeFetch([{ url: /https:/, respond: () => Response.json({ access_token: 'live-token', expires_in: 3600 }) }]);
+    const saving = defineProvider({ ...zoom, id: 'saving', save: { t: 'tokenAnswer.access_token' } });
+    const saved = await finishConnect(saving, { ...zoomInput, fetch: zoomFake.fetch });
+    expect(saved.values).toEqual({ accountId: 'acc', clientId: 'cid' });
+    expect(JSON.stringify(saved)).not.toContain('live-token');
+    // Metabase's token path is `id`: an identify reading it finds nothing, so no account is made of the session.
+    const naming = defineProvider({ ...metabase, id: 'naming', identify: { id: 'tokenAnswer.id' } });
+    await expect(finishConnect(naming, { ...metabaseInput('metabase.example.test'), fetch: session().fetch }))
+      .rejects.toEqual(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
+  });
+
   it('Metabase on an address with an app fetch is address_blocked: the fetch never called, the password never sent', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     await expect(finishConnect(metabase, { ...metabaseInput('127.0.0.1'), fetch }))
@@ -431,6 +443,17 @@ describe('connect review regressions', () => {
       .rejects.toEqual(new ProviderHttpError('rejected', null, 'scope_missing'));
     expect(http.calls.map(call => call.url.split('?')[0]).slice(1)).toEqual(['https://oauth2.googleapis.com/token', 'https://oauth2.googleapis.com/revoke']);
     expect(onRevokeFailed).not.toHaveBeenCalled();
+  });
+
+  it("an OAuth 2 entry that names the grant's own tokens never gets them back in values", async () => {
+    const saving = defineProvider({ id: 'saving', name: 'Saving', http: { baseUrl: 'https://api.saving.test' }, scopes: { default: [] },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://saving.test/authorize', tokenUrl: 'https://saving.test/token', pkce: false }],
+      identify: { id: 'tokenAnswer.team' }, save: { a: 'tokenAnswer.access_token', r: 'tokenAnswer.refresh_token' } });
+    const fake = fakeFetch([{ url: 'https://saving.test/token', respond: () => Response.json({ access_token: 'live-a', refresh_token: 'live-r',
+      token_type: 'bearer', team: 'T1' }) }]);
+    const result = await finishConnect(saving, { client, code: 'c', redirectUri: callback, fetch: fake.fetch, onRevokeFailed: vi.fn() });
+    expect(result.values).toEqual({});
+    expect(result.account).toEqual({ id: 'T1', name: 'T1' });
   });
 
   it("compares the granted scopes split on the entry's separator; an answer naming none granted those asked", async () => {

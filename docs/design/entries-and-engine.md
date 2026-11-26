@@ -280,7 +280,8 @@ type Value = Path | readonly Path[] | Template;
 ```
 
 `id`, `name` and `save` read from one lookup: the answer's own keys at the root, `tokenAnswer.*` (the token answer,
-seen only inside the engine) and `connection.*` (the plain values). A string with braces is a template over the same
+seen only inside the engine, never the token's own key: `access_token` and `refresh_token`, or a `token` entry's
+`token` path, read as missing) and `connection.*` (the plain values). A string with braces is a template over the same
 lookup, where `{id}` is the id already found: `'Portal {id}'`.
 
 - The request is sent only when a value needs the answer, or at once when there is no `id` and no `name` (a

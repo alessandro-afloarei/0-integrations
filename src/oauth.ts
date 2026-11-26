@@ -15,9 +15,13 @@ function oauth2(entry: Entry): Extract<Auth, { kind: 'oauth2' }> {
   return auth;
 }
 
-/** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted. */
+/** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted.
+ * Never the token's own key: the token is not returned or stored. */
 function tokenAnswerKeys(entry: Entry): string[] {
-  const keys = lookupNames(entry).filter(name => name.startsWith('tokenAnswer.')).map(name => name.split('.')[1] ?? '');
+  const [auth] = entry.auth;
+  const withheld = auth.kind === 'token' ? [(auth.request.token ?? 'access_token').split('.')[0]] : ['access_token', 'refresh_token'];
+  const keys = lookupNames(entry).filter(name => name.startsWith('tokenAnswer.')).map(name => name.split('.')[1] ?? '')
+    .filter(key => !withheld.includes(key));
   return [...new Set([...keys, ...(entry.scopes?.requireGranted ? ['scope'] : [])])];
 }
 
