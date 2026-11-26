@@ -11,7 +11,7 @@ Nothing here is released yet.
   `authorizeUrl`, `exchangeCode`, `finishConnect`, `refreshGrant` and `revokeGrant` take them; `Connected['values']`
   holds the plain fields for every sign-in kind. Every OAuth 2 URL is filled and checked as a base is, and a token
   never goes to a host other than the one that issued it: an entry whose OAuth 2 URLs, base and `http.bases` do not
-  share one host when any of them is typed is refused with `oauth_host_split` before anything is built or sent. First
+  share one host when any of them is typed is refused with `host_split` before anything is built or sent. First
   used by Mattermost, which now lists OAuth 2 first; its personal access token is `signInWith(mattermost, 'key')`.
 - `exchangeCode`, `refreshGrant` and `revokeGrant` take `fetch` as an option, by default `guardedFetch` for an entry
   whose host is typed.

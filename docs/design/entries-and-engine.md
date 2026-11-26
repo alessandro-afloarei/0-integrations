@@ -179,7 +179,7 @@ its `save` keeps.
   host from a value, every one of them has exactly the same host part (`https://{host}`): on a person's own server the
   registration, the sign-in and the calls all belong to that server. So a cloud's fixed token URL never pairs with a
   typed base (a cloud token would go to any host), nor a typed token URL with a fixed base. `hostSplit(entry)` is the
-  check: the engine refuses such an entry with `TypeError('oauth_host_split: <entry id>')` in `authorizeUrl` and
+  check: the engine refuses such an entry with `TypeError('host_split: <entry id>')` in `authorizeUrl` and
   before every exchange, refresh and revoke, before anything is built or sent, and the table runs it as a rule. An entry
   whose hosts are all fixed (a value only in the base's path) is unaffected. No value is ever read from the callback's
   query: the callback is the person's browser.

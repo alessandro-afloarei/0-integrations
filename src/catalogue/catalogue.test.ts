@@ -189,7 +189,7 @@ const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
 const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's) has a placeholder";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
-const HOST_SPLIT = 'OAuth 2 URLs, the base and `http.bases` on one host when any of them is typed (`hostSplit`): a token goes only to the host that issued it';
+const HOST_SPLIT = 'the base, `http.bases` and the OAuth 2 URLs on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const runnable = {
   [TODO_RULE]: (entry: Entry) => !stringsIn(entry).some(text => text.includes('TODO')),
   // A Basic or query send that names no secret would send a credential anyone could make.
@@ -345,7 +345,7 @@ const runnable = {
     || plainFields(entry).every(name => [...oauthUrlList(entry).flatMap(placeholders), ...plainReads(entry)].includes(name)),
   // What the engine cannot fill is `template_missing` at the start.
   [OAUTH_PLAIN_URLS]: (entry: Entry) => oauthUrlList(entry).flatMap(placeholders).every(name => plainFields(entry).includes(name)),
-  // The rule the engine runs before every OAuth 2 request.
+  // The rule the engine runs before every OAuth 2 request and every call on a named base.
   [HOST_SPLIT]: (entry: Entry) => !hostSplit(entry),
   // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
   "an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
@@ -617,6 +617,9 @@ test.each<[Rule, Entry]>([
   // A typed host in the OAuth 2 URLs alone needs the pattern too: they are filled by the base's rule.
   [HOST_PATTERN, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'host', title: 'Host' }],
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }] })],
+  // A key on a typed host beside a fixed second base: the key would go to that other host.
+  [HOST_SPLIT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'host', title: 'Host' }],
+    http: { baseUrl: 'https://{host}/api', host: '*', bases: { cloud: 'https://cloud.k.test' } } })],
   [OAUTH_READS, defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }], scopes: { default: [] },
     auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] })],
   ...(['https://k.test/{apiKey}/token', 'https://k.test/{site}/token'] as const).map((tokenUrl): [Rule, Entry] => [OAUTH_PLAIN_URLS,

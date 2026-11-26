@@ -793,7 +793,8 @@ test.each([['..', 'base_value_invalid: jira {cloudId}'], ['.', 'base_value_inval
   });
 
 test('a request revoke on a second base goes there, the credential with it, needing no values', async () => {
-  const revoking = defineProvider({ ...regional, http: { ...regional.http, bases: { auth: 'https://auth.example.test/v2' } },
+  // The value in the base's path, as Jira's: a typed host beside a second base is `host_split` (below).
+  const revoking = defineProvider({ ...regional, http: { baseUrl: 'https://example.com/{sub}/v1', bases: { auth: 'https://auth.example.test/v2' } },
     revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } } });
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
   await revokeGrant(revoking, { accessToken: 'a', fetch: fake.fetch });
@@ -801,6 +802,15 @@ test('a request revoke on a second base goes there, the credential with it, need
   const unknown = defineProvider({ ...revoking, revoke: { request: { base: 'nope', path: '/revoke' } } });
   await expect(revokeGrant(unknown, { accessToken: 'a', fetch: fake.fetch })).rejects.toThrow(new TypeError('base_unknown: nope'));
   expect(fake.calls).toHaveLength(1);
+});
+
+test('a key on a typed host beside a fixed second base is host_split where a call chooses that base, nothing sent', async () => {
+  const split = defineProvider({ ...regional, http: { ...regional.http, bases: { auth: 'https://auth.example.test/v2' } },
+    identify: { request: { base: 'auth', path: '/me' } } });
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await expect(finishConnect(split, { secret: { apiKey: 'k' }, values: { sub: 'eu' }, fetch: fake.fetch }))
+    .rejects.toThrow(new TypeError('host_split: regional'));
+  expect(fake.calls).toEqual([]);
 });
 
 test('a named base with a placeholder is refused where a call chooses it: a named base is never filled', async () => {

@@ -15,7 +15,7 @@ function endpoints(entry: Entry, values: Values = {}) {
   const [auth] = entry.auth;
   const urls = oauthUrls(entry);
   if (auth.kind !== 'oauth2' || urls === undefined) throw new TypeError('oauth_unsupported');
-  if (hostSplit(entry)) throw new TypeError(`oauth_host_split: ${entry.id}`);
+  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
   const plain = Object.fromEntries((entry.fields ?? []).filter(field => !field.secret).map(({ name }) => [name, values[name]]));
   const url = (template: string) => new URL(filledBase(entry, plain, template));
   return { config: auth, authorize: url(urls.authorize), token: url(urls.token), refresh: url(urls.refresh),
@@ -195,7 +195,7 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
 export async function revokeGrant(entry: Entry, input: { accessToken?: string; refreshToken?: string | null;
   client?: OAuthClient } & Sent): Promise<void> {
   const { revoke } = entry;
-  if (hostSplit(entry)) throw new TypeError(`oauth_host_split: ${entry.id}`);
+  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
   if (revoke === undefined) return;
   try {
     if ('url' in revoke) {

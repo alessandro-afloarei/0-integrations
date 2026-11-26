@@ -5,7 +5,7 @@ import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
 import { backoffMs, bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { fill, parseJson, placeholders, plainValue } from './rules.js';
+import { fill, hostSplit, parseJson, placeholders, plainValue } from './rules.js';
 
 export type RequestOptions = {
   method?: Method;
@@ -154,6 +154,7 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
  * placeholder is refused before anything is sent. */
 export function callBase(entry: Entry, { base }: Call): { baseUrl?: string } {
   if (base === undefined) return {};
+  if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
   const baseUrl = Object.hasOwn(entry.http.bases ?? {}, base) ? entry.http.bases?.[base] : undefined;
   if (baseUrl === undefined) throw new TypeError(`base_unknown: ${base}`);
   if (placeholders(baseUrl).length > 0) throw new TypeError(`base_templated: ${base}`);

@@ -623,9 +623,9 @@ test.each([
   ['a typed authorize URL with a fixed token URL', split({ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' })],
   ['a typed host beside an `http.bases` value', split({ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' },
     { baseUrl: 'https://{host}/api', bases: { cloud: 'https://cloud.k.test' } })],
-])('%s is oauth_host_split at start, exchange, refresh and revoke, nothing sent', async (_, entry) => {
+])('%s is host_split at start, exchange, refresh and revoke, nothing sent', async (_, entry) => {
   const fake = endpoint(token);
-  const refused = new TypeError('oauth_host_split: own');
+  const refused = new TypeError('host_split: own');
   expect(() => authorizeUrl(entry, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's', codeChallenge: 'c', values: chat }))
     .toThrow(refused);
   await expect(exchangeCode(entry, client, { ...exchange, codeVerifier: verifier, values: chat, fetch: fake.fetch })).rejects.toThrow(refused);
@@ -642,10 +642,10 @@ test('a request revoke on a typed host goes to the base its values fill', async 
   expect(fake.calls.map(call => [call.method, call.url])).toEqual([['POST', 'https://chat.k.test/api/v4/oauth/revoke']]);
 });
 
-test('a request revoke beside fixed cloud OAuth 2 URLs and a typed base is oauth_host_split, nothing sent', async () => {
+test('a request revoke beside fixed cloud OAuth 2 URLs and a typed base is host_split, nothing sent', async () => {
   const split = defineProvider({ ...requested, auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }] });
   const fake = fakeFetch([{ url: /https:\/\//u, respond: () => Response.json({}) }]);
   await expect(revokeGrant(split, { accessToken: 'a', values: { host: 'evil.k.test' }, fetch: fake.fetch }))
-    .rejects.toThrow(new TypeError('oauth_host_split: own'));
+    .rejects.toThrow(new TypeError('host_split: own'));
   expect(fake.calls).toEqual([]);
 });

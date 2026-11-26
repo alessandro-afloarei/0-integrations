@@ -75,13 +75,11 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
     ...(entry.revoke && 'url' in entry.revoke ? { revoke: entry.revoke.url } : {}) };
 }
 
-/** Whether an OAuth 2 entry's URLs, its base and `http.bases` differ in their host part when any of them takes its host
- * from a value: a token goes only to the host that issued it, so a cloud token never reaches a typed host, nor a
- * server's token the cloud. */
+/** Whether the entry's base, its `http.bases` and an OAuth 2 sign-in's URLs differ in their host part when any of them
+ * takes its host from a value: on a typed host a credential goes only to that host, and a cloud's never reaches it. */
 export function hostSplit(entry: Entry): boolean {
-  const urls = oauthUrls(entry);
-  if (urls === undefined) return false;
-  const hosts = [...Object.values(urls), entry.http.baseUrl, ...Object.values(entry.http.bases ?? {})].map(url => url.split('/', 3).join('/'));
+  const hosts = [...Object.values(oauthUrls(entry) ?? {}), entry.http.baseUrl, ...Object.values(entry.http.bases ?? {})]
+    .map(url => url.split('/', 3).join('/'));
   return hosts.some(host => placeholders(host).length > 0) && new Set(hosts).size > 1;
 }
 
