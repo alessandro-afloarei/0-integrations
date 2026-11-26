@@ -3,7 +3,7 @@ import { defineProvider } from '../catalogue.js';
 /** Smartsheet.com (Gov, Europe and Australia are other hosts): an access token as Bearer; 300 requests a minute per
  * token, after a 429 wait at least 60 seconds (https://developers.smartsheet.com/api/smartsheet/guides/advanced-topics/scalability-options.md).
  * A page past the last answers the last page again: page `sheets.list` by `totalPages`, `rows.list` (a sheet's rows,
- * 100 a page once `page` is sent) by `totalRowCount`. */
+ * 100 a page unless `pageSize` says otherwise) by `totalRowCount`. */
 const reference = 'https://developers.smartsheet.com/api/smartsheet/openapi';
 const row = { id: 'number', 'sheetId?': 'number', 'parentId?': 'number', 'rowNumber?': 'number', 'permaLink?': 'string',
   'createdAt?': 'unknown', 'modifiedAt?': 'unknown', 'cells?': [{ 'columnId?': 'number', 'value?': 'unknown' }] } as const;

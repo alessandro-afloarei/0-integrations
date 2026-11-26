@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Rollbar: a project access token in `X-Rollbar-Access-Token`; listing items (`read`) checks it, as no endpoint names
- * its owner, and updating one needs `write`: one token may hold both (https://docs.rollbar.com/docs/access-tokens).
- * Only an account token lists projects, so no `projects.list` (https://docs.rollbar.com/reference/list-all-projects).
- * Errors are `{ err: 1, message }`, no code; a bad token is a 403; a 429 past Rollbar's limits (https://docs.rollbar.com/docs/rate-limits). */
+/** Rollbar: a project access token; listing items (`read`) checks it, no endpoint naming its owner; updates need
+ * `write`; one token may hold both (https://docs.rollbar.com/docs/access-tokens). An account token passes that check
+ * but needs a `project_id`, and only it lists projects (https://docs.rollbar.com/reference/list-all-projects): no
+ * `projects.list`. No error code; a bad token: 403; a 429 past a limit (https://docs.rollbar.com/docs/rate-limits). */
 const item = { id: 'integer', 'project_id?': 'integer', 'title?': 'string', 'status?': 'string', 'first_occurrence_timestamp?': 'integer' } as const;
 const itemid = { in: 'path', type: 'integer', required: true } as const;
 
