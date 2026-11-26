@@ -321,6 +321,32 @@ describe('fakeProvider', () => {
     await expect(exchangeCode(pkce, kitClient, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).rejects.toMatchObject({ status: 401 });
   });
 
+  test('a revoke with no token is 400 invalid_request', async () => {
+    const { fetch } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
+    const revoke = (body: Record<string, string>) => fetch('https://basicjson.test/revoke', { method: 'POST',
+      headers: { authorization: `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}` }, body: JSON.stringify(body) });
+    expect(await answer(await revoke({ token_type_hint: 'refresh_token' }))).toEqual({ status: 400, body: { error: 'invalid_request' } });
+    expect((await revoke({ token: 'kit-refresh' })).status).toBe(200);
+  });
+
+  test('an entry whose revoke URL is its token URL still connects, refreshes and revokes there', async () => {
+    const shared = defineProvider({ ...basicJson, revoke: { url: 'https://basicjson.test/token', token: ['refresh'] } });
+    const { fetch } = fakeFetch(fakeProvider(shared, { key: 'k' }));
+    await expect(finishConnect(shared, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
+      .resolves.toMatchObject({ secret: { accessToken: 'k' } });
+    await expect(refreshGrant(shared, kitClient, 'kit-refresh', { fetch })).resolves.toMatchObject({ accessToken: 'k' });
+    await expect(revokeGrant(shared, { refreshToken: 'kit-refresh', client: kitClient, fetch })).resolves.toBeUndefined();
+  });
+
+  test('with Basic client authentication, a client secret in the body as well is refused', async () => {
+    const { fetch } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
+    const sent = (body: Record<string, string>) => fetch('https://basicjson.test/token', { method: 'POST',
+      headers: { authorization: `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}` },
+      body: JSON.stringify({ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri, ...body }) });
+    expect((await sent({})).status).toBe(200);
+    expect(await answer(await sent({ client_id: 'kit-client', client_secret: 'kit-secret' }))).toEqual({ status: 401, body: { error: 'invalid_client' } });
+  });
+
   test("Slack's token answer holds the value given for the `save` key that reads it, and its kit values elsewhere", async () => {
     const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { botUserId: 'U1' } }));
     await expect(finishConnect(slack, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))

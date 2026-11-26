@@ -211,9 +211,14 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     for (const url of new Set([urls.token, urls.refresh, urls.revoke ?? urls.token])) {
       routes.push(route('POST', target(new URL(filledBase(entry, values, url))), '', async (call, sent) => {
         const body = new URLSearchParams(auth.json ? call.body as Record<string, string> : await sent.text());
-        const sameClient = sent.headers.get('authorization') === client.headers.get('authorization') && [...client.body].every(([name, value]) => body.get(name) === value);
+        // One method per request (RFC 6749 §2.3.1): with Basic, no client secret in the body.
+        const sameClient = sent.headers.get('authorization') === client.headers.get('authorization') && [...client.body].every(([name, value]) => body.get(name) === value)
+          && (auth.clientAuth !== 'basic' || !body.has('client_secret'));
         if (!sameClient) return Response.json({ error: 'invalid_client' }, { status: 401 });
-        if (url === urls.revoke) return new Response(null, { status: 200 });
+        // A revoke names its token (RFC 7009 §2.1); on a URL it shares with a grant, a request with a `grant_type` is that grant.
+        if (url === urls.revoke && !body.has('grant_type')) {
+          return body.has('token') ? new Response(null, { status: 200 }) : Response.json({ error: 'invalid_request' }, { status: 400 });
+        }
         const granted = body.get('grant_type') === 'refresh_token' ? url === urls.refresh && body.get('refresh_token') === 'kit-refresh' : url === urls.token
           && body.get('grant_type') === 'authorization_code' && body.get('code') === code && body.has('redirect_uri') && (auth.pkce === false || body.has('code_verifier'));
         if (!granted) return Response.json({ error: 'invalid_grant' }, { status: 400 });
