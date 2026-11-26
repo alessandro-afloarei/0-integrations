@@ -1,12 +1,12 @@
-import { globSync, readFileSync } from 'node:fs';
+import { existsSync, globSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
 import { defineProvider, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
-import { BAD_KEY, GOOD_KEY, kitValues, replay, signIn, type Recording } from '../kit.test-support.js';
+import { BAD_KEY, GOOD_KEY, kitValues, replayProblem, signIn, type Recording } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
@@ -357,25 +357,15 @@ describe.each(entries)('%s', (id, entry) => {
     });
   }
 
-  // With a recording beside it, the sign-in replays a good and a bad key on its recordings' exchanges merged, sending a
-  // token entry's token request and identify's request once each (a bad key stops at the token request); a missing
-  // exchange fails with the request it wanted. The account names what the recording holds.
+  // With a recording beside it, the sign-in replays a good and a bad key on its recordings' exchanges merged, through the
+  // check the recorder runs before it writes one: a file the recorder accepts, the table accepts.
   const [first, ...rest] = recordings.filter(({ file }) => file.startsWith(`${id}.`));
-  const token = entry.auth[0].kind === 'token';
-  if ((entry.identify?.request === undefined && !token) || first === undefined) return;
+  if ((entry.identify?.request === undefined && entry.auth[0].kind !== 'token') || first === undefined) return;
   const recording = { ...first, provider: id, exchanges: [first, ...rest].flatMap(item => item.exchanges) };
-  const recorded = JSON.stringify([recording.exchanges.filter(item => item.key === 'good').map(item => item.response), kitValues(entry)]);
-  test.each(['good', 'bad'] as const)('signs in on its recording with a %s key, sending each request once', async key => {
-    const fetch = vi.fn(replay(recording, key));
-    const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
-    if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
-    else {
-      // No account only when the entry declares no id: identify is then a credential check.
-      const { account } = await signedIn;
-      if (account === null) expect(entry.identify?.id).toBeUndefined();
-      else expect(recorded.toLowerCase()).toContain(account.id.toLowerCase());
-    }
-    expect(fetch).toHaveBeenCalledTimes(token && key === 'bad' ? 1 : Number(token) + Number(entry.identify?.request !== undefined));
+  // Only an entry with no module is recorded from an account by the recorder; a module's real recording is its kit's.
+  const fromAccount = !recording.synthetic && !existsSync(`src/${id}/${id}.ts`);
+  test('replays its sign-ins: the key to its account, the bad key rejected, each request once', async () => {
+    expect(await replayProblem(entry, recording, fromAccount)).toBeNull();
   });
 });
 

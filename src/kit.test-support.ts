@@ -3,11 +3,11 @@ import { describe, expect, test } from 'vitest';
 import { identifyAccount, lookupNames } from './account.js';
 import type { Entry } from './catalogue.js';
 import { finishConnect } from './connect.js';
-import type { ProviderHttpError } from './errors.js';
+import { ProviderHttpError } from './errors.js';
 import { paginate, type Page } from './paginate.js';
 import { safeDetail } from './http-response.js';
 import { parseJson } from './rules.js';
-import { fakeFetch, type Route } from './testing.js';
+import { fakeFetch, fakeProvider, type Route } from './testing.js';
 
 /** One request and its answer. `key` says which key sent it: the scenario's good key or a bad one. */
 export type Exchange = { key: 'good' | 'bad'; method: string; url: string; body?: unknown; status: number;
@@ -70,6 +70,30 @@ export function replay(recording: Recording, key: Exchange['key']): typeof fetch
     if (!exchange) throw new Error(`${recording.provider} recording: no ${key}-key answer for ${request.method} ${request.url}`);
     return Response.json(exchange.response, { status: exchange.status, headers: exchange.headers ?? {} });
   };
+}
+
+/**
+ * The one replay check, which the table test runs on every recording beside an entry and the recorder runs before it
+ * writes one: the good key signs in, sending each request once (a token entry's token request, then identify's), and the
+ * bad key is `rejected` at its first request. A recording the recorder wrote from an account (`fromAccount`) holds the
+ * kit's stand-ins, so its account is the one the entry's own rule gives over the kit values: the account its derived
+ * fake signs in to. One written by hand holds the provider's documented values, so its account id is one of them, and
+ * there is no account only when the entry names no id. Null when all of this holds, else the sign-in it changes.
+ */
+export async function replayProblem(entry: Entry, recording: Recording, fromAccount: boolean): Promise<string | null> {
+  const sent = { good: 0, bad: 0 };
+  const counted = (key: Exchange['key']): typeof fetch => (input, init) => { sent[key] += 1; return replay(recording, key)(input, init); };
+  const good = await signIn(entry, GOOD_KEY, counted('good')).catch(() => undefined);
+  const id = good?.account?.id ?? null;
+  const kit = fakeFetch(fakeProvider(entry, { key: GOOD_KEY, values: kitValues(entry) })).fetch;
+  const recorded = JSON.stringify([recording.exchanges.filter(item => item.key === 'good').map(item => item.response), kitValues(entry)]);
+  const holds = fromAccount ? id === (await signIn(entry, GOOD_KEY, kit).then(({ account }) => account?.id ?? null, () => undefined))
+    : id === null ? entry.identify?.id === undefined : recorded.toLowerCase().includes(id.toLowerCase());
+  if (good === undefined || !holds || sent.good !== Number(entry.auth[0].kind === 'token') + Number(entry.identify?.request !== undefined)) {
+    return 'the sign-in with the key';
+  }
+  const bad = await signIn(entry, BAD_KEY, counted('bad')).then(() => undefined, (error: unknown) => error);
+  return bad instanceof ProviderHttpError && bad.code === 'rejected' && sent.bad === 1 ? null : 'the bad key as rejected';
 }
 
 /** Records every exchange a real fetch makes, as sent and answered, for `src/record.test.ts`: `scrub` makes them safe to
