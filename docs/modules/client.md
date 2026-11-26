@@ -138,9 +138,9 @@ of them by `client` as `TypeError('operation_clash: <id>')` for an app's own ent
 
 A wrong entry throws when its client is built: besides a clashing id, a parameter with no place in the request, such
 as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging shape the entry does not declare
-(`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`) and a `records` path that leads
-to no list in the `result` (`records_unshaped: <id>`). A wrong value throws when the call is made, before anything is
-sent.
+(`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
+to no list in the `result` (`records_unshaped: <id>`), and an operation on a `page` shape whose `records` is not the
+shape's `list` (`records_unpaged: <id>`). A wrong value throws when the call is made, before anything is sent.
 
 An app's own entry declares operations the same way:
 

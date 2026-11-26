@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { clashing, placed, placeholders, shapeAt } from '../rules.js';
+import { clashing, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -338,8 +338,8 @@ const runnable = {
     entry.auth[0].kind !== 'oauth2' || plainReads(entry).length === 0,
   // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
   "an operation on a `page` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
-    operations(entry).every(op => op.paging === undefined || entry.paging?.[op.paging]?.kind !== 'page'
-      || op.records === (entry.paging[op.paging] as { list?: string }).list),
+    operations(entry).every(op => { const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
+      return shape === undefined || pagedRecords(op, shape); }),
   // The walk sets that parameter itself on every page after the first.
   "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)": (entry: Entry) => operations(entry).every(op => {
     const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];

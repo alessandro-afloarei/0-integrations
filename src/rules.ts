@@ -1,4 +1,4 @@
-import type { Operation, Param, Path, Shape, Template, Values, When } from './catalogue.js';
+import type { Operation, Paging, Param, Path, Shape, Template, Values, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -34,6 +34,12 @@ export function placed(op: Operation, name: string, param: Param): boolean {
   return 'graphql' in op ? param.in === 'variables'
     : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))
       && (param.in !== 'body' || (op.method ?? 'GET') !== 'GET');
+}
+
+/** Whether a paged operation reads its records where its shape walks: on a `page` shape, at the shape's `list` (both
+ * left out for a list at the answer's top level). Records read elsewhere would end the list after its first page. */
+export function pagedRecords(op: Operation, shape: Paging): boolean {
+  return shape.kind !== 'page' || op.records === shape.list;
 }
 
 /** The first operation id a client cannot hold: one with an empty segment, a dotted prefix of another (`pages` beside

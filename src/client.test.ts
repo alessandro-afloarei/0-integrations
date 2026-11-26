@@ -278,6 +278,29 @@ test("an app's entry that would send a wrong request is refused when its client 
   ] as const) expect(() => client(entry(op), { token: 'k' })).toThrow(new TypeError(message));
 });
 
+test("an app's operation on a `page` shape reads its records at the shape's `list`, or is refused when built", async () => {
+  const entry = (list: string | undefined, op: object) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { page: { kind: 'page', send: { query: 'page' }, ...(list === undefined ? {} : { list }) },
+      cursor: { kind: 'cursor', next: 'next', send: { query: 'c' } } },
+    operations: { 'things.list': { path: '/things', ...op } } }) as Entry;
+  const things = async (built: Entry, ...pages: unknown[]) => {
+    const fake = fakeFetch([{ url: /https:/, respond: sequence(...pages.map(page => json(page))) }]);
+    const api = client(built, { token: 'k', fetch: fake.fetch }) as unknown as { things: { list: () => AsyncIterable<unknown> } };
+    const seen: unknown[] = [];
+    for await (const thing of api.things.list()) seen.push(thing);
+    return seen;
+  };
+  expect(() => client(entry('items', { paging: 'page', records: 'data', result: { data: ['string'], items: ['string'] } }), { token: 'k' }))
+    .toThrow(new TypeError('records_unpaged: things.list'));
+  expect(() => client(entry(undefined, { paging: 'page', records: 'items', result: { items: ['string'] } }), { token: 'k' }))
+    .toThrow(new TypeError('records_unpaged: things.list'));
+  await expect(things(entry('items', { paging: 'page', records: 'items', result: { items: ['string'] } }), { items: ['a'] }, { items: [] }))
+    .resolves.toEqual(['a']);
+  await expect(things(entry(undefined, { paging: 'page', result: ['string'] }), ['a', 'b'], [])).resolves.toEqual(['a', 'b']);
+  await expect(things(entry('items', { paging: 'cursor', records: 'data', result: { data: ['string'] } }), { data: ['a'] }))
+    .resolves.toEqual(['a']);
+});
+
 test("a wrong argument to an app's entry is a TypeError when the call is made, before anything is sent", async () => {
   const wrong = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: {
     lost: { path: '/b/{id}' }, flat: { path: '/d', params: { ids: { in: 'query', type: ['string'] } } } } } as const satisfies Entry;
