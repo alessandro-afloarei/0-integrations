@@ -7,6 +7,10 @@ none and starts with a form, and an entry whose kind is not known in the types (
 - A key entry starts as a form of its `fields`. `finishConnect(entry, { secret, values?, fetch })` reads only the
   declared fields, secret ones from `secret` and plain ones from `values`, and refuses one that is missing, blank or
   whitespace with `TypeError('connect_field_required: <name>')` before anything is sent; nothing else passes through.
+  A plain field with a `default` may be left out or blank, and takes the default; one with `choices` refuses any other
+  value with `TypeError('connect_field_invalid: <name>')`, also before anything is sent. The result's `values` hold
+  the value used: `finishConnect(intercom, { secret: { accessToken }, fetch })` connects to Intercom's US host and
+  answers `values.apiHost === 'api.intercom.io'`.
   The entry's only secret field is the credential: an entry that declares none is refused first, as the entry's fault,
   with `TypeError('connect_secret_field_missing: <entry id>')`. Then the entry's `identify` runs: with a request it
   checks the credential and learns the account; an entry that declares none sends nothing, and its `account` is `null`.

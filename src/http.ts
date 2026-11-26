@@ -4,7 +4,7 @@ import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { fill, parseJson, plainValue } from './rules.js';
+import { fill, parseJson, placeholders, plainValue } from './rules.js';
 
 export type RequestOptions = {
   method?: Method;
@@ -85,15 +85,34 @@ function credentialOf(entry: Entry, token: string, values: Values): Credential {
   if (send === undefined) return { header: ['authorization', `Bearer ${token}`] };
   if ('header' in send) return { header: [send.header, token] };
   const secret = entry.fields?.find(field => field.secret === true)?.name;
-  const lookup = (name: string) => (name === 'token' || name === secret ? token : plainValue(values, name));
+  const lookup = (name: string) => (name === 'token' || name === secret ? token : plainValue(entry, values, name));
   if ('query' in send) return { query: Object.entries(send.query).map(([name, template]) => [name, fill(template, lookup, entry.id)]) };
   const pair = `${fill(send.basic[0], lookup, entry.id)}:${fill(send.basic[1], lookup, entry.id)}`;
   return { header: ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`] };
 }
 
+/** A value a base's placeholder takes: a host name's labels, and a port. Never a `/`, `@`, `#`, space or empty label. */
+const BASE_VALUE = /^[a-z0-9-]+(\.[a-z0-9-]+)*(:\d{1,5})?$/iu;
+
+/** The entry's base, its placeholders filled from plain values: an https URL with no user, its host matching `http.host`
+ * (equal, `*.d` a name ending in `.d`, `*` any). Throws before anything is read or sent. */
+function filledBase(entry: Entry, values: Values): string {
+  const { baseUrl, host = '' } = entry.http;
+  if (placeholders(baseUrl).length === 0) return baseUrl;
+  const filled = fill(baseUrl, name => {
+    const value = plainValue(entry, values, name);
+    if (value !== undefined && !BASE_VALUE.test(String(value))) throw new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
+    return value;
+  }, entry.id);
+  const url = URL.canParse(filled) ? new URL(filled) : undefined;
+  const hosted = url !== undefined && (host === '*' || url.hostname === host || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1))));
+  if (!hosted || url.protocol !== 'https:' || url.username !== '' || url.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
+  return filled;
+}
+
 export type HttpOptions = {
   token: (rejected?: string) => Promise<string>; fetch: typeof fetch;
-  /** The connection's plain values, for a credential built from them (Aircall's `{apiId}`). */
+  /** The connection's plain values, for a credential or a base built from them (Aircall's `{apiId}`, Intercom's `{apiHost}`). */
   values?: Values;
   baseUrl?: string; headers?: Readonly<Record<string, string>>; minIntervalMs?: number;
   /** Runs once per call, before anything is sent (an app's metering); what it throws reaches the caller unchanged. */
@@ -101,9 +120,14 @@ export type HttpOptions = {
 };
 
 export function createClient(entry: Entry, input: HttpOptions): HttpClient {
-  // Read without a trailing slash, so a path after it never makes `//` (`https://x/v1/` + `/a`).
-  const baseUrl = (input.baseUrl ?? entry.http.baseUrl).replace(/\/+$/u, '');
-  const origin = new URL(baseUrl).origin;
+  // Filled once, on the first read: a wrong value throws before it is sent, never when the client is built. An app's
+  // own base is used as given. Read without a trailing slash, so a path after it never makes `//` (`https://x/v1/` + `/a`).
+  let base: { url: string; origin: string } | undefined;
+  const based = () => {
+    if (base) return base;
+    const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
+    return (base = { url, origin: new URL(url).origin });
+  };
   const retry = retryPolicy(entry.http.retry);
   const timeoutMs = entry.http.timeoutMs ?? 30_000;
   const minIntervalMs = input.minIntervalMs ?? entry.http.minIntervalMs ?? 0;
@@ -204,6 +228,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   }
 
   const request = async (path: string, options: RequestOptions = {}): Promise<ProviderResponse> => {
+    const { url: baseUrl, origin } = based();
     const url = new URL(baseUrl + path);
     // The credential never leaves the base's origin, the first request included (`https://api.x.test` + `@evil.test`).
     if (url.origin !== origin) throw new TypeError('url_outside_origin');
@@ -220,7 +245,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   };
 
   return {
-    baseUrl,
+    get baseUrl() { return based().url; },
     request,
     async json(path, options) {
       return responseJson(entry, await request(path, options));

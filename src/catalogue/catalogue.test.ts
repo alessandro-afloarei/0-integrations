@@ -74,7 +74,8 @@ const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
   id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1), docs: z.string().optional(),
-  fields: z.array(z.strictObject({ name: z.string(), title: z.string(), secret: z.literal(true).optional() })).optional(),
+  fields: z.array(z.strictObject({ name: z.string(), title: z.string().min(1), secret: z.literal(true).optional(),
+    default: z.string().optional(), help: z.string().min(1).optional(), choices: z.array(z.string()).optional() })).optional(),
   auth: z.array(z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('key'), send: send.optional() }),
     z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, pkce: z.literal(false).optional(),
@@ -89,7 +90,7 @@ const entrySchema = z.strictObject({
   save: z.record(z.string(), value).optional(),
   revoke: z.union([z.strictObject({ url: https, token: z.array(z.enum(['refresh', 'access'])), goneErrors: z.array(z.string()).optional() }),
     z.strictObject({ request, goneErrors: z.array(z.string()).optional() })]).optional(),
-  http: z.strictObject({ baseUrl: https, bases: z.record(z.string(), https).optional(), headers: z.record(z.string(), z.string()).optional(),
+  http: z.strictObject({ baseUrl: https, host: z.string().optional(), bases: z.record(z.string(), https).optional(), headers: z.record(z.string(), z.string()).optional(),
     timeoutMs: z.number().int().positive().optional(), minIntervalMs: z.number().int().nonnegative().optional(),
     retry: z.strictObject({ limit: z.number().int().nonnegative().optional(), maxWaitMs: z.number().int().nonnegative().optional(),
       defaultWaitMs: z.number().int().nonnegative().optional(),
@@ -124,10 +125,24 @@ function functionsIn(value: unknown, at = ''): string[] {
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
+/** The base's host part: between `https://` and the first `/` after it. */
+const baseHost = (entry: Entry) => entry.http.baseUrl.slice('https://'.length).split('/')[0] ?? '';
 const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
 const runnable = {
   // Every claim an entry makes is checked against the provider's own page.
   'an https docs page': (entry: Entry) => entry.docs?.startsWith('https://') === true,
+  // A typed host is checked against a pattern before the token is read; a fixed one needs none.
+  'a host pattern exactly when the base\'s host holds a placeholder': (entry: Entry) => (placeholders(baseHost(entry)).length > 0
+    ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
+  'a plain field for every placeholder in the base': (entry: Entry) => placeholders(entry.http.baseUrl)
+    .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true)),
+  // A connect screen draws the choices; the default is what it shows first.
+  'choices that are a non-empty list of unique values, holding the default': (entry: Entry) => (entry.fields ?? []).every(field =>
+    field.choices === undefined || (field.choices.length > 0 && new Set(field.choices).size === field.choices.length
+      && (field.default === undefined || field.choices.includes(field.default)))),
+  // A secret is never shown or guessed.
+  'no default or choices on a secret field': (entry: Entry) => (entry.fields ?? [])
+    .every(field => field.secret !== true || (field.default === undefined && field.choices === undefined)),
   // The engine sends only that field as `{token}`.
   'one secret field, the only one a key entry has': (entry: Entry) => {
     const secrets = (entry.fields ?? []).filter(field => field.secret === true).length;
@@ -261,6 +276,23 @@ test.each<[Rule, Entry]>([
   ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
   ['scopes on an oauth2 entry', defineProvider(oauth2)],
+  ...([
+    ["a host pattern exactly when the base's host holds a placeholder", { baseUrl: 'https://{region}.k.test' }],
+    ["a host pattern exactly when the base's host holds a placeholder", { baseUrl: 'https://api.k.test', host: 'api.k.test' }],
+    ["a host pattern exactly when the base's host holds a placeholder", { baseUrl: 'https://{region}', host: 'example.com/x' }],
+    ["a host pattern exactly when the base's host holds a placeholder", { baseUrl: 'https://{region}', host: '*.com' }],
+    ['a plain field for every placeholder in the base', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
+    ['a plain field for every placeholder in the base', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
+  ] as const).map(([rule, http]): [Rule, Entry] => [rule, { ...key, http, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region' }] }]),
+  ...([
+    ['choices that are a non-empty list of unique values, holding the default', { choices: ['us', 'eu'], default: 'au' }],
+    ['choices that are a non-empty list of unique values, holding the default', { choices: [] }],
+    ['choices that are a non-empty list of unique values, holding the default', { choices: ['us', 'us'] }],
+  ] as const).map(([rule, field]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
+  ['no default or choices on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, default: 'k' }] })],
+  ['no default or choices on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, choices: ['k'] }] })],
   ["save keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([
@@ -291,6 +323,11 @@ test.each<[Rule, Entry]>([
   ['operation ids a client can hold', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { then: { path: '/then' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
+
+test.each([['title', { title: '' }], ['help', { help: '' }]])('a field with an empty %s fails the schema', (_, part) => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', ...part }] };
+  expect(entrySchema.safeParse(bad).success).toBe(false);
+});
 
 test('a query send that names no parameter fails the schema, with what to fix', () => {
   const bad = { ...key, auth: [{ kind: 'key', send: { query: {} } }], fields: [secret] };

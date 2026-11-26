@@ -12,7 +12,8 @@ export type Values = Readonly<Record<string, unknown>>;
  * comparison the value only has to be there. `detail` tests the provider's own code. */
 export type When = { status?: number | 'error'; header?: string; path?: Path; detail?: string | true;
   equals?: string | number | boolean; in?: readonly string[]; startsWith?: string; contains?: string };
-export type Field = { name: string; title: string; secret?: true };
+/** What a person enters. `choices` lists every value a plain field accepts; `default` fills it when left blank. */
+export type Field = { name: string; title: string; secret?: true; default?: string; help?: string; choices?: readonly string[] };
 /** How the credential travels. None: `authorization: Bearer {token}`. A header alone: the bare `{token}`. `query`:
  * each parameter's template, set on the URL of every request and redirect hop. */
 export type Send = { header: string } | { basic: readonly [Template, Template] } | { query: Readonly<Record<string, Template>> };
@@ -32,7 +33,9 @@ export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number
   waitFromBody?: { path: Path; unit: 'ms' | 'epochMs' } };
 export type RateLimit = { when: readonly (When & { resetAt?: { header: string; unit: 'epochSeconds' } })[];
   defaultWaitMs?: number };
-export type Http = { baseUrl: string; bases?: Readonly<Record<string, string>>; headers?: Readonly<Record<string, string>>;
+export type Http = { baseUrl: Template;
+  /** The host a base with a placeholder in its host must have once filled: a name, `*.` and a domain, or `*` (any). */
+  host?: string; bases?: Readonly<Record<string, string>>; headers?: Readonly<Record<string, string>>;
   timeoutMs?: number; minIntervalMs?: number; retry?: Retry; rateLimit?: RateLimit };
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };

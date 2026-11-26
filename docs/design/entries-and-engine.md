@@ -102,6 +102,7 @@ That is a whole provider: sign-in form, credential check, account identity, retr
   - `auth.send`: every plain field of the entry by its name, the entry's only secret field by its name, and `{token}`:
     the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one. A plain
     value that is blank fills no template: it is missing, and nothing is sent.
+  - `http.baseUrl`: every plain field by its name. See "A base filled from a value" below.
   - `identify` and `save` values: the lookup described under `identify`.
   - `webhook.signed`: `{body}`, `{timestamp}`, `{method}`, `{url}`.
   - an operation's `path`: its declared `path` parameters.
@@ -131,17 +132,32 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 |---|---|---|
 | `id`, `name`, `categories` | Identity and metadata. | — |
 | `docs` | The provider's own page that states what the entry declares, https. Every library entry has one. | — |
-| `fields` | What the user enters to connect: `{ name, title, secret?, default?, help? }`. A connect screen is drawn from these. | none |
+| `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default`; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
 | `auth` | A list of sign-in alternatives (below). | — |
 | `scopes` | `{ default, requireGranted? }`. `requireGranted` refuses a grant that lacks a requested scope. | none |
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
 | `save` | Values kept on the connection after sign-in: `{ hubId: 'tokenAnswer.hub_id' }`. | none |
 | `revoke` | `{ url, token: ['refresh', 'access'] }` (RFC 7009) or `{ request }`, each with `goneErrors?`. | none |
-| `http` | `baseUrl`, `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
+| `http` | `baseUrl`, `host?` (the host a base filled from a value must have), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
 | `errors` | Where the provider's error code is, and how answers map to error codes (below). | status only |
 | `paging` | Named paging shapes (below). | none |
 | `webhook` | The signature scheme (below). | none |
 | `operations` | Named reads and writes (below). | none |
+
+#### A base filled from a value
+
+A placeholder in `http.baseUrl` names a plain field, and a placeholder in its host (between `https://` and the next
+`/`) needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.` and a domain (any name
+ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's region is the first:
+`baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts.
+
+- The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
+  is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given.
+- The value is the plain value, else the field's `default`; none is `template_missing`. A value that is not a host
+  part (letters, digits and `-` in dot-separated labels, and a port) is `TypeError('base_value_invalid: <entry id>
+  {<name>}')`.
+- The filled base must parse, be https with no user or password, and its host must match `http.host`, else
+  `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.
 
 #### Arriving later
 

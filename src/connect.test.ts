@@ -6,6 +6,7 @@ import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
 import { google } from './catalogue/google.js';
+import { intercom } from './catalogue/intercom.js';
 import { slack } from './catalogue/slack.js';
 import { finishConnect, startConnect, type Connected, type ConnectStart } from './connect.js';
 import { ProviderHttpError } from './errors.js';
@@ -142,6 +143,33 @@ describe('connect', () => {
     await expect(finishConnect(looseAircall, { secret: { apiToken: 'token' }, ...(values ? { values } : {}), fetch: http.fetch }))
       .rejects.toThrow(new TypeError('connect_field_required: apiId'));
     expect(http.calls).toHaveLength(0);
+  });
+});
+
+describe('field defaults and choices', () => {
+  const me = (host: string) => ({ url: `https://${host}/me`, respond: (request: Request) => (request.headers.get('authorization') === 'Bearer tok'
+    ? Response.json({ type: 'admin', app: { id_code: 'abc123', name: 'Workspace' } }) : Response.json({}, { status: 401 })) });
+  const http = () => fakeFetch(['api.intercom.io', 'api.eu.intercom.io', 'api.au.intercom.io'].map(me));
+
+  it.each([undefined, '', '  '])('a plain field left out or blank (%j) takes its default, which the values hold', async apiHost => {
+    const fake = http();
+    const result = await finishConnect(intercom, { secret: { accessToken: 'tok' }, ...(apiHost === undefined ? {} : { values: { apiHost } }), fetch: fake.fetch });
+    expect(result).toEqual({ secret: { accessToken: 'tok' }, values: { apiHost: 'api.intercom.io' }, account: { id: 'abc123', name: 'Workspace' } });
+    expect(fake.calls.map(call => call.url)).toEqual(['https://api.intercom.io/me']);
+  });
+
+  it('a value among the choices is used', async () => {
+    const fake = http();
+    const { values } = await finishConnect(intercom, { secret: { accessToken: 'tok' }, values: { apiHost: 'api.eu.intercom.io' }, fetch: fake.fetch });
+    expect(values.apiHost).toBe('api.eu.intercom.io');
+    expect(fake.calls.map(call => call.url)).toEqual(['https://api.eu.intercom.io/me']);
+  });
+
+  it.each(['api.evil.test', 'API.EU.INTERCOM.IO', 'api.intercom.io/x'])('a value not among the choices (%s) is refused before anything is sent', async apiHost => {
+    const fake = http();
+    await expect(finishConnect(intercom, { secret: { accessToken: 'tok' }, values: { apiHost }, fetch: fake.fetch }))
+      .rejects.toThrow(new TypeError('connect_field_invalid: apiHost'));
+    expect(fake.calls).toHaveLength(0);
   });
 });
 

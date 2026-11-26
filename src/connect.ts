@@ -19,7 +19,11 @@ type Keyed<E extends Entry, K extends string, V> = Unnamed<E> extends true ? Rea
 type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : never;
 /** A key entry's secret fields, and its plain fields, by name. */
 type Secrets<E extends Entry> = Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>;
-type Plain<E extends Entry> = Keyed<E, Exclude<Fields<E>, { secret: true }>['name'], string>;
+type PlainFields<E extends Entry> = Exclude<Fields<E>, { secret: true }>;
+type Plain<E extends Entry> = Keyed<E, PlainFields<E>['name'], string>;
+/** The plain values a finish takes: a field with a default may be left out. */
+type Entered<E extends Entry> = Unnamed<E> extends true ? Values : Keyed<E, Exclude<PlainFields<E>, { default: string }>['name'], string>
+  & Partial<Keyed<E, Extract<PlainFields<E>, { default: string }>['name'], string>>;
 /** A finished sign-in: the secret to seal, the plain values to keep, and the account; one per entry of a union. */
 export type Connected<E extends Entry = Entry> = E extends Entry ? {
   /** The grant, or a key entry's secret fields by name. */
@@ -31,9 +35,10 @@ export type Connected<E extends Entry = Entry> = E extends Entry ? {
 type OAuthStart = { clientId: string; redirectUri: string; state: string };
 type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string | undefined; fetch: typeof fetch;
   onRevokeFailed: (error: unknown) => void };
-/** A key entry's finish: its secret fields by name, and its plain fields, required when it has any. */
+/** A key entry's finish: its secret fields by name, and its plain fields, required unless each has a default. */
 type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch: typeof fetch } & (Unnamed<E> extends true
-  ? { values?: Values } : Partial<Plain<E>> extends Plain<E> ? { values?: never } : { values: Plain<E> }) : never;
+  ? { values?: Values } : [PlainFields<E>] extends [never] ? { values?: never }
+  : Partial<Entered<E>> extends Entered<E> ? { values?: Entered<E> } : { values: Entered<E> }) : never;
 
 /** A form of the entry's fields, or the provider's authorization URL (with the PKCE verifier for the app to keep). */
 export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart], []>):
@@ -58,8 +63,10 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     const credential = fields.find(field => field.secret);
     if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const read = (field: Field) => {
-      const value = (field.secret ? secrets : plain)[field.name];
-      if (typeof value !== 'string' || value.trim() === '') throw new TypeError(`connect_field_required: ${field.name}`);
+      const given = (field.secret ? secrets : plain)[field.name];
+      const value = typeof given === 'string' && given.trim() !== '' ? given : field.secret ? undefined : field.default;
+      if (value === undefined) throw new TypeError(`connect_field_required: ${field.name}`);
+      if (field.choices !== undefined && !field.choices.includes(value)) throw new TypeError(`connect_field_invalid: ${field.name}`);
       return [field.name, value] as const;
     };
     const secret = Object.fromEntries(fields.filter(field => field.secret).map(read));

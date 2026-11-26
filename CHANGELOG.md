@@ -8,6 +8,8 @@ Nothing here is released yet.
 - A blank plain value (Aircall's `apiId: ''`) is refused with `template_missing` before anything is sent; it was sent as
   `Basic :<token>`.
 - Every entry has a `docs` link.
+- New: a field may offer `choices` and a `default`, with `help`; a base may hold a host part from a plain value, checked
+  against `http.host`. First used by Intercom's region.
 
 ## 0.13.0
 

@@ -20,11 +20,13 @@ const me = await api.json('/users/me');
   blank token is `TypeError('token_missing')`, thrown when a request needs it, before anything is sent.
 - `fetch`: the global one by default. In production pass the app's own guarded `fetch`: the library does not refuse
   private addresses yet.
-- `values`: the connection's plain values, for a credential built from them (Aircall's `{apiId}`, Trello's `{apiKey}`).
-  A value the credential names that is missing, blank or neither a string nor a finite number is
-  `TypeError('template_missing: <entry id> {<name>}')`, before anything is sent.
-- `baseUrl` and `minIntervalMs` replace the entry's. `headers` are merged with the entry's, a header of the same name
-  winning, and the credential is set last.
+- `values`: the connection's plain values, for a credential or a base built from them (Aircall's `{apiId}`, Trello's
+  `{apiKey}`, Intercom's `{apiHost}`). A value the entry names that is missing, blank or neither a string nor a finite
+  number takes its field's `default`, else is `TypeError('template_missing: <entry id> {<name>}')`, before anything is
+  sent. A base is filled and checked on the first request (see [catalogue](catalogue.md)), not when the client is built.
+- `baseUrl` replaces the entry's, used as given: an app's own base is neither filled nor checked against `http.host`.
+- `minIntervalMs` replaces the entry's.
+- `headers` are merged with the entry's, a header of the same name winning, and the credential is set last.
 - `beforeRequest(url)` runs once per call before anything is sent (an app's metering). What it throws reaches the caller.
   The URL it sees never holds a credential sent in the query.
 

@@ -8,6 +8,7 @@ import { github } from './catalogue/github.js';
 import { granola } from './catalogue/granola.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
+import { client } from './client.js';
 import { callRequest, createClient } from './http.js';
 import { fakeFetch, sequence } from './testing.js';
 
@@ -537,4 +538,91 @@ test('a token function that answers a blank token, at first or on renewal, sends
     await expect(fake.client.json('/x')).rejects.toThrow(new TypeError('token_missing'));
     expect(fake.calls).toHaveLength(tokens.length - 1);
   }
+});
+
+/** A base whose host part is a plain value, checked against a host pattern. */
+const regional = defineProvider({ id: 'regional', name: 'Regional',
+  fields: [{ name: 'sub', title: 'Subdomain' }, { name: 'apiKey', title: 'API key', secret: true }],
+  auth: [{ kind: 'key' }], http: { baseUrl: 'https://{sub}.example.com/v1', host: '*.example.com' } });
+const filled = (entry: Entry, values: Record<string, unknown>) => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  const token = vi.fn<() => Promise<string>>().mockResolvedValue('t');
+  const before = vi.fn();
+  return { ...fake, token, before, client: createClient(entry, { token, values, fetch: fake.fetch, minIntervalMs: 0, beforeRequest: before }) };
+};
+
+test("a base's host is filled from a plain value once, on the first request", async () => {
+  const fake = filled(regional, { sub: 'eu' });
+  await fake.client.json('/a');
+  await fake.client.json('/b');
+  expect(fake.calls.map(call => call.url)).toEqual(['https://eu.example.com/v1/a', 'https://eu.example.com/v1/b']);
+  expect(fake.client.baseUrl).toBe('https://eu.example.com/v1');
+});
+
+test.each([['a.example.com@evil.test', 'base_value_invalid: regional {sub}'], ['evil.test/x', 'base_value_invalid: regional {sub}'],
+  ['evil.test#', 'base_value_invalid: regional {sub}'], ['a b', 'base_value_invalid: regional {sub}'], ['x.', 'base_value_invalid: regional {sub}'],
+  ['', 'template_missing: regional {sub}']])(
+  "a hostile base value %j is refused before the token is read, beforeRequest runs or anything is sent", async (sub, message) => {
+    const fake = filled(regional, { sub });
+    await expect(fake.client.json('/a')).rejects.toThrow(new TypeError(message));
+    expect(() => fake.client.baseUrl).toThrow(new TypeError(message));
+    expect(fake.token).not.toHaveBeenCalled();
+    expect(fake.before).not.toHaveBeenCalled();
+    expect(fake.calls).toHaveLength(0);
+  });
+
+test.each([['*.example.com', 'api.example.com', true], ['*.example.com', 'a.b.example.com', true], ['*.example.com', 'example.com', false],
+  ['*.example.com', 'xexample.com', false], ['*.example.com', 'example.com.evil.test', false], ['*.example.com', 'evil.test', false],
+  ['api.example.com', 'api.example.com', true], ['api.example.com', 'other.example.com', false], ['*', 'any.where.test', true],
+  ['*.example.com', 'API.EXAMPLE.COM', true], ['*.example.com', 'api.example.com:8443', true]])(
+  'host %s takes %s: %s', async (host, h, accepted) => {
+    const entry = defineProvider({ id: 'hosted', name: 'Hosted', fields: [{ name: 'h', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://{h}', host } });
+    const fake = filled(entry, { h });
+    if (accepted) {
+      await fake.client.json('/a');
+      expect(new URL(fake.calls[0]?.url ?? '').hostname).toBe(h.toLowerCase().split(':')[0]);
+    } else {
+      await expect(fake.client.json('/a')).rejects.toThrow(new TypeError('base_host_refused: hosted'));
+      expect(fake.token).not.toHaveBeenCalled();
+      expect(fake.calls).toHaveLength(0);
+    }
+  });
+
+test("an app's templated base with no host pattern is refused", async () => {
+  const entry = defineProvider({ id: 'loose', name: 'Loose', fields: [{ name: 'h', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://{h}' } });
+  await expect(filled(entry, { h: 'api.example.com' }).client.json('/a')).rejects.toThrow(new TypeError('base_host_refused: loose'));
+});
+
+test("a field's default fills the base, and a value replaces it", async () => {
+  const defaulted = defineProvider({ ...regional, fields: [{ name: 'sub', title: 'Subdomain', default: 'us' }, regional.fields[1]] });
+  for (const [values, url] of [[{}, 'https://us.example.com/v1/a'], [{ sub: ' ' }, 'https://us.example.com/v1/a'], [{ sub: 'eu' }, 'https://eu.example.com/v1/a']] as const) {
+    const fake = filled(defaulted, values);
+    await fake.client.json('/a');
+    expect(fake.calls[0]?.url).toBe(url);
+  }
+});
+
+test('a templated base is not filled when the client is built, and an app\'s own base is used as given', async () => {
+  const fake = filled(regional, {});
+  const built = client(regional, { token: 't', fetch: fake.fetch });
+  await expect(built.json('/a')).rejects.toThrow(new TypeError('template_missing: regional {sub}'));
+  const own = createClient(regional, { token: () => Promise.resolve('t'), fetch: fake.fetch, baseUrl: 'https://proxy.test/regional/' });
+  expect(own.baseUrl).toBe('https://proxy.test/regional');
+  await own.json('/a');
+  expect(fake.calls.map(call => call.url)).toEqual(['https://proxy.test/regional/a']);
+});
+
+test("the credential never leaves the filled base's origin", async () => {
+  const bare = defineProvider({ id: 'bare', name: 'Bare', fields: [{ name: 'h', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://{h}', host: '*.example.com' } });
+  const fake = filled(bare, { h: 'api.example.com' });
+  await expect(fake.client.json('@evil.test/y')).rejects.toThrow(new TypeError('url_outside_origin'));
+  expect(fake.token).not.toHaveBeenCalled();
+  expect(fake.calls).toHaveLength(0);
+  const moved = fakeFetch([{ url: /https:/, respond: () => new Response(null, { status: 307, headers: { location: 'https://us.example.com/v1/a' } }) }]);
+  await expect(createClient(regional, { token: () => Promise.resolve('t'), values: { sub: 'eu' }, fetch: moved.fetch }).json('/a'))
+    .rejects.toMatchObject({ code: 'request_failed', status: 307 });
+  expect(moved.calls).toHaveLength(1);
 });

@@ -1,7 +1,10 @@
 import { expect, expectTypeOf, test } from 'vitest';
 import { defineProvider, type Entry } from './catalogue.js';
+import { aircall } from './catalogue/aircall.js';
 import { attio } from './catalogue/attio.js';
+import { intercom } from './catalogue/intercom.js';
 import { client, type Client, type ProviderResponse, type RequestOptions } from './client.js';
+import { finishConnect } from './connect.js';
 
 // A fake provider, pure data: its client's types are inferred from this literal.
 const acme = defineProvider({
@@ -129,7 +132,19 @@ function typed() {
   } });
 }
 
+// A plain field with a default may be left out of `values`; the result still holds it, as a string.
+async function defaults(accessToken: string) {
+  const { values } = await finishConnect(intercom, { secret: { accessToken }, fetch });
+  expectTypeOf(values.apiHost).toEqualTypeOf<string>();
+  await finishConnect(intercom, { secret: { accessToken }, values: { apiHost: 'api.eu.intercom.io' }, fetch });
+  // @ts-expect-error a plain field without a default (Aircall's apiId) still requires `values`
+  await finishConnect(aircall, { secret: { apiToken: accessToken }, fetch });
+  // @ts-expect-error a misspelt field is no plain field of Intercom
+  await finishConnect(intercom, { secret: { accessToken }, values: { apiHots: 'x' }, fetch });
+}
+
 test('defineProvider keeps an entry with operations', () => {
+  expect(defaults).toBeTypeOf('function');
   expect(acme.id).toBe('acme');
   expect(typed).toBeTypeOf('function');
 });
