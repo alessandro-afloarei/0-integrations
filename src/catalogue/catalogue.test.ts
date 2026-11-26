@@ -200,7 +200,7 @@ const runnable = {
   // Every claim an entry makes is checked against the provider's own page.
   'a `docs` link to the provider\'s page, https': (entry: Entry) => entry.docs?.startsWith('https://') === true,
   // A connect screen and the providers page group entries by their first category.
-  '`categories`: one or two unique values, the first the main one': (entry: Entry) => entry.categories !== undefined
+  '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one': (entry: Entry) => entry.categories !== undefined
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
@@ -440,10 +440,10 @@ test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
   [TODO_RULE, defineProvider({ ...key, docs: 'https://TODO', auth: [{ kind: 'key' }], fields: [secret] })],
-  ['`categories`: one or two unique values, the first the main one', defineProvider({ id: 'k', name: 'K', docs: key.docs, http: key.http,
+  ['`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one', defineProvider({ id: 'k', name: 'K', docs: key.docs, http: key.http,
     auth: [{ kind: 'key' }], fields: [secret] })],
   ...([[], ['tasks', 'docs', 'chat'], ['tasks', 'tasks']] as const).map((categories): [Rule, Entry] => [
-    '`categories`: one or two unique values, the first the main one', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], categories })]),
+    '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], categories })]),
   ...([{ path: '/tasks' }, { path: '/tasks', docs: 'http://k.test/tasks' }] as const).map((op): [Rule, Entry] => [
     'a `docs` page on every operation, https', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations: { 'tasks.list': op } })]),
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
@@ -636,7 +636,7 @@ test.each<[string, Record<string, unknown>, string]>([
 
 const OAUTH_PLAIN = 'no plain field read by an `oauth2` sign-in (its connect asks for none): a provider whose OAuth needs one (a subdomain or region) waits for a plain value at OAuth sign-in';
 test("pnpm new's unfilled skeleton breaks only rules that say what to fill: the TODOs and the categories", async () => {
-  const folder = mkdtempSync(fileURLToPath(new URL('../../.scaffold-table-', import.meta.url)));
+  const folder = mkdtempSync(fileURLToPath(new URL('../../.scaffold-test-', import.meta.url)));
   try {
     mkdirSync(join(folder, 'src/catalogue'), { recursive: true });
     spawnSync(process.execPath, [fileURLToPath(new URL('../../scripts/new.mjs', import.meta.url)), 'acme'], { cwd: folder });
@@ -644,7 +644,7 @@ test("pnpm new's unfilled skeleton breaks only rules that say what to fill: the 
     writeFileSync(file, readFileSync(file, 'utf8').replace("'../catalogue.js'", `'${new URL('../catalogue.ts', import.meta.url).href}'`));
     const { acme } = await import(pathToFileURL(file).href) as { acme: Entry };
     expect(entrySchema.safeParse(acme).error).toBeUndefined();
-    expect(broken(acme)).toEqual([`${TODO_RULE} (key)`, '`categories`: one or two unique values, the first the main one (key)']);
+    expect(broken(acme)).toEqual([`${TODO_RULE} (key)`, '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one (key)']);
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 

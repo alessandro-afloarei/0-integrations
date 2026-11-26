@@ -401,7 +401,7 @@ type Paging =
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
-type Where = { query: string } | { body: string } | { variables: string };
+type Where = { query: string } | { body: string };
 type Size = { send: Where; value?: number };
 ```
 
