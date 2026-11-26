@@ -20,7 +20,7 @@ import * as guard from './guard.js';
 import { tokenSource } from './oauth.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
-import { fakeFetch, type Route } from './testing.js';
+import { fakeFetch, fakeProvider, type Route } from './testing.js';
 
 const callback = 'https://app.test/api/integrations/slack/callback';
 const start = { clientId: 'client', redirectUri: callback, state: 'state' };
@@ -117,6 +117,19 @@ describe('connect', () => {
     expect(reads).toBe(1);
     expect(result.secret).toEqual({ apiKey: 'k1' });
     expect(http.calls.map(call => call.headers.authorization)).toEqual(['Bearer k1']);
+  });
+
+  it("reads OAuth 2's id from the token answer and the key's from identify's answer, the absent path skipped", async () => {
+    const both = defineProvider({ id: 'k', name: 'K', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token', pkce: false }, { kind: 'key' }],
+      scopes: { default: [] }, http: { baseUrl: 'https://api.k.test' }, identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } });
+    const key = fakeFetch(fakeProvider(signInWith(both, 'key'), { key: 'k', account: { portalId: 7 } }));
+    expect((await finishConnect(signInWith(both, 'key'), { secret: { apiKey: 'k' }, fetch: key.fetch })).account).toEqual({ id: '7', name: '7' });
+    expect(key.calls.map(call => call.url)).toEqual(['https://api.k.test/me']);
+    const oauth = fakeFetch([{ method: 'POST', url: 'https://k.test/token', respond: () => Response.json({ access_token: 'a', token_type: 'bearer', hub_id: 9 }) }]);
+    expect((await finishConnect(both, { client, code: 'c', redirectUri: callback, fetch: oauth.fetch, onRevokeFailed: vi.fn() })).account)
+      .toEqual({ id: '9', name: '9' });
+    expect(oauth.calls.map(call => call.url)).toEqual(['https://k.test/token']);
   });
 
   it("keeps a key entry's plain values and builds its credential from them", async () => {

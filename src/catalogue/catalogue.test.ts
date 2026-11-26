@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
-import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
+import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
 import { clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
@@ -277,7 +277,15 @@ const runnable = {
     const nested = ['access_token', 'refresh_token', 'id_token'];
     return reads(entry, 'tokenAnswer.').every(name => !own.includes(name.split('.')[1]) && !nested.includes(name.split('.').at(-1) ?? ''));
   },
-  'no `tokenAnswer.*` on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key' || reads(entry, 'tokenAnswer.').length === 0,
+  // A key has no token answer: the engine skips such a path in a list and reads the next (HubSpot's `hub_id`, then `portalId`).
+  'no `tokenAnswer.*` on a key entry, but before a path of identify\'s answer in an `id` or `name` list': (entry: Entry) => {
+    const answered = (path: string) => !path.startsWith('tokenAnswer.') && !path.startsWith('connection.');
+    const strict = (value: Value | undefined) => (value !== undefined && typeof value !== 'string'
+      && value.every((path, at) => answered(path) || value.slice(at + 1).some(answered)) ? [] : [value]);
+    const values = [...strict(entry.identify?.id), ...strict(entry.identify?.name), ...Object.values(entry.save ?? {})];
+    return entry.auth[0].kind !== 'key' || values.every(value => value === undefined
+      || lookupNames({ identify: { id: value } }).every(name => !name.startsWith('tokenAnswer.')));
+  },
   // A token entry asks no scopes and gives no OAuth grant to revoke.
   'no `scopes` or RFC 7009 `revoke` on a key or token entry': (entry: Entry) => entry.auth[0].kind === 'oauth2'
     || (entry.scopes === undefined && !(entry.revoke !== undefined && 'url' in entry.revoke)),
@@ -480,8 +488,10 @@ test.each<[Rule, Entry]>([
     identify: { id: 'workspace_id' } })],
   ["an `identify.request` whenever a value reads identify's answer", defineProvider({ ...oauth2, scopes: { default: [] },
     identify: { id: 'tokenAnswer.team.id' }, save: { region: 'Region {region}' } })],
-  ['no `tokenAnswer.*` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*` on a key entry, but before a path of identify\'s answer in an `id` or `name` list', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { id: 'tokenAnswer.team.id' } })],
+  ['no `tokenAnswer.*` on a key entry, but before a path of identify\'s answer in an `id` or `name` list', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    identify: { request: { path: '/me' }, id: ['id', 'tokenAnswer.team.id'] } })],
   ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     scopes: { default: ['read'] } })],
   ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
@@ -706,6 +716,9 @@ test.each<[string, Entry]>([
   // Azure DevOps' shape: fixed OAuth 2 URLs, a value only in the base's path.
   ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
     http: { baseUrl: 'https://api.k.test/{org}' } })],
+  // HubSpot's shape: OAuth 2's id from the token answer, the key's from identify's answer, which the engine reads next.
+  ['an id list from the token answer, then identify\'s answer, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret],
+    scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key' }], identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } })],
 ])('%s breaks no rule', (_, entry) => { expect(broken(entry)).toEqual([]); });
 
 test('a token request whose body holds an object fails the schema, with what to fix', () => {
