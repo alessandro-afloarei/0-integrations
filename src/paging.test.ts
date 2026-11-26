@@ -208,7 +208,7 @@ test('page: a falsy more ends the walk before an empty page', async () => {
 
 test('page: a provider that ignores the page number is page_repeated, and the repeat is never yielded', async () => {
   const walked = await pageWalk({ kind: 'page', send: { query: 'page' }, list: 'data', more: 'has_more' },
-    [{ data: [1], has_more: true }]);
+    [{ data: [1], has_more: true }, { data: [1], has_more: true }, { data: [] }]);
   expect(walked.error).toMatchObject({ code: 'invalid_response', detail: 'page_repeated' });
   expect(walked.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?page=2']);
   expect(walked.pages).toEqual([{ data: [1], has_more: true }]);
@@ -247,8 +247,9 @@ test('offset: a falsy more ends the walk before an empty page; a repeat is page_
     [{ data: [1], more: true }, { data: [2], more: false }, { data: [] }]);
   expect(more.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?offset=1']);
   expect(more.error).toBeUndefined();
-  const repeated = await pageWalk({ kind: 'offset', send: { query: 'offset' }, list: 'data' }, [{ data: [1] }]);
+  const repeated = await pageWalk({ kind: 'offset', send: { query: 'offset' }, list: 'data' }, [{ data: [1] }, { data: [1] }, { data: [] }]);
   expect(repeated.error).toMatchObject({ code: 'invalid_response', detail: 'page_repeated' });
+  expect(repeated.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?offset=1']);
   expect(repeated.pages).toEqual([{ data: [1] }]);
   const missing = await pageWalk({ kind: 'offset', send: { query: 'offset' }, list: 'result.items' }, [{ result: {} }]);
   expect(missing.urls).toEqual(['https://api.acme.test/items']);
