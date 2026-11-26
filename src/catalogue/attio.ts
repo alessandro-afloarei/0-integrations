@@ -6,7 +6,7 @@ export const attio = defineProvider({
   docs: 'https://docs.attio.com/rest-api/guides/authentication',
   categories: ['crm'],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.attio.com/v2', minIntervalMs: 100, retry: { maxWaitMs: 10_000 } },
+  http: { baseUrl: 'https://api.attio.com/v2', retry: { maxWaitMs: 10_000 } },
   identify: { request: { path: '/self' }, id: 'workspace_id', name: 'workspace_name',
     rejectWhen: [{ path: 'active', equals: false, detail: 'token_inactive' }, { status: 400 }] },
 });
