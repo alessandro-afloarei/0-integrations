@@ -290,6 +290,13 @@ test("an app's operation with a parameter in the place its paging shape's `send`
   expect(() => client(entry({ kind: 'offset', send: { body: 'at' } }, 'query'), { token: 'k' })).not.toThrow();
 });
 
+test("an operation whose path's own query names the key its paging writes is refused when built; another key is the path's own", () => {
+  const entry = (path: string) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { offset: { kind: 'offset', send: { query: 'offset' } } }, operations: { 'things.list': { path, paging: 'offset' } } }) as Entry;
+  expect(() => client(entry('/things?offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
+  expect(() => client(entry('/things?api-version=7.1'), { token: 'k' })).not.toThrow();
+});
+
 test("an app's operation on an `offset` shape whose `records` is not the shape's `list` is refused when built", () => {
   const entry = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
     paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'items' } },

@@ -46,6 +46,8 @@ export function pagedRecords(op: Operation, shape: Paging): boolean {
  * itself, and a caller's would start the walk there and be overwritten after the first page. */
 export function pagedParam(op: Operation, shape: Paging): string | undefined {
   const sent = 'send' in shape ? shape.send : undefined;
+  // A literal query in the path (`/items?offset=2`) would start the walk there too.
+  if (sent && 'query' in sent && 'path' in op && new URLSearchParams(op.path.split('?')[1]).has(sent.query)) return sent.query;
   return sent === undefined ? undefined
     : Object.entries(op.params ?? {}).find(([name, param]) => param.in in sent && sent[param.in as keyof typeof sent] === name)?.[0];
 }

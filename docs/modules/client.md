@@ -142,8 +142,8 @@ A wrong entry throws when its client is built: besides a clashing id, a paramete
 as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging shape the entry does not declare
 (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
 to no list in the `result` (`records_unshaped: <id>`), an operation on a `page` or `offset` shape whose `records` is
-not the shape's `list` (`records_unpaged: <id>`), and a parameter in the place its paging shape's `send` writes, which
-the walk sends itself (`param_paged: <id> <name>`). A wrong value throws when the call is made, before anything is sent.
+not the shape's `list` (`records_unpaged: <id>`), and a parameter (or a literal query in its path) in the place its
+paging shape's `send` writes, which the walk sends itself (`param_paged: <id> <name>`). A wrong value throws when the call is made, before anything is sent.
 
 An app's own entry declares operations the same way:
 
