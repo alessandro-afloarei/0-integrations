@@ -13,7 +13,7 @@ export const gitlab = defineProvider({
     authorizeParams: { response_type: 'code' } }, { kind: 'key', send: { header: 'private-token' } }],
   scopes: { default: ['read_user'] },
   revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh', 'access'] },
-  http: { baseUrl: 'https://{host}/api/v4', host: '*' },
+  http: { baseUrl: 'https://{host}/api/v4', host: '*', retry: {} },
   identify: { request: { path: '/user' }, id: 'id', name: 'username' },
   // A signing token follows Standard Webhooks; `webhook-id` stays the same across retries
   // (https://docs.gitlab.com/user/project/integrations/webhooks/).
