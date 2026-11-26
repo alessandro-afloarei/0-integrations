@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Honeybadger API v3, US or EU host: 360 requests an hour per person or account unless raised, a 429 with `Retry-After`
- * (https://docs.honeybadger.io/api/v3/). A webhook is checked by a token header, not a signature: `Honeybadger-Token` is
- * derived from the project API key, which ships in browser code (https://docs.honeybadger.io/lib/javascript/integration/browser/),
- * and changes when that key is reset (https://docs.honeybadger.io/resources/security/). Treat a delivery as a notice: read the fault through the API before acting on it. */
+/** Honeybadger API v3, US or EU host: 360 requests an hour per person or account unless raised, a 429 with
+ * `Retry-After` (https://docs.honeybadger.io/api/v3/). A webhook carries `Honeybadger-Token`, a token, not a signature:
+ * Honeybadger also sends it with uptime checks and source-map fetches, and changes it when the project API key is reset
+ * (https://docs.honeybadger.io/resources/security/). Treat a delivery as a notice: read the fault through the API. */
 const fault = { id: 'string', project_id: 'string', message: 'string', 'resolved?': 'boolean', 'ignored?': 'boolean',
   created_at: 'string', 'last_notice_at?': 'string', links: { web: 'string' } } as const;
 const projectId = { in: 'path', type: 'string', required: true } as const;
