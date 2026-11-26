@@ -6,17 +6,19 @@ import { defineProvider } from '../catalogue.js';
  * (https://vercel.com/docs/webhooks/webhooks-api#securing-webhooks). */
 const deployment = { id: 'string', readyState: 'string', 'name?': 'string', 'projectId?': 'string', 'url?': 'string',
   'inspectorUrl?': 'string', 'createdAt?': 'number' } as const;
-const teamId = { in: 'query', type: 'string' } as const;
+const teamId = { in: 'query', type: 'string',
+  description: 'The team to act on. By default, a request with a full-account token targets your default team.' } as const;
 const deployments = 'https://vercel.com/docs/rest-api/deployments';
 
 export const vercel = defineProvider({
   id: 'vercel', name: 'Vercel', docs: 'https://vercel.com/docs/rest-api#authentication',
   categories: ['code'],
   fields: [{ name: 'accessToken', title: 'Access token', secret: true,
-    help: 'Create it on the Account Tokens page with the Full Account scope: a project-scoped token cannot read your user, so sign-in fails.' }],
+    help: 'Create it on the Account Tokens page with the Full Account scope: a project-scoped token cannot read your user, so sign-in fails. It expires on the date you choose when you create it.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.vercel.com', retry: {} },
-  identify: { request: { path: '/v2/user' }, id: 'user.id', name: ['user.name', 'user.username', 'user.email'] },
+  identify: { request: { path: '/v2/user' }, id: 'user.id', name: ['user.name', 'user.username', 'user.email'],
+    rejectWhen: [{ status: 403, path: 'error.invalidToken', equals: true }] },
   errors: { detail: 'error.code' },
   webhook: { kind: 'hmac', header: 'x-vercel-signature', hash: 'sha1', deliveryId: { body: ['id'] } },
   operations: {
