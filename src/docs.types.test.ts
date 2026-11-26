@@ -11,13 +11,14 @@ import { notion } from './catalogue/notion.js';
 import { aircall } from './catalogue/aircall.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { metabase } from './catalogue/metabase.js';
+import { trello } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
 import { accessToken, type WithLock } from './credentials.js';
 import { fakeHubSpot, type HubSpotFakeData } from './hubspot/fake.js';
 import { refreshGrant, tokenSource, type OAuthClient } from './oauth.js';
-import { fakeFetch } from './testing.js';
+import { fakeFetch, fakeProvider } from './testing.js';
 import type { SecretStore, Vault } from './vault.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook } from './webhooks.js';
 
@@ -196,10 +197,18 @@ function webhooksReceiveCalls(request: Request, signingSecret: string, publicKey
   return [webhooksReceive(slack.webhook, request, signingSecret, handle), webhooksReceive(discord.webhook, request, publicKey, handle)];
 }
 
+// docs/modules/testing.md › A fake derived from an entry.
+async function testingDerivedFake() {
+  // An app's test, for an entry with no module:
+  const { fetch } = fakeFetch(fakeProvider(trello, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
+  const { account } = await finishConnect(trello, { secret: { apiToken: 'kit-token' }, values: { apiKey: 'kit-key' }, fetch });
+  return account;
+}
+
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
     connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
-    webhooksReceiveCalls, webhooksDeclared].every(example => typeof example === 'function')).toBe(true);
+    webhooksReceiveCalls, webhooksDeclared, testingDerivedFake].every(example => typeof example === 'function')).toBe(true);
 });
 
 test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {

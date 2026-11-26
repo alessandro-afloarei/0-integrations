@@ -3,12 +3,12 @@ import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { identifyAccount, lookupNames } from '../account.js';
+import { lookupNames } from '../account.js';
 import { defineProvider, type Entry, type Field, type Shape } from '../catalogue.js';
-import { finishConnect } from '../connect.js';
 import { createClient } from '../http.js';
-import { BAD_KEY, GOOD_KEY, replay, type Recording } from '../kit.test-support.js';
+import { BAD_KEY, GOOD_KEY, kitValues, replay, signIn, type Recording } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
+import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
 /** Every entry in this folder: no list to edit when one is added. */
@@ -29,17 +29,6 @@ const recordings = globSync('src/catalogue/*.recording.json').sort().map(file =>
 });
 /** Whether a recording's file name names one of the entries: `<id>.` starts it. */
 const besideAnEntry = (file: string, ids: readonly string[]) => ids.some(id => file.startsWith(`${id}.`));
-
-/** A key entry's plain fields, each `kit-<name>`. */
-const kitValues = (entry: Entry) =>
-  Object.fromEntries((entry.fields ?? []).filter(field => field.secret !== true).map(field => [field.name, `kit-${field.name}`]));
-
-/** Signs in with a key: a key entry through `finishConnect`, an OAuth entry's token through `identifyAccount`. */
-function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch) {
-  if (entry.auth[0].kind === 'oauth2') return identifyAccount(entry, { token: key, fetch });
-  const secret = (entry.fields ?? []).find(field => field.secret === true)?.name ?? '';
-  return finishConnect(entry, { secret: { [secret]: key }, values: kitValues(entry), fetch });
-}
 
 const https = z.string().startsWith('https://');
 /** A header name as `Headers` takes it: one lowercase HTTP token (RFC 9110). `Headers.get('X Signature')` throws. */
@@ -347,6 +336,16 @@ describe.each(entries)('%s', (id, entry) => {
     expect(placeholders(entry.identify?.request?.path ?? '')).toEqual([]);
     for (const name of placeholders(signing(entry)?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
+
+  // Every entry that sends identify, and every token entry, signs in on the fake derived from it: no recording needed.
+  if (entry.identify?.request !== undefined || entry.auth[0].kind === 'token') {
+    test.each(['good', 'bad'] as const)('signs in on its derived fake with a %s key', async key => {
+      const { fetch } = fakeFetch(fakeProvider(entry, { key: GOOD_KEY, values: kitValues(entry) }));
+      const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
+      if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
+      else expect((await signedIn).account === null).toBe(entry.identify?.id === undefined);
+    });
+  }
 
   // With a recording beside it, identify replays a good and a bad key on its recordings' exchanges merged, sending its
   // request once; a missing exchange fails with the request it wanted. The account names what the recording holds.

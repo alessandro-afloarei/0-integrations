@@ -44,6 +44,8 @@ Nothing here is released yet.
   declares its signature.
 - A provider code equal to any value a credential template took (Aircall's `apiId` in its Basic pair, Trello's key in
   its header) is no error's detail; before, only the token and the header's value were withheld.
+- New: `fakeProvider(entry, { key, values?, operations? })` in `0-integrations/testing`: routes derived from any
+  entry, so a provider with no module is testable.
 
 ## 0.13.0
 

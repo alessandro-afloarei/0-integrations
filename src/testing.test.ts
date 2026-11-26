@@ -1,6 +1,162 @@
-import { expect, test } from 'vitest';
-import { checkCredentialStore, fakeFetch, memoryStores, respondFrom, sequence } from './testing.js';
+import { describe, expect, test } from 'vitest';
+import { defineProvider } from './catalogue.js';
+import { aircall } from './catalogue/aircall.js';
+import { discord } from './catalogue/discord.js';
+import { fireflies } from './catalogue/fireflies.js';
+import { gitlab } from './catalogue/gitlab.js';
+import { metabase } from './catalogue/metabase.js';
+import { notion } from './catalogue/notion.js';
+import { serpapi } from './catalogue/serpapi.js';
+import { trello } from './catalogue/trello.js';
+import { zoom } from './catalogue/zoom.js';
+import { client } from './client.js';
+import { finishConnect } from './connect.js';
+import { kitValues } from './kit.test-support.js';
+import { requestToken, tokenSource } from './oauth.js';
+import { checkCredentialStore, fakeFetch, fakeProvider, memoryStores, respondFrom, sequence, type FakeCall } from './testing.js';
 import type { Sealed } from './vault.js';
+
+describe('fakeProvider', () => {
+  const unauthorized = { status: 401, body: { error: 'unauthorized' } };
+  const answer = async (response: Response) => ({ status: response.status, body: await response.json() });
+
+  test("SerpApi's fake answers its account to the key in the query, and 401 to another", async () => {
+    const { fetch } = fakeFetch(fakeProvider(serpapi, { key: 'k' }));
+    expect(await answer(await fetch('https://serpapi.com/account?api_key=k')))
+      .toEqual({ status: 200, body: { account_id: 'kit-account', account_email: 'kit-name' } });
+    expect(await answer(await fetch('https://serpapi.com/account?api_key=x'))).toEqual(unauthorized);
+  });
+
+  test("Trello's fake checks its `OAuth …` header, the app's key and the person's token", async () => {
+    const { fetch } = fakeFetch(fakeProvider(trello, { key: 'k', values: { apiKey: 'a' } }));
+    const sent = (apiKey: string, token: string) => fetch('https://api.trello.com/1/members/me',
+      { headers: { authorization: `OAuth oauth_consumer_key="${apiKey}", oauth_token="${token}"` } });
+    expect((await sent('a', 'k')).status).toBe(200);
+    expect(await answer(await sent('b', 'k'))).toEqual(unauthorized);
+    await expect(finishConnect(trello, { secret: { apiToken: 'k' }, values: { apiKey: 'a' }, fetch }))
+      .resolves.toMatchObject({ account: { id: 'kit-account', name: 'kit-name' } });
+    await expect(finishConnect(trello, { secret: { apiToken: 'x' }, values: { apiKey: 'a' }, fetch })).rejects.toMatchObject({ code: 'rejected' });
+  });
+
+  test("Aircall's fake checks Basic from the API ID and the token", async () => {
+    const { fetch } = fakeFetch(fakeProvider(aircall, { key: 'k', values: { apiId: 'a' } }));
+    const sent = (pair: string) => fetch('https://api.aircall.io/v1/company',
+      { headers: { authorization: `Basic ${Buffer.from(pair).toString('base64')}` } });
+    expect(await answer(await sent('a:k'))).toEqual({ status: 200, body: { company: { name: 'kit-name' } } });
+    expect(await answer(await sent('a:x'))).toEqual(unauthorized);
+    await expect(finishConnect(aircall, { secret: { apiToken: 'k' }, values: { apiId: 'a' }, fetch }))
+      .resolves.toMatchObject({ account: { id: 'a', name: 'kit-name' } });
+  });
+
+  test("Discord's fake checks `Bot <token>`", async () => {
+    const { fetch } = fakeFetch(fakeProvider(discord, { key: 'k' }));
+    const sent = (value: string) => fetch('https://discord.com/api/v10/users/@me', { headers: { authorization: value } });
+    expect((await sent('Bot k')).status).toBe(200);
+    expect(await answer(await sent('Bearer k'))).toEqual(unauthorized);
+  });
+
+  test("GitLab's fake checks `private-token` under the base filled from its values", async () => {
+    expect(kitValues(gitlab)).toEqual({ host: 'gitlab.com' });
+    const { fetch } = fakeFetch(fakeProvider(gitlab, { key: 'k', values: kitValues(gitlab) }));
+    expect(await answer(await fetch('https://gitlab.com/api/v4/user', { headers: { 'private-token': 'k' } })))
+      .toEqual({ status: 200, body: { id: 'kit-account', username: 'kit-name' } });
+    expect(await answer(await fetch('https://gitlab.com/api/v4/user', { headers: { 'private-token': 'x' } }))).toEqual(unauthorized);
+    await expect(client(gitlab, { token: 'k', values: { host: 'gitlab.com' }, fetch }).json('/user')).resolves.toMatchObject({ id: 'kit-account' });
+  });
+
+  test('a bad value fails in the fake as it fails in the engine', () => {
+    expect(() => fakeProvider(gitlab, { key: 'k', values: { host: '127.0.0.1' } }))
+      .toThrow(expect.objectContaining({ code: 'request_failed', detail: 'address_blocked' }));
+    expect(() => fakeProvider(gitlab, { key: 'k', values: { host: 'a/b' } })).toThrow('base_value_invalid: gitlab {host}');
+    expect(() => fakeProvider(gitlab, { key: 'k' })).toThrow('template_missing: gitlab {host}');
+  });
+
+  test('`account` replaces the default answer of identify', async () => {
+    const { fetch } = fakeFetch(fakeProvider(serpapi, { key: 'k', account: { account_id: 'acct_1', account_email: 'a@example.test' } }));
+    await expect(finishConnect(serpapi, { secret: { apiKey: 'k' }, fetch }))
+      .resolves.toMatchObject({ account: { id: 'acct_1', name: 'a@example.test' } });
+  });
+
+  test("an operation's function receives its decoded path parameters, query and body", async () => {
+    const calls: FakeCall[] = [];
+    const fake = fakeFetch(fakeProvider(notion, { key: 'k', operations: { 'pages.markdown': call => {
+      calls.push(call);
+      return { markdown: '# Plan', truncated: false };
+    } } }));
+    const api = client(notion, { token: 'k', fetch: fake.fetch });
+    await expect(api.pages.markdown({ pageId: 'p 1' })).resolves.toEqual({ markdown: '# Plan', truncated: false });
+    expect(fake.calls[0]?.url).toBe('https://api.notion.com/v1/pages/p%201/markdown?markdown_version=v2');
+    expect(calls).toEqual([{ path: { pageId: 'p 1' }, query: { markdown_version: 'v2' }, body: undefined }]);
+    await expect(client(notion, { token: 'x', fetch: fake.fetch }).pages.markdown({ pageId: 'p' })).rejects.toMatchObject({ code: 'rejected' });
+  });
+
+  test('an operation that returns undefined is a 404: `notFound: null` answers null', async () => {
+    const { fetch } = fakeFetch(fakeProvider(aircall, { key: 'k', values: { apiId: 'a' }, operations: { 'calls.transcript': () => undefined } }));
+    await expect(client(aircall, { token: 'k', values: { apiId: 'a' }, fetch }).calls.transcript({ callId: 7 })).resolves.toBeNull();
+    const notion404 = fakeFetch(fakeProvider(notion, { key: 'k', operations: { 'pages.markdown': () => undefined } }));
+    await expect(client(notion, { token: 'k', fetch: notion404.fetch }).pages.markdown({ pageId: 'p' })).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  test('a returned Response is answered as it is', async () => {
+    const { fetch } = fakeFetch(fakeProvider(notion, { key: 'k', operations: {
+      'pages.markdown': () => Response.json({ object: 'error', code: 'validation_error' }, { status: 400 }) } }));
+    await expect(client(notion, { token: 'k', fetch }).pages.markdown({ pageId: 'p' }))
+      .rejects.toMatchObject({ code: 'request_failed', status: 400 });
+  });
+
+  test("a GraphQL operation routes by its query, and its function sees the posted body", async () => {
+    const calls: FakeCall[] = [];
+    const user = { user_id: 'u1', email: 'kit@example.test', name: 'Kit' };
+    const { fetch } = fakeFetch(fakeProvider(fireflies, { key: 'k', operations: { user: call => { calls.push(call); return { data: { user } }; } } }));
+    await expect(client(fireflies, { token: 'k', fetch }).user()).resolves.toEqual({ data: { user } });
+    expect(calls).toEqual([{ path: {}, query: {}, body: { query: fireflies.operations.user.graphql, variables: {} } }]);
+    await expect(fetch('https://api.fireflies.ai/graphql', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ query: 'query Other { other }' }) })).rejects.toThrow('fakeFetch: no route for POST https://api.fireflies.ai/graphql');
+  });
+
+  test('a request no route matches is fakeFetch\'s own "no route" error', async () => {
+    const { fetch } = fakeFetch(fakeProvider(notion, { key: 'k' }));
+    await expect(client(notion, { token: 'k', fetch }).pages.markdown({ pageId: 'p' }))
+      .rejects.toThrow('fakeFetch: no route for GET https://api.notion.com/v1/pages/p/markdown?markdown_version=v2');
+  });
+
+  test("Zoom's fake answers the token request to the right Basic, and invalid_client to another", async () => {
+    const values = { accountId: 'acc', clientId: 'c' };
+    const { fetch } = fakeFetch(fakeProvider(zoom, { key: 'k', values }));
+    const sent = (secret: string) => fetch('https://zoom.us/oauth/token', { method: 'POST',
+      headers: { authorization: `Basic ${Buffer.from(`c:${secret}`).toString('base64')}` },
+      body: new URLSearchParams({ grant_type: 'account_credentials', account_id: 'acc' }) });
+    expect(await answer(await sent('k'))).toEqual({ status: 200, body: { access_token: 'kit-token', expires_in: 3600 } });
+    expect(await answer(await sent('x'))).toEqual({ status: 400, body: { error: 'invalid_client' } });
+    const before = Date.now();
+    const { token, expiresAt } = await requestToken(zoom, { secret: { clientSecret: 'k' }, values, fetch });
+    expect(token).toBe('kit-token');
+    expect(expiresAt).toBeGreaterThanOrEqual(before + 3_600_000);
+    await expect(requestToken(zoom, { secret: { clientSecret: 'x' }, values, fetch })).rejects.toMatchObject({ code: 'rejected', detail: 'invalid_client' });
+  });
+
+  test("Metabase's fake answers a session to the right JSON body, and its calls require that session", async () => {
+    expect(kitValues(metabase)).toEqual({ host: 'kit-host.example.test', username: 'kit-username' });
+    const values = { host: 'kit-host.example.test', username: 'u' };
+    const withCalls = defineProvider({ ...metabase, operations: { 'user.current': { path: '/user/current' } } });
+    const { fetch } = fakeFetch(fakeProvider(withCalls, { key: 'pw', values, operations: { 'user.current': () => ({ email: 'u' }) } }));
+    const session = (password: string) => fetch('https://kit-host.example.test/api/session', { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'u', password }) });
+    expect(await answer(await session('pw'))).toEqual({ status: 200, body: { id: 'kit-token', expires_in: 3600 } });
+    expect(await answer(await session('nope'))).toEqual({ status: 400, body: { error: 'invalid_client' } });
+    const current = (value: string) => fetch('https://kit-host.example.test/api/user/current', { headers: { 'x-metabase-session': value } });
+    expect((await current('kit-token')).status).toBe(200);
+    expect(await answer(await current('pw'))).toEqual(unauthorized);
+    const api = client(withCalls, { token: tokenSource(withCalls, { secret: { password: 'pw' }, values, fetch }), values, fetch });
+    await expect(api.user.current()).resolves.toEqual({ email: 'u' });
+    await expect(finishConnect(metabase, { secret: { password: 'nope' }, values, fetch })).rejects.toMatchObject({ code: 'rejected' });
+  });
+
+  test('operations are keyed by the entry\'s own operation ids', () => {
+    // @ts-expect-error: Notion declares no `nope`.
+    expect(fakeProvider(notion, { key: 'k', operations: { nope: () => null } })).toBeInstanceOf(Array);
+  });
+});
 
 test('respondFrom matches a route whose url is a predicate', async () => {
   const respond = respondFrom([{ method: 'GET', url: url => url.host === 'a.test' && url.pathname.startsWith('/items/'),

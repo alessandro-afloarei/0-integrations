@@ -85,7 +85,7 @@ type Credential = { header?: [name: string, value: string]; query?: [name: strin
 
 /** Bearer by default, a header's bare token or its `value` filled, Basic from a template, or the query's parameters from
  * templates. */
-function credentialOf(entry: Entry, token: string, values: Values): Credential {
+export function credentialOf(entry: Entry, token: string, values: Values): Credential {
   const [auth] = entry.auth;
   const send = 'send' in auth ? auth.send : undefined;
   if (send === undefined) return { header: ['authorization', `Bearer ${token}`] };
