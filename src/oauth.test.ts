@@ -497,3 +497,18 @@ test.each([1e308, 1e20, Number.MAX_VALUE])('expires_in %j gives no safe time: no
   const fake = endpoint({ access_token: 'at', expires_in: expiresIn });
   expect(await requestToken(zoom, zoomInput(fake.fetch))).toMatchObject({ token: 'at', expiresAt: null });
 });
+
+/** An OAuth 2 entry whose token, refresh and revoke URLs can each be replaced. */
+const urls = (part: { tokenUrl?: string; refreshUrl?: string; revoke?: string }) => defineProvider({ id: 'userinfo', name: 'Userinfo',
+  http: { baseUrl: 'https://api.auth.test' }, revoke: { url: part.revoke ?? 'https://auth.test/revoke', token: ['refresh'] },
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://auth.test/authorize', tokenUrl: part.tokenUrl ?? 'https://auth.test/token',
+    pkce: false, ...(part.refreshUrl ? { refreshUrl: part.refreshUrl } : {}) }] });
+test.each([
+  ['token', (fetch: typeof globalThis.fetch) => exchangeCode(urls({ tokenUrl: 'https://u:p@auth.test/token' }), client, { ...exchange, fetch })],
+  ['refresh', (fetch: typeof globalThis.fetch) => refreshGrant(urls({ refreshUrl: 'https://u:p@auth.test/refresh' }), client, 'r', { fetch })],
+  ['revoke', (fetch: typeof globalThis.fetch) => revokeGrant(urls({ revoke: 'https://u:p@auth.test/revoke' }), { refreshToken: 'r', client, fetch })],
+])('an OAuth 2 %s URL with a username or password is base_host_refused, with nothing sent', async (_, run) => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  await expect(run(fetch)).rejects.toThrow(new TypeError('base_host_refused: userinfo'));
+  expect(fetch).not.toHaveBeenCalled();
+});

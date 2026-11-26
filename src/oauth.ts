@@ -2,7 +2,7 @@ import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
 import type { Auth, Entry, Values } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
+import { callBase, callRequest, createClient, defaultFetch, filledBase, sendable, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
 import { fill, holds, parseJson, placeholders, plainValue, readPath } from './rules.js';
 
@@ -64,9 +64,10 @@ const jsonBodies = (fetch: typeof globalThis.fetch): CustomFetch => (url, option
 /** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. */
 function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThis.fetch, refresh = false) {
   const config = oauth2(entry);
-  const as: oauth.AuthorizationServer = { issuer: new URL(config.tokenUrl).origin,
-    token_endpoint: refresh ? config.refreshUrl ?? config.tokenUrl : config.tokenUrl,
-    ...(entry.revoke && 'url' in entry.revoke ? { revocation_endpoint: entry.revoke.url } : {}) };
+  // Each URL passes the one check every URL the library sends to passes, before anything is sent.
+  const as: oauth.AuthorizationServer = { issuer: sendable(entry, config.tokenUrl).origin,
+    token_endpoint: sendable(entry, refresh ? config.refreshUrl ?? config.tokenUrl : config.tokenUrl).href,
+    ...(entry.revoke && 'url' in entry.revoke ? { revocation_endpoint: sendable(entry, entry.revoke.url).href } : {}) };
   const client = { client_id: credentials.clientId };
   const auth = config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret);
   // The Basic value as sent (the id and secret form-encoded first), so no error detail echoes it.

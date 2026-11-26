@@ -104,7 +104,7 @@ const BASE_VALUE = /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/u;
 /** The one check of every URL the library sends to (an entry's base, an app's own, a token URL): it parses, is https and
  * holds no username or password. Refused by entry id alone: Node's own errors name the URL (`ERR_INVALID_URL` keeps it
  * in `input`) and its query key. No `URL.parse`: Node 22.1+. */
-function sendable(entry: Entry, url: string): URL {
+export function sendable(entry: Entry, url: string): URL {
   const parsed = URL.canParse(url) ? new URL(url) : undefined;
   if (parsed?.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '') {
     throw new TypeError(`base_host_refused: ${entry.id}`);
