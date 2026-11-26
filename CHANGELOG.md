@@ -35,9 +35,9 @@ Nothing here is released yet.
   modules still take one).
 - Granola, Intercom, Slack and Stripe declare a retry. An idempotent call (a GET unless the caller marks it otherwise,
   or a call marked idempotent) made without the caller's own abort signal is sent once more after a 429, a 408, 500,
-  502, 503 or 504, or a network failure. It waits the answer's `Retry-After` when sent; else, after a 429, the entry's
-  default wait (Granola 5 seconds, Intercom 10 seconds, Slack and Stripe 1 second), and after any other, at most one
-  second; never more than 60 seconds.
+  502, 503 or 504, or a network failure. It waits the answer's `Retry-After` when it gives a valid, positive delay;
+  else, after a 429, the entry's default wait (Granola 5 seconds, Intercom 10 seconds, Slack and Stripe 1 second),
+  and after any other, at most one second; never more than 60 seconds.
 - `finishConnect` over a union of key or token entries takes each member's own secret fields; it asked for every
   member's at once (HubSpot's `accessToken` beside Attio's `apiKey`). An OAuth 2 member adds no form input.
 - `FirefliesUser`'s `email` and `name` are `string | null` (they were `string`): a Fireflies user without one no longer
