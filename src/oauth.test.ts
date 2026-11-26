@@ -516,3 +516,15 @@ test("an app's getter-backed secret is read once: the value redacted is the valu
   expect(reads).toBe(1);
   expect(fake.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('cid:secret1').toString('base64')}`);
 });
+
+test('the plain values are read once and own ones only: a getter runs once, an inherited value is missing', async () => {
+  let reads = 0;
+  const values = { accountId: 'acc', get clientId() { reads += 1; return reads === 1 ? 'a' : 'b'; } };
+  const fake = endpoint({ access_token: 'at' });
+  await requestToken(zoom, { secret: zoomSecret, values, fetch: fake.fetch });
+  expect(reads).toBe(1);
+  expect(fake.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('a:zoom-client-secret').toString('base64')}`);
+  const inherited = Object.assign(Object.create({ clientId: 'proto' }) as Record<string, string>, { accountId: 'acc' });
+  await expect(requestToken(zoom, { secret: zoomSecret, values: inherited, fetch: fake.fetch })).rejects.toThrow('template_missing: zoom {clientId}');
+  expect(fake.calls).toHaveLength(1);
+});

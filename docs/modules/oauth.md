@@ -46,7 +46,9 @@ The source requests a token on its first call and keeps it until 60 seconds befo
 (an answer with no positive `expires_in` keeps it until it is refused; a caller that requested a token, or joined that
 request, gets it however short its life). Concurrent calls share one request; a failed
 request is not kept, so the next call tries again. When the API refuses the token with a 401, the client passes it back
-and the source requests a new one.
+and the source requests a new one. A client asks its source when it first needs a token and again only after a refused
+call, so a client kept for hours renews on the first 401 (the call is sent once more), and a client built per job gets
+a token the source already renewed 60 seconds early.
 
 The request posts the entry's body as a form (or as one JSON object with `json: true`), with Basic client
 authentication when the entry says `basic`, and the entry's `http.headers`. Its URL is filled by the base's rule: a host

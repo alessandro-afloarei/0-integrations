@@ -204,7 +204,7 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
   const [auth] = entry.auth;
   if (auth.kind !== 'token') throw new TypeError('token_unsupported');
   const { request } = auth;
-  const values = input.values ?? {};
+  const values = { ...input.values }; // own values, each read once, for the URL, the body and Basic
   const secretNames = new Set((entry.fields ?? []).filter(field => field.secret).map(field => field.name));
   // The URL is filled from plain values only (a secret field's name there is missing, whatever `values` holds), and
   // checked before any secret is read.
