@@ -63,6 +63,7 @@ Every line below breaks 0.12 unless it says otherwise.
   link under it was read wrongly.
 - A request whose URL leaves its base's origin (`https://api.x.test` + `@evil.test/y`) is refused with
   `TypeError('url_outside_origin')` before the token is read or anything is sent.
+- A GET sent with `idempotent: false` is no longer retried after a 429 (0.12 retried every GET).
 - A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
   by the retry wait. The retry wait no longer accepts forms such as `2e3`, `+2`, `0x10` or `Infinity`: they fall back to
   the body's wait or the default.
@@ -84,6 +85,9 @@ Every line below breaks 0.12 unless it says otherwise.
   `revoke_unsupported`), and only an RFC 7009 revoke needs `client` (`oauth_client_required` without it).
 - A connect object's `revoke` is `revokeGrant(entry, …)`: HubSpot's and Google's `revokeGrant(entry, { refreshToken,
   client, fetch })` (or `{ ...grant, client, fetch }`), Slack's `revokeGrant(slack, { accessToken, fetch })`.
+- `exchangeCode`'s `extras` are the token answer's top-level keys that the entry's `identify` and `save` read
+  (`tokenAnswer.<key>`), and `scope` under `scopes.requireGranted`; a 0.12 definition listed them in `oauth2.extras`. An
+  app's own entry gets a key into `extras` by naming its path in `identify` or `save`.
 - `accessToken` always refreshes 15 minutes before expiry: a provider definition's `refreshMarginMs` is gone.
 - google: a token answer without `scope` passes `requireGranted`, since it granted the scopes requested (RFC 6749
   §5.1); it was refused as `scope_missing`.

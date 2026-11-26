@@ -45,7 +45,7 @@ const start = await startConnect(google, { clientId: oauthClient.clientId, redir
 
 // In the callback, once the state matches, with the verifier kept at the start:
 const { secret, account } = await finishConnect(google, {
-  client: oauthClient, code, redirectUri, codeVerifier: start.codeVerifier, fetch, onRevokeFailed: error => { report(error); },
+  client: oauthClient, code, redirectUri, codeVerifier, fetch, onRevokeFailed: error => { report(error); },
 });
 // secret: the grant, to seal; account: { id, name }, the member's address.
 ```
