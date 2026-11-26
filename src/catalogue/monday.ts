@@ -1,7 +1,7 @@
 import { defineProvider } from '../catalogue.js';
 
-/** monday.com: OAuth 2.1 (PKCE, rotating refresh tokens), or a personal API token, bare. Pinned to API version 2026-10
- * (https://developer.monday.com/api-reference/docs/api-versioning). Errors: `errors[].extensions.code`, often inside a
+/** monday.com: OAuth 2.1 or a personal API token, bare. API version 2026-10 (https://developer.monday.com/api-reference/docs/api-versioning),
+ * schema https://api.monday.com/v2/get_schema?format=sdl&version=2026-10. Errors: `errors[].extensions.code`, often in a
  * 200; a 429 with `Retry-After` (https://developer.monday.com/api-reference/docs/error-handling). Webhooks are signed
  * as a JWT, not declared (https://developer.monday.com/api-reference/reference/webhooks). */
 const fields = 'id name state board { id } url created_at updated_at';
@@ -36,10 +36,10 @@ export const monday = defineProvider({
         group_id: { in: 'variables', type: 'string' }, column_values: { in: 'variables', type: 'string' } },
       result: { data: { 'create_item?': item } } },
     'items.update': { docs: `${reference}/columns`,
-      graphql: 'mutation ($board_id: ID!, $item_id: ID!, $column_value: JSON!) {change_multiple_column_values (item_id: $item_id, board_id: $board_id, column_values: $column_value) {id}}',
+      graphql: `mutation ($board_id: ID!, $item_id: ID!, $column_value: JSON!) {change_multiple_column_values (item_id: $item_id, board_id: $board_id, column_values: $column_value) { ${fields} }}`,
       params: { board_id: { in: 'variables', type: 'string', required: true }, item_id: { in: 'variables', type: 'string', required: true },
         column_value: { in: 'variables', type: 'string', required: true } },
-      result: { data: { 'change_multiple_column_values?': { id: 'string' } } } },
+      result: { data: { 'change_multiple_column_values?': item } } },
     'boards.list': { docs: `${reference}/boards`, kind: 'read',
       graphql: 'query Boards($limit: Int, $page: Int) { boards(limit: $limit, page: $page) { id name state workspace_id url updated_at } }',
       params: { limit: { in: 'variables', type: 'integer' }, page: { in: 'variables', type: 'integer' } },
