@@ -7,6 +7,11 @@ const fail = reason => { console.error(reason); process.exit(1); };
 if (process.argv.length !== 3 || !/^[a-z][a-z0-9]*$/u.test(id)) {
   fail(`usage: pnpm new <id>, an id of lowercase letters and digits starting with a letter (not ${JSON.stringify(id)})`);
 }
+// The id is the export's name: a word JavaScript reserves would not compile.
+const RESERVED = new Set(('arguments await break case catch class const continue debugger default delete do else enum eval export '
+  + 'extends false finally for function if implements import in instanceof interface let new null package private protected public '
+  + 'return static super switch this throw true try typeof var void while with yield').split(' '));
+if (RESERVED.has(id)) fail(`${id} is a word JavaScript reserves, so it cannot name the entry's export: pick another id`);
 
 const skeleton = `import { defineProvider } from '../catalogue.js';
 

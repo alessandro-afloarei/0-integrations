@@ -44,6 +44,13 @@ test.each([['Acme'], ['ac-me'], ['1acme'], [''], []])('refuses the id %j, writin
   expect(files()).toEqual(['src', 'src/catalogue']);
 });
 
+test.each(['new', 'class', 'default', 'await', 'let'])('refuses %s, a word JavaScript reserves, in one line, writing nothing', id => {
+  const { status, stderr } = run(id);
+  expect(status).toBe(1);
+  expect(stderr.trim()).toBe(`${id} is a word JavaScript reserves, so it cannot name the entry's export: pick another id`);
+  expect(files()).toEqual(['src', 'src/catalogue']);
+});
+
 test('creates no folder: outside a checkout it writes nothing', () => {
   rmSync(join(folder, 'src'), { recursive: true });
   expect(run('acme').status).toBe(1);
