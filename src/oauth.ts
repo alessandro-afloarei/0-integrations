@@ -4,26 +4,22 @@ import type { Entry, Values } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
-import { fill, holds, hostSplit, parseJson, placeholders, plainValue, readPath } from './rules.js';
+import { fill, holds, hostSplit, oauthUrls, parseJson, placeholders, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
-
-/** Refuses, before anything is built or sent, an entry whose OAuth 2 URLs and base disagree on a typed host. */
-function unsplit(entry: Entry): void {
-  if (hostSplit(entry)) throw new TypeError(`oauth_host_split: ${entry.id}`);
-}
 
 /** The entry's OAuth 2 URLs, each filled and checked by the base's rule from the plain fields alone: a secret is never
  * in a URL, and a saved value does not exist before the exchange. */
 function endpoints(entry: Entry, values: Values = {}) {
   const [auth] = entry.auth;
-  if (auth.kind !== 'oauth2') throw new TypeError('oauth_unsupported');
-  unsplit(entry);
+  const urls = oauthUrls(entry);
+  if (auth.kind !== 'oauth2' || urls === undefined) throw new TypeError('oauth_unsupported');
+  if (hostSplit(entry)) throw new TypeError(`oauth_host_split: ${entry.id}`);
   const plain = Object.fromEntries((entry.fields ?? []).filter(field => !field.secret).map(({ name }) => [name, values[name]]));
   const url = (template: string) => new URL(filledBase(entry, plain, template));
-  return { config: auth, authorize: url(auth.authorizeUrl), token: url(auth.tokenUrl), refresh: url(auth.refreshUrl ?? auth.tokenUrl),
-    revoke: entry.revoke && 'url' in entry.revoke ? url(entry.revoke.url) : undefined };
+  return { config: auth, authorize: url(urls.authorize), token: url(urls.token), refresh: url(urls.refresh),
+    revoke: urls.revoke === undefined ? undefined : url(urls.revoke) };
 }
 
 /** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted.
@@ -199,7 +195,7 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
 export async function revokeGrant(entry: Entry, input: { accessToken?: string; refreshToken?: string | null;
   client?: OAuthClient } & Sent): Promise<void> {
   const { revoke } = entry;
-  unsplit(entry);
+  if (hostSplit(entry)) throw new TypeError(`oauth_host_split: ${entry.id}`);
   if (revoke === undefined) return;
   try {
     if ('url' in revoke) {

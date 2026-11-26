@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { clashing, hostSplit, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { clashing, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -184,13 +184,8 @@ const signing = (entry: Entry) => (entry.webhook?.kind === 'hmac' || entry.webho
 const plainReads = (entry: Entry) => [...placeholders(entry.http.baseUrl), ...reads(entry, 'connection.')
   .map(name => name.slice('connection.'.length))].filter(name => plainFields(entry).includes(name));
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
-/** An OAuth 2 sign-in's URLs: authorize, token, refresh and an RFC 7009 revoke. */
-const oauthUrls = (entry: Entry) => {
-  const auth = entry.auth[0];
-  if (auth.kind !== 'oauth2') return [];
-  return [auth.authorizeUrl, auth.tokenUrl, auth.refreshUrl, entry.revoke !== undefined && 'url' in entry.revoke ? entry.revoke.url : undefined]
-    .filter(url => url !== undefined);
-};
+/** An OAuth 2 sign-in's URLs, as the engine reads them. */
+const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
 const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's) has a placeholder";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
@@ -216,7 +211,7 @@ const runnable = {
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
-  [HOST_PATTERN]: (entry: Entry) => ([entry.http.baseUrl, ...oauthUrls(entry)].some(url => placeholders(hostOf(url)).length > 0)
+  [HOST_PATTERN]: (entry: Entry) => ([entry.http.baseUrl, ...oauthUrlList(entry)].some(url => placeholders(hostOf(url)).length > 0)
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
@@ -347,9 +342,9 @@ const runnable = {
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
   // OAuth 2's connect reads every plain field: one only the key reads would be asked for and never used.
   [OAUTH_READS]: (entry: Entry) => entry.auth[0].kind !== 'oauth2'
-    || plainFields(entry).every(name => [...oauthUrls(entry).flatMap(placeholders), ...plainReads(entry)].includes(name)),
+    || plainFields(entry).every(name => [...oauthUrlList(entry).flatMap(placeholders), ...plainReads(entry)].includes(name)),
   // What the engine cannot fill is `template_missing` at the start.
-  [OAUTH_PLAIN_URLS]: (entry: Entry) => oauthUrls(entry).flatMap(placeholders).every(name => plainFields(entry).includes(name)),
+  [OAUTH_PLAIN_URLS]: (entry: Entry) => oauthUrlList(entry).flatMap(placeholders).every(name => plainFields(entry).includes(name)),
   // The rule the engine runs before every OAuth 2 request.
   [HOST_SPLIT]: (entry: Entry) => !hostSplit(entry),
   // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
