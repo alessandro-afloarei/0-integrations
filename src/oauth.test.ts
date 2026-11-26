@@ -528,3 +528,8 @@ test('the plain values are read once and own ones only: a getter runs once, an i
   await expect(requestToken(zoom, { secret: zoomSecret, values: inherited, fetch: fake.fetch })).rejects.toThrow('template_missing: zoom {clientId}');
   expect(fake.calls).toHaveLength(1);
 });
+
+test.each([['invalid_client', 'invalid_client'], ['unsupported_grant_type', 'unsupported_grant_type'], ['sess_abc123', null]])(
+  'a refused token request keeps only an RFC 6749 code as its detail: %s', async (error, detail) => {
+    await expect(requestToken(zoom, zoomInput(endpoint({ error }, 400).fetch))).rejects.toMatchObject({ code: 'rejected', status: 400, detail });
+  });

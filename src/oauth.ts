@@ -194,6 +194,7 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
   }
 }
 
+const RFC6749_ERRORS = ['invalid_request', 'invalid_client', 'invalid_grant', 'unauthorized_client', 'unsupported_grant_type', 'invalid_scope'];
 type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; fetch?: typeof fetch };
 
 /** @internal Requests a token entry's token: the token, its expiry (ms since epoch) or null, and the answer's keys the
@@ -229,10 +230,10 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
     throw new ProviderHttpError('unavailable', null);
   }
   const { status, data } = response;
-  // RFC 6749 §5.2: a refused client or grant; the provider's code is its `error`.
+  // RFC 6749 §5.2: a refused client or grant; its detail is the answer's `error` only when that is one of the RFC's codes.
   if (status === 400 || status === 401 || status === 403) {
-    const code = codeOf({ detail: 'error' }, data);
-    throw new ProviderHttpError('rejected', status, code === undefined ? null : safeDetail(code, secrets));
+    const code = readPath(data, 'error');
+    throw new ProviderHttpError('rejected', status, typeof code === 'string' && RFC6749_ERRORS.includes(code) ? code : null);
   }
   const error = status >= 200 && status < 300 ? null : classify(entry, response);
   if (error) throw error;

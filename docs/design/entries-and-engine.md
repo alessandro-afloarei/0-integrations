@@ -256,11 +256,13 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   - Its answer: a 2xx whose `token` path (`access_token` by default) holds a non-empty string is the token, and a root
     `expires_in` that is a positive finite number of seconds is its life (none: kept until refused); the caller that
     requested a token gets it, however short its life. A 2xx without a token is `invalid_response` (`missing_fields`);
-    400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the answer's `error`; any other answer is classified
-    as usual. No detail holds a secret field, a body value filled from one, or the Basic value sent.
+    400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the answer's `error` when it is one of the RFC's
+    codes (`invalid_client`, …), else none; any other answer is classified as usual. No detail holds a secret field, a
+    body value filled from one, or the Basic value sent.
     The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
-    the token until 60 seconds before its expiry or until it is passed back as refused, concurrent calls share one
+    the token until it is passed back as refused or a call comes within 60 seconds of its expiry, or after it (that
+    call requests a new one; nothing renews by itself), concurrent calls share one
     request, and a failed request is not kept. It applies no field's `default`, so an app passes it, and `client`, the
     connection's `values` as `finishConnect` returned them.
   - `startConnect` returns the form. `finishConnect(entry, { secret, values?, fetch? })` reads the fields as a key
@@ -283,8 +285,10 @@ type Value = Path | readonly Path[] | Template;
 
 `id`, `name` and `save` read from one lookup: the answer's own keys at the root, `tokenAnswer.*` (the token answer,
 seen only inside the engine, never the token's own key: `access_token` and `refresh_token`, or a `token` entry's
-`token` path, read as missing) and `connection.*` (the plain values). A string with braces is a template over the same
-lookup, where `{id}` is the id already found: `'Portal {id}'`.
+`token` path, read as missing) and `connection.*` (the plain values). `save` keeps only a string, a number or a
+boolean: an object or a list, which may hold a second credential (`tokenAnswer.authed_user`), is not kept. An id must
+be a string or a number and a name a string, so neither can carry one either. A string with braces is a template over
+the same lookup, where `{id}` is the id already found: `'Portal {id}'`.
 
 - The request is sent only when a value needs the answer, or at once when there is no `id` and no `name` (a
   credential check). Slack's identity is all `tokenAnswer.*`, so it sends none. HubSpot's

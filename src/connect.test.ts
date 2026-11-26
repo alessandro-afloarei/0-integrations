@@ -455,6 +455,16 @@ describe('connect review regressions', () => {
     expect(result.account).toEqual({ id: 'T1', name: 'T1' });
   });
 
+  it('save keeps only a scalar: an object or a list from the token answer, which may nest a credential, never reaches values', async () => {
+    const saving = defineProvider({ id: 'nested', name: 'Nested', http: { baseUrl: 'https://api.nested.test' }, scopes: { default: [] },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://nested.test/authorize', tokenUrl: 'https://nested.test/token', pkce: false }],
+      save: { u: 'tokenAnswer.authed_user', uid: 'tokenAnswer.authed_user.id', l: 'tokenAnswer.list' } });
+    const fake = fakeFetch([{ url: 'https://nested.test/token', respond: () => Response.json({ access_token: 'a', token_type: 'bearer',
+      authed_user: { access_token: 'USERTOK', id: 'U1' }, list: ['USERTOK'] }) }]);
+    const result = await finishConnect(saving, { client, code: 'c', redirectUri: callback, fetch: fake.fetch, onRevokeFailed: vi.fn() });
+    expect(result.values).toEqual({ uid: 'U1' });
+  });
+
   it("compares the granted scopes split on the entry's separator; an answer naming none granted those asked", async () => {
     const commas = defineProvider({ id: 'commas', name: 'Commas', http: { baseUrl: 'https://api.commas.test' },
       auth: [{ kind: 'oauth2', authorizeUrl: 'https://commas.test/authorize', tokenUrl: 'https://commas.test/token', pkce: false, scopeSeparator: ',' }],
