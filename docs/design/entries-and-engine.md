@@ -539,13 +539,14 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
 
 A recording is a real capture from a real account; a made-up one tests the code but leaves the entry `declared`. The
 recorder (`src/record.test.ts`) records an entry with no module that sends a request to sign in, and refuses any other
-that has no kit scenario. Each exchange keeps its method, URL, request body, status, `location` and `retry-after`, and
-from the answer only the paths the entry reads (an object or a list reached by one keeps only its shell). The key, the
-plain values and the tokens issued are swapped for the kit's stand-ins in the URL, the body and those headers; in the
-answers, they and the account's id, name and saved values are swapped where they are a whole value. It refuses to
-write when a value is under 4 characters, or when a real value is still in an exchange, searched ignoring case,
-percent-decoded and with base64 runs decoded. The module kits stay for what an entry cannot know, such as incremental
-reads.
+that has no kit scenario. Each exchange keeps its method, URL, request body, status and `retry-after`, and from the
+answer only the paths the entry reads (an object or a list reached by one keeps only its shell; at an error or
+condition path, only a provider code, a number or a boolean). The key, the plain values and the tokens issued are
+swapped for the kit's stand-ins in the URL, the body and that header; in the answers, they and the account's id, name
+and saved values are swapped where they are a whole value. It refuses to write when a sign-in was redirected, when a
+value is under 4 characters, when a real value is still in an exchange (searched before the stand-ins go in, ignoring
+case, percent-decoded and with base64 runs decoded), and when the file, replayed as the table test replays it, does not
+sign in as the account did live. The module kits stay for what an entry cannot know, such as incremental reads.
 
 `pnpm check` remains the one gate, with no network.
 

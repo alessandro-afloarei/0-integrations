@@ -12,8 +12,8 @@ routes for `fakeFetch`. They answer for one credential, `key`, sent as the entry
 the base filled from `values` with the engine's own rules): a request without it is 401 `{ "error": "unauthorized" }`.
 For a `token` entry, `key` is the value of its secret field (a client secret, a password).
 
-- Identify's request answers `account`, or by default `kit-account` at the first answer path of `identify.id` and
-  `kit-name` at the first of `name`.
+- Identify's request answers `account`, or by default `kit-account` at the answer paths of `identify.id` and
+  `kit-name` at those of `name`: every path a template reads (`'{org.id}/{user.id}'`), else the first of a list.
 - A `token` entry's token request answers `kit-token` (at its `token` path), `expires_in: 3600` and `kit-<path>` at
   every `tokenAnswer.<path>` the entry reads (never over the token or `expires_in`). One whose Basic or body differs
   from the request the engine sends for `key` is 400 `{ "error": "invalid_client" }`. Its calls then carry `kit-token`.
@@ -97,30 +97,40 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   with `synthetic: false`, replacing any recording of that name, so the table test replays it with the kit's key and
   values and the entry's tier is `recorded`.
 
-**What is written.** Each exchange is its method, its URL (a followed redirect's too), its request body, its status,
-its `location` and `retry-after` headers, and from the answer only the paths the entry reads: identify's `id` and `name`
-paths and every `save` path (a `tokenAnswer.` path is read in the token answer), a token answer's token and
-`expires_in`, the `path` of each condition in `identify.rejectWhen`, `errors.failed`, `errors.rules` and
-`http.rateLimit.when`, the `errors.detail` paths and a body wait's path. A path that reaches an object or a list keeps
-only its shell (`{}`, `[]`), which the paths read inside it fill. An answer that is not JSON is written as `null`.
-Nothing else in an answer is written: no other token, name, address or number.
+**What is written.** Each exchange is its method, its URL, its request body, its status, its `retry-after` header (no
+other header), and from the answer only the paths the entry reads:
+
+- identify's `id` and `name` paths and every `save` path (a `tokenAnswer.` path is read in the token answer), a token
+  answer's token and `expires_in`, and a body wait's path;
+- the `path` of each condition in `identify.rejectWhen`, `errors.failed`, `errors.rules` and `http.rateLimit.when`, and
+  the `errors.detail` paths. There a number or a boolean is kept, and a string only when it is a provider code as an
+  error's detail takes one (letters, digits, `_`, `.` and `-`, up to 64): an error's message is never written.
+
+A path that reaches an object or a list keeps only its shell (`{}`, `[]`), which the paths read inside it fill. An
+answer that is not JSON is written as `null`. Nothing else in an answer is written: no other token, name, address or
+number.
 
 **What is swapped.** The key becomes `kit-good-key`, each plain value given its kit value, and every token at the
-entry's `token` path `kit-token`: inside the URL, the request body and the two headers kept (as written, JSON-escaped,
+entry's `token` path `kit-token`: inside the URL, the request body and `retry-after` (as written, JSON-escaped,
 percent- or form-encoded), and in the answers where they are a whole value. In the answers, the account's id and name
 become `kit-account` and `kit-name`, and each `save` value `kit-<name>` (its key's name). A number is replaced only when
-it is a whole value. Error codes, condition values, `location` and a followed redirect's URL are written as answered,
-apart from the values above, so the replay reads what the provider sent.
+it is a whole value. Codes at the error and condition paths are written as answered, apart from the values above, so
+the replay reads what the provider sent.
 
-**When it refuses.** The recorder writes nothing when:
+**When it refuses.** Before it writes, the recorder replays the file as the table test does. It writes nothing when:
 
+- a sign-in request was answered with a redirect: point the entry at the final URL (a redirect's target can name the
+  account, and the replay answers each request once);
+- the file does not replay as the sign-ins went live: the key signs in, to the account it found live as swapped, and the
+  bad key is `rejected`. Dropping or swapping changed what a rule reads (a `rejectWhen` on a header, which is not
+  written; a message a rule compared; a swapped value a condition tests). The message says which sign-in changed;
 - a value to swap is under 4 characters (an account id `7`, a region `eu`): it would match unrelated text, so record
   from an account whose values are longer;
-- a real value is still in an exchange once the stand-ins are taken out. Each part is searched ignoring case,
+- a real value is still in an exchange. Before the stand-ins are put in, each part is searched ignoring case,
   percent-decoded, and with every run of 8 or more base64 or base64url characters decoded from each of its first four
   characters (a Basic pair, a JWT's payload, a value after `state=`). The message names the stand-in, the exchange and
   the part (`url`, `headers`, `body`, `response`), never the value: for example an account named like a word of the
-  API's host;
+  API's host. Only what the recorder put in is exempt, so a real value that spells a stand-in inside it is still found;
 - the sign-in with the key fails, or the bad key is not refused as `rejected`: the message gives the error's code and
   status, or the library's own error code, never the provider's text.
 

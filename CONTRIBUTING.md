@@ -75,9 +75,11 @@ For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test ac
 The recorder refuses a provider with a module but no kit scenario of that name, and an entry that sends no request
 when it signs in. Otherwise it signs in with the key and with a bad key, and writes
 `src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request
-body, status, `location` and `retry-after`, and from the answer only the paths the entry reads. It swaps the key, the
-plain values, the tokens issued, the account's id and name and the saved values for the kit's stand-ins, and refuses to
-write when a value is too short to swap or a real value is still in an exchange
+body, status and `retry-after` (no other header), and from the answer only the paths the entry reads; at an error or
+condition path, only a provider code, a number or a boolean. It swaps the key, the plain values, the tokens issued, the
+account's id and name and the saved values for the kit's stand-ins. It refuses to write when a sign-in was redirected,
+when a value is too short to swap or a real value is still in an exchange, and when the file, replayed before it is
+written, does not sign in as the account did live
 ([testing](docs/modules/testing.md#recording-an-entry-with-no-module) says exactly what is written, swapped and
 refused). Only such a capture from a real test account (`synthetic: false`)
 makes the entry `recorded`; never copy a file from a `.record-test-*` folder, which the recorder's own tests write on a
