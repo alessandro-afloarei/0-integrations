@@ -59,17 +59,19 @@ function withCursor(where: Where, options: RequestOptions, cursor: string | numb
   return { ...options, json: { ...body, [where.body]: cursor } };
 }
 
-/** A page-number list's loader: no number first, then each next one, until `more` is falsy or the list is empty or no
- * list. A list equal to the page before's is `page_repeated`: the provider ignores the number, and would never end. */
+/** A page-number list's loader: no number first, then each next one, until `more` is falsy or the list is empty. A
+ * missing list, or one that is no list, is `invalid_response`: a malformed answer never reads as an empty list. A list
+ * equal to the page before's is `page_repeated`: the provider ignores the number, and would never end. */
 function numbered(http: HttpClient, shape: PageNumber, path: string, options: RequestOptions) {
   let previous: string | undefined;
   return async (page: string | undefined) => {
     const answer = await http.json(path, page === undefined ? options : withCursor(shape.send, options, Number(page)));
     const list = shape.list === undefined ? answer : readPath(answer, shape.list);
+    if (!Array.isArray(list)) throw new ProviderHttpError('invalid_response', null, 'missing_fields');
     const seen = JSON.stringify(list);
     if (previous !== undefined && seen === previous) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
     previous = seen;
-    const last = !Array.isArray(list) || list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
+    const last = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
     return { items: [answer], skipped: [], cursor: last ? null : String(Number(page ?? (shape.zeroBased ? 0 : 1)) + 1) };
   };
 }

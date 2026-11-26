@@ -2,6 +2,8 @@ import { expect, test } from 'vitest';
 import { defineProvider, type Paging } from './catalogue.js';
 import { createClient, type RequestOptions } from './http.js';
 import { followed, nextCursor, ownPath, walk } from './paging.js';
+import { clickup } from './catalogue/clickup.js';
+import { client } from './client.js';
 import { fakeFetch, sequence } from './testing.js';
 
 const cursor = { kind: 'cursor', next: 'pagination.cursor', more: 'pagination.hasMore', send: { query: 'cursor' } } as const;
@@ -212,12 +214,28 @@ test('page: a provider that ignores the page number is page_repeated, and the re
   expect(walked.pages).toEqual([{ data: [1], has_more: true }]);
 });
 
-test('page: a missing list path, or an answer that is not a list, ends the walk', async () => {
+test('page: a missing list path, or an answer that is not a list, is invalid_response, never an empty end', async () => {
   for (const [shape, answer] of [[{ kind: 'page', send: { query: 'page' }, list: 'result.items' }, { result: {} }],
     [{ kind: 'page', send: { query: 'page' } }, { items: [1] }], [{ kind: 'page', send: { query: 'page' }, list: 'items' }, { items: 'x' }]] as const) {
     const walked = await pageWalk(shape, [answer, answer]);
     expect(walked.urls).toEqual(['https://api.acme.test/items']);
-    expect(walked.pages).toEqual([answer]);
-    expect(walked.error).toBeUndefined();
+    expect(walked.pages).toEqual([]);
+    expect(walked.error).toMatchObject({ code: 'invalid_response', detail: 'missing_fields' });
+  }
+});
+
+test('ClickUp tasks.list, through client() and raw paginate: { tasks: [] } ends cleanly, {} fails loudly', async () => {
+  const run = async (last: unknown, read: (api: ReturnType<typeof client<typeof clickup>>) => AsyncGenerator<unknown>) => {
+    const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ tasks: [{ id: 't1' }] }), () => Response.json(last)) }]);
+    const seen: unknown[] = [];
+    try { for await (const item of read(client(clickup, { token, fetch: fake.fetch }))) seen.push(item); } catch (error) { return { seen, error }; }
+    return { seen, error: undefined };
+  };
+  for (const read of [(api: ReturnType<typeof client<typeof clickup>>) => api.tasks.list({ list_id: 5 }),
+    (api: ReturnType<typeof client<typeof clickup>>) => api.paginate('page', '/list/5/task')]) {
+    expect((await run({ tasks: [] }, read)).error).toBeUndefined();
+    const broken = await run({}, read);
+    expect(broken.seen).toHaveLength(1);
+    expect(broken.error).toMatchObject({ code: 'invalid_response' });
   }
 });
