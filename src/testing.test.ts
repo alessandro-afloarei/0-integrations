@@ -306,7 +306,7 @@ describe('fakeProvider', () => {
     await expect(revokeGrant(basicJson, { refreshToken: 'kit-refresh', client: wrong, fetch })).rejects.toMatchObject(refused);
     // The client in the body, where the entry declares Basic, is no client either.
     const body = JSON.stringify({ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri, client_id: 'kit-client', client_secret: 'kit-secret' });
-    expect((await fetch('https://basicjson.test/token', { method: 'POST', body })).status).toBe(401);
+    expect((await fetch('https://basicjson.test/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status).toBe(401);
   });
 
   test('a PKCE entry is answered only with a code verifier, its client in the form body, and a given code and client', async () => {
@@ -338,6 +338,12 @@ describe('fakeProvider', () => {
         for (const type of [wrong, 'text/plain', undefined]) expect(await answer(await sent(type))).toEqual({ status: 400, body: { error: 'invalid_request' } });
       }
     }
+    // Checked before the body is read: a JSON grant to a form entry that authenticates in the body finds no client there.
+    const post = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize', tokenUrl: 'https://basicjson.test/token', pkce: false }] });
+    const { fetch } = fakeFetch(fakeProvider(post, { key: 'k' }));
+    const json = JSON.stringify({ ...code, client_id: 'kit-client', client_secret: 'kit-secret' });
+    expect(await answer(await fetch('https://basicjson.test/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: json })))
+      .toEqual({ status: 400, body: { error: 'invalid_request' } });
   });
 
   test('a revoke with no token is 400 invalid_request', async () => {

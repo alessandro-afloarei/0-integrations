@@ -213,6 +213,10 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     void (auth.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(clientSecret)({ issuer: '' }, { client_id: clientId }, client.body, client.headers);
     for (const url of new Set([urls.token, urls.refresh, urls.revoke ?? urls.token])) {
       routes.push(route('POST', target(new URL(filledBase(entry, values, url))), '', async (call, sent) => {
+        // A grant comes in the encoding the entry declares, as the engine sends it: checked before its body is read.
+        const type = sent.headers.get('content-type')?.split(';')[0];
+        const revokeOnly = url === urls.revoke && url !== urls.token && url !== urls.refresh;
+        if (!revokeOnly && type !== (auth.json ? 'application/json' : 'application/x-www-form-urlencoded')) return Response.json({ error: 'invalid_request' }, { status: 400 });
         const body = new URLSearchParams(auth.json ? call.body as Record<string, string> : await sent.text());
         // One method per request (RFC 6749 §2.3.1): with Basic, no client secret in the body.
         const sameClient = sent.headers.get('authorization') === client.headers.get('authorization') && [...client.body].every(([name, value]) => body.get(name) === value)
@@ -222,9 +226,6 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
         if (url === urls.revoke && !body.has('grant_type')) {
           return body.has('token') ? new Response(null, { status: 200 }) : Response.json({ error: 'invalid_request' }, { status: 400 });
         }
-        // A grant comes in the encoding the entry declares, as the engine sends it.
-        const type = sent.headers.get('content-type')?.split(';')[0];
-        if (type !== (auth.json ? 'application/json' : 'application/x-www-form-urlencoded')) return Response.json({ error: 'invalid_request' }, { status: 400 });
         const granted = body.get('grant_type') === 'refresh_token' ? url === urls.refresh && body.get('refresh_token') === 'kit-refresh' : url === urls.token
           && body.get('grant_type') === 'authorization_code' && body.get('code') === code && body.has('redirect_uri')
           && (auth.pkce === false || body.get('code_verifier')?.trim());
