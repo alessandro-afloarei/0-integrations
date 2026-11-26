@@ -13,5 +13,8 @@ is the calendar's owner when the calendar's id is their address. Google answers 
 
 Signing a member in, each account's id and revoking a grant: [connect › Google and Microsoft](connect.md#google-and-microsoft).
 
+The entry's `webhook` is Calendar push: `verifyWebhook(google.webhook, request, channelToken)` checks the
+`x-goog-channel-token` header against the channel's token.
+
 `google/fake` exports `fakeGoogle`: the sign-in and the reads on synthetic mailboxes, described with `fakeMicrosoft` on
 the [Microsoft page](microsoft.md).

@@ -37,6 +37,11 @@ entry:
   one in its `url`, whose host placeholder needs `http.host`), sends the secret field in its body or Basic, and its
   `send` names no secret field; a field's `choices` are a non-empty list of unique values holding its `default`, each
   of them and the `default` fills the base to a host `http.host` takes, and a secret field has neither;
+- declares a webhook the engine can trust: `{body}` is signed (by default, or in `signed`), and `{timestamp}` exactly
+  when a timestamp is declared, read apart from the signature (another `part` or header); a `part` name holds no `,`, `=` or whitespace, and no `prefix` sits beside it; every header name is one
+  lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key; a send's
+  `value` names the secret, holds no control character and never spells out a default (`'{token}'`, or
+  `authorization: Bearer {token}`);
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body), a paged operation names a declared shape and no `notFound`, a records path
   leads to a list, and no id is a client call or a dotted prefix of another.

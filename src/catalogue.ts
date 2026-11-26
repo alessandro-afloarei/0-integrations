@@ -14,9 +14,11 @@ export type When = { status?: number | 'error'; header?: string; path?: Path; de
   equals?: string | number | boolean; in?: readonly string[]; startsWith?: string; contains?: string };
 /** What a person enters. `choices` lists every value a plain field accepts; `default` fills it when left blank. */
 export type Field = { name: string; title: string; secret?: true; default?: string; help?: string; choices?: readonly string[] };
-/** How the credential travels. None: `authorization: Bearer {token}`. A header alone: the bare `{token}`. `query`:
- * each parameter's template, set on the URL of every request and redirect hop. */
-export type Send = { header: string } | { basic: readonly [Template, Template] } | { query: Readonly<Record<string, Template>> };
+/** How the credential travels. None: `authorization: Bearer {token}`. A header: its `value` filled (Discord's
+ * `Bot {token}`), else the bare `{token}`. `query`: each parameter's template, set on the URL of every request and
+ * redirect hop. */
+export type Send = { header: string; value?: Template } | { basic: readonly [Template, Template] }
+  | { query: Readonly<Record<string, Template>> };
 /** One request that turns what the person entered into a short-lived token: client credentials, or a session sign-in.
  * Its body is a flat record of templates, sent as a form or, with `json`, as JSON; `token` is the token's path in the
  * answer (`access_token` by default), and a root `expires_in` (seconds) is its life. */
@@ -49,9 +51,20 @@ export type Http = { baseUrl: Template;
   timeoutMs?: number; minIntervalMs?: number; retry?: Retry; rateLimit?: RateLimit };
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
-export type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64';
-  timestamp?: { header: string; toleranceSeconds?: number };
-  deliveryId?: { header: string } | { body: readonly Path[] } };
+type Timestamp = { header: string; toleranceSeconds?: number };
+/** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `part`: the header is a
+ * comma-separated list of `name=value` pieces, each piece named `part` a signature, any of which may match;
+ * `timestamp.part` reads the timestamp from the same list. `ed25519`: the header is the hex signature of `signed`, the
+ * secret the provider's public key in hex. `token`: the header is the secret itself. `standard`: Standard Webhooks, the
+ * secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on. `challenge`: a handshake whose body
+ * `when` holds is answered `{ [echo]: <the body's value> }` (Slack's `url_verification`, Discord's PING). */
+export type Webhook = (
+  | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
+    part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+  | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
+  | { kind: 'token'; header: string }
+  | { kind: 'standard' }
+) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 export type Where = { query: string } | { body: string };
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */

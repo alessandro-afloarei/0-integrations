@@ -10,4 +10,7 @@ export const gitlab = defineProvider({
   auth: [{ kind: 'key', send: { header: 'private-token' } }],
   http: { baseUrl: 'https://{host}/api/v4', host: '*' },
   identify: { request: { path: '/user' }, id: 'id', name: 'username' },
+  // A signing token follows Standard Webhooks; `webhook-id` stays the same across retries
+  // (https://docs.gitlab.com/user/project/integrations/webhooks/).
+  webhook: { kind: 'standard', deliveryId: { header: 'webhook-id' } },
 });

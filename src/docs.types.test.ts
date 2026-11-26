@@ -1,6 +1,10 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider } from './catalogue.js';
+import { defineProvider, type Webhook } from './catalogue.js';
 import { attio } from './catalogue/attio.js';
+import { breakcold } from './catalogue/breakcold.js';
+import { stripe } from './catalogue/stripe.js';
+import { discord } from './catalogue/discord.js';
+import { slack } from './catalogue/slack.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
@@ -15,6 +19,7 @@ import { fakeHubSpot, type HubSpotFakeData } from './hubspot/fake.js';
 import { refreshGrant, tokenSource, type OAuthClient } from './oauth.js';
 import { fakeFetch } from './testing.js';
 import type { SecretStore, Vault } from './vault.js';
+import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook } from './webhooks.js';
 
 // Every code example of README.md and docs/, as written, each in its own function. An import of
 // `0-integrations/<subpath>` is the source file that subpath publishes (src/exports.test.ts holds the map). The
@@ -153,7 +158,52 @@ async function designClient() {
   return self;
 }
 
+// docs/modules/webhooks.md › Declaring a webhook.
+function webhooksDeclared() {
+  // `hmac` with a timestamp header (Breakcold)
+  const timestamped: Webhook = { kind: 'hmac', header: 'x-webhook-signature', signed: '{timestamp}.{body}', prefix: 'sha256=',
+    timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { header: 'x-webhook-delivery-id' } };
+  // `hmac` with `part`: `t=…,v1=…` pieces in one header (Stripe)
+  const pieces: Webhook = { kind: 'hmac', header: 'stripe-signature', signed: '{timestamp}.{body}', part: 'v1',
+    timestamp: { part: 't' }, deliveryId: { body: ['id'] } };
+  // `ed25519`: the secret is the provider's public key (Discord)
+  const signedWithKey: Webhook = { kind: 'ed25519', header: 'x-signature-ed25519', signed: '{timestamp}{body}',
+    timestamp: { header: 'x-signature-timestamp' } };
+  // `token`: the header is the secret itself (Google Calendar push)
+  const sharedToken: Webhook = { kind: 'token', header: 'x-goog-channel-token' };
+  // `standard`: Standard Webhooks fixes the headers and what is signed (GitLab)
+  const standard: Webhook = { kind: 'standard', deliveryId: { header: 'webhook-id' } };
+  // A `challenge` beside any kind: echo the body's `challenge` when its `type` is `url_verification` (Slack)
+  const challenged: Webhook = { kind: 'hmac', header: 'x-slack-signature', signed: 'v0:{timestamp}:{body}', prefix: 'v0=',
+    timestamp: { header: 'x-slack-request-timestamp' },
+    challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge' } };
+  return [timestamped, pieces, signedWithKey, sharedToken, standard, challenged];
+}
+
+// docs/modules/webhooks.md › Receiving a delivery (its last line, a comment there, is the two calls below).
+async function webhooksReceive(webhook: Webhook, request: Request, secret: string,
+  handle: (id: string | null, rawBody: Buffer) => Promise<Response>): Promise<Response> {
+  const rawBody = await readCappedBody(request, 1024 * 1024);
+  if (rawBody === null) return new Response(null, { status: 413 });
+  const delivery = { method: request.method, url: request.url, headers: request.headers, rawBody };
+  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
+  const answer = challengeAnswer(webhook, delivery);
+  if (answer !== null) return answer;
+  return handle(deliveryId(webhook, delivery), rawBody); // the app dedupes on the id, when the entry declares one
+}
+function webhooksReceiveCalls(request: Request, signingSecret: string, publicKey: string,
+  handle: (id: string | null, rawBody: Buffer) => Promise<Response>) {
+  return [webhooksReceive(slack.webhook, request, signingSecret, handle), webhooksReceive(discord.webhook, request, publicKey, handle)];
+}
+
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken].every(example => typeof example === 'function')).toBe(true);
+    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
+    webhooksReceiveCalls, webhooksDeclared].every(example => typeof example === 'function')).toBe(true);
+});
+
+test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {
+  // `toEqual` reads a property set to undefined as missing.
+  expect(webhooksDeclared()).toEqual([breakcold.webhook, stripe.webhook, { ...discord.webhook, challenge: undefined }, google.webhook,
+    gitlab.webhook, slack.webhook]);
 });

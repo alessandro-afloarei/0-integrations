@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { defineProvider, type Entry, type Retry } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { breakcold } from './catalogue/breakcold.js';
+import { discord } from './catalogue/discord.js';
 import { exa } from './catalogue/exa.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
@@ -12,6 +13,7 @@ import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
+import { trello } from './catalogue/trello.js';
 import { client } from './client.js';
 import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
@@ -552,6 +554,62 @@ test('a code that echoes the Basic header is no detail', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ code: header }, { status: 400 }) }]);
   await expect(createClient(keyed, { token: () => Promise.resolve('k'), values: { user: 'u' }, fetch: fake.fetch, minIntervalMs: 0 }).json('/x'))
     .rejects.toMatchObject({ code: 'request_failed', detail: null });
+});
+
+test("a header send's value is filled: Discord's `Bot {token}`, an inline `Token token={token}`", async () => {
+  const tokenHeader = defineProvider({ id: 'tokenheader', name: 'Token header', fields: [{ name: 'key', title: 'Key', secret: true }],
+    auth: [{ kind: 'key', send: { header: 'authorization', value: 'Token token={token}' } }], http: { baseUrl: 'https://api.th.test' } });
+  for (const [entry, sent] of [[discord, 'Bot t'], [tokenHeader, 'Token token=t']] as const) {
+    const fake = script(entry, ok);
+    await fake.client.json('/me');
+    expect(fake.calls[0]?.headers.authorization).toBe(sent);
+  }
+});
+
+test("Trello's header carries the plain key and the secret token, and a missing key sends nothing", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await createClient(trello, { token: () => Promise.resolve('tok'), values: { apiKey: 'k1' }, fetch: fake.fetch }).json('/members/me');
+  expect(fake.calls[0]).toMatchObject({ url: 'https://api.trello.com/1/members/me',
+    headers: { authorization: 'OAuth oauth_consumer_key="k1", oauth_token="tok"' } });
+  for (const values of [{}, { apiKey: ' ' }]) {
+    await expect(createClient(trello, { token: () => Promise.resolve('tok'), values, fetch: fake.fetch }).json('/members/me'))
+      .rejects.toThrow(new TypeError('template_missing: trello {apiKey}'));
+  }
+  expect(fake.calls).toHaveLength(1);
+});
+
+test('`{token}` is the token even when the secret field is named `token`', async () => {
+  const named = defineProvider({ id: 'named-token', name: 'Named token', fields: [{ name: 'token', title: 'Token', secret: true }],
+    auth: [{ kind: 'token', request: { url: 'https://nt.test/session', body: { password: '{token}' } }, send: { header: 'x-api-key' } }],
+    http: { baseUrl: 'https://api.nt.test' } });
+  const fake = script(named, ok);
+  await fake.client.json('/me');
+  expect(fake.calls[0]?.headers['x-api-key']).toBe('t');
+});
+
+test("a plain field that would split Trello's header is refused before anything is sent", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await expect(createClient(trello, { token: () => Promise.resolve('tok'), values: { apiKey: 'k\r\nX-Evil: 1' }, fetch: fake.fetch })
+    .json('/members/me')).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(fake.calls).toHaveLength(0);
+});
+
+test('a code that echoes any value a credential template took is no detail: a header value, Basic, a query', async () => {
+  const queried = defineProvider({ id: 'queried', name: 'Queried', fields: [{ name: 'account', title: 'Account' }, { name: 'key', title: 'Key', secret: true }],
+    auth: [{ kind: 'key', send: { query: { account: '{account}', key: '{token}' } } }], http: { baseUrl: 'https://api.q.test' } });
+  for (const [entry, values, code] of [[trello, { apiKey: 'k1' }, 'k1'], [aircall, { apiId: 'id1' }, 'id1'], [queried, { account: 'acc1' }, 'acc1']] as const) {
+    const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ code }, { status: 400 }) }]);
+    const api = createClient({ ...entry, errors: { detail: 'code' } }, { token: () => Promise.resolve('tok'), values, fetch: fake.fetch });
+    await expect(api.json('/me')).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  }
+});
+
+test("a code that echoes the filled header value or the token is no detail", async () => {
+  const echoing = { ...discord, errors: { detail: 'code' } };
+  for (const code of ['Bot t', 't']) {
+    const fake = script(echoing, () => Response.json({ code }, { status: 400 }));
+    await expect(fake.client.json('/me')).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  }
 });
 
 test("GitHub's declared rate limits classify a 403", async () => {

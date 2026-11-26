@@ -204,7 +204,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
-`Send.value`, `oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
+`oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
 `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
 and `Where.variables`. `paging` and `operations` arrive with the walker and the client.
 
@@ -232,7 +232,7 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
 ```
 
 - `send` says how the credential travels. With no `send` it is `{ header: 'authorization', value: 'Bearer {token}' }`.
-  A `send` with a header and no `value` sends the bare `{token}`.
+  A `send` with a header and no `value` sends the bare `{token}`, so the table refuses a `value` of exactly `'{token}'`.
 - `key` covers API keys, bearer tokens and basic auth: `{ basic: ['{apiId}', '{apiToken}'] }`.
 - `query` sets each parameter, filled, on the URL of every request and every redirect hop, after the caller's query, so
   it replaces a value of the same name. It adds no header, and `beforeRequest` sees the URL without it. A query send
@@ -386,13 +386,55 @@ repeated-cursor guard.
 ### `webhook`
 
 ```ts
-type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64';
-  timestamp?: { header: string; toleranceSeconds?: number };
-  deliveryId?: { header: string } | { body: readonly Path[] } };
+type Timestamp = { header: string; toleranceSeconds?: number };
+type Webhook = (
+  | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
+      part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+  | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
+  | { kind: 'token'; header: string }
+  | { kind: 'standard' }
+) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 ```
 
-Defaults: SHA-256, hex, the raw body signed, a tolerance of 300 seconds. `deliveryId` is what an app dedupes on;
-several body paths are joined with `:`.
+`verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
+request. Every comparison is constant time over buffers of equal length, a timestamp is plain seconds inside its
+tolerance (300 seconds by default), and a signature header longer than 8 KiB is `false` before it is parsed.
+`deliveryId` is what an app dedupes on; several body paths are joined with `:`.
+
+1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
+   (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`).
+2. `hmac` with `part` (Stripe's `t=…,v1=…,v1=…`): the header is split on `,`, each piece on its first `=`. Every value
+   whose name is `part` is a signature, the other pieces (another scheme, debug entries) are ignored, and the request
+   passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
+   beside it (an app's own entry with both compares `prefix` and the digest inside the piece) and a `part` name holding
+   a `,`, `=` or whitespace.
+3. `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in
+   `signed` is that value. `timestamp.part` needs `part`, and `{timestamp}` is in `signed` exactly when there is a
+   `timestamp`: a tolerance on a timestamp that is not signed would let a replay pass with a fresh one. `verifyWebhook`
+   is `false` for an app's own declaration whose `signed` lacks `{body}`, or lacks `{timestamp}` beside a timestamp;
+   any other name in `signed` is signed as written.
+4. `ed25519` (Discord): the secret is the provider's public key as 64 hex characters; the header holds a
+   128-hex-character signature over the filled `signed`. A bad key, a bad signature or a wrong length is `false`.
+5. `token` (Google Calendar push): the header must equal the secret, compared over the SHA-256 digests of both, so its
+   length leaks nothing.
+6. `standard` (Standard Webhooks, GitLab): `webhook-id`, `webhook-timestamp`
+   (seconds, 300 seconds of tolerance) and `webhook-signature` (space-separated `v1,<base64>`, other versions ignored)
+   over `<webhook-id>.<webhook-timestamp>.<raw body>`, keyed with the base64 decoding of the secret after an optional
+   `whsec_`. An id holding a `.` is `false`, as the specification bars it.
+7. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
+8. `challengeAnswer(webhook, request)`, called only after `verifyWebhook` accepted the request, answers a handshake: a
+   JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
+   string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
+
+In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom) and `part` (Stripe), `ed25519` and
+`Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge` (Slack, Discord). A secret that keys
+nothing (empty, or a `standard` secret whose base64 decodes to nothing) is `false`. The table test also refuses a
+`challenge.when` with a `status`, `header` or `detail` or without a `path`, and an `echo` holding a `.`.
+
+Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
+chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a
+provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft Graph's `validationToken`, Zoom's
+`endpoint.url_validation`, Dropbox's GET, Asana's `X-Hook-Secret`) and a default `deliveryId` for `standard`.
 
 ### `operations`
 
@@ -450,7 +492,7 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 | `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
 | `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
-| `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, plus `deliveryId(entry.webhook, request)`. |
+| `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, then `challengeAnswer(entry.webhook, request)` and `deliveryId(entry.webhook, request)`. |
 | `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |
 | `vault` | Unchanged. A connection's plain values are the app's to keep. |
 
