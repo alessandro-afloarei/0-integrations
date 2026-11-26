@@ -11,6 +11,6 @@ export const paypal = defineProvider({
   { name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Secret', secret: true }],
   auth: [{ kind: 'token', request: { url: 'https://{apiHost}/v1/oauth2/token', body: { grant_type: 'client_credentials' },
     basic: ['{clientId}', '{clientSecret}'] } }],
-  http: { baseUrl: 'https://{apiHost}', host: '*.paypal.com', headers: { accept: 'application/json' } },
+  http: { baseUrl: 'https://{apiHost}', host: '*.paypal.com', headers: { accept: 'application/json' }, retry: {} },
   identify: { id: 'tokenAnswer.app_id' },
 });
