@@ -6,11 +6,13 @@ import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
 import { aircall } from './catalogue/aircall.js';
 import { gitlab } from './catalogue/gitlab.js';
+import { metabase } from './catalogue/metabase.js';
+import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
 import { accessToken, type WithLock } from './credentials.js';
 import { fakeHubSpot, type HubSpotFakeData } from './hubspot/fake.js';
-import { refreshGrant, type OAuthClient } from './oauth.js';
+import { refreshGrant, tokenSource, type OAuthClient } from './oauth.js';
 import { fakeFetch } from './testing.js';
 import type { SecretStore, Vault } from './vault.js';
 
@@ -118,6 +120,32 @@ async function clientGuarded(accessToken: string, host: string) {
   return user;
 }
 
+// docs/modules/connect.md › A token provider's connect.
+async function connectToken(password: string, host: string, username: string) {
+  // Once, at sign-in:
+  const { secret, values, account } = await finishConnect(metabase, { secret: { password }, values: { host, username } });
+  // secret: { password } to seal; values: { host, username } to keep; account: { id: username, name: username }
+
+  // Outside any request handler, once per connection:
+  const api = client(metabase, { token: tokenSource(metabase, { secret, values }), values });
+
+  async function handler() {
+    return api.json('/user/current');
+  }
+  return [handler, account];
+}
+
+// docs/modules/oauth.md › A `token` entry.
+function oauthTokenSource(secret: { clientSecret: string }, values: { accountId: string; clientId: string }) {
+  // One source per connection, built outside any request handler and kept for the process's life.
+  const api = client(zoom, { token: tokenSource(zoom, { secret, values }), values });
+
+  async function handler() {
+    return api.json('/users/me'); // every request reuses the kept token
+  }
+  return handler;
+}
+
 // docs/design/entries-and-engine.md › The engine (its operation line is a comment there).
 async function designClient() {
   const api = client(attio, { token: process.env.ATTIO_KEY });
@@ -127,5 +155,5 @@ async function designClient() {
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded].every(example => typeof example === 'function')).toBe(true);
+    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken].every(example => typeof example === 'function')).toBe(true);
 });

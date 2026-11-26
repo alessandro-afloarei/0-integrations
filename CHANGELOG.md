@@ -21,6 +21,19 @@ Nothing here is released yet.
 - A Firecrawl scrape that runs a script (`actions`) skips the automatic retries: a 5xx or a dropped connection goes
   straight to the plain read, and a 429 fails with the wait Firecrawl names (before, its 429 was retried). A plain
   scrape and a map are retried as reads.
+- New: `oauth2.json` (the token endpoint takes JSON), first used by Jira, and `oauth2.refreshUrl`, first used by Figma's
+  refresh endpoint.
+- New: a declared call may name one of `http.bases` (`Call.base`); a base may take a path segment from a plain or saved
+  value. First used by Jira (Atlassian 3LO).
+- New: the `token` sign-in kind, one declared request for client credentials or a session sign-in, and
+  `tokenSource(entry, { secret, values })` for `client()`. First used by Zoom Server-to-Server OAuth.
+- `startConnect` and `finishConnect` run a `token` entry (Metabase, PayPal, Zoom); a token URL may take its host from a
+  field, and a typed host is address-guarded.
+- `tokenAnswer.*` never holds the token's own key (`access_token`, `refresh_token`, or a `token` entry's `token` path):
+  an entry naming one reads nothing. `save` keeps only a string, a number or a boolean: an object or a list
+  (`tokenAnswer.authed_user`) is not kept.
+- An app's own `baseUrl` must be https, as every URL the library sends to: one that is not, or that does not parse or
+  holds a username or password, is `base_host_refused`.
 
 ## 0.13.0
 

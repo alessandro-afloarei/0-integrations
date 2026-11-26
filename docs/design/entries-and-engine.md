@@ -99,10 +99,11 @@ That is a whole provider: sign-in form, credential check, account identity, retr
 
 - **Template**: a string with `{name}` placeholders. A name that is missing is an error that names the entry and the
   key. There are no fallbacks, conditions or functions. Each place that takes a template states its names:
-  - `auth.send`: every plain field of the entry by its name, the entry's only secret field by its name, and `{token}`:
-    the access token, or that secret field. An entry has at most one secret field, and a key entry exactly one. A plain
-    value that is blank fills no template: it is missing, and nothing is sent.
-  - `http.baseUrl`: every plain field by its name. See "A base filled from a value" below.
+  - `auth.send`: every plain field of the entry by its name, and `{token}`: the access token, or the key. Only a key
+    entry's secret field is its credential, so only a key entry's `send` may also name it. An entry has at most one
+    secret field, and a key or token entry exactly one. A plain value that is blank fills no template: it is missing,
+    and nothing is sent.
+  - `http.baseUrl`: every plain field and every `save` key by its name. See "A base filled from a value" below.
   - `identify` and `save` values: the lookup described under `identify`.
   - `webhook.signed`: `{body}`, `{timestamp}`, `{method}`, `{url}`.
   - an operation's `path`: its declared `path` parameters.
@@ -146,20 +147,27 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 #### A base filled from a value
 
-A placeholder in `http.baseUrl` names a plain field and sits in its host (between `https://` and the next `/`; a
-path segment from a value arrives later). A base with one needs `http.host`, the host the filled base must have: a
-name (`api.example.com`), `*.` and a domain (any name ending in `.example.com`, never `example.com` itself), or `*`
-(any). Intercom's region is the first:
-`baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts.
+A placeholder in `http.baseUrl` names a plain field or a `save` key. In the host (between `https://` and the next `/`)
+it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
+and a domain (any name ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's region is the
+first: `baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three
+hosts. In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as `a%2Fb`; a value that is
+`.` or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no placeholder in its host needs
+no `http.host`. Jira's is the first: `baseUrl: 'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value
+its `save` keeps.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
-  is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given.
-- The value is the connection's plain value; none is `template_missing`. Only `finishConnect` applies a field's
-  `default` (and returns it in `values`): a client, and a revoke, never do, so they need the connection's `values`. A
-  value that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host`
-  checks only the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
-- The filled base must parse, be https with no user or password, and its host must match `http.host`, else
-  `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.
+  is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
+  after the one check below that every URL the library sends to passes.
+- The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
+  one) is `template_missing`. Only `finishConnect` applies a field's `default` (and returns it in `values`): a client,
+  and a revoke, never do, so they need the connection's `values`. A value in the host that is not a host part (ASCII
+  letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only the name) is
+  `TypeError('base_value_invalid: <entry id> {<name>}')`.
+- Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 token,
+  refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
+  `http.host`, else `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then
+  never leaves the filled base's origin.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
   placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
   (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.
@@ -196,7 +204,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
-`Send.value`, `oauth2.send`, `Call.base` and `Operation.base`, placeholders in `identify`'s request path, the `s` and
+`Send.value`, `oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
 `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
 and `Where.variables`. `paging` and `operations` arrive with the walker and the client.
 
@@ -212,12 +220,15 @@ accepts only a string or a number from them.
 ```ts
 type Auth =
   | { kind: 'key'; send?: Send }
-  | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; pkce?: false; clientAuth?: 'basic';
-      scopeSeparator?: ','; authorizeParams?: Record<string, string>; tokenTypes?: readonly string[];
-      failed?: When; reusesGrant?: true; send?: Send };
+  | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
+      clientAuth?: 'basic'; scopeSeparator?: ','; authorizeParams?: Record<string, string>;
+      tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true; send?: Send }
+  | { kind: 'token'; request: TokenRequest; send?: Send };
 
 type Send = { header: string; value?: Template } | { basic: readonly [Template, Template] }
   | { query: Record<string, Template> };
+type TokenRequest = { url: Template; body: Record<string, Template>; json?: true;
+  basic?: readonly [Template, Template]; token?: Path };
 ```
 
 - `send` says how the credential travels. With no `send` it is `{ header: 'authorization', value: 'Bearer {token}' }`.
@@ -230,6 +241,36 @@ type Send = { header: string; value?: Template } | { basic: readonly [Template, 
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today.
+- `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
+  `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
+- `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
+  (Atlassian) with `content-type: application/json`, the client id and secret in it unless `clientAuth: 'basic'`. The
+  answer is read as a form-bodied one is.
+- `token` turns what the person entered into a short-lived token with one request: client credentials (Zoom, PayPal) or
+  a session sign-in (Metabase). It has no refresh: a new request is the refresh.
+  - The request's URL is filled by the base rule from the plain values alone (a host placeholder's result must match
+    `http.host`; a fixed URL is used as written, after the same check). Its body's templates and `basic` are filled
+    from the plain values and the secret fields by name, and it is posted as a form, or as one JSON object with
+    `json: true`, with the entry's `http.headers`, redirects not followed, through the entry's default `fetch`
+    (`guardedFetch` for `http.host: '*'`) unless the app passes one.
+  - Its answer: a 2xx whose `token` path (`access_token` by default) holds a non-empty string is the token, and a root
+    `expires_in` that is a positive finite number of seconds is its life (none: kept until refused); the caller that
+    requested a token gets it, however short its life. A 2xx without a token is `invalid_response` (`missing_fields`);
+    400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the answer's `error` when it is one of the RFC's
+    codes (`invalid_client`, …), else none; any other answer is classified as usual. No detail holds a secret field, a
+    body value filled from one, or the Basic value sent.
+    The request is sent once, never retried: it is no read of the provider's API.
+  - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
+    the token until it is passed back as refused or a call comes within 60 seconds of its expiry, or after it (that
+    call requests a new one; nothing renews by itself), concurrent calls share one
+    request, and a failed request is not kept. It applies no field's `default`, so an app passes it, and `client`, the
+    connection's `values` as `finishConnect` returned them.
+  - `startConnect` returns the form. `finishConnect(entry, { secret, values?, fetch? })` reads the fields as a key
+    entry does (defaults, choices), requests a token (the credential check), identifies with it, with the token
+    answer's keys the entry names as `tokenAnswer.*`, and returns the secret fields as `secret`; the token is not
+    returned.
+  - Its `send` may name `{token}` (the token obtained) and plain fields, never a secret field: a call never sends one,
+    whatever `values` holds.
 - A sign-in the provider hosts on its own page is not a kind: the entry is a `key` entry for the app's own key, and the
   provider's module offers the hosted link and the account lookup as calls.
 
@@ -243,8 +284,11 @@ type Value = Path | readonly Path[] | Template;
 ```
 
 `id`, `name` and `save` read from one lookup: the answer's own keys at the root, `tokenAnswer.*` (the token answer,
-seen only inside the engine) and `connection.*` (the plain values). A string with braces is a template over the same
-lookup, where `{id}` is the id already found: `'Portal {id}'`.
+seen only inside the engine, never the token's own key: `access_token` and `refresh_token`, or a `token` entry's
+`token` path, read as missing) and `connection.*` (the plain values). `save` keeps only a string, a number or a
+boolean: an object or a list, which may hold a second credential (`tokenAnswer.authed_user`), is not kept. An id must
+be a string or a number and a name a string, so neither can carry one either. A string with braces is a template over
+the same lookup, where `{id}` is the id already found: `'Portal {id}'`.
 
 - The request is sent only when a value needs the answer, or at once when there is no `id` and no `name` (a
   credential check). Slack's identity is all `tokenAnswer.*`, so it sends none. HubSpot's
@@ -257,6 +301,11 @@ lookup, where `{id}` is the id already found: `'Portal {id}'`.
 - `lowercase` lowercases and trims the id and the name when they are strings.
 - `rejectWhen` names answers that mean a bad credential despite their status. The error is `rejected`. A rule's
   `detail` is the detail reported, so a `rejectWhen` condition cannot test the provider's code.
+- A request's `base` names a key of `http.bases`: identify's request and a request revoke are sent to that base, and
+  the credential stays on its origin. An unknown name is `TypeError('base_unknown: <name>')` before anything is sent.
+  Jira's identify goes to `api.atlassian.com` while its own base still waits for the `cloudId` it saves: a call on a
+  second base never fills the entry's own. A request revoke on a second base needs no `values`; one on a templated
+  own base needs them, and `revokeGrant` takes none, so it fails closed (`template_missing`) with nothing sent.
 - With no `id`, identify is only a credential check. There is no separate `verify`: none of the 17 providers needs
   the two apart.
 - Only the paths an entry names leave the token answer. Nothing else of it is returned or stored.
@@ -300,8 +349,9 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   on. The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
 - Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
   retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
-  the OAuth token endpoint and an RFC 7009 revoke. An answer that step 3 reclassifies is reported, not retried. The
-  last answer is classified as any other; a timeout, and a network failure after the last retry, are `unavailable`.
+  the OAuth token endpoint, a `token` entry's request and an RFC 7009 revoke. An answer that step 3 reclassifies is
+  reported, not retried. The last answer is classified as any other; a timeout, and a network failure after the last
+  retry, are `unavailable`.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
   1 second. A `limit` of 0 means no retry; an error still carries the wait the provider names.
 - The error taxonomy does not change.
@@ -478,8 +528,8 @@ its docs, and engine tests as proof:
 1. **Where a call can go.** Keys in the query (SerpApi); field choices and defaults, and a base filled from a value with
    a host pattern (Intercom); a guarded `fetch` that refuses private addresses, for a host the person types (GitLab);
    retry of 5xx and network failures on reads, with jitter (Microsoft, Google).
-2. **How a token is obtained.** JSON token bodies, a second base for a declared call and a base from saved values
-   (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session sign-ins
+2. **How a token is obtained.** JSON token bodies, a second base for identify, a path segment and a saved value in the
+   base (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session sign-ins
    (Zoom, Metabase); a templated token URL (PayPal, Metabase).
 3. **More webhook schemes.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 and a header value
    template (Discord, Trello), shared tokens (Google), Standard Webhooks (GitLab), and a challenge handshake (Slack,
@@ -488,8 +538,9 @@ its docs, and engine tests as proof:
    and a five-step guide to adding a provider.
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
-code flow; templated OAuth authorize and token URLs (Shopify); placeholders in `bases`; retry of writes; second
-challenge shapes; webhook schemes that are code (Twilio, HubSpot v3, PayPal, SendGrid).
+code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
+authorize and token URLs (Shopify); placeholders in `bases`; retry of writes; second challenge shapes; webhook schemes
+that are code (Twilio, HubSpot v3, PayPal, SendGrid).
 
 OAuth 1, JWT and service-account sign-in, and multipart bodies wait for the first provider that needs them.
 

@@ -1,10 +1,10 @@
 import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
-import type { Auth, Entry } from './catalogue.js';
+import type { Auth, Entry, Values } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { callRequest, createClient } from './http.js';
-import { codeOf, responseJson, safeDetail } from './http-response.js';
-import { holds } from './rules.js';
+import { callBase, callRequest, createClient, defaultFetch, filledBase, sendable, type ProviderResponse } from './http.js';
+import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
+import { fill, holds, parseJson, placeholders, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
@@ -15,10 +15,20 @@ function oauth2(entry: Entry): Extract<Auth, { kind: 'oauth2' }> {
   return auth;
 }
 
-/** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted. */
+/** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted.
+ * Never the token's own key: the token is not returned or stored. */
 function tokenAnswerKeys(entry: Entry): string[] {
-  const keys = lookupNames(entry).filter(name => name.startsWith('tokenAnswer.')).map(name => name.split('.')[1] ?? '');
+  const [auth] = entry.auth;
+  const withheld = auth.kind === 'token' ? [(auth.request.token ?? 'access_token').split('.')[0]] : ['access_token', 'refresh_token'];
+  const keys = lookupNames(entry).filter(name => name.startsWith('tokenAnswer.')).map(name => name.split('.')[1] ?? '')
+    .filter(key => !withheld.includes(key));
   return [...new Set([...keys, ...(entry.scopes?.requireGranted ? ['scope'] : [])])];
+}
+
+/** Only the token answer's keys the entry reads: nothing else of it leaves the engine. */
+function tokenAnswerOf(entry: Entry, answer: unknown): Record<string, unknown> {
+  return Object.fromEntries(tokenAnswerKeys(entry).map((key): [string, unknown] => [key, readPath(answer, key)])
+    .filter(([, value]) => value !== undefined));
 }
 
 export function authorizeUrl(entry: Entry, input: {
@@ -45,10 +55,19 @@ export async function pkcePair(): Promise<{ verifier: string; challenge: string 
   return { verifier, challenge: await oauth.calculatePKCECodeChallenge(verifier) };
 }
 
-function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThis.fetch) {
+type CustomFetch = NonNullable<oauth.HttpRequestOptions<'POST', URLSearchParams>[typeof oauth.customFetch]>;
+
+/** The form oauth4webapi builds, sent as one JSON object of the same names and values. */
+const jsonBodies = (fetch: typeof globalThis.fetch): CustomFetch => (url, options) => fetch(url, { ...options,
+  headers: { ...options.headers, 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(options.body)) });
+
+/** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. */
+function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThis.fetch, refresh = false) {
   const config = oauth2(entry);
-  const as: oauth.AuthorizationServer = { issuer: new URL(config.tokenUrl).origin, token_endpoint: config.tokenUrl,
-    ...(entry.revoke && 'url' in entry.revoke ? { revocation_endpoint: entry.revoke.url } : {}) };
+  // Each URL passes the one check every URL the library sends to passes, before anything is sent.
+  const as: oauth.AuthorizationServer = { issuer: sendable(entry, config.tokenUrl).origin,
+    token_endpoint: sendable(entry, refresh ? config.refreshUrl ?? config.tokenUrl : config.tokenUrl).href,
+    ...(entry.revoke && 'url' in entry.revoke ? { revocation_endpoint: sendable(entry, entry.revoke.url).href } : {}) };
   const client = { client_id: credentials.clientId };
   const auth = config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret);
   // The Basic value as sent (the id and secret form-encoded first), so no error detail echoes it.
@@ -57,7 +76,7 @@ function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThi
   const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
     config, as, client, auth, secrets: [credentials.clientSecret, ...(basic === undefined ? [] : [basic])],
-    options: { [oauth.customFetch]: fetch, signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
+    options: { [oauth.customFetch]: config.json ? jsonBodies(fetch) : fetch, signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
     processing: { recognizedTokenTypes: Object.fromEntries((config.tokenTypes ?? []).map(type => [type.toLowerCase(), () => undefined])) },
   };
 }
@@ -116,8 +135,7 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options));
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
-    const extras = Object.fromEntries(tokenAnswerKeys(entry).flatMap(key => answer[key] === undefined ? [] : [[key, answer[key]]]));
-    return { grant: grant(answer, null), extras };
+    return { grant: grant(answer, null), extras: tokenAnswerOf(entry, answer) };
   } catch (error) {
     throw processingError(error, entry, response.status, secrets);
   }
@@ -125,7 +143,7 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
 
 export async function refreshGrant(entry: Entry, client: OAuthClient, refreshToken: string,
   input: { fetch: typeof fetch }): Promise<Grant> {
-  const c = context(entry, client, input.fetch);
+  const c = context(entry, client, input.fetch, true);
   const secrets = [...c.secrets, refreshToken];
   const response = await send(c, entry, secrets, () => oauth.refreshTokenGrantRequest(c.as, c.client, c.auth, refreshToken, c.options));
   try {
@@ -167,11 +185,83 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
     }
     const { accessToken } = input;
     if (accessToken === undefined) return;
-    const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch });
+    const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch, ...callBase(entry, revoke.request) });
     responseJson(entry, await http.request(...callRequest(revoke.request)));
   } catch (error) {
     const gone = error instanceof GrantRevoked || (error instanceof ProviderHttpError && error.detail !== null
       && (revoke.goneErrors ?? []).includes(error.detail));
     if (!gone) throw error;
   }
+}
+
+const RFC6749_ERRORS = ['invalid_request', 'invalid_client', 'invalid_grant', 'unauthorized_client', 'unsupported_grant_type', 'invalid_scope'];
+type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; fetch?: typeof fetch };
+
+/** @internal Requests a token entry's token: the token, its expiry (ms since epoch) or null, and the answer's keys the
+ * entry reads (`tokenAnswer.*`). Sent once, never retried (it is no read of the provider's API) and never redirected. Its
+ * templates read the secret fields from `secret` and every other name as a plain value; no error detail holds a secret, a
+ * body value filled from one, or the Basic value sent. */
+export async function requestToken(entry: Entry, input: TokenInput): Promise<{ token: string; expiresAt: number | null; extras: Record<string, unknown> }> {
+  const [auth] = entry.auth;
+  if (auth.kind !== 'token') throw new TypeError('token_unsupported');
+  const { request } = auth;
+  const values = { ...input.values }; // own values, each read once, for the URL, the body and Basic
+  const secretNames = new Set((entry.fields ?? []).filter(field => field.secret).map(field => field.name));
+  // The URL is filled from plain values only (a secret field's name there is missing, whatever `values` holds), and
+  // checked before any secret is read.
+  const url = filledBase(entry, Object.fromEntries(Object.entries(values).filter(([name]) => !secretNames.has(name))), request.url);
+  // One read of each secret (an app's may be a getter), so the value redacted is the value sent.
+  const secret = { ...input.secret };
+  const filled = (template: string) => fill(template, name => plainValue(secretNames.has(name) ? secret : values, name), entry.id);
+  const body = Object.fromEntries(Object.entries(request.body).map(([name, template]) => [name, filled(template)]));
+  const basic = request.basic && Buffer.from(`${filled(request.basic[0])}:${filled(request.basic[1])}`).toString('base64');
+  const secrets = [...Object.values(secret), basic ?? '', ...Object.entries(request.body)
+    .filter(([, template]) => placeholders(template).some(name => secretNames.has(name))).map(([name]) => body[name] ?? '')];
+  const headers = new Headers(entry.http.headers);
+  headers.set('content-type', request.json ? 'application/json' : 'application/x-www-form-urlencoded;charset=UTF-8');
+  if (basic !== undefined) headers.set('authorization', `Basic ${basic}`);
+  let response: ProviderResponse;
+  try {
+    const answer = await (input.fetch ?? defaultFetch(entry))(url, { method: 'POST', headers, redirect: 'manual',
+      body: request.json ? JSON.stringify(body) : new URLSearchParams(body), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) });
+    response = sentWith({ status: answer.status, headers: answer.headers, data: parseJson(await answer.text()) }, secrets);
+  } catch (error) {
+    if (error instanceof ProviderHttpError) throw error; // the address guard's refusal
+    throw new ProviderHttpError('unavailable', null);
+  }
+  const { status, data } = response;
+  // RFC 6749 §5.2: a refused client or grant; its detail is the answer's `error` only when that is one of the RFC's codes.
+  if (status === 400 || status === 401 || status === 403) {
+    const code = readPath(data, 'error');
+    throw new ProviderHttpError('rejected', status, typeof code === 'string' && RFC6749_ERRORS.includes(code) ? safeDetail(code, secrets) : null);
+  }
+  const error = status >= 200 && status < 300 ? null : classify(entry, response);
+  if (error) throw error;
+  const token = readPath(data, request.token ?? 'access_token');
+  if (typeof token !== 'string' || token.trim() === '') throw new ProviderHttpError('invalid_response', status, 'missing_fields');
+  const life = readPath(data, 'expires_in');
+  return { token, expiresAt: typeof life === 'number' && Number.isFinite(life) && life > 0 ? Date.now() + life * 1000 : null,
+    extras: tokenAnswerOf(entry, data) };
+}
+
+/** The token function `client()` takes, for a `token` entry: requests a token, keeps it until it expires (60 s early) or
+ * is refused, and shares one request among concurrent callers. A failed request is not kept. */
+export function tokenSource(entry: Entry, input: TokenInput): (rejected?: string) => Promise<string> {
+  let kept: Promise<{ token: string; expiresAt: number | null }> | undefined;
+  let settled = false;
+  const request = () => {
+    settled = false;
+    const pending = requestToken(entry, input).then(answer => { if (kept === pending) settled = true; return answer; },
+      (error: unknown) => { if (kept === pending) kept = undefined; throw error; });
+    return (kept = pending);
+  };
+  return async rejected => {
+    // A token requested by this call, or still being requested when it came, is fresh for it, however short its life.
+    const fresh = kept === undefined || !settled;
+    const held = kept ?? request();
+    const { token, expiresAt } = await held;
+    if (token !== rejected && (fresh || expiresAt === null || expiresAt - Date.now() > 60_000)) return token;
+    // The first caller to find it stale requests again; the others wait for that request.
+    return (await (kept === held ? request() : kept ?? request())).token;
+  };
 }

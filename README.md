@@ -20,8 +20,11 @@ credential travels, how errors read and which calls the provider offers. One eng
 needs real code, such as answers with meaning, incremental reads or parsed webhooks, also has a module built on its
 entry, with a fake for tests.
 
-What an app keeps for each account is a connection: a secret to seal (an API key, or an OAuth grant) and plain values to
-store. Sign-in is `startConnect` and `finishConnect`, and calls go through `client`.
+An entry signs in one of three ways: a `key` the person enters, an `oauth2` grant from the provider's consent screen,
+or a `token` request that turns what the person entered into a short-lived token (client credentials, or a session
+sign-in). What an app keeps for each account is a connection: a secret to seal (an API key or a token entry's secret,
+or an OAuth grant) and plain values to store. Sign-in is `startConnect` and `finishConnect`, and calls go through
+`client`.
 
 ## Connect a key provider
 
@@ -65,7 +68,8 @@ const me = await api.json('/users/me'); // raw: authenticated, paced, classified
 ```
 
 Any entry gives the raw calls `json`, `request` and `paginate`; an entry that declares operations adds them, typed. For
-an OAuth connection, `token` is a function that renews the token: [client](docs/modules/client.md) shows one.
+an OAuth connection, `token` is a function that renews the token: [client](docs/modules/client.md) shows one. For a
+`token` entry (Zoom, PayPal, Metabase) it is `tokenSource(entry, { secret, values })` from `0-integrations/oauth`.
 
 ## Providers
 

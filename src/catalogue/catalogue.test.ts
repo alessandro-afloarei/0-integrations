@@ -63,7 +63,7 @@ const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ b
 const value = z.union([z.string(), z.array(z.string())]);
 const method = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const request = z.strictObject({ method: method.optional(), path: template.optional(),
-  query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional() });
+  query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional(), base: z.string().optional() });
 const shape: z.ZodType<Shape> = z.lazy(() =>
   z.union([z.enum(['string', 'integer', 'number', 'boolean', 'unknown']), z.tuple([shape]), z.record(z.string(), shape)]));
 const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
@@ -81,10 +81,15 @@ const entrySchema = z.strictObject({
     choices: z.array(z.string()).optional() })).optional(),
   auth: z.array(z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('key'), send: send.optional() }),
-    z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, pkce: z.literal(false).optional(),
+    z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, refreshUrl: https.optional(),
+      json: z.literal(true, '`json` is `true` or left out').optional(), pkce: z.literal(false).optional(),
       clientAuth: z.literal('basic').optional(), scopeSeparator: z.literal(',').optional(),
       authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() }),
+    z.strictObject({ kind: z.literal('token'), send: send.optional(), request: z.strictObject({ url: https,
+      body: z.record(z.string(), z.string("a token request's body is a flat record of templates")), json: z.literal(true).optional(), basic: z.tuple([template, template]).optional(),
+      token: z.string().regex(/\S/u, "a token request's `token` is the token's path in the answer: give it, or leave it out")
+        .optional() }) }),
   ])).length(1), // one sign-in each until a provider needs two
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
   identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
@@ -128,8 +133,17 @@ function functionsIn(value: unknown, at = ''): string[] {
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
-/** The base's host part: between `https://` and the first `/` after it. */
-const baseHost = (entry: Entry) => entry.http.baseUrl.slice('https://'.length).split('/')[0] ?? '';
+/** A URL's host part: between `https://` and the first `/` after it. */
+const hostOf = (url: string) => url.slice('https://'.length).split('/')[0] ?? '';
+const baseHost = (entry: Entry) => hostOf(entry.http.baseUrl);
+/** A token entry's request. */
+const tokenRequest = (entry: Entry) => (entry.auth[0].kind === 'token' ? entry.auth[0].request : undefined);
+/** The names a token request's body and Basic fill. */
+const tokenSent = (request: NonNullable<ReturnType<typeof tokenRequest>>) =>
+  [...Object.values(request.body), ...request.basic ?? []].flatMap(placeholders);
+const plainFields = (entry: Entry) => (entry.fields ?? []).filter(field => field.secret !== true).map(field => field.name);
+/** The declared calls that may name a base: identify's request and a request revoke. */
+const calls = (entry: Entry) => [entry.identify?.request, entry.revoke !== undefined && 'request' in entry.revoke ? entry.revoke.request : undefined];
 const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
 /** The templates a Basic or query send fills, and the secret field's name. */
 const sentTemplates = (entry: Entry) => {
@@ -139,29 +153,52 @@ const sentTemplates = (entry: Entry) => {
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
   // A Basic or query send that names no secret would send a credential anyone could make.
-  '`auth.send` basic or query: name the secret ({token} or the secret field)': (entry: Entry) => sentTemplates(entry).length === 0
-    || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || name === secretField(entry)),
+  '`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)': (entry: Entry) => sentTemplates(entry).length === 0
+    || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || (entry.auth[0].kind === 'key' && name === secretField(entry))),
   "`auth.send` templates: name only the entry's fields and {token}": (entry: Entry) => sentTemplates(entry).flatMap(placeholders)
     .every(name => name === 'token' || (entry.fields ?? []).some(field => field.name === name)),
+  // The secret field goes only to the token request: a call carries the token it gave.
+  "a `token` entry's `send`: name no secret field": (entry: Entry) => entry.auth[0].kind !== 'token'
+    || !sentTemplates(entry).flatMap(placeholders).some(name => name === secretField(entry)),
   // Every claim an entry makes is checked against the provider's own page.
   'a `docs` link to the provider\'s page, https': (entry: Entry) => entry.docs?.startsWith('https://') === true,
-  // A typed host is checked against a pattern before the token is read; a fixed one needs none.
-  // Path segments from values arrive later (Jira): until then the engine checks every base value as a host part.
-  '`http.baseUrl` placeholders in its host only, never its path': (entry: Entry) =>
-    placeholders(baseHost(entry)).length === placeholders(entry.http.baseUrl).length,
-  'an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder': (entry: Entry) => (placeholders(entry.http.baseUrl).length > 0
+  // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
+  'an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder': (entry: Entry) => (placeholders(baseHost(entry)).length > 0
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
     || /^\{[^{}]+\}$/u.test(baseHost(entry)),
-  'a plain field (not secret) for every `http.baseUrl` placeholder': (entry: Entry) => placeholders(entry.http.baseUrl)
-    .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true)),
+  // The token URL is filled by the base's rule, so a typed host there is checked against the same pattern.
+  "a token request's `url` with a placeholder in its host only beside an `http.host` pattern": (entry: Entry) =>
+    placeholders(hostOf(tokenRequest(entry)?.url ?? 'https://')).length === 0 || entry.http.host !== undefined,
+  // A URL is filled from plain values, never a secret; the body and Basic from either.
+  // What the engine cannot fill is `template_missing` at the first sign-in.
+  "a token request names only the entry's fields, a plain one in its `url`": (entry: Entry) => {
+    const request = tokenRequest(entry);
+    return request === undefined || (placeholders(request.url).every(name => plainFields(entry).includes(name))
+      && tokenSent(request).every(name => (entry.fields ?? []).some(field => field.name === name)));
+  },
+  // A request that sends no secret proves nothing.
+  "a token request sends the secret field in its body or Basic": (entry: Entry) => {
+    const request = tokenRequest(entry);
+    return request === undefined || tokenSent(request).some(name => name === secretField(entry));
+  },
+  'a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder': (entry: Entry) => placeholders(entry.http.baseUrl)
+    .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true) || Object.hasOwn(entry.save ?? {}, name)),
+  // A named base is used as written: a `{name}` in it would send the token to a host spelt with braces.
+  '`http.bases` written out in full, with no placeholder (none is ever filled)': (entry: Entry) =>
+    Object.values(entry.http.bases ?? {}).every(base => placeholders(base).length === 0),
+  // Otherwise the call is refused, `base_unknown`, when it is made.
+  "a call's `base` one of `http.bases`": (entry: Entry) => calls(entry).every(call => call?.base === undefined
+    || Object.hasOwn(entry.http.bases ?? {}, call.base)),
   // A choice the engine would refuse fails here, not when a person picks it.
   "`fields[].choices` and `default` that fill the base to a host `http.host` takes": (entry: Entry) => {
     const named = (entry.fields ?? []).filter(field => placeholders(entry.http.baseUrl).includes(field.name));
+    // A saved value has no choices: a stand-in fills it.
+    const saved = Object.keys(entry.save ?? {}).map((name): [string, string] => [name, 'x']);
     const first = (field: Field) => field.default ?? field.choices?.[0] ?? 'x';
     return named.every(field => [...field.choices ?? [], ...field.default === undefined ? [] : [field.default]].every(value => {
-      const values = { ...Object.fromEntries(named.map(other => [other.name, first(other)])), [field.name]: value };
+      const values = { ...Object.fromEntries([...saved, ...named.map((other): [string, string] => [other.name, first(other)])]), [field.name]: value };
       try {
         return createClient(entry, { token: () => Promise.resolve('t'), fetch: globalThis.fetch, values }).baseUrl !== '';
       } catch { return false; }
@@ -175,15 +212,24 @@ const runnable = {
   'no `default` or `choices` on a secret field': (entry: Entry) => (entry.fields ?? [])
     .every(field => field.secret !== true || (field.default === undefined && field.choices === undefined)),
   // The engine sends only that field as `{token}`.
-  'at most one secret field in `fields`, exactly one on a key entry': (entry: Entry) => {
+  'at most one secret field in `fields`, exactly one on a key or token entry': (entry: Entry) => {
     const secrets = (entry.fields ?? []).filter(field => field.secret === true).length;
-    return entry.auth[0].kind === 'key' ? secrets === 1 : secrets <= 1;
+    return entry.auth[0].kind === 'oauth2' ? secrets <= 1 : secrets === 1;
   },
   // No silent GET to the base URL.
   "an `identify.request` whenever a value reads identify's answer": (entry: Entry) => entry.identify?.request !== undefined
     || lookupNames(entry).every(name => name.startsWith('tokenAnswer.') || name.startsWith('connection.')),
-  'no `tokenAnswer.*`, `scopes` or RFC 7009 `revoke` on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key'
-    || (reads(entry, 'tokenAnswer.').length === 0 && entry.scopes === undefined && !(entry.revoke !== undefined && 'url' in entry.revoke)),
+  // The engine withholds these keys; an entry naming one would read nothing where it meant the token.
+  'no `identify` or `save` value that reads a token from `tokenAnswer.*`, its own or one nested (never returned: read another key)': (entry: Entry) => {
+    const auth = entry.auth[0];
+    const own = auth.kind === 'token' ? [(auth.request.token ?? 'access_token').split('.')[0]] : ['access_token', 'refresh_token'];
+    const nested = ['access_token', 'refresh_token', 'id_token'];
+    return reads(entry, 'tokenAnswer.').every(name => !own.includes(name.split('.')[1]) && !nested.includes(name.split('.').at(-1) ?? ''));
+  },
+  'no `tokenAnswer.*` on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key' || reads(entry, 'tokenAnswer.').length === 0,
+  // A token entry asks no scopes and gives no OAuth grant to revoke.
+  'no `scopes` or RFC 7009 `revoke` on a key or token entry': (entry: Entry) => entry.auth[0].kind === 'oauth2'
+    || (entry.scopes === undefined && !(entry.revoke !== undefined && 'url' in entry.revoke)),
   '`scopes` on an oauth2 entry': (entry: Entry) => entry.auth[0].kind !== 'oauth2' || entry.scopes !== undefined,
   'an `operations[].paging` name declared in `paging`': (entry: Entry) =>
     operations(entry).every(op => op.paging === undefined || Object.hasOwn(entry.paging ?? {}, op.paging)),
@@ -282,41 +328,72 @@ test.each([
 const key = { id: 'k', name: 'K', docs: 'https://k.test/docs', http: { baseUrl: 'https://api.k.test' } } as const;
 const oauth2 = { ...key, auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }] } as const;
 const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
+/** A token entry with Zoom's shape: a plain client id, one secret, Basic client authentication. */
+const tokened = { ...key, fields: [{ name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Client secret', secret: true }],
+  auth: [{ kind: 'token', request: { url: 'https://k.test/token', body: { grant_type: 'client_credentials' },
+    basic: ['{clientId}', '{clientSecret}'] } }] } as const;
 test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
-  ['`auth.send` basic or query: name the secret ({token} or the secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+  ['`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
-  ['`auth.send` basic or query: name the secret ({token} or the secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+  ['`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { basic: ['{apiId}', ''] } }] })],
   ["`auth.send` templates: name only the entry's fields and {token}", defineProvider({ ...key, fields: [secret],
     auth: [{ kind: 'key', send: { query: { key: '{apiKey}', account: '{acount}' } } }] })],
-  ['at most one secret field in `fields`, exactly one on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
-  ['at most one secret field in `fields`, exactly one on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }],
+  ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
+  ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
-  ['at most one secret field in `fields`, exactly one on a key entry', defineProvider({ ...oauth2, scopes: { default: [] },
+  ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...oauth2, scopes: { default: [] },
     fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
   ["an `identify.request` whenever a value reads identify's answer", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { id: 'workspace_id' } })],
   ["an `identify.request` whenever a value reads identify's answer", defineProvider({ ...oauth2, scopes: { default: [] },
     identify: { id: 'tokenAnswer.team.id' }, save: { region: 'Region {region}' } })],
-  ['no `tokenAnswer.*`, `scopes` or RFC 7009 `revoke` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { id: 'tokenAnswer.team.id' } })],
-  ['no `tokenAnswer.*`, `scopes` or RFC 7009 `revoke` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     scopes: { default: ['read'] } })],
-  ['no `tokenAnswer.*`, `scopes` or RFC 7009 `revoke` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
+  ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...tokened, scopes: { default: ['read'] } })],
+  ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...tokened,
+    revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
+  ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...tokened,
+    fields: [...tokened.fields, { name: 'other', title: 'Other', secret: true }] })],
+  ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...tokened, fields: [{ name: 'clientId', title: 'Client ID' }] })],
+  // A token entry's call carries the token it gave: naming its secret field is no secret sent.
+  ["`auth.send` basic or query: name the secret ({token}, or a key entry's secret field)", defineProvider({ ...tokened,
+    auth: [{ ...tokened.auth[0], send: { query: { s: '{clientSecret}' } } }] })],
+  ["a `token` entry's `send`: name no secret field", defineProvider({ ...tokened,
+    auth: [{ ...tokened.auth[0], send: { basic: ['{clientId}', '{clientSecret}'] } }] })],
+  ["a token request's `url` with a placeholder in its host only beside an `http.host` pattern", defineProvider({ ...tokened,
+    fields: [...tokened.fields, { name: 'apiHost', title: 'Host' }], auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request,
+      url: 'https://{apiHost}/token' } }] })],
+  ...([[{ url: 'https://k.test/{tenant}/token' }, "a token request names only the entry's fields, a plain one in its `url`"], [{ url: 'https://k.test/{clientSecret}/token' }, "a token request names only the entry's fields, a plain one in its `url`"],
+    [{ body: { scope: '{scop}' } }, "a token request names only the entry's fields, a plain one in its `url`"], [{ body: { a: '{nope}' } }, "a token request names only the entry's fields, a plain one in its `url`"],
+    [{ basic: ['{clientld}', '{clientSecret}'] }, "a token request names only the entry's fields, a plain one in its `url`"], [{ basic: ['{clientId}', '{secret}'] }, "a token request names only the entry's fields, a plain one in its `url`"],
+    [{ basic: ['{clientId}', 'fixed'] }, "a token request sends the secret field in its body or Basic"]] as const).map(([part, rule]): [Rule, Entry] => [rule,
+    defineProvider({ ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, ...part } }] })]),
+  ...[defineProvider({ ...tokened, save: { t: 'tokenAnswer.access_token' } }),
+    defineProvider({ ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, token: 'id' } }], identify: { id: 'tokenAnswer.id' } }),
+    defineProvider({ ...oauth2, scopes: { default: [] }, identify: { id: 'tokenAnswer.refresh_token' } }),
+    defineProvider({ ...oauth2, scopes: { default: [] }, save: { a: 'tokenAnswer.access_token.x' } }),
+    // A second credential nested in the answer (a user token under another key).
+    defineProvider({ ...oauth2, scopes: { default: [] }, save: { u: 'tokenAnswer.authed_user.access_token' } }),
+    defineProvider({ ...oauth2, scopes: { default: [] }, identify: { id: 'tokenAnswer.openid.id_token' } })]
+    .map((entry): [Rule, Entry] => ["no `identify` or `save` value that reads a token from `tokenAnswer.*`, its own or one nested (never returned: read another key)", entry]),
   ['`scopes` on an oauth2 entry', defineProvider(oauth2)],
   ...([
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}.k.test' }],
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://api.k.test', host: 'api.k.test' }],
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}', host: 'example.com/x' }],
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}', host: '*.com' }],
-    ['`http.baseUrl` placeholders in its host only, never its path', { baseUrl: 'https://api.example.com/{region}' }],
-    ['`http.baseUrl` placeholders in its host only, never its path', { baseUrl: 'https://{region}.k.test/{region}', host: '*.k.test' }],
+    ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://api.k.test/{region}', host: 'api.k.test' }],
     ["`http.host: '*'` only on a base whose whole host is one placeholder", { baseUrl: 'https://{region}.example.com', host: '*' }],
-    ['a plain field (not secret) for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
-    ['a plain field (not secret) for every `http.baseUrl` placeholder', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
+    ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
+    ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://api.k.test/{zone}' }],
+    ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
   ] as const).map(([rule, http]): [Rule, Entry] => [rule, { ...key, http, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }] }]),
   ...([
@@ -334,6 +411,12 @@ test.each<[Rule, Entry]>([
       fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, default: 'k' }] })],
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, choices: ['k'] }] })],
+  ["a call's `base` one of `http.bases`", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    http: { ...key.http, bases: { api: 'https://other.k.test' } }, identify: { request: { base: 'nope', path: '/me' } } })],
+  ["a call's `base` one of `http.bases`", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    revoke: { request: { base: 'api', method: 'POST', path: '/revoke' } } })],
+  ['`http.bases` written out in full, with no placeholder (none is ever filled)', defineProvider({ ...key, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region' }], http: { ...key.http, bases: { api: 'https://{region}.k.test' } } })],
   ["`save` keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([
@@ -372,9 +455,33 @@ test.each([[{ title: '' }, "a field's title says what to enter: give it words"],
     expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
   });
 
+test.each([[{ refreshUrl: 'http://k.test/refresh' }, 'refreshUrl', 'Invalid string: must start with "https://"'],
+  [{ json: false }, 'json', '`json` is `true` or left out']])(
+  'an oauth2 sign-in with %j fails the schema, with what to fix', (part, key, message) => {
+    const bad = { ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], ...part }] };
+    expect(entrySchema.safeParse(bad).error?.issues.map(issue => [issue.path.at(-1), issue.message])).toEqual([[key, message]]);
+  });
+
+test.each(['', '  '])('a token request whose `token` path is %j fails the schema, with what to fix', token => {
+  const bad = { ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, token } }] };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
+    .toEqual(["a token request's `token` is the token's path in the answer: give it, or leave it out"]);
+});
+
+test('a token request whose body holds an object fails the schema, with what to fix', () => {
+  const bad = { ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, body: { grant: { type: 'x' } } } }] };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(["a token request's body is a flat record of templates"]);
+});
+
 test('a query send that names no parameter fails the schema, with what to fix', () => {
   const bad = { ...key, auth: [{ kind: 'key', send: { query: {} } }], fields: [secret] };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(['a query send names at least one parameter']);
+});
+
+test("a base with a host from a field's choices and a path segment from a saved value passes every rule", () => {
+  const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', choices: ['eu.k.test'] }],
+    http: { baseUrl: 'https://{region}/sites/{siteId}', host: '*.k.test' }, identify: { request: { path: '/me' } }, save: { siteId: 'id' } });
+  expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
 });
 
 test('an entry whose operations keep every rule passes them all', () => {

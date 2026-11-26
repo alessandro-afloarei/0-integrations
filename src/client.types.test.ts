@@ -3,6 +3,9 @@ import { defineProvider, type Entry } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { attio } from './catalogue/attio.js';
 import { intercom } from './catalogue/intercom.js';
+import { metabase } from './catalogue/metabase.js';
+import { paypal } from './catalogue/paypal.js';
+import { zoom } from './catalogue/zoom.js';
 import { client, type Client, type ProviderResponse, type RequestOptions } from './client.js';
 import { finishConnect } from './connect.js';
 
@@ -143,8 +146,19 @@ async function defaults(accessToken: string) {
   await finishConnect(intercom, { secret: { accessToken }, values: { apiHots: 'x' }, fetch });
 }
 
+// A token entry's finish is a form's: its secret fields, its plain fields unless each has a default, `fetch` optional.
+async function tokenFinish(clientSecret: string, password: string, host: string, username: string) {
+  // @ts-expect-error Zoom's account and client ids have no default, so `values` is required
+  await finishConnect(zoom, { secret: { clientSecret }, fetch });
+  const { secret } = await finishConnect(zoom, { secret: { clientSecret }, values: { accountId: 'a', clientId: 'c' }, fetch });
+  expectTypeOf(secret).toEqualTypeOf<Readonly<Record<'clientSecret', string>>>();
+  await finishConnect(metabase, { secret: { password }, values: { host, username } });
+  await finishConnect(paypal, { secret: { clientSecret }, values: { clientId: 'c' } });
+}
+
 test('defineProvider keeps an entry with operations', () => {
   expect(defaults).toBeTypeOf('function');
+  expect(tokenFinish).toBeTypeOf('function');
   expect(acme.id).toBe('acme');
   expect(typed).toBeTypeOf('function');
 });
