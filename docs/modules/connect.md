@@ -4,7 +4,7 @@
 typed by the entry's sign-in: an OAuth 2 entry needs the start options and starts with a redirect, a key entry takes
 none and starts with a form, and an entry whose kind is not known in the types (a union an app picks by id) takes either.
 
-- A key entry starts as a form of its `fields`. `finishConnect(entry, { secret, values?, fetch })` reads only the
+- A key entry starts as a form of its `fields`. `finishConnect(entry, { secret, values?, fetch? })` reads only the
   declared fields, secret ones from `secret` and plain ones from `values`, and refuses one that is missing, blank or
   whitespace with `TypeError('connect_field_required: <name>')` before anything is sent; nothing else passes through.
   A plain field with a `default` may be left out or blank, and takes the default; one with `choices` refuses any other
@@ -15,7 +15,7 @@ none and starts with a form, and an entry whose kind is not known in the types (
   with `TypeError('connect_secret_field_missing: <entry id>')`. Then the entry's `identify` runs: with a request it
   checks the credential and learns the account; an entry that declares none sends nothing, and its `account` is `null`.
 - An OAuth 2 entry starts with a redirect asking for the entry's `scopes.default`, with PKCE unless the entry says
-  `pkce: false`. `finishConnect(entry, { client, code, redirectUri, codeVerifier?, fetch, onRevokeFailed })` exchanges
+  `pkce: false`. `finishConnect(entry, { client, code, redirectUri, codeVerifier?, fetch?, onRevokeFailed })` exchanges
   the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
   `scope_missing`; the granted scopes are split on the entry's `scopeSeparator`), and identifies the account. If that
   fails it revokes the new grant best-effort and throws the original error; `onRevokeFailed(error)` reports a failed
@@ -25,6 +25,9 @@ none and starts with a form, and an entry whose kind is not known in the types (
 To ask for other scopes, derive an entry: `defineProvider({ ...google, scopes: { default: [...] } })`. `defineProvider`
 does not refuse a misspelled key at compile time (the catalogue test does, for the entries in this repository), so check
 the key's name.
+
+`fetch` is optional in both: by default the global one, or `guardedFetch` for an entry whose host the person types
+(`http.host: '*'`, GitLab), which refuses private and metadata addresses ([client](client.md#the-address-guard)).
 
 The result is `{ secret, values, account }`, typed from the entry: the secret to seal (the grant, or the secret fields by
 name), the plain values to keep (the plain fields by name, and what the entry's `save` keeps when the provider answers

@@ -5,6 +5,7 @@ import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
 import { aircall } from './catalogue/aircall.js';
+import { gitlab } from './catalogue/gitlab.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
 import { accessToken, type WithLock } from './credentials.js';
@@ -110,6 +111,13 @@ async function hubspotFakeConnect(portalData: Omit<HubSpotFakeData, 'client' | '
   return connected;
 }
 
+// docs/modules/client.md › The address guard.
+async function clientGuarded(accessToken: string, host: string) {
+  const api = client(gitlab, { token: accessToken, values: { host } }); // `host` as the person typed it
+  const user = await api.json('/user');
+  return user;
+}
+
 // docs/design/entries-and-engine.md › The engine (its operation line is a comment there).
 async function designClient() {
   const api = client(attio, { token: process.env.ATTIO_KEY });
@@ -119,5 +127,5 @@ async function designClient() {
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectOtherScopes, hubspotFakeConnect, designClient].every(example => typeof example === 'function')).toBe(true);
+    connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded].every(example => typeof example === 'function')).toBe(true);
 });

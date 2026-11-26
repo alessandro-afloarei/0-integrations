@@ -5,12 +5,16 @@ import { breakcold } from './catalogue/breakcold.js';
 import { exa } from './catalogue/exa.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
+import { gitlab } from './catalogue/gitlab.js';
 import { granola } from './catalogue/granola.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { intercom } from './catalogue/intercom.js';
 import { notion } from './catalogue/notion.js';
 import { client } from './client.js';
-import { callRequest, createClient } from './http.js';
+import { finishConnect } from './connect.js';
+import { ProviderHttpError } from './errors.js';
+import * as guard from './guard.js';
+import { callRequest, createClient, defaultFetch } from './http.js';
 import { walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
 
@@ -649,4 +653,48 @@ test("the credential never leaves the filled base's origin", async () => {
   await expect(createClient(regional, { token: () => Promise.resolve('t'), values: { sub: 'eu' }, fetch: moved.fetch }).json('/a'))
     .rejects.toMatchObject({ code: 'request_failed', status: 307 });
   expect(moved.calls).toHaveLength(1);
+});
+
+const addressBlocked = new ProviderHttpError('request_failed', null, 'address_blocked');
+
+test.each(['127.0.0.1', '2130706433', '0x7f.1', '169.254.169.254', '10.0.0.1'])(
+  "a typed host that is a blocked address (%s) is refused before the token is read, whatever the app's fetch", async host => {
+    const fake = filled(gitlab, { host });
+    await expect(fake.client.json('/user')).rejects.toEqual(addressBlocked);
+    expect(() => fake.client.baseUrl).toThrow(addressBlocked);
+    expect(fake.token).not.toHaveBeenCalled();
+    expect(fake.before).not.toHaveBeenCalled();
+    expect(fake.calls).toHaveLength(0);
+  });
+
+test("a typed host that is a name, or a public address, goes to the app's own fetch as it is", async () => {
+  for (const host of ['gitlab.example.test', '8.8.8.8']) {
+    const fake = filled(gitlab, { host });
+    expect(await fake.client.json('/user')).toEqual({ ok: true });
+    expect(fake.calls[0]?.url).toBe(`https://${host}/api/v4/user`);
+    expect(fake.calls[0]?.headers['private-token']).toBe('t');
+  }
+});
+
+test("an app's own base for a typed-host entry is used as given", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  await createClient(gitlab, { token: () => Promise.resolve('t'), fetch: fake.fetch, baseUrl: 'https://10.0.0.1/api/v4' }).json('/user');
+  expect(fake.calls[0]?.url).toBe('https://10.0.0.1/api/v4/user');
+});
+
+test('an entry whose host is typed defaults to guardedFetch; any other to the global fetch', () => {
+  expect(defaultFetch(gitlab)).toBe(guard.guardedFetch);
+  expect(defaultFetch(intercom)).toBe(globalThis.fetch);
+});
+
+test('client() and finishConnect on GitLab with no fetch send through guardedFetch', async () => {
+  const guarded = vi.spyOn(guard, 'guardedFetch').mockRejectedValue(addressBlocked);
+  try {
+    const values = { host: 'gitlab.example.test' };
+    await expect(client(gitlab, { token: 't', values }).json('/user')).rejects.toEqual(addressBlocked);
+    await expect(finishConnect(gitlab, { secret: { accessToken: 't' }, values })).rejects.toEqual(addressBlocked);
+    expect(guarded).toHaveBeenCalledTimes(2);
+    expect(guarded.mock.calls.map(([input]) => (input instanceof Request ? input.url : String(input))))
+      .toEqual(['https://gitlab.example.test/api/v4/user', 'https://gitlab.example.test/api/v4/user']);
+  } finally { guarded.mockRestore(); }
 });

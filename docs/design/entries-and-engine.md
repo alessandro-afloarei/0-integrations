@@ -138,7 +138,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
 | `save` | Values kept on the connection after sign-in: `{ hubId: 'tokenAnswer.hub_id' }`. | none |
 | `revoke` | `{ url, token: ['refresh', 'access'] }` (RFC 7009) or `{ request }`, each with `goneErrors?`. | none |
-| `http` | `baseUrl`, `host?` (the host a base filled from a value must have), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
+| `http` | `baseUrl`, `host?` (the host a base filled from a value must have; `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
 | `errors` | Where the provider's error code is, and how answers map to error codes (below). | status only |
 | `paging` | Named paging shapes (below). | none |
 | `webhook` | The signature scheme (below). | none |
@@ -158,6 +158,35 @@ ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's 
   {<name>}')`.
 - The filled base must parse, be https with no user or password, and its host must match `http.host`, else
   `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.
+- `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
+  placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
+  (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.
+
+#### The address guard
+
+`guardedFetch` (published from `0-integrations/client`) is a `fetch` over `node:https` that refuses
+`ProviderHttpError('request_failed', null, 'address_blocked')`, never retried, for a URL that is not https, a host that
+is a blocked address, and a name whose lookup answers none or any blocked address. It is the default `fetch` of
+`client()` and `finishConnect` for an entry with `http.host: '*'`; every other entry keeps the global one.
+
+- The blocked ranges, in `node:net`'s `BlockList`. IPv4: `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10`, `127.0.0.0/8`,
+  `169.254.0.0/16` (the cloud metadata address), `172.16.0.0/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`,
+  `192.168.0.0/16`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24`, `224.0.0.0/3`. IPv6: `::/96`,
+  `64:ff9b::/96`, `64:ff9b:1::/48`, `100::/64`, `2001::/32`, `2001:db8::/32`, `2002::/16`, `fc00::/7` (holds
+  `fd00:ec2::254`), `fe80::/10`, `fec0::/10`, `ff00::/8`. A string that is not an IP is blocked. `::ffff:0:0/96` is
+  never listed: `BlockList` applies the IPv4 rules to IPv4-mapped addresses itself, and that rule would match every
+  IPv4 address. The URL parser already reads `https://2130706433` and `https://0x7f.1` as `127.0.0.1`.
+- DNS rebinding is closed: the guard dials with its own lookup, which resolves every address and refuses the whole
+  answer if one is blocked, so the address dialled is one it checked. The socket's remote address is checked again
+  as it connects, and on a reused socket, before TLS or the request writes a byte. A blocked literal and a blocked name
+  never get a TCP connection.
+- It is a minimal `fetch` for what the engine sends: a `Request` or a URL with init, a body read whole, the caller's
+  `signal` and the timeout's abort, a redirect answered and never followed (as `redirect: 'manual'`), and the answer's
+  body streamed. It asks for no compression and decodes none.
+- Outside the guard: an app's own `fetch` (a test fake, a wrapper, a proxy). The engine cannot see what it resolves, so
+  only a host that is an address literal is checked. An HTTP proxy is outside it too: `node:https` ignores the proxy
+  variables, and a proxy the app's `fetch` uses dials for it. In production pass `guardedFetch`, or no `fetch`, for an
+  entry whose host is typed.
 
 #### Arriving later
 
@@ -350,11 +379,11 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 |---|---|
 | `catalogue` (new) | `defineProvider`, the entry types, the template and path helpers. |
 | `http` (internal) | `createClient(entry, options)` reads `auth.send`, `http`, `errors`, `rateLimit` from the entry, and `classify` interprets the declared rules. `./http` is no longer a subpath: `client` is the public client. |
-| `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. |
+| `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
 | `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
 | `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, plus `deliveryId(entry.webhook, request)`. |
-| `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default. |
+| `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |
 | `vault` | Unchanged. A connection's plain values are the app's to keep. |
 
 ```ts

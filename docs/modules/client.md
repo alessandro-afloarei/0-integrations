@@ -18,8 +18,8 @@ const me = await api.json('/users/me');
 - `token`: a string, or a function `(rejected?: string) => Promise<string>`. The client calls the function once, and
   again with the refused token after a 401, so it can renew the token and the request is sent once more. A missing or
   blank token is `TypeError('token_missing')`, thrown when a request needs it, before anything is sent.
-- `fetch`: the global one by default. In production pass the app's own guarded `fetch`: the library does not refuse
-  private addresses yet.
+- `fetch`: the global one by default, or `guardedFetch` for an entry whose host the person types (`http.host: '*'`,
+  GitLab). See [The address guard](#the-address-guard).
 - `values`: the connection's plain values, for a credential or a base built from them (Aircall's `{apiId}`,
   Intercom's `{apiHost}`). A value the entry names that is missing, blank or neither a string nor a finite
   number takes its field's `default`, else is `TypeError('template_missing: <entry id> {<name>}')`, before anything is
@@ -54,6 +54,34 @@ seconds by default) and is paced `minIntervalMs` apart. A 429 is waited out and 
 the entry declares `http.retry`, never with a caller's `signal`, and never longer than `retry.maxWaitMs`. A GET is a
 read unless `idempotent` says otherwise. An error answer is a `ProviderHttpError` or a `GrantRevoked`
 ([errors](errors.md)), classified by the entry's rules.
+
+## The address guard
+
+`guardedFetch` (`import { guardedFetch } from '0-integrations/client'`) is a `fetch` that refuses private, loopback,
+link-local, unique-local and metadata addresses (the ranges are in the
+[design](../design/entries-and-engine.md#the-address-guard)): a URL that is not https, a host that is such an
+address, and a name that resolves to one, as
+`ProviderHttpError('request_failed', null, 'address_blocked')`, never retried. It dials only an address its own lookup
+checked, and checks the connected address again before a byte is written, so a name rebound to a private address
+between the two is refused. It answers a redirect without following it, as `redirect: 'manual'` does.
+
+An entry whose host the person types uses it when the app passes no `fetch`:
+
+```ts
+import { gitlab } from '0-integrations/catalogue/gitlab';
+import { client } from '0-integrations/client';
+
+const api = client(gitlab, { token: accessToken, values: { host } }); // `host` as the person typed it
+const user = await api.json('/user');
+```
+
+What the guard does not cover:
+
+- An app's own `fetch` (a test fake, a wrapper, a proxy): the library cannot see what it resolves, so for a typed host
+  it refuses only an address literal (`127.0.0.1`, `2130706433`) before the token is read. Pass `guardedFetch`, or no
+  `fetch`, in production for an entry whose host is typed.
+- A proxy: `guardedFetch` ignores the proxy variables, and a proxy an app's own `fetch` sends through dials for it.
+- An app's own `baseUrl`, used as given.
 
 ## Raw calls
 

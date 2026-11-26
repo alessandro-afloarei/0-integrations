@@ -150,6 +150,9 @@ const runnable = {
     placeholders(baseHost(entry)).length === placeholders(entry.http.baseUrl).length,
   'a host pattern exactly when the base\'s host holds a placeholder': (entry: Entry) => (placeholders(entry.http.baseUrl).length > 0
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
+  // Any host is allowed only where the person types the whole host, which is then address-guarded.
+  "host '*' only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
+    || /^\{[^{}]+\}$/u.test(baseHost(entry)),
   'a plain field for every placeholder in the base': (entry: Entry) => placeholders(entry.http.baseUrl)
     .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true)),
   // A connect screen draws the choices; the default is what it shows first.
@@ -299,6 +302,7 @@ test.each<[Rule, Entry]>([
     ["a host pattern exactly when the base's host holds a placeholder", { baseUrl: 'https://{region}', host: '*.com' }],
     ["placeholders in the base's host only, never its path", { baseUrl: 'https://api.example.com/{region}' }],
     ["placeholders in the base's host only, never its path", { baseUrl: 'https://{region}.k.test/{region}', host: '*.k.test' }],
+    ["host '*' only on a base whose whole host is one placeholder", { baseUrl: 'https://{region}.example.com', host: '*' }],
     ['a plain field for every placeholder in the base', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
     ['a plain field for every placeholder in the base', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
   ] as const).map(([rule, http]): [Rule, Entry] => [rule, { ...key, http, auth: [{ kind: 'key' }],

@@ -1,6 +1,7 @@
 import { identifyAccount, type Account } from './account.js';
 import type { Entry, Field, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
+import { defaultFetch } from './http.js';
 import { authorizeUrl, exchangeCode, pkcePair, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
 
 type Redirect = { kind: 'redirect'; url: string; codeVerifier?: string };
@@ -33,10 +34,10 @@ export type Connected<E extends Entry = Entry> = E extends Entry ? {
   account: E['identify'] extends { id: Value } ? Account : Account | null;
 } : never;
 type OAuthStart = { clientId: string; redirectUri: string; state: string };
-type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string | undefined; fetch: typeof fetch;
+type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string | undefined; fetch?: typeof fetch;
   onRevokeFailed: (error: unknown) => void };
 /** A key entry's finish: its secret fields by name, and its plain fields, required unless each has a default. */
-type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch: typeof fetch } & (Unnamed<E> extends true
+type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch?: typeof fetch } & (Unnamed<E> extends true
   ? { values?: Values } : [PlainFields<E>] extends [never] ? { values?: never }
   : Partial<Entered<E>> extends Entered<E> ? { values?: Entered<E> } : { values: Entered<E> }) : never;
 
@@ -55,6 +56,7 @@ export async function startConnect(entry: Entry, options?: OAuthStart): Promise<
 export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish, FormFinish<E>>): Promise<Connected<E>>;
 export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
   const [auth] = entry.auth;
+  const fetch = input.fetch ?? defaultFetch(entry);
   if (auth.kind === 'key') {
     const { secret: secrets = {}, values: plain = {} }: Partial<FormFinish> = 'secret' in input ? input : {};
     // Only the declared fields, each filled, all checked before anything is sent: an entry's templates read them.
@@ -71,23 +73,23 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     };
     const secret = Object.fromEntries(fields.filter(field => field.secret).map(read));
     const values = Object.fromEntries(fields.filter(field => !field.secret).map(read));
-    return { secret, ...await identifyAccount(entry, { fetch: input.fetch, token: read(credential)[1], values }) };
+    return { secret, ...await identifyAccount(entry, { fetch, token: read(credential)[1], values }) };
   }
   if (!('code' in input)) throw new TypeError('oauth_options_required');
-  const { grant, extras } = await exchangeCode(entry, input.client, input);
+  const { grant, extras } = await exchangeCode(entry, input.client, { ...input, fetch });
   try {
     // RFC 6749 §5.1: a token answer without `scope` granted the scopes requested.
     const granted = typeof extras.scope === 'string' ? new Set(extras.scope.split(auth.scopeSeparator ?? ' ')) : undefined;
     if (entry.scopes?.requireGranted && granted && !entry.scopes.default.every(scope => granted.has(scope))) {
       throw new ProviderHttpError('rejected', null, 'scope_missing');
     }
-    return { secret: grant, ...await identifyAccount(entry, { fetch: input.fetch, token: grant.accessToken, tokenAnswer: extras }) };
+    return { secret: grant, ...await identifyAccount(entry, { fetch, token: grant.accessToken, tokenAnswer: extras }) };
   } catch (error) {
     // A reused grant may belong to a live connection; only the app can decide ownership.
     if (auth.reusesGrant) throw error;
     // Cleanup must not hide the original refusal.
     try {
-      await revokeGrant(entry, { ...grant, client: input.client, fetch: input.fetch });
+      await revokeGrant(entry, { ...grant, client: input.client, fetch });
     } catch (revokeError) { input.onRevokeFailed(revokeError); }
     throw error;
   }

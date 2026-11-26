@@ -1,7 +1,9 @@
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import type { Call, Entry, Method, Values } from './catalogue.js';
+import { isIP } from 'node:net';
 import { ProviderHttpError } from './errors.js';
+import { blockedAddress, guardedFetch } from './guard.js';
 import { bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
 import { fill, parseJson, placeholders, plainValue } from './rules.js';
@@ -108,7 +110,15 @@ function filledBase(entry: Entry, values: Values): string {
   const url = URL.canParse(filled) ? new URL(filled) : undefined;
   const hosted = url !== undefined && (host === '*' || url.hostname === host || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1))));
   if (!hosted || url.protocol !== 'https:' || url.username !== '' || url.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
+  // A typed host that is an address is checked here too, since an app's own fetch cannot be seen to dial; a name is
+  // only checked by guardedFetch.
+  if (host === '*' && isIP(url.hostname) !== 0 && blockedAddress(url.hostname)) throw new ProviderHttpError('request_failed', null, 'address_blocked');
   return filled;
+}
+
+/** The fetch an entry uses when the app passes none: guardedFetch for `http.host: '*'`, else the global one. */
+export function defaultFetch(entry: Entry): typeof fetch {
+  return entry.http.host === '*' ? guardedFetch : globalThis.fetch;
 }
 
 export type HttpOptions = {
