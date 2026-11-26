@@ -193,8 +193,8 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
   never get a TCP connection.
 - It is a minimal `fetch` for what the engine sends: a `Request` or a URL with init, a body read whole, the caller's
   `signal` and the timeout's abort, a redirect answered and never followed (as `redirect: 'manual'`), and the answer's
-  body streamed; a body cut short fails as fetch's does, `TypeError('terminated')`. It asks for no compression, removes
-  a caller's `accept-encoding`, and decodes none.
+  body streamed; a body cut short fails as fetch's does, `TypeError('terminated')`. It asks for no compression
+  (`accept-encoding: identity`, replacing a caller's), and decodes none.
 - It dials through its own agent, never Node's global one, which follows `HTTPS_PROXY` when `NODE_USE_ENV_PROXY=1` or
   `--use-env-proxy` is set (Node 22.21 and later) and would hand the name to the proxy unchecked. So the guard never
   sends through a proxy, whatever the environment says.
