@@ -19,7 +19,7 @@ export const todoist = defineProvider({
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.todoist.com/oauth/authorize',
     tokenUrl: 'https://api.todoist.com/oauth/access_token', pkce: false, scopeSeparator: ',' }, { kind: 'key' }],
   scopes: { default: ['data:read_write'], requireGranted: true },
-  http: { baseUrl: 'https://api.todoist.com/api/v1', retry: {} },
+  http: { baseUrl: 'https://api.todoist.com/api/v1', retry: { wait: { path: 'error_extra.retry_after', unit: 's' } } },
   identify: { request: { path: '/user' }, id: 'id', name: ['full_name', 'email'] },
   errors: { detail: 'error_tag' },
   paging: { cursor: { kind: 'cursor', next: 'next_cursor', send: { query: 'cursor' } } },
