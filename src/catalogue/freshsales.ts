@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Freshsales (Freshworks CRM): a user's API key as `Token token=`, on the bundle alias's host, which is typed: it is
- * reached only through the address guard unless the app passes its own `fetch`. 1,000 requests an hour per account,
- * then a 429. A list reads a view (its id from `/filters`), 25 a page from page 1. No page names the current user, so
- * signing in reads the portal's users. */
+/** Freshsales (Freshworks CRM): a user's API key as `Token token=`; 1,000 requests an hour per account, then a 429.
+ * A list reads a view, 25 a page. No page names the current user, so signing in reads the users. The bundle alias's
+ * host is typed (reached only through the address guard unless the app passes its own `fetch`), on one of two domains:
+ * https://developers.freshworks.com/docs/app-sdk/v2.3/freshsales-suite/app-settings/installation-parameters/ */
 const ref = 'https://developers.freshworks.com/crm/api/';
 const contact = { id: 'number', 'first_name?': 'string', 'last_name?': 'string', 'display_name?': 'string', 'email?': 'string',
   'owner_id?': 'number', 'created_at?': 'string', 'updated_at?': 'string' } as const;
@@ -19,7 +19,7 @@ export const freshsales = defineProvider({
   categories: ['crm'],
   fields: [{ name: 'host', title: 'Bundle alias host',
     help: 'The host of the bundle alias shown below your API key under Profile Settings, then API Settings: widgetz.myfreshworks.com, or widgetz.freshworks.com for an account migrated from Freshsales Classic.' },
-  { name: 'apiKey', title: 'API key', secret: true, help: 'Your own API key, under Profile Settings, then API Settings.' }],
+  { name: 'apiKey', title: 'API key', secret: true, help: 'Your API key, under Profile Settings, then API Settings.' }],
   auth: [{ kind: 'key', send: { header: 'authorization', value: 'Token token={token}' } }],
   http: { baseUrl: 'https://{host}/crm/sales/api', host: '*', headers: { 'content-type': 'application/json' }, retry: {} },
   identify: { request: { path: '/selector/owners' } },

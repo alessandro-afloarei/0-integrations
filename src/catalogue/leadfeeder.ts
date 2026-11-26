@@ -15,7 +15,7 @@ export const leadfeeder = defineProvider({
   id: 'leadfeeder', name: 'Leadfeeder', docs: `${ref}/authentication-354547m0`,
   categories: ['sales'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'For your own Leadfeeder user, from Settings, Personal, API Keys: Leadfeeder asks an integration used by more than one person to use OAuth 2.0. Reading a contact\'s or a company\'s details spends the account\'s credits.' }],
+    help: 'For your own Leadfeeder user, under Settings, then Personal, then API Keys: Leadfeeder asks an integration used by more than one person to use OAuth 2.0. Reading a contact\'s or a company\'s details spends the account\'s credits.' }],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: { baseUrl: 'https://api.leadfeeder.com', minIntervalMs: 100, retry: {} },
   errors: { detail: 'code' },

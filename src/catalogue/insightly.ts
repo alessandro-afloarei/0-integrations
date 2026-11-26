@@ -16,7 +16,7 @@ export const insightly = defineProvider({
   fields: [{ name: 'pod', title: 'Pod',
     help: 'The pod in your API URL, shown under your API key in User Settings: na1 in https://api.na1.insightly.com/v3.1/.' },
   { name: 'apiKey', title: 'API key', secret: true,
-    help: 'Your own API key, in User Settings: the API acts with your permissions in Insightly.' }],
+    help: 'Your API key, under User Settings: the API acts with your permissions in Insightly.' }],
   auth: [{ kind: 'key', send: { basic: ['{apiKey}', ''] } }],
   http: { baseUrl: 'https://api.{pod}.insightly.com/v3.1', host: '*.insightly.com', retry: {} },
   identify: { request: { path: '/Users/Me' }, id: 'USER_ID', name: ['EMAIL_ADDRESS', 'FIRST_NAME'] },

@@ -1,8 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Nutshell's REST API: a user's email and API key as Basic. Contacts are people, accounts companies, and leads the
- * deals. Lists page by `page[page]` from 0. An update is a JSON Patch, which the engine cannot send yet, so it is left
- * out. No page names the current user, so signing in reads the users. */
+ * deals. Lists page by `page[page]` from 0. No page names the current user, so signing in reads the users. An update
+ * is a JSON Patch, which the engine cannot send yet, so it is left out:
+ * https://developers.nutshell.com/reference/cb995ae09d7e0e99e91b122bcc9358ed */
 const ref = 'https://developers.nutshell.com/reference';
 const contact = { id: 'string', 'name?': 'string', 'firstName?': 'string', 'lastName?': 'string',
   'emails?': [{ 'value?': 'string', 'isPrimary?': 'boolean' }], 'htmlUrl?': 'string', 'createdTime?': 'integer' } as const;
@@ -13,7 +14,7 @@ export const nutshell = defineProvider({
   categories: ['crm'],
   fields: [{ name: 'email', title: 'Nutshell email', help: 'The email address you sign in to Nutshell with.' },
     { name: 'apiKey', title: 'API key', secret: true,
-      help: 'Created under Setup, then API keys: choose the API access permission type. A web-only key (for HTML forms) cannot sign in.' }],
+      help: 'Create it under Setup, then API keys, and choose the API access permission type: a web-only key (for HTML forms) cannot sign in.' }],
   auth: [{ kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }],
   http: { baseUrl: 'https://app.nutshell.com/rest' },
   identify: { request: { path: '/users' } },

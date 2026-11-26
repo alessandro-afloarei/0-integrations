@@ -14,7 +14,7 @@ const written = { email: { in: 'body', type: 'string' }, firstname: { in: 'body'
 export const salesflare = defineProvider({
   id: 'salesflare', name: 'Salesflare', docs: 'https://api.salesflare.com/docs',
   categories: ['crm'],
-  fields: [{ name: 'apiKey', title: 'API key', secret: true, help: 'Made under Settings, then API keys.' }],
+  fields: [{ name: 'apiKey', title: 'API key', secret: true, help: 'Create it under Settings, then API keys.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.salesflare.com', retry: {} },
   identify: { request: { path: '/me' }, id: 'id', name: ['name', 'email'] },

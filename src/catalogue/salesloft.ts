@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Salesloft, pages under https://developers.salesloft.com/docs/: other teams use an OAuth 2 app once Salesloft
- * allowlists it: platform/marketplace/submission-checklist/. The key, identify (no scope), the `data`
- * envelope, paging, webhooks (hex HMAC-SHA1): platform/api-basics/api-key-authentication/, api/me-index/,
- * platform/api-basics/request-response-format/, …/filtering-paging-sorting/, platform/webhooks/delivery-headers/. */
+ * allowlists it (platform/marketplace/submission-checklist/). Identify needs no scope (api/me-index/); the key, the
+ * `data` envelope and paging are under platform/api-basics/ (api-key-authentication/, request-response-format/,
+ * filtering-paging-sorting/); webhooks, a hex HMAC-SHA1, under platform/webhooks/delivery-headers/. */
 const person = { id: 'integer', 'display_name?': 'string', 'email_address?': 'string', 'account?': { 'id?': 'integer' },
   'owner?': { 'id?': 'integer' }, 'created_at?': 'string', 'updated_at?': 'string' } as const;
 const perPage = { per_page: { in: 'query', type: 'integer', description: '1 to 100, 25 by default.' } } as const;

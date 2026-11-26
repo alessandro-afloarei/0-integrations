@@ -16,7 +16,7 @@ export const close = defineProvider({
   id: 'close', name: 'Close', docs: 'https://developer.close.com/api/overview/oauth-authentication',
   categories: ['crm'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'For your own Close organization: Settings, then Developer, then API Keys, with the access level "Read, write, and delete". An app for other Close customers connects with the OAuth 2 sign-in.' }],
+    help: 'For your own Close organization: under Settings, then Developer, then API Keys, with the access level "Read, write, and delete". An app for other people connects with the OAuth 2 sign-in.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.close.com/oauth2/authorize/', tokenUrl: 'https://api.close.com/oauth2/token/',
     pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key', send: { basic: ['{apiKey}', ''] } }],
   scopes: { default: ['all.full_access'] },

@@ -21,7 +21,7 @@ export const peopledatalabs = defineProvider({
   id: 'peopledatalabs', name: 'People Data Labs', docs: `${ref}/authentication`,
   categories: ['sales'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'From the API Dashboard, under Account, API Keys. Enrichments and searches spend the account\'s credits.' }],
+    help: 'From the API Dashboard, under Account, then API Keys. Enrichments and searches spend the account\'s credits.' }],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: { baseUrl: 'https://api.peopledatalabs.com/v5', retry: {} },
   errors: { detail: 'error.type' },
