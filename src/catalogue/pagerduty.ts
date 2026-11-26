@@ -7,7 +7,6 @@ import { defineProvider } from '../catalogue.js';
 const incident = { id: 'string', 'title?': 'string', 'status?': 'string', 'html_url?': 'string', 'created_at?': 'string',
   'updated_at?': 'string', 'service?': { 'id?': 'string' } } as const;
 const limit = { limit: { in: 'query', type: 'integer', description: 'Results per page, at most 100.' } } as const;
-const paged = { 'more?': 'boolean', 'offset?': 'integer', 'limit?': 'integer' } as const;
 const rest = 'https://docs.pagerduty.com/developer/api/reference/rest';
 
 export const pagerduty = defineProvider({
@@ -27,12 +26,11 @@ export const pagerduty = defineProvider({
     services: { kind: 'offset', send: { query: 'offset' }, list: 'services', more: 'more' } },
   operations: {
     'incidents.list': { docs: `${rest}/incidents/list-incidents`, path: '/incidents', paging: 'incidents', records: 'incidents',
-      params: { 'service_ids[]': { in: 'query', type: 'string' }, ...limit }, result: { incidents: [incident], ...paged } },
+      params: { 'service_ids[]': { in: 'query', type: 'string' }, ...limit }, result: { incidents: [incident] } },
     'incidents.get': { docs: `${rest}/incidents/get-incident`, path: '/incidents/{id}', notFound: 'null',
       params: { id: { in: 'path', type: 'string', required: true } }, result: { incident } },
     'services.list': { docs: `${rest}/services/list-services`, path: '/services', paging: 'services', records: 'services',
       params: limit,
-      result: { services: [{ id: 'string', 'name?': 'string', 'status?': 'string', 'html_url?': 'string', 'created_at?': 'string' }],
-        ...paged } },
+      result: { services: [{ id: 'string', 'name?': 'string', 'status?': 'string', 'html_url?': 'string', 'created_at?': 'string' }] } },
   },
 });
