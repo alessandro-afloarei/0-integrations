@@ -41,7 +41,7 @@ const requestBody = async (request: Request): Promise<unknown> => {
 };
 
 /** A fetch answering from a recording: each request must match one exchange of that key, or the test names it. */
-function replay(recording: Recording, key: Exchange['key']): typeof fetch {
+export function replay(recording: Recording, key: Exchange['key']): typeof fetch {
   return async (input, init) => {
     const request = new Request(input, init);
     const body = await requestBody(request);

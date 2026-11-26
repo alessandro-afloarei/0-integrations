@@ -22,7 +22,7 @@ Every new provider module ships three things beside its client:
 
 - **A fake** at `<provider>/fake`: routes that answer the calls the client makes, from data the test passes.
 - **A recording** beside its entry, `src/catalogue/<id>.recording.json`: the scenario's requests and the provider's
-  answers.
+  answers. The catalogue test signs in on it with a good key and a bad one.
 - **The provider kit or the lookup kit**, run once on the recording and once on the fake, so the fake answers as the
   provider does. A provider with pages uses the provider kit; one that looks up a person or a company uses the lookup
   kit. [docs/modules/testing.md](docs/modules/testing.md) describes both and how to record from a test account.
