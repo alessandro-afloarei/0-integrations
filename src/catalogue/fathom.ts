@@ -7,7 +7,7 @@ export const fathom = defineProvider({
   docs: 'https://developers.fathom.ai/quickstart',
   categories: ['meetings'],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
-  http: { baseUrl: 'https://api.fathom.ai/external/v1', minIntervalMs: 1000, retry: { defaultWaitMs: 5000 } },
+  http: { baseUrl: 'https://api.fathom.ai/external/v1', retry: { defaultWaitMs: 5000 } },
   identify: { request: { path: '/meetings' } },
   paging: { cursor: { kind: 'cursor', next: 'next_cursor', send: { query: 'cursor' } } },
 });
