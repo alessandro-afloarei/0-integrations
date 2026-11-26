@@ -9,6 +9,9 @@ const lead = { id: 'string', 'email?': 'string', 'first_name?': 'string', 'last_
 const written = { first_name: { in: 'body', type: 'string' }, last_name: { in: 'body', type: 'string' },
   company_name: { in: 'body', type: 'string' }, job_title: { in: 'body', type: 'string' }, phone: { in: 'body', type: 'string' },
   website: { in: 'body', type: 'string' } } as const;
+const clearable = { in: 'body', type: 'string', nullable: true } as const;
+const patched = { first_name: clearable, last_name: clearable, company_name: clearable, job_title: clearable, phone: clearable,
+  website: clearable } as const;
 const limit = { in: 'query', type: 'integer', description: '1 to 100.' } as const;
 const id = { in: 'path', type: 'string', required: true } as const;
 const ref = 'https://developer.instantly.ai/api-reference';
@@ -33,6 +36,6 @@ export const instantly = defineProvider({
     'leads.get': { docs: `${ref}/lead/get-lead`, path: '/leads/{id}', notFound: 'null', params: { id }, result: lead },
     'leads.create': { docs: `${ref}/lead/create-lead`, method: 'POST', path: '/leads',
       params: { email: { in: 'body', type: 'string' }, campaign: { in: 'body', type: 'string' }, ...written }, result: lead },
-    'leads.update': { docs: `${ref}/lead/patch-lead`, method: 'PATCH', path: '/leads/{id}', params: { id, ...written }, result: lead },
+    'leads.update': { docs: `${ref}/lead/patch-lead`, method: 'PATCH', path: '/leads/{id}', params: { id, ...patched }, result: lead },
   },
 });
