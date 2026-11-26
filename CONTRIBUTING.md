@@ -38,7 +38,8 @@ entry:
   function and no `TODO`, prints to JSON unchanged, and has an id that is unique and equals its file name;
 - cites in `docs` the https page of the provider that states what the entry declares;
 - fills `auth.send`'s templates, when it has any, with the secret (`{token}`, or a key entry's secret field) and only
-  the entry's fields;
+  the entry's fields; a send's `value` holds no control character and never spells out a default (`'{token}'`, or
+  `authorization: Bearer {token}`), and no field is named `token`;
 - names in each template only what that place allows;
 - is one the engine can run: a key or token entry has exactly one secret field, a key entry reads no token answer, and
   neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
@@ -50,15 +51,12 @@ entry:
   `send` names no secret field; a field's `choices` are a non-empty list of unique values holding its `default`, each
   of them and the `default` fills the base to a host `http.host` takes, and a secret field has neither;
 - declares a webhook the engine can trust: `{body}` is signed (by default, or in `signed`), and `{timestamp}` exactly
-  when a timestamp is declared, read apart from the signature (another `part` or header); a `part` name holds no `,`, `=` or whitespace, and no `prefix` sits beside it; every header name is one
-  lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key; a send's
-  `value` names the secret, holds no control character and never spells out a default (`'{token}'`, or
-  `authorization: Bearer {token}`);
+  when a timestamp is declared, read apart from the signature (another `part` or header); a `part` name holds no `,`,
+  `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, `http.headers` keys) is
+  one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body), a paged operation names a declared shape and no `notFound`, a records path
-  leads to a list, and no id is a client call or a dotted prefix of another;
-- declares a webhook the checks can run: `{timestamp}` signed exactly when a timestamp is read, no `prefix` beside a
-  `part`, and a challenge recognised by a body path that echoes one top-level key of the body.
+  leads to a list, and no id is a client call or a dotted prefix of another.
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
 the test signs in once with a good key and once with a bad one, each sending a `token` entry's token request and
