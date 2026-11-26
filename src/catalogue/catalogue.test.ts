@@ -1,13 +1,12 @@
 import { globSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { identifyAccount, lookupNames, sendCall } from '../account.js';
+import { identifyAccount, lookupNames } from '../account.js';
 import { defineProvider, type Entry, type Shape } from '../catalogue.js';
 import { finishConnect } from '../connect.js';
-import { createClient } from '../http.js';
-import { BAD_KEY, GOOD_KEY, replay, type Exchange, type Recording } from '../kit.test-support.js';
+import { BAD_KEY, GOOD_KEY, replay, type Recording } from '../kit.test-support.js';
 import { placeholders } from '../rules.js';
 import { tierOf } from '../tier.js';
 
@@ -21,9 +20,14 @@ const entries: [string, Entry][] = await Promise.all(FILES.map(async file => {
   return [id, found as Entry];
 }));
 
-/** Every recording in this folder, by its file name: `<id>.recording.json` or `<id>.<part>.recording.json`. */
-const recordings = globSync('src/catalogue/*.recording.json').sort()
-  .map(file => ({ file: basename(file), ...JSON.parse(readFileSync(file, 'utf8')) as Recording }));
+/** Every recording in this folder, by its file name: `<id>.recording.json` or `<id>.<part>.recording.json`. Read as the build
+ * reads it: only `synthetic: false` is a real recording. */
+const recordings = globSync('src/catalogue/*.recording.json').sort().map(file => {
+  const json = JSON.parse(readFileSync(file, 'utf8')) as Omit<Recording, 'synthetic'> & { synthetic?: unknown };
+  return { ...json, file: basename(file), synthetic: json.synthetic !== false };
+});
+/** Whether a recording's file name names one of the entries: `<id>.` starts it. */
+const besideAnEntry = (file: string, ids: readonly string[]) => ids.some(id => file.startsWith(`${id}.`));
 
 /** A key entry's plain fields, each `kit-<name>`. */
 const kitValues = (entry: Entry) =>
@@ -35,25 +39,6 @@ function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch) {
   const secret = (entry.fields ?? []).find(field => field.secret === true)?.name ?? '';
   return finishConnect(entry, { secret: { [secret]: key }, values: kitValues(entry), fetch });
 }
-
-/** The entry's recordings as one, and which keys answer its identify request there; or why it cannot be replayed. */
-async function identifyReplay(entry: Entry): Promise<{ recording: Recording; keys: Exchange['key'][] } | string> {
-  const request = entry.identify?.request;
-  if (request === undefined) return 'it sends no identify request';
-  const own = recordings.filter(({ file }) => file.startsWith(`${entry.id}.`));
-  const [first] = own;
-  if (first === undefined) return 'no recording sits beside it';
-  // The request as the engine sends it, read off a stand-in wire.
-  let sent = new Request('https://unsent.test');
-  const wire: typeof fetch = (input, init) => { sent = new Request(input, init); return Promise.resolve(Response.json({})); };
-  await sendCall(createClient(entry, { token: () => Promise.resolve(GOOD_KEY), fetch: wire, values: kitValues(entry) }), request);
-  const exchanges = own.flatMap(recording => recording.exchanges);
-  const keys = (['good', 'bad'] as const).filter(key =>
-    exchanges.some(item => item.key === key && item.method === sent.method && item.url === sent.url));
-  if (!keys.includes('good')) return `its recordings hold no good-key answer for ${sent.method} ${sent.url}`;
-  return { recording: { ...first, provider: entry.id, exchanges }, keys };
-}
-const replays = new Map(await Promise.all(entries.map(async ([id, entry]) => [id, await identifyReplay(entry)] as const)));
 
 const https = z.string().startsWith('https://');
 const template = z.string();
@@ -182,30 +167,19 @@ describe.each(entries)('%s', (id, entry) => {
     for (const name of placeholders(entry.webhook?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 
-  const signInReplay = replays.get(id);
-  if (typeof signInReplay !== 'object') {
-    test.skip(`signs in on its recording: skipped, ${signInReplay ?? 'unknown'}`, () => undefined);
-    return;
-  }
-  // An identify sends its request at most once: a key is proved with one call.
-  const counted = (key: Exchange['key']) => {
-    const answer = replay(signInReplay.recording, key);
-    let calls = 0;
-    const fetch: typeof globalThis.fetch = (input, init) => { calls += 1; return answer(input, init); };
-    return { fetch, calls: () => calls };
-  };
-  test('signs in with a good key on its recording, sending identify once', async () => {
-    const { fetch, calls } = counted('good');
-    await expect(signIn(entry, GOOD_KEY, fetch)).resolves.toBeDefined();
-    expect(calls()).toBe(1);
+  // With a recording beside it, identify replays a good and a bad key on its recordings' exchanges merged, sending its
+  // request once; a missing exchange fails with the request it wanted. The account names what the recording holds.
+  const [first, ...rest] = recordings.filter(({ file }) => file.startsWith(`${id}.`));
+  if (entry.identify?.request === undefined || first === undefined) return;
+  const recording = { ...first, provider: id, exchanges: [first, ...rest].flatMap(item => item.exchanges) };
+  const recorded = JSON.stringify([recording.exchanges.filter(item => item.key === 'good').map(item => item.response), kitValues(entry)]);
+  test.each(['good', 'bad'] as const)('signs in on its recording with a %s key, sending identify once', async key => {
+    const fetch = vi.fn(replay(recording, key));
+    const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
+    if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
+    else expect(recorded.toLowerCase()).toContain((await signedIn).account?.id.toLowerCase() ?? '');
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
-  if (signInReplay.keys.includes('bad')) {
-    test('refuses a bad key on its recording as rejected, sending identify once', async () => {
-      const { fetch, calls } = counted('bad');
-      await expect(signIn(entry, BAD_KEY, fetch)).rejects.toMatchObject({ code: 'rejected' });
-      expect(calls()).toBe(1);
-    });
-  }
 });
 
 test("ids are unique and the folder's entries are found", () => {
@@ -214,10 +188,19 @@ test("ids are unique and the folder's entries are found", () => {
 });
 
 test("catalogue.json's tier: every entry declared today; a real recording makes its own entry recorded, no other", () => {
-  expect(entries.map(([id]) => tierOf(id, recordings))).toEqual(entries.map(() => 'declared'));
+  expect(Object.fromEntries(entries.map(([id]) => [id, tierOf(id, recordings)])))
+    .toEqual(Object.fromEntries(entries.map(([id]) => [id, 'declared'])));
   const real = [{ file: 'acme.mail.recording.json', synthetic: false }];
   expect([tierOf('acme', real), tierOf('acme-two', real), tierOf('acm', real)]).toEqual(['recorded', 'declared', 'declared']);
 });
+
+test('every recording sits beside an entry', () => {
+  const ids = entries.map(([id]) => id);
+  expect(recordings.map(({ file }) => file).filter(file => !besideAnEntry(file, ids))).toEqual([]);
+});
+
+test.each([['acme.mail.recording.json', true], ['acme-two.recording.json', false], ['acm.recording.json', false]])(
+  'a recording named %s sits beside the entry acme: %s', (file, beside) => { expect(besideAnEntry(file, ['acme'])).toBe(beside); });
 
 test.each([
   ['states both header and path', { header: 'x-error', path: 'error' }],
