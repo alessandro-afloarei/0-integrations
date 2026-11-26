@@ -74,8 +74,10 @@ an OAuth connection, `token` is a function that renews the token: [client](docs/
 ## Providers
 
 Every provider's entry is a file in [`src/catalogue/`](src/catalogue), published at `0-integrations/catalogue/<id>`.
-The build writes them all, each with its tier, to `0-integrations/catalogue.json`: that file is the provider list, and
-an entry needs no line here. The providers below also have a module and a fake at `<id>/fake`.
+[`docs/providers.md`](docs/providers.md) lists them all, with their categories, sign-ins, operations, webhooks and
+tiers; it is generated from the entries, so an entry needs no line here. The build writes them too, each with its tier,
+to `0-integrations/catalogue.json`, the list for code to read. What providers need that the engine cannot say yet is on
+the [waiting list](docs/waiting-list.md). The providers below also have a module and a fake at `<id>/fake`.
 
 | Module | Auth | Reads | Writes | Webhooks |
 |---|---|---|---|---|

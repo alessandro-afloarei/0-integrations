@@ -5,6 +5,7 @@ import { defineProvider } from '../catalogue.js';
  * `Stripe-Signature: t=…,v1=…`, one `v1` per active secret while one rolls (https://docs.stripe.com/webhooks). */
 export const stripe = defineProvider({
   id: 'stripe', name: 'Stripe', docs: 'https://docs.stripe.com/api/authentication',
+  categories: ['finance'],
   fields: [{ name: 'secretKey', title: 'Secret key', secret: true }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.stripe.com/v1' },

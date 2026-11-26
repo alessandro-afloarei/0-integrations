@@ -79,6 +79,27 @@ test("Slack's ok:false is a refusal, not a token", async () => {
     .rejects.toBeInstanceOf(GrantRevoked);
 });
 
+test('a token answer that states no token_type is read as Bearer; one that states another type is refused unless listed', async () => {
+  expect((await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ access_token: 'a', refresh_token: 'r', expires_in: 1800 }).fetch }))
+    .grant).toMatchObject({ accessToken: 'a', refreshToken: 'r' });
+  // ClickUp's documented answer: the token alone.
+  expect(await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ access_token: 'only' }).fetch }))
+    .toEqual({ grant: { accessToken: 'only', refreshToken: null, expiresAt: null }, extras: {} });
+  expect(await refreshGrant(hubspot, client, 'old', { fetch: endpoint({ access_token: 'new' }).fetch }))
+    .toEqual({ accessToken: 'new', refreshToken: 'old', expiresAt: null });
+  expect((await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint(token).fetch })).grant.accessToken).toBe('a');
+  await expect(exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ ...token, token_type: 'mac' }).fetch }))
+    .rejects.toMatchObject({ code: 'invalid_response', status: 200 });
+});
+
+test("the Bearer default reads only a 2xx token answer: a 5xx and a revoke's 200 are never read", async () => {
+  /** A body that never ends: reading it would never finish. */
+  const endless = (status: number) => fakeFetch([{ url: /https:/, respond: () => new Response(new ReadableStream({ start() {} }),
+    { status, headers: { 'content-type': 'application/json' } }) }]);
+  await expect(refreshGrant(hubspot, client, 'old', { fetch: endless(500).fetch })).rejects.toMatchObject({ code: 'unavailable', status: 500 });
+  await expect(revokeGrant(hubspot, { refreshToken: 'old', client, fetch: endless(200).fetch })).resolves.toBeUndefined();
+}, 2000);
+
 test('a refresh without a new refresh token keeps the old one', async () => {
   const fake = endpoint({ access_token: 'new', token_type: 'bearer' });
   expect(await refreshGrant(hubspot, client, 'old', { fetch: fake.fetch }))

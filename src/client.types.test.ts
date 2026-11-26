@@ -42,6 +42,8 @@ const acme = defineProvider({
       result: { 'a.b': [{ whole: 'string' }], a: { b: [{ split: 'string' }] } } },
     // Without `records`, a paged operation yields each page whole, as its `result` says.
     'pages.all': { path: '/pages', paging: 'cursor', result: { n: 'integer', 'next?': 'string' } },
+    // A list at the answer's top level is the records themselves.
+    'builds.list': { path: '/builds', paging: 'cursor', result: [{ id: 'string', 'number?': 'integer' }] },
     user: { path: '/user' },
     viewer: {
       kind: 'read', graphql: 'query Viewer($first: Int) { viewer { id name teams(first: $first) { nodes { id } } } }',
@@ -61,6 +63,7 @@ function typed() {
   expectTypeOf(api.issues.list({ teamId: 'T1' })).toEqualTypeOf<AsyncGenerator<Yielded<ReturnType<typeof api.issues.list>>, void, undefined>>();
   expectTypeOf<Yielded<ReturnType<typeof api.events.list>>>().branded.toEqualTypeOf<{ whole: string }>();
   expectTypeOf<Yielded<ReturnType<typeof api.pages.all>>>().branded.toEqualTypeOf<{ n: number; next?: string }>();
+  expectTypeOf<Yielded<ReturnType<typeof api.builds.list>>>().branded.toEqualTypeOf<{ id: string; number?: number }>();
   expectTypeOf<Awaited<ReturnType<typeof api.issues.get>>>().branded.toEqualTypeOf<{ id: string; assignee?: string; raw: unknown } | null>();
   expectTypeOf<Awaited<ReturnType<typeof api.issues.create>>>().branded.toEqualTypeOf<{ id: string; url: string }>();
   expectTypeOf<Awaited<ReturnType<typeof api.viewer>>>()

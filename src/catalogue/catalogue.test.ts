@@ -1,32 +1,19 @@
-import { globSync, readFileSync } from 'node:fs';
-import { basename } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
-import { defineProvider, type Entry, type Field, type Shape } from '../catalogue.js';
+import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
-import { BAD_KEY, GOOD_KEY, kitValues, replayProblem, signIn, type Recording } from '../kit.test-support.js';
+import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
-/** Every entry in this folder: no list to edit when one is added. */
-const FILES = globSync('src/catalogue/*.ts').filter(file => !file.endsWith('.test.ts')).sort();
-const entries: [string, Entry][] = await Promise.all(FILES.map(async file => {
-  const id = basename(file, '.ts');
-  const found = Object.values(await import(pathToFileURL(file).href) as Record<string, unknown>)
-    .find(value => typeof value === 'object' && value !== null && 'id' in value && value.id === id);
-  if (!found) throw new Error(`${file} exports no entry whose id is ${id}`);
-  return [id, found as Entry];
-}));
-
-/** Every recording in this folder, by its file name: `<id>.recording.json` or `<id>.<part>.recording.json`. Read as the build
- * reads it: only `synthetic: false` is a real recording. */
-const recordings = globSync('src/catalogue/*.recording.json').sort().map(file => {
-  const json = JSON.parse(readFileSync(file, 'utf8')) as Omit<Recording, 'synthetic'> & { synthetic?: unknown };
-  return { ...json, file: basename(file), synthetic: json.synthetic !== false };
-});
+const entries = await catalogueEntries();
+const recordings = catalogueRecordings();
 /** Whether a recording's file name names one of the entries: `<id>.` starts it. */
 const besideAnEntry = (file: string, ids: readonly string[]) => ids.some(id => file.startsWith(`${id}.`));
 
@@ -58,7 +45,11 @@ const request = z.strictObject({ method: method.optional(), path: template.optio
   query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional(), base: z.string().optional() });
 const shape: z.ZodType<Shape> = z.lazy(() =>
   z.union([z.enum(['string', 'integer', 'number', 'boolean', 'unknown']), z.tuple([shape]), z.record(z.string(), shape)]));
-const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
+/** Every category once: the compiler refuses one missing from `Category` or not in it. */
+const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true, code: true, monitoring: true, crm: true,
+  sales: true, mail: true, calendar: true, meetings: true, support: true, marketing: true, finance: true, hr: true,
+  storage: true, ecommerce: true, phone: true, design: true, analytics: true, search: true };
+const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 'delete']).optional(),
   params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'variables']), type: shape,
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
     description: z.string().optional() })).optional(),
@@ -70,10 +61,17 @@ const partName = z.string().regex(/^[^\s,=]+$/u, 'a `part` names one `name=value
 /** What every webhook kind may declare. */
 const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional(),
   challenge: z.strictObject({ when: when.refine(item => item.equals !== undefined || item.in !== undefined, 'a `challenge.when` compares the body value: give `equals` or `in`'), echo: z.string().min(1) }).optional() };
+const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]);
+/** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
+const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
+const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
+const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
+const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
   id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1), docs: z.string().optional(),
+  categories: z.array(z.enum(Object.keys(CATEGORIES) as [Category, ...Category[]])).optional(),
   fields: z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
     secret: z.literal(true).optional(), default: z.string().optional(),
     help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
@@ -89,7 +87,9 @@ const entrySchema = z.strictObject({
       body: z.record(z.string(), z.string("a token request's body is a flat record of templates")), json: z.literal(true).optional(), basic: z.tuple([template, template]).optional(),
       token: z.string().regex(/\S/u, "a token request's `token` is the token's path in the answer: give it, or leave it out")
         .optional() }) }),
-  ])).length(1), // one sign-in each until a provider needs two
+  ])).min(1).refine(auth => new Set(auth.map(item => item.kind)).size === auth.length, ONE_OF_EACH)
+    .refine(auth => !(auth.some(item => item.kind === 'key') && auth.some(item => item.kind === 'token')), KEY_OR_TOKEN)
+    .refine(auth => auth[0]?.kind === 'oauth2' || !auth.some(item => item.kind === 'oauth2'), OAUTH_FIRST),
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
   identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
     lowercase: z.literal(true).optional(),
@@ -127,10 +127,11 @@ const entrySchema = z.strictObject({
       ? 'a `standard` webhook takes no `header`, `signed`, `timestamp` or `prefix`: Standard Webhooks fixes them' : undefined) }),
   ]).optional(),
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(),
-      send: z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]) }),
-    // A prefix is a whole directory (`/me/`), so `/meetings` is not under `/me`.
-    z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix: z.string().regex(/^\/(?:.*\/)?$/u).optional() }),
+    z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(), send: where }),
+    z.strictObject({ kind: z.literal('page'), send: where, list: z.string().optional(), more: z.string().optional(),
+      zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional() }),
+    z.strictObject({ kind: z.literal('linkHeader'), pathPrefix }),
+    z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix }),
   ])).optional(),
   operations: z.record(z.string(), z.union([z.strictObject({ method: method.optional(), path: template, ...operationParts }),
     z.strictObject({ graphql: z.string(), ...operationParts })])).optional(),
@@ -178,6 +179,9 @@ const sentTemplates = (entry: Entry) => {
 const hmac = (entry: Entry) => (entry.webhook?.kind === 'hmac' ? entry.webhook : undefined);
 /** A webhook whose entry declares what is signed: `hmac` or `ed25519`. */
 const signing = (entry: Entry) => (entry.webhook?.kind === 'hmac' || entry.webhook?.kind === 'ed25519' ? entry.webhook : undefined);
+/** The plain fields an entry reads: in its base, or as `connection.*` in identify and `save`. */
+const plainReads = (entry: Entry) => [...placeholders(entry.http.baseUrl), ...reads(entry, 'connection.')
+  .map(name => name.slice('connection.'.length))].filter(name => plainFields(entry).includes(name));
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
   [TODO_RULE]: (entry: Entry) => !stringsIn(entry).some(text => text.includes('TODO')),
@@ -195,6 +199,10 @@ const runnable = {
     || !sentTemplates(entry).flatMap(placeholders).some(name => name === secretField(entry)),
   // Every claim an entry makes is checked against the provider's own page.
   'a `docs` link to the provider\'s page, https': (entry: Entry) => entry.docs?.startsWith('https://') === true,
+  // A connect screen and the providers page group entries by their first category.
+  '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one': (entry: Entry) => entry.categories !== undefined
+    && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
+  'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
   'an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder': (entry: Entry) => (placeholders(baseHost(entry)).length > 0
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
@@ -325,14 +333,48 @@ const runnable = {
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
+  // OAuth 2's `finishConnect` takes no plain values: the grant would be issued, then identify or a call would fail.
+  'no plain field read by an `oauth2` sign-in (its connect asks for none): a provider whose OAuth needs one (a subdomain or region) waits for a plain value at OAuth sign-in': (entry: Entry) =>
+    entry.auth[0].kind !== 'oauth2' || plainReads(entry).length === 0,
+  // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
+  "an operation on a `page` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
+    operations(entry).every(op => op.paging === undefined || entry.paging?.[op.paging]?.kind !== 'page'
+      || op.records === (entry.paging[op.paging] as { list?: string }).list),
+  // The walk sets that parameter itself on every page after the first.
+  "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)": (entry: Entry) => operations(entry).every(op => {
+    const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
+    const sent = shape !== undefined && 'send' in shape ? shape.send : undefined;
+    return sent === undefined || Object.entries(op.params ?? {}).every(([name, param]) => !(param.in in sent && sent[param.in as keyof typeof sent] === name));
+  }),
 };
 type Rule = keyof typeof runnable;
+
+/** An entry as each of its sign-ins: an entry with one sign-in as it is, one with several narrowed to each. */
+const signIns = (entry: Entry): [kind: string, one: Entry][] => entry.auth.map(({ kind }) =>
+  [kind, entry.auth.length > 1 ? signInWith(entry, kind) : entry]);
+/** The rules an entry breaks, each with the sign-in it breaks them in. */
+const broken = (entry: Entry) => signIns(entry).flatMap(([kind, one]) =>
+  (Object.keys(runnable) as Rule[]).filter(rule => !runnable[rule](one)).map(rule => `${rule} (${kind})`));
 
 describe.each(entries)('%s', (id, entry) => {
   test('matches the entry types', () => { expect(entrySchema.safeParse(entry).error).toBeUndefined(); });
   test('holds no function', () => { expect(functionsIn(entry)).toEqual([]); });
   test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(entry))).toEqual(entry); });
-  test.each(Object.keys(runnable) as Rule[])('declares %s', rule => { expect(runnable[rule](entry)).toBe(true); });
+  // Each sign-in is an entry of its own once an app picks it: every rule and the derived fake run on each, named by its
+  // kind when there are several.
+  for (const [kind, one] of signIns(entry)) {
+    const named = entry.auth.length > 1 ? ` (${kind})` : '';
+    test.each(Object.keys(runnable) as Rule[])(`declares %s${named}`, rule => { expect(runnable[rule](one)).toBe(true); });
+    // Every sign-in that sends identify, and every token sign-in, signs in on the fake derived from it: no recording needed.
+    if (one.identify?.request !== undefined || one.auth[0].kind === 'token') {
+      test.each(['good', 'bad'] as const)(`signs in on its derived fake with a %s key${named}`, async key => {
+        const { fetch } = fakeFetch(fakeProvider(one, { key: GOOD_KEY, values: kitValues(one) }));
+        const signedIn = signIn(one, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
+        if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
+        else expect((await signedIn).account === null).toBe(one.identify?.id === undefined);
+      });
+    }
+  }
   test('names only what each place allows in its templates', () => {
     // identify and save read one lookup: the id found, the token answer, a connection value (a plain field the user
     // entered, or a value `save` keeps), or a path into the identify answer. A value without braces is itself a path.
@@ -347,20 +389,11 @@ describe.each(entries)('%s', (id, entry) => {
     for (const name of placeholders(signing(entry)?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 
-  // Every entry that sends identify, and every token entry, signs in on the fake derived from it: no recording needed.
-  if (entry.identify?.request !== undefined || entry.auth[0].kind === 'token') {
-    test.each(['good', 'bad'] as const)('signs in on its derived fake with a %s key', async key => {
-      const { fetch } = fakeFetch(fakeProvider(entry, { key: GOOD_KEY, values: kitValues(entry) }));
-      const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
-      if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
-      else expect((await signedIn).account === null).toBe(entry.identify?.id === undefined);
-    });
-  }
-
-  // With a recording beside it, the sign-in replays a good and a bad key on its recordings' exchanges merged, through the
-  // check the recorder runs before it writes one: a file the recorder accepts, the table accepts.
+  // With a recording beside it, the sign-in the recorder records (`recordedSignIn`: the key or token one, else the
+  // first) replays a good and a bad key on its recordings' exchanges merged, through the check the recorder runs before it writes one: a file the recorder accepts,
+  // the table accepts.
   const [first, ...rest] = recordings.filter(({ file }) => file.startsWith(`${id}.`));
-  if ((entry.identify?.request === undefined && entry.auth[0].kind !== 'token') || first === undefined) return;
+  if ((entry.identify?.request === undefined && recordedSignIn(entry).auth[0].kind !== 'token') || first === undefined) return;
   const recording = { ...first, provider: id, exchanges: [first, ...rest].flatMap(item => item.exchanges) };
   test('replays its sign-ins: the key to an account where the entry names an id, the bad key rejected', async () => {
     expect(await replayProblem(entry, recording)).toBeNull();
@@ -396,7 +429,7 @@ test.each([
   ['compares a path to a boolean', { path: 'active', equals: false }],
 ])('a condition that %s matches the schema', (_, good) => { expect(when.safeParse(good).success).toBe(true); });
 
-const key = { id: 'k', name: 'K', docs: 'https://k.test/docs', http: { baseUrl: 'https://api.k.test' } } as const;
+const key = { id: 'k', name: 'K', docs: 'https://k.test/docs', categories: ['tasks'], http: { baseUrl: 'https://api.k.test' } } as const;
 const oauth2 = { ...key, auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }] } as const;
 const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
 /** A token entry with Zoom's shape: a plain client id, one secret, Basic client authentication. */
@@ -407,6 +440,12 @@ test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
   [TODO_RULE, defineProvider({ ...key, docs: 'https://TODO', auth: [{ kind: 'key' }], fields: [secret] })],
+  ['`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one', defineProvider({ id: 'k', name: 'K', docs: key.docs, http: key.http,
+    auth: [{ kind: 'key' }], fields: [secret] })],
+  ...([[], ['tasks', 'docs', 'chat'], ['tasks', 'tasks']] as const).map((categories): [Rule, Entry] => [
+    '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], categories })]),
+  ...([{ path: '/tasks' }, { path: '/tasks', docs: 'http://k.test/tasks' }] as const).map((op): [Rule, Entry] => [
+    'a `docs` page on every operation, https', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations: { 'tasks.list': op } })]),
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
@@ -541,6 +580,18 @@ test.each<[Rule, Entry]>([
     .map((when): [Rule, Entry] => ["a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
         webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when, echo: 'type' } } })]),
+  ["an operation on a `page` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+    auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' }, list: 'items' } },
+    operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'result.items',
+      result: { result: { items: [{ id: 'string' }] } } } } })],
+  ["an operation on a `page` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+    auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' } } },
+    operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'items', result: { items: [{ id: 'string' }] } } } })],
+  ...([[{ kind: 'page', send: { query: 'page' } }, 'page', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'cursor', 'body']] as const)
+    .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)",
+      defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
+        operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
+          params: { [name]: { in: place, type: 'integer' } } } } })]),
   // The compiler refuses these through `defineProvider`; they are entries read as data.
   ['an `operations[].paging` name declared in `paging`', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { list: { path: '/items', paging: 'cursor' } } }],
@@ -572,6 +623,47 @@ test.each(['', '  '])('a token request whose `token` path is %j fails the schema
   const bad = { ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, token } }] };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
     .toEqual(["a token request's `token` is the token's path in the answer: give it, or leave it out"]);
+});
+
+test.each<[string, Record<string, unknown>, string]>([
+  ['a key before OAuth 2', { fields: [secret], scopes: { default: [] }, auth: [{ kind: 'key' }, oauth2.auth[0]] }, OAUTH_FIRST],
+  ['two key sign-ins', { fields: [secret], auth: [{ kind: 'key' }, { kind: 'key', send: { header: 'x-api-key' } }] }, ONE_OF_EACH],
+  ['a key beside a token', { fields: [secret], auth: [{ kind: 'key' },
+    { kind: 'token', request: { url: 'https://k.test/token', body: { key: '{apiKey}' } } }] }, KEY_OR_TOKEN],
+])('an entry with %s fails the schema, with what to fix', (_, parts, message) => {
+  expect(entrySchema.safeParse({ ...key, ...parts }).error?.issues.map(issue => issue.message)).toEqual([message]);
+});
+
+const OAUTH_PLAIN = 'no plain field read by an `oauth2` sign-in (its connect asks for none): a provider whose OAuth needs one (a subdomain or region) waits for a plain value at OAuth sign-in';
+test("pnpm new's unfilled skeleton breaks only rules that say what to fill: the TODOs and the categories", async () => {
+  const folder = mkdtempSync(fileURLToPath(new URL('../../.scaffold-test-', import.meta.url)));
+  try {
+    mkdirSync(join(folder, 'src/catalogue'), { recursive: true });
+    spawnSync(process.execPath, [fileURLToPath(new URL('../../scripts/new.mjs', import.meta.url)), 'acme'], { cwd: folder });
+    const file = join(folder, 'src/catalogue/acme.ts');
+    writeFileSync(file, readFileSync(file, 'utf8').replace("'../catalogue.js'", `'${new URL('../catalogue.ts', import.meta.url).href}'`));
+    const { acme } = await import(pathToFileURL(file).href) as { acme: Entry };
+    expect(entrySchema.safeParse(acme).error).toBeUndefined();
+    expect(broken(acme)).toEqual([`${TODO_RULE} (key)`, '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one (key)']);
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+test.each<[string, Entry, string[]]>([
+  // Narrowing a key entry would drop these: a one-sign-in entry is checked as it is.
+  ['a key entry with scopes and an RFC 7009 revoke', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], scopes: { default: ['read'] },
+    revoke: { url: 'https://k.test/revoke', token: ['refresh'] } }), ['no `scopes` or RFC 7009 `revoke` on a key or token entry (key)']],
+  ['an OAuth entry with two secret fields', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [secret, { name: 'other', title: 'Other', secret: true }] }),
+    ['at most one secret field in `fields`, exactly one on a key or token entry (oauth2)']],
+  ['a plain field in the base beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret, { name: 'site', title: 'Site' }], scopes: { default: [] },
+    http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [oauth2.auth[0], { kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }] }),
+    [`${OAUTH_PLAIN} (oauth2)`]],
+  ['a plain field identify reads on an OAuth entry', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'site', title: 'Site' }],
+    identify: { request: { path: '/me' }, id: 'id', name: '{connection.site}' } }), [`${OAUTH_PLAIN} (oauth2)`]],
+])('%s breaks only its rule', (_, entry, rules) => { expect(broken(entry)).toEqual(rules); });
+
+test('a Basic email the key alone reads, beside OAuth 2 and a key, breaks no rule', () => {
+  expect(broken(defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }], scopes: { default: [] },
+    auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }))).toEqual([]);
 });
 
 test('a token request whose body holds an object fails the schema, with what to fix', () => {
@@ -624,6 +716,19 @@ test('an `ed25519` webhook with an unknown key such as `signd` gets the ordinary
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(['Unrecognized key: "signd"']);
 });
 
+test.each<[Record<string, unknown>, string]>([
+  [{ kind: 'cursor', next: 'next', send: { query: 'cursor' }, zeroBased: true }, 'Unrecognized key: "zeroBased"'],
+  [{ kind: 'nextUrl', next: 'next', zeroBased: true }, 'Unrecognized key: "zeroBased"'],
+  [{ kind: 'page', send: { query: 'page' }, zeroBased: false }, '`zeroBased` is `true` or left out (the first page is 1)'],
+  [{ kind: 'linkHeader', zeroBased: true }, 'Unrecognized key: "zeroBased"'],
+  [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
+  ...['me', '/me', 'me/'].flatMap(pathPrefix => [{ kind: 'linkHeader', pathPrefix }, { kind: 'nextUrl', next: 'next', pathPrefix }]
+    .map((shape): [Record<string, unknown>, string] => [shape, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)'])),
+])('a paging shape %j fails the schema, with what to fix', (shape, message) => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape } };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+});
+
 test.each([...['', 'v 1', 'v1,t', 'v1=', '\tv1'].map(part => ({ part })), ...['t,', 't=', 't t'].map(name => ({ part: 'v1', timestamp: { part: name } }))])(
   'an `hmac` webhook with %j fails the schema, with what to fix', parts => {
     const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'hmac', header: 'stripe-signature', ...parts } };
@@ -653,16 +758,16 @@ test("a base with a host from a field's choices and a path segment from a saved 
 
 test('an entry whose operations keep every rule passes them all', () => {
   const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
-    paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } } },
+    paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } }, links: { kind: 'linkHeader', pathPrefix: '/pages/' } },
     operations: {
-      'pages.list': { path: '/pages/{space}', paging: 'cursor', records: 'data.items',
+      'pages.list': { docs: 'https://k.test/docs/pages', path: '/pages/{space}', paging: 'cursor', records: 'data.items',
         params: { space: { in: 'path', type: 'string', required: true }, q: { in: 'query', type: 'string' } },
         result: { data: { items: [{ id: 'string' }] }, 'next?': 'string' } },
-      'pages.events': { path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
-      'requests.create': { method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
+      'pages.events': { docs: 'https://k.test/docs/events', path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
+      'requests.create': { docs: 'https://k.test/docs/requests', method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
         state: { in: 'query', type: 'string', enum: ['open'] }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
-      'then.later': { path: '/later' },
-      me: { graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
+      'then.later': { docs: 'https://k.test/docs/later', path: '/later' },
+      me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
   expect(entrySchema.safeParse(good).error).toBeUndefined();

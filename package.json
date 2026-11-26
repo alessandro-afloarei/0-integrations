@@ -211,6 +211,7 @@
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && node scripts/catalogue.mjs",
     "check": "tsc --noEmit && eslint . --max-warnings 0 && knip && vitest run",
     "new": "node scripts/new.mjs",
+    "providers": "vitest run src/providers-page.test.ts -u",
     "prepack": "pnpm build"
   },
   "devDependencies": {

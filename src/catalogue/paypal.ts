@@ -4,6 +4,7 @@ import { defineProvider } from '../catalogue.js';
  * again when it runs out. The account is the app the token answer names. */
 export const paypal = defineProvider({
   id: 'paypal', name: 'PayPal', docs: 'https://developer.paypal.com/api/rest/authentication/',
+  categories: ['finance'],
   fields: [{ name: 'apiHost', title: 'Environment', choices: ['api-m.paypal.com', 'api-m.sandbox.paypal.com'],
     default: 'api-m.paypal.com', help: 'Live, or the sandbox for testing.' },
   { name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Secret', secret: true }],

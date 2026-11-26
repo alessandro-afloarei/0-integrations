@@ -4,6 +4,7 @@ import { defineProvider } from '../catalogue.js';
 export const microsoft = defineProvider({
   id: 'microsoft', name: 'Microsoft',
   docs: 'https://learn.microsoft.com/en-us/graph/auth-v2-user',
+  categories: ['mail', 'calendar'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
     tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token', authorizeParams: { response_type: 'code', response_mode: 'query' } }],
   scopes: { default: ['offline_access', 'User.Read', 'Mail.Read', 'Calendars.Read'] },

@@ -25,8 +25,10 @@ type CallArgs<O> = [args: Args<O>, options?: Pick<RequestOptions, 'signal'> & (O
 type Get<T, P> = P extends keyof T ? T[P] : P extends `${infer H}.${infer R}` ? H extends keyof T ? Get<T[H], R> : never : never;
 /** An operation's answer: its `result`'s type, else unknown. */
 type Result<O> = O extends { result: infer S } ? TypeOf<S> : unknown;
-/** What a paged operation yields: an element of the list at `records`, else each page's whole answer. */
-type Item<O> = O extends { records: infer P } ? Get<Result<O>, P> extends readonly (infer E)[] ? E : unknown : Result<O>;
+/** What a paged operation yields: an element of the list at `records`, else of a list `result`, else each page's whole
+ * answer. */
+type Item<O> = O extends { records: infer P } ? Get<Result<O>, P> extends readonly (infer E)[] ? E : unknown
+  : O extends { result: readonly [infer S] } ? TypeOf<S> : Result<O>;
 /** An operation as a method: a paged one yields its records. */
 type MethodOf<O> = (...call: Record<string, never> extends Args<O> ? Partial<CallArgs<O>> : CallArgs<O>) => O extends { paging: string }
   ? AsyncGenerator<Item<O>, void, undefined> : Promise<Result<O> | (O extends { notFound: 'null' } ? null : never)>;
@@ -134,13 +136,14 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
       };
     }
     const shape = op.notFound === undefined ? pagingOf(paging) : refuse(`not_found_paged: ${id}`);
-    const list = records === undefined || result === undefined ? ['unknown'] as const : shapeAt(result, records);
-    const item = Array.isArray(list) ? (list as readonly [Shape])[0] : refuse(`records_unshaped: ${id}`);
-    // Each page's records, a bad one skipped and reported; without `records`, each page's whole answer.
+    // The records: the list at `records`, or a list `result` itself (a list at the answer's top level).
+    const list = records === undefined ? result : result === undefined ? ['unknown'] as const : shapeAt(result, records);
+    const item = Array.isArray(list) ? (list as readonly [Shape])[0] : records === undefined ? undefined : refuse(`records_unshaped: ${id}`);
+    // Each page's records, a bad one skipped and reported; with none, each page's whole answer.
     return async function* (args: Given = {}, { signal, onSkipped }: Pick<RequestOptions, 'signal'> & Paged = {}) {
       for await (const answer of walk(http, shape, ...operationRequest(id, op, args, signal))) {
-        if (records === undefined) { yield result === undefined ? answer : parseAnswer(schemaOf(result), answer); continue; }
-        const found = readPath(answer, records);
+        if (item === undefined) { yield result === undefined ? answer : parseAnswer(schemaOf(result), answer); continue; }
+        const found = records === undefined ? answer : readPath(answer, records);
         if (!Array.isArray(found)) throw new ProviderHttpError('invalid_response', null);
         const page = parseEntries(schemaOf(item), found);
         if (page.skipped.length > 0) onSkipped?.(page.skipped);

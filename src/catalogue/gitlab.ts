@@ -5,6 +5,7 @@ import { defineProvider } from '../catalogue.js';
  * whose id is local to that host: an app keys the connection by host and account id. */
 export const gitlab = defineProvider({
   id: 'gitlab', name: 'GitLab', docs: 'https://docs.gitlab.com/api/rest/authentication/',
+  categories: ['code'],
   fields: [{ name: 'host', title: 'GitLab host', default: 'gitlab.com', help: 'gitlab.com, or the host name of your own GitLab, with no port.' },
     { name: 'accessToken', title: 'Personal access token', secret: true }],
   auth: [{ kind: 'key', send: { header: 'private-token' } }],

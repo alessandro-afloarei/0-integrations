@@ -5,10 +5,12 @@ import { defineProvider } from '../catalogue.js';
 export const aircall = defineProvider({
   id: 'aircall', name: 'Aircall',
   docs: 'https://developers.aircall.io/api-references',
+  categories: ['phone'],
   fields: [{ name: 'apiId', title: 'API ID' }, { name: 'apiToken', title: 'API token', secret: true }],
   auth: [{ kind: 'key', send: { basic: ['{apiId}', '{apiToken}'] } }],
   http: { baseUrl: 'https://api.aircall.io/v1', minIntervalMs: 500, retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/company' }, id: '{connection.apiId}', name: 'company.name' },
-  operations: { 'calls.transcript': { path: '/calls/{callId}/transcription',
+  operations: { 'calls.transcript': { docs: 'https://developers.aircall.io/api-references#retrieve-a-transcription',
+    path: '/calls/{callId}/transcription',
     params: { callId: { in: 'path', type: 'integer', required: true } }, result: 'unknown', notFound: 'null' } },
 });

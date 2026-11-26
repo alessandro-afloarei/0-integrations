@@ -111,13 +111,15 @@ read, as `TypeError('url_outside_origin')` when it would change the host and `Ty
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
-  A cursor that comes back is `invalid_response` (`cursor_repeated`), and a next link outside the base's path is
-  `invalid_response` (`next_link_foreign`).
+  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered page that repeats
+  the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
+  base's origin (Shortcut's search answers a path and query string); one outside the base's origin, path or
+  `pathPrefix` is `invalid_response` (`next_link_foreign`), and nothing is sent to it.
 
 ## Operations
 
-An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pages.markdown(args, { signal })`. Three
-entries declare operations today: notion `pages.markdown`, fireflies `user` and aircall `calls.transcript`.
+An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pages.markdown(args, { signal })`.
+[providers](../providers.md) lists each entry's operations.
 
 - Each argument is checked by its declared type before anything is sent: `TypeError('param_missing: <name>')` or
   `TypeError('param_invalid: <name>')`. An argument that is not declared, or is `undefined`, is not sent. An operation
@@ -125,8 +127,8 @@ entries declare operations today: notion `pages.markdown`, fireflies `user` and 
 - The answer is read by the operation's `result`: undeclared keys are dropped, and an answer that does not fit is
   `invalid_response`. With no `result` the answer is `unknown`, and a 204 answers `null`; any other answer without JSON
   is `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
-- A paged operation is read with `for await`. It yields the records at `records`, page by page; a record that does not
-  fit is skipped, and the `onSkipped(ids)` option hears once from each page that skipped any.
+- A paged operation is read with `for await`. It yields the records at `records`, or, with no `records`, the elements of
+  a list `result` (an answer that is a list), page by page; a record that does not fit is skipped, and the `onSkipped(ids)` option hears once from each page that skipped any.
 
 The client's own calls take some names. An operation id whose first dot-separated segment equals `json`, `request` or
 `paginate` (`requests.list` is fine), an id `then`, an id with an empty segment, and an id that is a dotted prefix of

@@ -66,7 +66,13 @@ export type Webhook = (
   | { kind: 'standard' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 export type Where = { query: string } | { body: string };
-export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path;
+/** `page`: no page number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the
+ * answer itself when absent) is empty; a `list` that is missing or no list is `invalid_response`. `linkHeader` and
+ * `nextUrl`: the next link is the `Link` header's `rel="next"`, or the value at `next`; a path is read on the base's
+ * origin, and the link must sit under the base's path and `pathPrefix`. */
+export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
+  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true }
+  | { kind: 'linkHeader'; pathPrefix?: string } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
   pathPrefix?: string };
 /** A value's declared type. In an object, a key ending in `?` may be missing or null, and is read as absent. */
@@ -75,11 +81,15 @@ export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | re
 export type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
 /** A named read or write. `kind` defaults from the method; `paging` names an entry's shape, `records` the list in a page. */
-export type Operation = ({ method?: Method; path: Template } | { graphql: string }) & {
+export type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Readonly<Record<string, Param>>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null' };
-/** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. */
-export type Entry = { id: string; name: string; docs?: string; fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
+/** What a provider is for: a closed list of 20; a new value arrives with the first entry that needs it. */
+export type Category = 'tasks' | 'docs' | 'chat' | 'code' | 'monitoring' | 'crm' | 'sales' | 'mail' | 'calendar' | 'meetings'
+  | 'support' | 'marketing' | 'finance' | 'hr' | 'storage' | 'ecommerce' | 'phone' | 'design' | 'analytics' | 'search';
+/** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. `categories`: the first is the main one. */
+export type Entry = { id: string; name: string; docs?: string; categories?: readonly Category[];
+  fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
   scopes?: { default: readonly string[]; requireGranted?: true }; identify?: Identify;
   save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook;
   paging?: Readonly<Record<string, Paging>>; operations?: Readonly<Record<string, Operation>> };
@@ -106,3 +116,18 @@ type Declared<Ops, Pagings> = { [K in keyof Ops]: (Ops[K] extends { path: infer 
 /** One provider, as plain data. The literal's type is kept, so a client's types are inferred from it. */
 export function defineProvider<const D extends Entry>(
   data: D & { operations?: Unreserved<D['operations']> & Declared<D['operations'], D['paging']> }): D { return data; }
+
+type Kinds<E extends Entry> = E['auth'][number]['kind'];
+/** An entry narrowed to one sign-in: `scopes` and `revoke` belong to OAuth 2 alone, so a key or token sign-in drops them.
+ * A union of kinds gives a union of narrowings, each with what its sign-in has. */
+export type SignIn<E extends Entry, K extends Kinds<E>> = K extends unknown
+  ? Omit<E, 'auth' | (K extends 'oauth2' ? never : 'scopes' | 'revoke')> & { auth: readonly [Extract<E['auth'][number], { kind: K }>] }
+  : never;
+
+/** The entry with `auth` narrowed to its sign-in of that kind; every engine function reads the first sign-in. */
+export function signInWith<const E extends Entry, K extends Kinds<E>>(entry: E, kind: K): SignIn<E, K> {
+  const auth = entry.auth.find(item => item.kind === kind);
+  if (auth === undefined) throw new TypeError(`sign_in_unknown: ${entry.id} ${kind}`);
+  const kept = Object.entries(entry).filter(([name]) => kind === 'oauth2' || (name !== 'scopes' && name !== 'revoke'));
+  return { ...Object.fromEntries(kept), auth: [auth] } as unknown as SignIn<E, K>;
+}

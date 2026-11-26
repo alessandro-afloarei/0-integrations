@@ -20,10 +20,11 @@ test('writes src/catalogue/<id>.ts, a key entry whose every unknown is TODO, and
   const { status, stdout } = run('acme');
   expect(status).toBe(0);
   expect(stdout).toContain('src/catalogue/acme.ts');
+  expect(stdout).toContain('pnpm providers && pnpm check');
   const entry = readFileSync(join(folder, 'src/catalogue/acme.ts'), 'utf8');
   expect(entry).toContain("export const acme = defineProvider({");
   expect(entry).toContain("id: 'acme'");
-  expect(entry).toContain("docs: 'https://TODO'");
+  expect(entry).toContain("docs: 'https://TODO', categories: []");
   expect(files()).toEqual(['src', 'src/catalogue', 'src/catalogue/acme.ts']);
 });
 

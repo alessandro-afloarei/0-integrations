@@ -61,6 +61,18 @@ type CustomFetch = NonNullable<oauth.HttpRequestOptions<'POST', URLSearchParams>
 const jsonBodies = (fetch: typeof globalThis.fetch): CustomFetch => (url, options) => fetch(url, { ...options,
   headers: { ...options.headers, 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(options.body)) });
 
+/** A token answer that states no `token_type` is read as Bearer, as most OAuth clients read it (ClickUp's states none).
+ * Only a 2xx answer to a grant (an exchange or a refresh) is read; a revoke sends no `grant_type`. */
+const bearerByDefault = (send: CustomFetch): CustomFetch => async (url, options) => {
+  const response = await send(url, options);
+  if (!response.ok || !options.body.has('grant_type')) return response;
+  const body: unknown = await response.clone().json().catch(() => null);
+  if (typeof body !== 'object' || body === null || !('access_token' in body) || 'token_type' in body) return response;
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  return Response.json({ ...body, token_type: 'bearer' }, { status: response.status, headers });
+};
+
 /** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. */
 function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThis.fetch, refresh = false) {
   const config = oauth2(entry);
@@ -76,7 +88,7 @@ function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThi
   const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
     config, as, client, auth, secrets: [credentials.clientSecret, ...(basic === undefined ? [] : [basic])],
-    options: { [oauth.customFetch]: config.json ? jsonBodies(fetch) : fetch, signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
+    options: { [oauth.customFetch]: bearerByDefault(config.json ? jsonBodies(fetch) : fetch), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
     processing: { recognizedTokenTypes: Object.fromEntries((config.tokenTypes ?? []).map(type => [type.toLowerCase(), () => undefined])) },
   };
 }

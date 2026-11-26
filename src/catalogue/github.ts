@@ -7,6 +7,7 @@ import { defineProvider } from '../catalogue.js';
 export const github = defineProvider({
   id: 'github', name: 'GitHub', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api',
+  categories: ['code'],
   auth: [{ kind: 'key' }],
   // The latest API version: it drops `assignee` and `merge_commit_sha`, which the client never reads. GitHub refuses a
   // request without a User-Agent.

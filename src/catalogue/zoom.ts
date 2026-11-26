@@ -4,6 +4,7 @@ import { defineProvider } from '../catalogue.js';
  * The account is the account ID entered. */
 export const zoom = defineProvider({
   id: 'zoom', name: 'Zoom', docs: 'https://developers.zoom.us/docs/internal-apps/s2s-oauth/',
+  categories: ['meetings'],
   fields: [{ name: 'accountId', title: 'Account ID' }, { name: 'clientId', title: 'Client ID' },
     { name: 'clientSecret', title: 'Client secret', secret: true }],
   auth: [{ kind: 'token', request: { url: 'https://zoom.us/oauth/token',

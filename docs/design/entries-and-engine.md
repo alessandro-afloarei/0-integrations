@@ -131,7 +131,8 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 | Field | What it declares | Default |
 |---|---|---|
-| `id`, `name`, `categories` | Identity and metadata. | — |
+| `id`, `name` | Identity. | — |
+| `categories` | What the provider is for: one or two of a closed list, the first the main one. Every library entry has them. The list: `tasks`, `docs`, `chat`, `code`, `monitoring`, `crm`, `sales`, `mail`, `calendar`, `meetings`, `support`, `marketing`, `finance`, `hr`, `storage`, `ecommerce`, `phone`, `design`, `analytics`, `search`: a closed list of 20; a new value arrives with the first entry that needs it. | — |
 | `docs` | The provider's own page that states what the entry declares, https. Every library entry has one. | — |
 | `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default` in `finishConnect`, the one place a default is applied; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
 | `auth` | A list of sign-in alternatives (below). | — |
@@ -203,10 +204,9 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 
 #### Arriving later
 
-Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
-`oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
-`epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
-and `Where.variables`.
+Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
+`Operation.base`, placeholders in `identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs`
+reset unit, the paging kind `offset`, `Size`, and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -273,6 +273,42 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     whatever `values` holds.
 - A sign-in the provider hosts on its own page is not a kind: the entry is a `key` entry for the app's own key, and the
   provider's module offers the hosted link and the account lookup as calls.
+- A token answer that states no `token_type` is read as Bearer, as most OAuth clients read it (ClickUp's states none);
+  one that states another type is refused unless the entry lists it in `tokenTypes`.
+
+#### Sign-in alternatives
+
+`auth` is a list of sign-in alternatives, the first the default. Linear's is OAuth 2, whose token goes as Bearer, then
+its personal key, sent bare in `authorization`, to the same GraphQL endpoint and the same `viewer` query.
+
+1. `signInWith(entry, kind)` (from `0-integrations/catalogue`) returns a new entry whose `auth` is the one sign-in of
+   that `kind`, else throws `TypeError('sign_in_unknown: <entry id> <kind>')`. Nothing else in the engine changes: every
+   engine function keeps reading `entry.auth[0]`, so a narrowed entry is a one-sign-in entry.
+2. An alternative is chosen by its `kind`. An entry holds at most one sign-in of each kind, and never `key` beside
+   `token`.
+3. An entry used whole is its first sign-in. Library entries list OAuth 2 first, then the key or token: the library is
+   for apps that connect other people's accounts, which is what providers ask OAuth 2 for (ClickUp: "OAuth 2.0:
+   Required for building apps for other users"). The key is `signInWith(entry, 'key')`. The rule constrains only an
+   entry with two sign-ins.
+4. A narrowed entry keeps every field: an OAuth 2 connect reads none (the grant is the secret, and its `finishConnect`
+   takes no form). An `oauth2` sign-in reads no plain field, in its base or its lookups: its `finishConnect` takes no
+   `values`, so the grant would be issued and the first call would fail. A provider whose OAuth needs one (a subdomain or
+   region chosen before the redirect) waits. A plain field only the key reads (a Basic email) is the key's alone.
+5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `identify`, `save`,
+   `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
+6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
+   per sign-in: an entry with several on `signInWith(entry, kind)`, each test named with its kind, and an entry with
+   one as it is. The replay runs on the recorded sign-in only (rule 9).
+7. The schema takes `auth` of one or more sign-ins with unique kinds, not `key` with `token`, and OAuth 2 first when
+   there is one.
+8. `catalogue.json` holds the entry as declared, every sign-in in its order; the providers page's Sign-in column lists
+   their kinds in that order.
+9. A recording is of the entry's key or token sign-in when it has one, else of its first (`recordedSignIn`, in the
+   test support): the recorder records it with a test account's pasted key (`RECORD_KEY`), the table test replays it,
+   and the entry is `recorded` when that sign-in is. An OAuth 2 alternative is proven by its derived fake, and by a
+   recording once the recorder learns the OAuth exchange.
+10. An app keeps the kind it chose with the connection (the secret's shape already differs: a grant, or the key's
+    fields) and narrows again for every later `client`, `refreshGrant` or `revokeGrant`.
 
 ### `identify` and `save`
 
@@ -362,21 +398,35 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
   | { kind: 'offset'; send: Where; size: Size }
-  | { kind: 'page'; send: Where; size?: Size; more?: Path }
-  | { kind: 'linkHeader'; size?: Size }
+  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
+  | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
-type Where = { query: string } | { body: string } | { variables: string };
+type Where = { query: string } | { body: string };
 type Size = { send: Where; value?: number };
 ```
 
-The engine owns the stop rules, and entries hold no stop expressions:
+The engine owns the stop rules, and entries hold no stop expressions. An operation declares no parameter in the place
+a shape's `send` writes: the walk sends it.
 
 - `cursor`: with `more`, stop when it is falsy; a truthy `more` with a blank cursor is `invalid_response`
   (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`.
 - `offset`: sends 0 first and stops on a page shorter than the size.
-- `page`: sends nothing on the first request, then 2, 3 and so on. It stops on a falsy `more`, or an empty page.
-- `linkHeader` follows `rel="next"`. `nextUrl` follows a full URL in the body. Both stay on the provider's origin, and
-  `nextUrl` under `pathPrefix`, counted from the base URL's path. A link that leaves is `invalid_response`.
+- `page`: sends nothing on the first request, then 2, 3 and so on (with `zeroBased`, 1, 2 and so on), in `send`'s
+  place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
+  `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
+  `invalid_response` (`missing_fields`): a malformed answer never reads as an empty list. A page whose list
+  equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
+  number would otherwise never end. An operation on a `page` shape names the shape's `list` as its `records` (both
+  absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
+- `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
+  answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
+  `nextUrl` follows the link at `next` in the body, and stops when there is none.
+- One rule for a next link, from either: one that starts with a single `/` (Shortcut's search answers "the URL path
+  and query string for the next page") is read on the base's origin; a full URL is read as it is. Either must then stay on the
+  base's origin and under the base's path and `pathPrefix` (a whole directory counted from the base URL's path), read
+  as it resolves; else it is `invalid_response` (`next_link_foreign`) before anything is sent to it. `//host/…`,
+  `/\host/…`, another origin, `/../x` and a percent-encoded dot segment are refused. A link that comes back is
+  `cursor_repeated`, through the one `paginate` guard.
 
 A module keeps its own public cursor and builds its own requests, and reads its next cursor through its entry's shape,
 so its stop rules are the engine's. A module whose cursor is not a provider's cursor (a page number, a restart point,
@@ -439,7 +489,7 @@ provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft 
 ### `operations`
 
 ```ts
-type Operation = ({ method?: Method; path: Template } | { graphql: string }) & {
+type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Record<string, Param>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null'; base?: string };
 type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
@@ -447,6 +497,8 @@ type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; require
 type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
 ```
 
+- `docs` is the provider's page that states the operation's method, path, parameters and answer, https. Every operation
+  of a library entry has one.
 - An operation's key is its id (`'issues.create'`). `kind` defaults from the method: GET is a read, DELETE a delete,
   anything else a write. A GraphQL operation is a POST, so a write unless it says `kind: 'read'`. A search sent as POST
   says `kind: 'read'`: the engine retries only a call marked idempotent, a GET by default and an operation of
@@ -470,7 +522,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   the base.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
-  any, with their `id`s (or `null`). Without `records` it yields each page's whole answer.
+  any, with their `id`s (or `null`). Without `records`, a list `result` is the records themselves (a list at the answer's
+  top level, Buildkite's) and is read the same way; any other `result` yields each page's whole answer.
 - There are no sync concepts here: no parent and child streams, no incremental cursors, no transforms. An app calls an
   operation with the parent's id.
 
@@ -479,6 +532,71 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 There are no hooks, and `defineProvider` takes one argument. What an entry cannot say is a call of the provider's
 module: a hosted sign-in link and a two-request account lookup are calls of that provider's module.
 A hook is added only when a provider's sign-in or identity can be neither data nor a module call.
+
+## Breadth entries
+
+The catalogue grows in batches of entries with no module. Each is written by the same rules, so two people reading the
+same docs write the same entry.
+
+**Every fact from the provider's own page.** Each value an entry declares (the sign-in and how the credential travels,
+the base and its hosts, identify's request and paths, each operation's method, path, parameters and result keys,
+paging, the error code path, rate-limit numbers, the webhook scheme) is read from the provider's own documentation.
+Its URL is in the entry: the entry's `docs` (sign-in and identify), the operation's `docs`, or, for a fact on another
+page (a rate limit, regions, a webhook, an error format), the entry's leading comment. What cannot be cited is left
+out: a smaller true entry beats a larger guessed one. What the engine cannot say is left out too, never forced into a
+wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
+
+**Sign-in.** Every sign-in the provider documents, in one pass: its self-serve OAuth 2 authorization code grant
+(`oauth2`) first, when it reaches the key's base and `identify` and reads no plain field, then its personal key or token
+(`key`, its `send` as the docs show it); a documented one-request token (`token`) takes the key's place when there is
+no key. [Sign-in alternatives](#sign-in-alternatives) gives the rules. When the provider's own rules say an app for
+other people must use OAuth, the key's `help` says the key is for the person's own account, and a provider whose OAuth
+2 cannot be declared yet is not declared with a key alone: it goes on the waiting list.
+
+- `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
+  credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
+  scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host` with `http.host: '*'`; a documented list of regional
+  hosts on one domain is `choices` with `http.host: '*.<domain>'`.
+- `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
+- `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
+  authorization, the refresh token goes first.
+- `identify`: the documented request that answers who the credential is, `id` its id path, `name` its display name,
+  then its email. With none, a credential check with no `id` on the cheapest read the credential can always make.
+- `http`: `headers` for every header the docs say each request needs, `content-type` included, and no other; `retry: {}` when the docs state a 429 or a
+  `Retry-After`, with `maxWaitMs` and `defaultWaitMs` only from stated numbers; `minIntervalMs` only from a stated
+  per-credential limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
+  limit answer.
+- `errors.detail` only for a documented machine code, never a human message.
+- `paging`: one named shape per way the declared lists page. A list the engine cannot page is declared unpaged, its
+  paging parameters ordinary parameters and its paging fields in its `result`.
+- `webhook` only for a scheme the engine has, every part cited.
+
+**Operations: the category's template, no more.** An entry declares each operation of its main category's template
+that the provider documents as one plain request, and nothing else. Its id is `<noun>.<verb>`: the noun the provider's
+own plural in lowerCamelCase (`tasks`, `cards`, `pullRequests`), the verb one of `list`, `get`, `create`, `update` and
+`search` (`search` beside `list` when the docs give the object a search endpoint, in its place when that is the only
+way to list it). No `delete`.
+
+| Category | Template |
+|---|---|
+| `tasks` | `<items>.list`, `<items>.get`, `<items>.create`, `<items>.update`, `<containers>.list` |
+| `docs` | `<pages>.list` (or `.search`), `<pages>.get`, `<pages>.create`, `<pages>.update`, `<spaces>.list` |
+| `chat` | `<channels>.list`, `<messages>.list`, `<messages>.create`, `<users>.list` |
+| `code` | source control: `repositories.list`, `repositories.get`, `pullRequests.list`, `pullRequests.get`, `pullRequests.create`; CI and deploys: `<runs>.list`, `<runs>.get`, `<runs>.create`, `<projects>.list` |
+| `monitoring` | `<issues>.list`, `<issues>.get`, `<issues>.update`, `<projects>.list`; incident tools add `<incidents>.create` |
+
+A category gains its template with the batch that first writes it.
+
+**Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
+its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record
+(JSON:API's `attributes` counts as one). A key is required only when the docs explicitly mark it required (a
+`required` list, words saying so, a non-null `!` in a published GraphQL schema), or it is the record's id; a
+non-nullable type or an example value is not enough. Every other key ends in `?`; the envelope a list is read from stays
+required. A type the docs do not state, a polymorphic value (rich text, custom fields) and a map keyed by ids
+are `'unknown'`. A `get`, `create` and `update` declare the same record as the list's element. An answer the docs show
+only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
+it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
+say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
 
 ## The engine
 
@@ -522,7 +640,8 @@ and writes `dist/catalogue.json`.
 
 One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the folder:
 
-1. **Shape.** The entry matches the schema. It holds no function. Every URL is https. Every placeholder names a
+1. **Shape.** The entry matches the schema. It holds no function. Every URL is https. It has one or two unique
+   `categories` and an https `docs` page, as does each of its operations. Every placeholder names a
    declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip. No string
    holds `TODO`, what `pnpm new` leaves for each unknown.
 2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): a `token`
@@ -532,8 +651,8 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
 3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
    `./testing`) answers identify, a `token` entry's token request and each operation the app answers, filling the base
    and the credential with the engine's own functions, and comparing a token request with the one the engine sends for
-   the good key. Every entry that sends a request to sign in (an identify request, or a `token` entry's token request)
-   signs in on it with a good key and is `rejected` with a bad one, with no recording.
+   the good key. Every sign-in of an entry that sends a request to sign in (an identify request, or a `token` sign-in's
+   token request) signs in on it with a good key and is `rejected` with a bad one, with no recording.
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.
 
@@ -597,8 +716,8 @@ its docs, and engine tests as proof:
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
 code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
-authorize and token URLs (Shopify); `Operation.base`; placeholders in `bases`; `{ value, title }` choices;
-`categories`; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+authorize and token URLs (Shopify; Sentry, Outline and Mattermost for a host the person types); a base per sign-in
+(Confluence's and Wrike's OAuth 2 reach another base than their key); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
 (Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
 
 Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments

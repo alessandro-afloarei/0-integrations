@@ -23,29 +23,56 @@ one takes five steps:
 1. `pnpm new <id>` writes the entry's skeleton, a key entry whose every unknown is `TODO`. It never overwrites a file.
 2. Fill it from the provider's own documentation, and put the page that states what the entry declares in `docs`.
    State only what differs from the defaults: [catalogue](docs/modules/catalogue.md) lists every field, and the
-   design's [`auth` section](docs/design/entries-and-engine.md#auth) gives every sign-in rule. Start from the entry
-   of the same sign-in kind: a key, `src/catalogue/serpapi.ts`; an OAuth 2 grant, `src/catalogue/figma.ts` (drop the
-   skeleton's secret field: the grant is the secret); a token request, `src/catalogue/zoom.ts`. Write every header name
-   in lowercase (`x-api-key`).
-3. `pnpm check`. The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake
-   derived from it (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry
-   has an identify request or a token request.
+   design's [`auth` section](docs/design/entries-and-engine.md#auth) gives every sign-in rule. Declare every sign-in
+   the provider documents in one pass: its OAuth 2 grant first, when it reaches the same base and the same `identify`,
+   then its key or token ([sign-in alternatives](docs/design/entries-and-engine.md#sign-in-alternatives)). Start from
+   the entry of the same sign-ins: a key, `src/catalogue/serpapi.ts`; OAuth 2 and a key, `src/catalogue/linear.ts`; an
+   OAuth 2 grant alone, `src/catalogue/figma.ts` (drop the skeleton's secret field: the grant is the secret); a token
+   request, `src/catalogue/zoom.ts`. Write every header name
+   in lowercase (`x-api-key`). Pick one or two `categories`, the main one first; declare the operations of that
+   category's template, each with its own `docs` page (`search` beside `list` when the docs give a search endpoint);
+   follow the result-shape rules. A fact you cannot cite from the provider's page stays out. In short:
+   - a result key is required only when the docs explicitly mark it required (a `required` list, words saying so, a
+     non-null `!` in a published GraphQL schema), or it is the record's id; a non-nullable type or an example value is
+     not enough; the envelope a list is read from stays required;
+   - a parameter the docs' prose calls required is required;
+   - every header the docs say each request needs is in `http.headers`, `content-type` included;
+   - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
+     own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
+   - `revoke` holds only what the docs state; when either token is accepted and the docs do not say which ends the
+     authorization, the refresh token goes first;
+   - the key's `help` names the credential the operations need (a token type, scopes, an access level, a role, an
+     expiry default) when the docs make it matter.
+
+   The design's [Breadth entries](docs/design/entries-and-engine.md#breadth-entries) gives the templates and the rules.
+3. `pnpm providers`, which writes the entry's row into [`docs/providers.md`](docs/providers.md), then `pnpm check`.
+   The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake derived from it
+   (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry has an identify
+   request or a token request; an entry with two sign-ins runs the rules and the sign-in once for each. `pnpm check` also fails while the committed page differs from the entries.
 4. Optional: record it from a test account (below), read the file, and commit it. An entry the recorder can record (one
    with no module that sends a request when it signs in) becomes `recorded`.
 5. Add one line to `CHANGELOG.md` under `Unreleased`, then open a pull request.
+
+When a provider needs something the engine cannot say yet (a paging kind, a body format, a webhook scheme), never
+force it into another shape. Declare what the engine can say and leave the rest out; when its sign-in or its account
+lookup does not fit, write no entry. Either way, add it to [`docs/waiting-list.md`](docs/waiting-list.md) under the
+mechanism it needs. A mechanism is built once three providers wait for it.
 
 `src/catalogue/catalogue.test.ts` runs over every file in the folder, with no test code of yours. It checks that the
 entry:
 
 - matches the entry types with no unknown key (the compiler accepts a misspelled one; this test does not), holds no
   function and no `TODO`, prints to JSON unchanged, and has an id that is unique and equals its file name;
-- cites in `docs` the https page of the provider that states what the entry declares;
+- cites in `docs` the https page of the provider that states what the entry declares, and on each operation the https
+  page that states it;
+- names one or two unique `categories` from the closed list, the first the main one;
 - fills `auth.send`'s templates, when it has any, with the secret (`{token}`, or a key entry's secret field) and only
   the entry's fields; a send's `value` holds no control character and never spells out a default (`'{token}'`, or
   `authorization: Bearer {token}`), and no field is named `token`;
 - names in each template only what that place allows;
-- is one the engine can run: a key or token entry has exactly one secret field, a key entry reads no token answer, and
-  neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
+- lists one or more sign-ins, at most one of each kind, never a key beside a token, OAuth 2 first when there is one;
+- is one the engine can run, each sign-in on its own: a key or token entry has exactly one secret field, a key entry
+  reads no token answer, and neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
   the token itself from `tokenAnswer.*`; a value read from identify's answer has a request to read it from; no `save`
   key is a field's name; each placeholder in the base names a plain field or a `save` key, either in its host, with
   `http.host` declared (`'*'` only when the whole host is one placeholder), or as one segment of its path; `http.bases`
@@ -58,8 +85,10 @@ entry:
   `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, `http.headers` keys) is
   one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
-  place in the request (a GET has no body), a paged operation names a declared shape and no `notFound`, a records path
-  leads to a list, and no id is a client call or a dotted prefix of another.
+  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
+  names a declared shape and no `notFound`, a records path leads to a list (on a `page` shape, the shape's `list`), and
+  no id is a client call or a dotted prefix of another;
+- has an `oauth2` sign-in that reads no plain field (its connect asks for none).
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
 the test signs in once with a good key and once with a bad one (a `token` entry's token request, then identify's when a
@@ -72,6 +101,7 @@ value (its `default`, else its first choice, else `kit-<name>`).
 To record an entry with no module from a test account, read the key at a prompt (bash and zsh) and run the recorder:
 `printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
 For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test account with your app's own OAuth client.
+An entry with OAuth 2 and a key is recorded with its key: a recording is of the key or token sign-in when there is one.
 The recorder refuses a provider with a module but no kit scenario of that name, and an entry that sends no request
 when it signs in. Otherwise it signs in with the key and with a bad key, and writes
 `src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request

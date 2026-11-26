@@ -18,7 +18,7 @@ const skeleton = `import { defineProvider } from '../catalogue.js';
 // Fill each TODO from the provider's own docs and state only what differs from the defaults
 // (docs/modules/catalogue.md lists every field), then follow the five steps in CONTRIBUTING.md.
 export const ${id} = defineProvider({
-  id: '${id}', name: 'TODO', docs: 'https://TODO',
+  id: '${id}', name: 'TODO', docs: 'https://TODO', categories: [],
   fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://TODO' },
@@ -32,4 +32,4 @@ try {
   fail(error.code === 'EEXIST' ? `${path} exists: pick another id or edit that entry`
     : `cannot write ${path}: run pnpm new from the repository's root`);
 }
-console.log(`${path}\nNext: fill it from the provider's docs, then pnpm check.`);
+console.log(`${path}\nNext: fill it from the provider's docs, then pnpm providers && pnpm check.`);

@@ -1,7 +1,10 @@
+import { globSync, readFileSync } from 'node:fs';
+import { basename } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { identifyAccount, lookupNames } from './account.js';
-import type { Entry } from './catalogue.js';
+import { signInWith, type Entry } from './catalogue.js';
 import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import { paginate, type Page } from './paginate.js';
@@ -37,6 +40,27 @@ export type KitScenario<C, I> = {
   retriesRateLimit: boolean;
 };
 
+/** Every entry in `src/catalogue/`, as `[id, entry]` sorted by id: no list to edit when one is added. */
+export async function catalogueEntries(): Promise<[string, Entry][]> {
+  const files = globSync('src/catalogue/*.ts').filter(file => !file.endsWith('.test.ts')).sort();
+  return Promise.all(files.map(async file => {
+    const id = basename(file, '.ts');
+    const found = Object.values(await import(pathToFileURL(file).href) as Record<string, unknown>)
+      .find(value => typeof value === 'object' && value !== null && 'id' in value && value.id === id);
+    if (!found) throw new Error(`${file} exports no entry whose id is ${id}`);
+    return [id, found as Entry];
+  }));
+}
+
+/** Every recording in `src/catalogue/`, by its file name: `<id>.recording.json` or `<id>.<part>.recording.json`. Read as
+ * the build reads it: only `synthetic: false` is a real recording. */
+export function catalogueRecordings(): (Recording & { file: string })[] {
+  return globSync('src/catalogue/*.recording.json').sort().map(file => {
+    const json = JSON.parse(readFileSync(file, 'utf8')) as Omit<Recording, 'synthetic'> & { synthetic?: unknown };
+    return { ...json, file: basename(file), synthetic: json.synthetic !== false };
+  });
+}
+
 export const GOOD_KEY = 'kit-good-key';
 export const BAD_KEY = 'kit-bad-key';
 
@@ -44,6 +68,13 @@ export const BAD_KEY = 'kit-bad-key';
 export function kitValues(entry: Entry): Record<string, string> {
   return Object.fromEntries((entry.fields ?? []).filter(field => field.secret !== true)
     .map(({ name, default: given, choices }) => [name, given ?? choices?.[0] ?? `kit-${name}`]));
+}
+
+/** The sign-in a recording is of: the entry's key or token sign-in when it has one (a test account's pasted key),
+ * else its first. The recorder records it, the replay replays it, and the entry is `recorded` when it is. */
+export function recordedSignIn(entry: Entry): Entry {
+  const { kind } = entry.auth.find(auth => auth.kind !== 'oauth2') ?? entry.auth[0];
+  return signInWith(entry, kind);
 }
 
 /** Signs in with a key: a key or token entry through `finishConnect` on its plain values (the kit's unless given), an
@@ -79,7 +110,8 @@ export function replay(recording: Recording, key: Exchange['key']): typeof fetch
  * values alone: that the file holds nothing real is the recorder's swap and last check, not this. Null when it holds,
  * else the sign-in it changes.
  */
-export async function replayProblem(entry: Entry, recording: Recording): Promise<string | null> {
+export async function replayProblem(whole: Entry, recording: Recording): Promise<string | null> {
+  const entry = recordedSignIn(whole);
   const sent = { good: 0, bad: 0 };
   const counted = (key: Exchange['key']): typeof fetch => (input, init) => { sent[key] += 1; return replay(recording, key)(input, init); };
   const held = (key: Exchange['key']) => recording.exchanges.filter(exchange => exchange.key === key).length;

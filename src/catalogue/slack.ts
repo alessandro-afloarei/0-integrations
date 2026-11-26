@@ -7,6 +7,7 @@ import { defineProvider } from '../catalogue.js';
 export const slack = defineProvider({
   id: 'slack', name: 'Slack',
   docs: 'https://docs.slack.dev/authentication/installing-with-oauth',
+  categories: ['chat'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://slack.com/oauth/v2/authorize', tokenUrl: 'https://slack.com/api/oauth.v2.access',
     pkce: false, scopeSeparator: ',', tokenTypes: ['bot'], failed: { path: 'ok', equals: false } }],
   scopes: { default: ['chat:write', 'chat:write.public', 'channels:read', 'groups:read'] },

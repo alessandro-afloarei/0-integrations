@@ -4,6 +4,7 @@ import { defineProvider } from '../catalogue.js';
 export const attio = defineProvider({
   id: 'attio', name: 'Attio', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://docs.attio.com/rest-api/guides/authentication',
+  categories: ['crm'],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.attio.com/v2', minIntervalMs: 100, retry: { maxWaitMs: 10_000 } },
   identify: { request: { path: '/self' }, id: 'workspace_id', name: 'workspace_name',
