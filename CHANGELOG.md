@@ -4,6 +4,8 @@
 
 Nothing here is released yet.
 
+- `fakeProvider` answers an OAuth 2 entry's token, refresh and revoke URLs, and tells apart operations that share a
+  route by their required parameters.
 - An authorize URL carries no `scope` when the entry asks for none (Bitbucket, GitHub).
 - `authorizeUrl`, `exchangeCode`, `refreshGrant`, `revokeGrant` and `tokenSource` type `values` by the entry, as
   `startConnect` and `finishConnect` do.
