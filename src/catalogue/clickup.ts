@@ -13,7 +13,8 @@ const fields = { name: { in: 'body', type: 'string' }, status: { in: 'body', typ
 export const clickup = defineProvider({
   id: 'clickup', name: 'ClickUp', docs: 'https://developer.clickup.com/docs/authentication',
   categories: ['tasks'],
-  fields: [{ name: 'apiToken', title: 'Personal API token', secret: true }],
+  fields: [{ name: 'apiToken', title: 'Personal API token', secret: true,
+    help: 'For your own ClickUp account: an app for other people connects with the OAuth 2 sign-in, as ClickUp requires.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.clickup.com/api', tokenUrl: 'https://api.clickup.com/api/v2/oauth/token', pkce: false },
     { kind: 'key', send: { header: 'authorization' } }],
   // No scopes: the person picks the Workspaces the app may reach on ClickUp's consent screen.

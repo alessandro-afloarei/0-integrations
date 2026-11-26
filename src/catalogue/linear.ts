@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Linear: a personal API key, bare in `Authorization`, or OAuth 2, its token as Bearer, on one GraphQL endpoint. A 429
- * with `Retry-After` past the limit (https://linear.app/developers/rate-limiting). Webhooks sign the body, hex HMAC-SHA256
- * in `Linear-Signature` (https://linear.app/developers/webhooks). Types from the schema, one page per list
- * (https://raw.githubusercontent.com/linear/linear/master/packages/sdk/src/schema.graphql). */
+/** Linear: OAuth 2, an app private to its workspace until made public (https://linear.app/developers/oauth-app-manifests),
+ * or a personal key, bare; a 429 with `Retry-After` (https://linear.app/developers/rate-limiting). Webhooks: hex HMAC-SHA256
+ * of the body in `Linear-Signature`; its `webhookTimestamp` is in ms, so refuse one over a minute old yourself
+ * (https://linear.app/developers/webhooks). Types: https://raw.githubusercontent.com/linear/linear/master/packages/sdk/src/schema.graphql */
 const fields = 'id title url state { id name } team { id } createdAt updatedAt';
 const issue = { id: 'string', title: 'string', url: 'string', state: { id: 'string', name: 'string' }, team: { id: 'string' },
   createdAt: 'string', updatedAt: 'string' } as const;
@@ -15,11 +15,12 @@ const guide = 'https://linear.app/developers/graphql';
 export const linear = defineProvider({
   id: 'linear', name: 'Linear', docs: `${guide}#authentication`,
   categories: ['tasks'],
-  fields: [{ name: 'apiKey', title: 'Personal API key', secret: true, help: 'Create it in Linear under Settings, Security & access.' }],
+  fields: [{ name: 'apiKey', title: 'Personal API key', secret: true,
+    help: 'Create it under Settings > Account > Security & Access with Write access to the teams the app works on: a key can be limited to some permissions and teams, and admins can stop members creating keys.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://linear.app/oauth/authorize', tokenUrl: 'https://api.linear.app/oauth/token',
     scopeSeparator: ',', authorizeParams: { response_type: 'code' } }, { kind: 'key', send: { header: 'authorization' } }],
   scopes: { default: ['read', 'issues:create'] },
-  revoke: { url: 'https://api.linear.app/oauth/revoke', token: ['access', 'refresh'] },
+  revoke: { url: 'https://api.linear.app/oauth/revoke', token: ['refresh', 'access'] },
   http: { baseUrl: 'https://api.linear.app/graphql', retry: {} },
   identify: { request: { graphql: 'query Me { viewer { id name email } }' }, id: 'data.viewer.id',
     name: ['data.viewer.name', 'data.viewer.email'] },
