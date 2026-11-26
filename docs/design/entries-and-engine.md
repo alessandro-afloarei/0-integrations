@@ -420,7 +420,7 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 6. `standard` (Standard Webhooks, GitLab): `webhook-id`, `webhook-timestamp`
    (seconds, 300 seconds of tolerance) and `webhook-signature` (space-separated `v1,<base64>`, other versions ignored)
    over `<webhook-id>.<webhook-timestamp>.<raw body>`, keyed with the base64 decoding of the secret after an optional
-   `whsec_`.
+   `whsec_`. An id holding a `.` is `false`, as the specification bars it.
 7. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
 8. `challengeAnswer(webhook, request)`, called only after `verifyWebhook` accepted the request, answers a handshake: a
    JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a

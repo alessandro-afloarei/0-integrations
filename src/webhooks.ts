@@ -33,7 +33,8 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   const signed = scheme.signed ?? '{body}';
   if (!signed.includes('{body}') || (stamp !== undefined && !signed.includes('{timestamp}'))) return false;
   const id = standard ? request.headers.get('webhook-id') || null : '';
-  if (id === null) return false;
+  // The specification bars a `.` from the id: `a.<t>` and a body starting `<digits>.` would sign the same bytes.
+  if (id === null || id.includes('.')) return false;
   // A Map: a name that is no placeholder (`constructor`) is signed as written, never read from a prototype.
   const substitutions = new Map<string, string | Uint8Array>([
     ['{body}', request.rawBody], ['{timestamp}', timestamp], ['{method}', request.method], ['{url}', request.url]]);

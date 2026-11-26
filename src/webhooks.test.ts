@@ -296,6 +296,15 @@ test('a challenge answer echoes the one declared value and nothing else of the b
     .toEqual({ status: 200, type: 'application/json', body: { challenge: 'x' } });
 });
 
+test('a Standard Webhooks id holding a `.` is false: the signed content cannot be split again', () => {
+  // Signed for id `a`, an old timestamp and the body `<now>.x`; replayed now as id `a.<old>`, timestamp `<now>`, body `x`.
+  const old = String(now - 3600);
+  const signature = `v1,${createHmac('sha256', standardKey).update(`a.${old}.${t}.x`).digest('base64')}`;
+  const replayed = request({ 'webhook-id': `a.${old}`, 'webhook-timestamp': t, 'webhook-signature': signature }, Buffer.from('x'));
+  expect(verifyWebhook(gitlab.webhook, replayed, standardSecret)).toBe(false);
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg.1', t), t, 'msg.1'), standardSecret)).toBe(false);
+});
+
 test('deliveryId reads the declared header or the body paths', () => {
   expect(deliveryId(gitlab.webhook, standardSigned(standardSignature('msg_1', t)))).toBe('msg_1');
   expect(deliveryId(stripe.webhook, request({}, Buffer.from('{"id":"evt_1","type":"balance.available"}')))).toBe('evt_1');

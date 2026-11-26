@@ -33,7 +33,9 @@ nothing; a missing header is `false`.
 `v1,<base64>` of which any may match (other versions are ignored), over `<webhook-id>.<webhook-timestamp>.<raw body>`.
 The secret is the base64 key, with or without its `whsec_` prefix; one that decodes to nothing is `false`, as is an empty
 secret of any HMAC scheme. GitLab's entry declares `webhook-id`, the same across retries, as its delivery id. A GitLab
-hook set up with only the older secret token (`X-Gitlab-Token`) sends no signature, and this entry refuses it.
+hook set up with only the older secret token (`X-Gitlab-Token`) sends no signature, and this entry refuses it. An id
+holding a `.` is `false`: the specification says the message id must "not be allowed to include any `.`", since the
+signed content joins id, timestamp and body with dots (GitLab's ids are UUIDs).
 
 [Fireflies](fireflies.md) and [Breakcold](breakcold.md) declare a delivery id; Fireflies' module also parses the event.
 Stripe's entry declares the event's `id` as its delivery id.
