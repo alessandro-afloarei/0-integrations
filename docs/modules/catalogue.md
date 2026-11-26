@@ -27,7 +27,7 @@ That is a whole provider: the connect form, the credential check, the account, p
 | `auth` | One sign-in: `{ kind: 'key' }` or `{ kind: 'oauth2', authorizeUrl, tokenUrl, … }`. `send` says how a key travels: Bearer by default, `{ header }` for a bare token, `{ basic: ['{apiId}', '{apiToken}'] }`. |
 | `scopes` | `{ default, requireGranted? }`: the scopes asked for, and whether a grant short of one is refused. |
 | `identify` | The request that checks the credential and the paths of the account's `id` and `name`; `rejectWhen` names answers that mean a bad credential whatever their status. |
-| `save` | Values kept on the connection after sign-in, read from the token answer, the identify answer or the plain fields. |
+| `save` | Values kept on the connection after sign-in, read from the token answer, the identify answer or the plain fields. A saved value never replaces an entered field of the same name. |
 | `revoke` | An RFC 7009 revoke (`{ url, token }`) or a request (`{ request }`), with `goneErrors`. |
 | `http` | `baseUrl`, `bases` (named extra bases), `headers`, `timeoutMs` (30 s by default), `minIntervalMs`, `retry`, `rateLimit`. |
 | `errors` | Where the provider's own error code is (`detail`), which codes mean a revoked grant, and rules that map answers to error codes. |

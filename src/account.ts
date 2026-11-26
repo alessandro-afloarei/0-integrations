@@ -74,5 +74,5 @@ export async function identifyAccount(entry: Entry, input: { fetch: typeof fetch
     if (found !== undefined && found !== null) saved[key] = found;
   }
   return { account: id === undefined ? null : { id, name: typeof name === 'string' && name.trim() !== '' ? name : id },
-    values: { ...values, ...saved } };
+    values: { ...saved, ...values } };
 }

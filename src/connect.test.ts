@@ -199,6 +199,16 @@ describe('connect types', () => {
 
 
 describe('connect review regressions', () => {
+  it('keeps an entered field over a saved value of the same name', async () => {
+    const own = defineProvider({ id: 'own', name: 'Own', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.own.test' },
+      fields: [{ name: 'apiKey', title: 'API key', secret: true }, { name: 'region', title: 'Region' }],
+      identify: { request: { path: '/me' } }, save: { region: 'region' } });
+    const http = fakeFetch([{ url: 'https://api.own.test/me', respond: () => Response.json({ region: 7 }) }]);
+    const { values } = await finishConnect(own, { secret: { apiKey: 'k' }, values: { region: 'eu' }, fetch: http.fetch });
+    expect(values).toEqual({ region: 'eu' });
+    expect(http.calls).toHaveLength(1);
+  });
+
   it.each(['', '  '])('refuses blank state %j', async state => {
     await expect(startConnect(slack, { ...start, state })).rejects.toThrow('state_required');
   });
