@@ -99,9 +99,9 @@ async function recordEntry(entry: Entry, secret: string, given: Readonly<Record<
   const exchanges = [...good.exchanges, ...bad.exchanges];
   // A redirect's target can name the account, and the replay answers each request once.
   if (exchanges.some(({ status }) => status >= 300 && status < 400)) throw new Error('recording refused: the sign-in was redirected: point the entry at the final URL');
-  /** Each string or number the good answers hold at one of `paths`, for the stand-in `stand`. */
+  /** Each string or number the good answers hold at one of `paths`, for the stand-in `stand`; a blank one holds nothing. */
   const found = (paths: readonly string[], stand: string) => good.exchanges.flatMap(({ response }) => paths.map(path => readPath(response, path)))
-    .flatMap((value): Swap[] => (typeof value === 'string' || typeof value === 'number' ? [[String(value), stand]] : []));
+    .flatMap((value): Swap[] => ((typeof value === 'string' && value.trim() !== '') || typeof value === 'number' ? [[String(value), stand]] : []));
   const { values, codes } = answerReads(entry);
   // An answer the sign-in did not accept names no account: there every kept string must be a code, whatever its path.
   // A 2xx token answer is accepted as it is, as `requestToken` takes it; identify's is also read by the entry's rules.
@@ -441,6 +441,17 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(refused).toBeUndefined();
     expect(recording?.exchanges[0]?.response).toMatchObject({ access_token: 'kit-token' });
     if (recording !== undefined) expect(await replayProblem(noted, recording)).toBeNull();
+  });
+
+  test('a blank value at an identity path is written as it is, and the recording replays', async () => {
+    const blank = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' },
+      identify: { request: { path: '/me' }, id: 'id', name: ['global_name', 'username'] } });
+    const { refused, recording } = await recordOnFake(blank, { key: 'real-key-1', account: { id: 'u-real-881', global_name: '', username: 'alopez' } });
+    expect(refused).toBeUndefined();
+    expect(recording?.exchanges[0]?.response).toEqual({ id: 'kit-account', global_name: '', username: 'kit-name' });
+    // The engine reads the blank first path, so the name falls back to the id, as it did live.
+    expect(await replayed(blank, recording)).toMatchObject([{ account: { id: 'kit-account', name: 'kit-account' } }, { code: 'rejected' }]);
   });
 
   test('hostile: a redirected sign-in is refused, and nothing is written', async () => {
