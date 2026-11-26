@@ -17,7 +17,7 @@ export const replyio = defineProvider({
   id: 'replyio', name: 'Reply.io', docs: 'https://docs.reply.io/api-reference/authentication',
   categories: ['sales'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'A user API key from Settings, then API Key, not a Team or Organization key, with the contacts:write and sequences:operate scopes (each also covers reading).' }],
+    help: 'A user API key (Settings, then API Key), which acts as you: a Team key also works but acts as the workspace owner, and an Organization key needs a header this sign-in does not send. Give it the contacts:write and sequences:operate scopes (each also covers reading).' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.reply.io', retry: {} },
   identify: { request: { path: '/v3/whoami' }, id: 'userId', name: 'username' },
