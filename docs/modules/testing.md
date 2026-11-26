@@ -106,6 +106,9 @@ other header), and from the answer only the paths the entry reads:
   the `errors.detail` paths. There a number or a boolean is kept, and a string only when it is a provider code as an
   error's detail takes one (letters, digits, `_`, `.` and `-`, up to 64): an error's message is never written.
 
+In an answer the sign-in did not accept (the bad key's, or one the entry reads as an error), every kept string must be
+such a code, whatever its path: there is no account to swap.
+
 A path that reaches an object or a list keeps only its shell (`{}`, `[]`), which the paths read inside it fill. An
 answer that is not JSON is written as `null`. Nothing else in an answer is written: no other token, name, address or
 number.
@@ -113,7 +116,8 @@ number.
 **What is swapped.** The key becomes `kit-good-key`, each plain value given its kit value, and every token at the
 entry's `token` path `kit-token`: inside the URL, the request body and `retry-after` (as written, JSON-escaped,
 percent- or form-encoded), and in the answers where they are a whole value. In the answers, the account's id and name
-become `kit-account` and `kit-name`, and each `save` value `kit-<name>` (its key's name). A number is replaced only when
+become `kit-account` and `kit-name`, and each `save` value `kit-<name>` (its key's name); a value read from the token
+answer becomes `kit-<path>`, as the derived fake answers it. A number is replaced only when
 it is a whole value. Codes at the error and condition paths are written as answered, apart from the values above, so
 the replay reads what the provider sent.
 
@@ -121,8 +125,9 @@ the replay reads what the provider sent.
 
 - a sign-in request was answered with a redirect: point the entry at the final URL (a redirect's target can name the
   account, and the replay answers each request once);
-- the file does not replay as the sign-ins went live: the key signs in, to the account it found live as swapped, and the
-  bad key is `rejected`. Dropping or swapping changed what a rule reads (a `rejectWhen` on a header, which is not
+- the file fails the table test's own replay check (`replayProblem`): the key signs in, sending each request once, to
+  the account the entry's derived fake signs in to, and the bad key is `rejected`. Dropping or swapping changed what a
+  rule reads (a `rejectWhen` on a header, which is not
   written; a message a rule compared; a swapped value a condition tests). The message says which sign-in changed;
 - a value to swap is under 4 characters (an account id `7`, a region `eu`): it would match unrelated text, so record
   from an account whose values are longer;
