@@ -72,12 +72,12 @@ test("the body's epoch wait, after Retry-After, read from the first error only",
   }
 });
 
-test('a wait too large is measured in milliseconds: carried while it is a safe number of them, else none', () => {
+test('a wait too large is measured in milliseconds: carried while it is a safe number of them, else the largest', () => {
   // An instant past the safe integers in its own unit can still be a safe number of milliseconds away.
   const far = Number.MAX_SAFE_INTEGER + 1;
   expect(fail(graph, 200, { errors: [{ code: 'slow_down', wait: far }] })).toMatchObject({ retryAfterMs: far - NOW });
   const reset: Rules = { http: { ...BASE, retry: { wait: { header: 'ratelimit-reset', unit: 's' } } } };
-  expect(fail(reset, 429, {}, { 'ratelimit-reset': String(Number.MAX_SAFE_INTEGER) })).toMatchObject({ retryAfterMs: null });
+  expect(fail(reset, 429, {}, { 'ratelimit-reset': String(Number.MAX_SAFE_INTEGER) })).toMatchObject({ retryAfterMs: Number.MAX_SAFE_INTEGER });
 });
 
 /** A rate limit without a 429: by a header with a reset, by a message, by the provider's code. */
@@ -251,10 +251,10 @@ test.each(['a b', 'a@b.test', 'error\nprivate', 'x'.repeat(65)])('an unsafe prov
   expect(gone).toMatchObject({ detail: null });
 });
 
-test('a reset already past waits 0; one beyond the safe range once in milliseconds, and a negative body wait, none', () => {
+test('a reset already past waits 0; one beyond the safe range once in milliseconds the largest; a negative body wait none', () => {
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: 0 });
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(Number.MAX_SAFE_INTEGER) }))
-    .toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+    .toMatchObject({ code: 'rate_limited', retryAfterMs: Number.MAX_SAFE_INTEGER });
   const chat: Rules = { http: { ...BASE, retry: { wait: { path: 'waitMs', unit: 'ms' } } } };
   expect(fail(chat, 429, { waitMs: -5 })).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
 });

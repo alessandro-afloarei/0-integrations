@@ -1,6 +1,7 @@
+/** A wait in whole milliseconds; one too large to be a safe integer is the largest, never none. */
 function delay(value: number | undefined): number | null {
-  if (value === undefined || value < 0 || !Number.isSafeInteger(Math.ceil(value))) return null;
-  return Math.ceil(value);
+  if (value === undefined || !(value >= 0)) return null; // negative or NaN
+  return Math.min(Math.ceil(value), Number.MAX_SAFE_INTEGER);
 }
 
 /** Normalize only HTTP-date's three wire formats; Date.parse alone also accepts values such as "-1". */

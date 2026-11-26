@@ -1231,6 +1231,14 @@ describe("a retry never comes before the provider's stated wait", () => {
     await retriesAfter(todo, () => Response.json({ error_extra: { retry_after: 1.0005 } }, { status: 429 }), 1001);
   });
 
+  test('a wait too large to represent is the largest wait: sent once, carrying Number.MAX_SAFE_INTEGER', async () => {
+    const huge = () => Response.json({ waitMs: 2 ** 53 }, { status: 429 });
+    const largest = { code: 'rate_limited', retryAfterMs: Number.MAX_SAFE_INTEGER };
+    expect(await sentOnce(retrying({ wait: { path: 'waitMs', unit: 'ms' } }), huge)).toMatchObject(largest);
+    expect(await sentOnce(retrying({ onlyStated: true, wait: { path: 'waitMs', unit: 'ms' } }), huge)).toMatchObject(largest);
+    expect(await sentOnce(retrying({}), answer(429, { 'retry-after': '9007199254740993' }))).toMatchObject(largest);
+  });
+
   test("the error of a 429 carries the declared header's wait", async () => {
     expect(await sentOnce(reset('s', { limit: 0 }), answer(429, { 'ratelimit-reset': '3' })))
       .toMatchObject({ code: 'rate_limited', retryAfterMs: 3000 });

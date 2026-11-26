@@ -38,9 +38,9 @@ describe('provider wait metadata', () => {
     ['Sun, 01 Nov 2026 12:00:03 GMT', 3000], ['Sun, 01 Nov 2026 11:59:59 GMT', 0],
     ['Sunday, 01-Nov-26 12:00:03 GMT', 3000], ['Sun Nov  1 12:00:03 2026', 3000],
     ['Tuesday, 02-Nov-76 12:00:00 GMT', 0],
-    ['9007199254740', 9_007_199_254_740_000],
+    ['9007199254740', 9_007_199_254_740_000], ['9007199254741', Number.MAX_SAFE_INTEGER],
     [undefined, null], ['', null], [' ', null], ['later', null], ['-1', null], ['Infinity', null],
-    ['NaN', null], ['9007199254741', null], ['1.5', 1500], ['+2', null], ['2e3', null], ['0x10', null],
+    ['NaN', null], ['1.5', 1500], ['+2', null], ['2e3', null], ['0x10', null],
     ['2026-11-02', null], ['Sun, 99 Nov 2026 12:00:03 GMT', null],
     ['Sundayy, 01-Nov-26 12:00:03 GMT', null], ['Sun, 01-Nov-26 12:00:03 GMT', null],
   ] as const)('retains only a valid Retry-After header %j as %j milliseconds without a retry', async (value, retryAfterMs) => {
@@ -52,7 +52,7 @@ describe('provider wait metadata', () => {
   });
 
   test.each([[0, null], [12.1, 13], [1500, 1500], [-1, null], ['1500', null], [null, null], [Infinity, null],
-    [Number.MAX_SAFE_INTEGER + 1, null]])('keeps a valid Breakcold body delay %j as %j milliseconds', async (wait, retryAfterMs) => {
+    [Number.MAX_SAFE_INTEGER + 1, Number.MAX_SAFE_INTEGER]])('keeps a valid Breakcold body delay %j as %j milliseconds', async (wait, retryAfterMs) => {
     const fake = scripted(() => Response.json({ error: { code: 'usage_limit', retryAfterMs: wait } }, { status: 429 }));
     await expect(http(breakcold, fake.fetch).json('/items', { method: 'POST' }))
       .rejects.toMatchObject({ code: 'rate_limited', detail: 'usage_limit', retryAfterMs });
