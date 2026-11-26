@@ -31,7 +31,7 @@ export const lemlist = defineProvider({
       result: [{ _id: 'string', 'name?': 'string', 'status?': 'string', 'createdBy?': 'string', 'createdAt?': 'string' }] },
     'contacts.list': { docs: `${ref}/contacts/get-many-contacts-v2`, path: '/v2/contacts', paging: 'contacts', records: 'data',
       params: { limit: { in: 'query', type: 'integer', description: '1 to 500, 100 by default; limit plus offset at most 10,000.' } },
-      result: { data: [contact], 'total?': 'integer' } },
+      result: { data: [contact] } },
     'contacts.get': { docs: `${ref}/contacts/get-contact`, path: '/contacts/{idOrEmail}', notFound: 'null',
       params: { idOrEmail: { in: 'path', type: 'string', required: true } }, result: contact },
     'contacts.create': { docs: `${ref}/contacts/upsert-contact`, method: 'POST', path: '/contacts',

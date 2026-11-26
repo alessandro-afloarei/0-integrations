@@ -636,7 +636,8 @@ its web URL and its created and updated times: at most eight keys, nested at mos
 (JSON:API's `attributes` counts as one). A key is required only when the docs explicitly mark it required (a
 `required` list, words saying so, a non-null `!` in a published GraphQL schema), or it is the record's id; a
 non-nullable type or an example value is not enough. Every other key ends in `?`; the envelope a list is read from stays
-required. A type the docs do not state, a polymorphic value (rich text, custom fields) and a map keyed by ids
+required. A paged operation's `result` declares only the envelope down to its records: the walk reads its paging
+shape's paths from the answer itself, and nothing reads another key. A type the docs do not state, a polymorphic value (rich text, custom fields) and a map keyed by ids
 are `'unknown'`. A `get`, `create` and `update` declare the same record as the list's element. An answer the docs show
 only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they

@@ -28,7 +28,7 @@ export const freshsales = defineProvider({
     deals: { kind: 'page', send: { query: 'page' }, list: 'deals' } },
   operations: {
     'contacts.list': { docs: `${ref}#list_all_contacts`, path: '/contacts/view/{view_id}', paging: 'contacts', records: 'contacts',
-      params: viewId, result: { contacts: [contact], ...meta } },
+      params: viewId, result: { contacts: [contact] } },
     'contacts.search': { docs: `${ref}#search`, method: 'POST', path: '/filtered_search/contact', kind: 'read',
       params: { filter_rule: { in: 'body', type: [{ attribute: 'string', operator: 'string', value: 'unknown' }],
         description: 'Exact-match rules, such as { attribute: "contact_email.email", operator: "is_in", value: "a@b.test" }.' } },
@@ -41,9 +41,9 @@ export const freshsales = defineProvider({
     'accounts.list': { docs: `${ref}#list_all_accounts`, path: '/sales_accounts/view/{view_id}', paging: 'accounts',
       records: 'sales_accounts', params: viewId,
       result: { sales_accounts: [{ id: 'number', 'name?': 'string', 'website?': 'string', 'owner_id?': 'number',
-        'parent_sales_account_id?': 'number', 'created_at?': 'string', 'updated_at?': 'string' }], ...meta } },
+        'parent_sales_account_id?': 'number', 'created_at?': 'string', 'updated_at?': 'string' }] } },
     'deals.list': { docs: `${ref}#list_all_deals`, path: '/deals/view/{view_id}', paging: 'deals', records: 'deals', params: viewId,
       result: { deals: [{ id: 'number', 'name?': 'string', 'amount?': 'unknown', 'sales_account_id?': 'number',
-        'deal_stage_id?': 'number', 'owner_id?': 'number', 'expected_close?': 'string', 'created_at?': 'string' }], ...meta } },
+        'deal_stage_id?': 'number', 'owner_id?': 'number', 'expected_close?': 'string', 'created_at?': 'string' }] } },
   },
 });

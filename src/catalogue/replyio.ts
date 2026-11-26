@@ -27,9 +27,9 @@ export const replyio = defineProvider({
   operations: {
     'sequences.list': { docs: `${ref}/sequences/list-all-sequences`, path: '/v3/sequences', paging: 'skip', records: 'items',
       params: top, result: { items: [{ id: 'integer', 'name?': 'string', 'status?': 'string', 'isArchived?': 'boolean',
-        'ownerUserId?': 'integer', 'created?': 'string' }], 'hasMore?': 'boolean' } },
+        'ownerUserId?': 'integer', 'created?': 'string' }] } },
     'contacts.list': { docs: `${ref}/contacts/list-all-contacts`, path: '/v3/contacts', paging: 'skip', records: 'items',
-      params: top, result: { items: [contact], 'hasMore?': 'boolean' } },
+      params: top, result: { items: [contact] } },
     'contacts.get': { docs: `${ref}/contacts/get-a-contact`, path: '/v3/contacts/{id}', notFound: 'null', params: { id }, result: contact },
     'contacts.create': { docs: `${ref}/contacts/create-a-contact`, method: 'POST', path: '/v3/contacts',
       params: { ...written, email: { in: 'body', type: 'string', description: `The email. ${oneOf}` },
