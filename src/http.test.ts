@@ -578,6 +578,15 @@ test("Trello's header carries the plain key and the secret token, and a missing 
   expect(fake.calls).toHaveLength(1);
 });
 
+test('`{token}` is the token even when the secret field is named `token`', async () => {
+  const named = defineProvider({ id: 'named-token', name: 'Named token', fields: [{ name: 'token', title: 'Token', secret: true }],
+    auth: [{ kind: 'token', request: { url: 'https://nt.test/session', body: { password: '{token}' } }, send: { header: 'x-api-key' } }],
+    http: { baseUrl: 'https://api.nt.test' } });
+  const fake = script(named, ok);
+  await fake.client.json('/me');
+  expect(fake.calls[0]?.headers['x-api-key']).toBe('t');
+});
+
 test("a plain field that would split Trello's header is refused before anything is sent", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
   await expect(createClient(trello, { token: () => Promise.resolve('tok'), values: { apiKey: 'k\r\nX-Evil: 1' }, fetch: fake.fetch })
