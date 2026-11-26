@@ -3,7 +3,7 @@ import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { fakeFetch } from '../testing.js';
 import { attioClient, type AttioRecord } from './attio.js';
 import { fakeAttio, type FakeAttioWorkspace } from './fake.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/attio.recording.json' with { type: 'json' };
 import { attioScenario } from './scenario.test-support.js';
 
 const BASE = 'https://api.attio.com/v2';

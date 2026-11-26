@@ -1,4 +1,4 @@
-import type { Path, Template, When } from './catalogue.js';
+import type { Operation, Param, Path, Shape, Template, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -18,6 +18,30 @@ export function readPath(value: unknown, path: Path): unknown {
   if (dot === -1) return undefined;
   const head = path.slice(0, dot);
   return Object.hasOwn(record, head) ? readPath(record[head], path.slice(dot + 1)) : undefined;
+}
+
+/** The shape at a dotted path through an object shape's keys, the whole rest tried as one key first, as `readPath` reads. */
+export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined {
+  if (typeof shape !== 'object' || Array.isArray(shape)) return undefined;
+  const keys = shape as { readonly [key: string]: Shape }; // `isArray` does not narrow a readonly tuple away
+  const dot = path.indexOf('.');
+  return Object.hasOwn(keys, path) ? keys[path] : dot === -1 ? undefined : shapeAt(keys[path.slice(0, dot)], path.slice(dot + 1));
+}
+
+/** Whether a parameter has a place in its operation's request: GraphQL takes only variables; a path operation takes no
+ * variables, a path parameter only where its path names it, and a body parameter only when it is not a GET. */
+export function placed(op: Operation, name: string, param: Param): boolean {
+  return 'graphql' in op ? param.in === 'variables'
+    : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))
+      && (param.in !== 'body' || (op.method ?? 'GET') !== 'GET');
+}
+
+/** The first operation id a client cannot hold: one with an empty segment, a dotted prefix of another (`pages` beside
+ * `pages.markdown`), one whose first segment is the client's own call, or `then`, which would make the client a thenable.
+ * `Reserved` in catalogue.ts is the compiler's copy of these names. */
+export function clashing(ids: readonly string[]): string | undefined {
+  return ids.find(id => id.split('.').includes('') || ids.some(other => other.startsWith(`${id}.`))
+    || ['json', 'request', 'paginate'].includes(id.split('.')[0] ?? '') || id === 'then');
 }
 
 /** A `{name}`: no braces inside, never empty. */

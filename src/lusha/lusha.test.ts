@@ -3,7 +3,7 @@ import { GOOD_KEY, lookupKit, type Recording } from '../kit.test-support.js';
 import { fakeFetch } from '../testing.js';
 import { fakeLusha, type FakeLushaAccount } from './fake.js';
 import { lushaClient, type LushaClient, type LushaCompany, type LushaPerson } from './lusha.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/lusha.recording.json' with { type: 'json' };
 
 const BASE = 'https://api.lusha.com';
 const boston = { country: 'United States', state: 'Massachusetts', city: 'Boston' };

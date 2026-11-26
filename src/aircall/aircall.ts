@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
-import { createClient } from '../http.js';
+import { client } from '../client.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { aircall } from '../catalogue/aircall.js';
@@ -62,11 +62,11 @@ const CURSOR = /^(\d*):([1-9]\d*)$/u;
 /** Aircall pages up to 50 calls; `pageSize` is for tests. */
 export function aircallClient(input: { apiId: string; apiToken: string; fetch: typeof fetch; minIntervalMs?: number;
   pageSize?: number }): AircallClient {
-  const http = createClient(aircall, { token: () => Promise.resolve(input.apiToken), values: { apiId: input.apiId }, fetch: input.fetch,
+  const api = client(aircall, { token: input.apiToken, values: { apiId: input.apiId }, fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   return {
     async company() {
-      return parseAnswer(companySchema, await http.json('/company')).company;
+      return parseAnswer(companySchema, await api.json('/company')).company;
     },
     async calls({ from, cursor }) {
       const position = cursor === undefined ? null : CURSOR.exec(cursor);
@@ -77,7 +77,7 @@ export function aircallClient(input: { apiId: string; apiToken: string; fetch: t
       const query: Record<string, string> = { order: 'asc', per_page: String(perPage), fetch_contact: 'true' };
       if (start !== undefined) query.from = String(start);
       if (pageNumber > 1) query.page = String(pageNumber);
-      const page = parseAnswer(listSchema, await http.json('/calls', { query }));
+      const page = parseAnswer(listSchema, await api.json('/calls', { query }));
       const parsed = parseEntries(callSchema, page.calls);
       // A second before the last call: whether `from` counts its own second or not, no call of that second is missed.
       const restart = (parsed.items.at(-1)?.started_at ?? 0) - 1;
@@ -88,8 +88,7 @@ export function aircallClient(input: { apiId: string; apiToken: string; fetch: t
       return { ...parsed, cursor: page.meta.next_page_link === null ? null : next };
     },
     async transcript(callId) {
-      const answer = await http.json(`/calls/${String(callId)}/transcription`).catch((error: unknown) => {
-        if (error instanceof ProviderHttpError && error.status === 404) return null;
+      const answer = await api.calls.transcript({ callId }).catch((error: unknown) => {
         if (error instanceof ProviderHttpError && error.status === 403) {
           throw new ProviderHttpError('request_failed', 403, 'ai_assist_required');
         }

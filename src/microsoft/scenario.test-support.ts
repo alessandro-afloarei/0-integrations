@@ -17,7 +17,8 @@ const client: KitScenario<MailboxReader, unknown>['client'] = ({ apiKey, fetch }
   graphMailbox({ token: () => Promise.resolve(apiKey), fetch });
 
 export const graphMailScenario: KitScenario<MailboxReader, MailboxEmail> = {
-  provider: 'graph-mail',
+  provider: 'microsoft.mail',
+  standIn: KIT_MAILBOX,
   client,
   identify: reader => reader.identify(),
   page: (reader, { since, cursor }) => reader.messages({ after: since, cursor, limit: PAGE }),
@@ -30,12 +31,13 @@ export const graphMailScenario: KitScenario<MailboxReader, MailboxEmail> = {
 /** The main calendar's events. `since` starts the window, and Graph lists every event the window overlaps: one counts as
  *  read since that time by its end. */
 export const graphCalendarScenario: KitScenario<MailboxReader, MailboxEvent> = {
-  provider: 'graph-calendar',
+  provider: 'microsoft.calendar',
+  standIn: KIT_MAILBOX,
   client,
   identify: reader => reader.identify(),
   async page(reader, { since, cursor }) {
     const calendar = await reader.primaryCalendar();
-    if (!calendar) throw new Error('graph-calendar: the mailbox has no calendar');
+    if (!calendar) throw new Error('microsoft.calendar: the mailbox has no calendar');
     return reader.events(calendar.id, { start: since ?? KIT_WINDOW.start, end: KIT_WINDOW.end, cursor, limit: PAGE });
   },
   id: event => event.id,

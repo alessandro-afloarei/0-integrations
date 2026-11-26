@@ -7,7 +7,4 @@ entry declares an app dedupes on: a header, or body paths joined with `:`, null 
 verifying lets a forged post suppress the real delivery. Routing, replay protection, dedupe and the inbox remain in the
 app.
 
-After verifying the raw request with `verifyWebhook`, Fireflies' `parseWebhook(body)` reads the V2 event,
-`meeting_id` and timestamp (number, or legacy string). Unknown fields are omitted; malformed events return null.
-`deliveryId(breakcold.webhook, request)` reads Breakcold's `x-webhook-delivery-id`. Apps own deduplication and retain
-original bytes.
+[Fireflies](fireflies.md) and [Breakcold](breakcold.md) declare a delivery id; Fireflies' module also parses the event.

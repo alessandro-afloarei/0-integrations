@@ -13,7 +13,7 @@ string or a positive integer; anything else is `invalid_response` (`missing_fiel
 without falling back. The secret keeps the shared `Grant` shape. HubSpot can return the portal's existing refresh token
 on re-consent, so the entry's `reusesGrant: true` skips failed-identity cleanup. An orphan grant is returned on the
 next consent; revoking it could end a live connection. The app must check ownership before discarding a grant.
-`revokeGrant(hubspot, { ...grant, client, fetch })` still revokes the refresh token; access-only grants expire naturally.
+`revokeGrant(hubspot, { ...grant, client, fetch })` revokes the refresh token; access-only grants expire naturally.
 
 `fakeHubSpot({ client: { clientId, clientSecret }, redirectUri, ...portalData })` from `hubspot/fake` requires the
 registered client and an absolute HTTP(S) callback without userinfo or a fragment. Register the exact callback

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
-import { createClient } from '../http.js';
+import { client } from '../client.js';
 import { fireflies } from '../catalogue/fireflies.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
@@ -27,7 +27,6 @@ const LIVE_SEARCH_QUERY = `query FirefliesKeywordSearch($keyword: String!, $user
     meeting_info { summary_status }
   }
 }`;
-const LIVE_USER_QUERY = "query FirefliesUser { user { user_id email name } }";
 
 const PAGE_SIZE = 50;
 const liveListItemSchema = z.object({
@@ -52,7 +51,6 @@ export type FirefliesClient = {
   transcript(id: string): Promise<FirefliesTranscript | null>;
   search(query: { userId: string; keyword: string; limit: number }): Promise<{ items: FirefliesListItem[]; skipped: (string | null)[] }>;
 };
-const userSchema = z.object({ data: z.object({ user: z.object({ user_id: z.string(), email: z.string(), name: z.string() }) }) });
 const listSchema = z.object({ data: z.object({ transcripts: z.array(z.unknown()) }) });
 const detailSchema = z.object({ data: z.object({ transcript: z.record(z.string(), z.unknown()).nullable() }) });
 const cursorSchema = z.object({
@@ -76,9 +74,10 @@ function pageOffset(query: TranscriptQuery): number {
 }
 
 export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; signal?: AbortSignal }): FirefliesClient {
-  const http = createClient(fireflies, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
+  const api = client(fireflies, { token: input.apiKey, fetch: input.fetch });
+  const signal = input.signal ? { signal: input.signal } : {};
   const request = (query: string, variables: Record<string, unknown>): Promise<unknown> =>
-    http.json('', { method: 'POST', json: { query, variables }, ...(input.signal ? { signal: input.signal } : {}) });
+    api.json('', { method: 'POST', json: { query, variables }, ...signal });
   const list = (body: unknown, limit: number) => {
     const entries = parseAnswer(listSchema, body).data.transcripts;
     if (entries.length > limit) throw new ProviderHttpError('invalid_response', null);
@@ -86,7 +85,7 @@ export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; si
   };
   return {
     async user() {
-      const { user } = parseAnswer(userSchema, await request(LIVE_USER_QUERY, {})).data;
+      const { user } = (await api.user({}, signal)).data;
       return { userId: user.user_id, email: user.email, name: user.name };
     },
     async transcripts(query) {

@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { fakeFetch } from '../testing.js';
 import { fakeGitHub, type FakeGitHubAccount, type FakeGitHubRepo } from './fake.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/github.recording.json' with { type: 'json' };
 import { githubClient, type GitHubIssue } from './github.js';
 import { githubScenario } from './scenario.test-support.js';
 

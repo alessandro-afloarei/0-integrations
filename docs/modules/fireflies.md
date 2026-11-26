@@ -22,4 +22,5 @@ and keyword search against caller-owned fixture data.
 
 After verifying the raw request with `verifyWebhook`, Fireflies' `parseWebhook(body)` reads the V2 event,
 `meeting_id` and timestamp (number, or legacy string). Unknown fields are omitted; malformed events return null.
+`deliveryId(fireflies.webhook, request)` from `0-integrations/webhooks` reads `event:meeting_id`, the id to dedupe on.
 Apps own deduplication and retain original bytes.

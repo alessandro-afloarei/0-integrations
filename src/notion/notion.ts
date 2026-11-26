@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { ProviderHttpError } from '../errors.js';
-import { createClient } from '../http.js';
+import { client } from '../client.js';
 import type { Page } from '../paginate.js';
+import { nextCursor } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { notion } from '../catalogue/notion.js';
 import { datetime } from '../shapes.js';
@@ -41,15 +41,14 @@ const pageSchema = z.object({ object: z.literal('page'), id, url: z.string(), cr
   .transform(({ properties, ...page }): NotionPage => ({ id: page.id, url: page.url, created_time: page.created_time,
     last_edited_time: page.last_edited_time, in_trash: page.in_trash, title: titleOf(properties) }));
 const listSchema = z.object({ results: z.array(z.unknown()), has_more: z.boolean(), next_cursor: z.string().nullable() });
-const markdownSchema = z.object({ markdown: z.string(), truncated: z.boolean() });
 
 /** `pageSize` is for tests: Notion answers at most 100 a page. */
 export function notionClient(input: { apiKey: string; fetch: typeof fetch; minIntervalMs?: number; pageSize?: number }): NotionClient {
-  const http = createClient(notion, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
+  const api = client(notion, { token: input.apiKey, fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   return {
     async bot() {
-      const { id: botId, bot } = parseAnswer(botSchema, await http.json('/users/me'));
+      const { id: botId, bot } = parseAnswer(botSchema, await api.json('/users/me'));
       return { id: botId, workspace_id: bot.workspace_id ?? null, workspace_name: bot.workspace_name ?? null };
     },
     async pages({ editedAfter, cursor }) {
@@ -59,19 +58,17 @@ export function notionClient(input: { apiKey: string; fetch: typeof fetch; minIn
       // Newest edit first. Search filters on no time, so an incremental read stops where older pages begin instead of
       // paging the whole workspace. And a page edited during the read moves to the top, pushing the unread ones down (read
       // twice) where ascending order would move it to the end and pull them up past the cursor (never read).
-      const answer = parseAnswer(listSchema, await http.json('/search', { method: 'POST', idempotent: true,
+      const answer = parseAnswer(listSchema, await api.json('/search', { method: 'POST', idempotent: true,
         query: { filter_properties: 'title' },
         json: { filter: { property: 'object', value: 'page' }, sort: { timestamp: 'last_edited_time', direction: 'descending' },
           page_size: input.pageSize ?? 100, ...(cursor ? { start_cursor: cursor } : {}) } }));
       const { items, skipped } = parseEntries(pageSchema, answer.results);
       const older = since === null ? -1 : items.findIndex(page => Date.parse(page.last_edited_time) < since);
       if (older >= 0) return { items: items.slice(0, older), skipped, cursor: null };
-      if (answer.has_more && !answer.next_cursor) throw new ProviderHttpError('invalid_response', null, 'cursor_missing');
-      return { items, skipped, cursor: answer.has_more ? answer.next_cursor : null };
+      return { items, skipped, cursor: nextCursor(notion.paging.cursor, answer) };
     },
     async text(pageId) {
-      const answer = parseAnswer(markdownSchema, await http.json(`/pages/${encodeURIComponent(pageId)}/markdown`,
-        { query: { markdown_version: 'v2' } }));
+      const answer = await api.pages.markdown({ pageId });
       return { markdown: answer.markdown, cut: answer.truncated };
     },
   };

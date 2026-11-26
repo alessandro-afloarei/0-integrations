@@ -1,6 +1,6 @@
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
-import type { Entry, Method, Values } from './catalogue.js';
+import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
@@ -15,7 +15,18 @@ export type RequestOptions = {
   signal?: AbortSignal;
 };
 export type ProviderResponse = { status: number; headers: Headers; data: unknown };
+
+/** The request a declared call makes, with what the caller adds: GraphQL is a POST of the query and its variables to
+ * the base. The one rule for every declared call (identify, a request revoke, an operation, a paged operation). */
+export function callRequest(call: Call, extra: RequestOptions & { variables?: Values } = {}): [path: string, options: RequestOptions] {
+  const { variables = {}, ...options } = extra;
+  return call.graphql === undefined
+    ? [call.path ?? '', { method: call.method ?? 'GET', ...(call.query ? { query: call.query } : {}), ...options }]
+    : ['', { method: 'POST', json: { query: call.graphql, variables }, ...options }];
+}
 export type HttpClient = {
+  /** The base every path is read after: the entry's, or the one the client was built with. */
+  readonly baseUrl: string;
   json(path: string, options?: RequestOptions): Promise<unknown>;
   request(path: string, options?: RequestOptions): Promise<ProviderResponse>;
 };
@@ -76,15 +87,18 @@ function credentialOf(entry: Entry, token: string, values: Values): [header: str
   return ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`];
 }
 
-export function createClient(entry: Entry, input: {
+export type HttpOptions = {
   token: (rejected?: string) => Promise<string>; fetch: typeof fetch;
   /** The connection's plain values, for a credential built from them (Aircall's `{apiId}`). */
   values?: Values;
   baseUrl?: string; headers?: Readonly<Record<string, string>>; minIntervalMs?: number;
   /** Runs once per call, before anything is sent (an app's metering); what it throws reaches the caller unchanged. */
   beforeRequest?: (url: URL) => void | Promise<void>;
-}): HttpClient {
-  const baseUrl = input.baseUrl ?? entry.http.baseUrl;
+};
+
+export function createClient(entry: Entry, input: HttpOptions): HttpClient {
+  // Read without a trailing slash, so a path after it never makes `//` (`https://x/v1/` + `/a`).
+  const baseUrl = (input.baseUrl ?? entry.http.baseUrl).replace(/\/+$/u, '');
   const origin = new URL(baseUrl).origin;
   const retry = retryPolicy(entry.http.retry);
   const timeoutMs = entry.http.timeoutMs ?? 30_000;
@@ -93,8 +107,14 @@ export function createClient(entry: Entry, input: {
   let cachedToken: Promise<string> | undefined;
   const renewals = new Map<string, Promise<string>>();
 
+  /** A blank token is never sent: it would be an empty credential. */
+  const nonBlank = (value: string) => {
+    if (value.trim() === '') throw new TypeError('token_missing');
+    return value;
+  };
+
   function token(): Promise<string> {
-    cachedToken ??= input.token().catch((error: unknown) => { cachedToken = undefined; throw error; });
+    cachedToken ??= input.token().then(nonBlank).catch((error: unknown) => { cachedToken = undefined; throw error; });
     return cachedToken;
   }
 
@@ -102,7 +122,7 @@ export function createClient(entry: Entry, input: {
   function renew(rejected: string): Promise<string> {
     let renewal = renewals.get(rejected);
     if (!renewal) {
-      renewal = input.token(rejected).catch((error: unknown) => { renewals.delete(rejected); cachedToken = undefined; throw error; });
+      renewal = input.token(rejected).then(nonBlank).catch((error: unknown) => { renewals.delete(rejected); cachedToken = undefined; throw error; });
       renewals.set(rejected, renewal);
       cachedToken = renewal;
     }
@@ -127,7 +147,8 @@ export function createClient(entry: Entry, input: {
 
   async function send(url: URL, [name, value]: [string, string], options: RequestOptions): Promise<ProviderResponse> {
     const method = options.method ?? 'GET';
-    const limit = (method === 'GET' || options.idempotent) && !options.signal ? retry.limit : 0;
+    // A GET is a read unless the caller says otherwise (an operation declared a write).
+    const limit = (options.idempotent ?? method === 'GET') && !options.signal ? retry.limit : 0;
     let headers: Headers;
     try {
       headers = new Headers(entry.http.headers);
@@ -180,6 +201,8 @@ export function createClient(entry: Entry, input: {
     const url = new URL(baseUrl + path);
     // The credential never leaves the base's origin, the first request included (`https://api.x.test` + `@evil.test`).
     if (url.origin !== origin) throw new TypeError('url_outside_origin');
+    // A path is read after the base, so one without its `/` would run into the base's last segment (`/v1users`).
+    if (path !== '' && !path.startsWith('/') && !path.startsWith('?')) throw new TypeError('url_path_relative');
     for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value);
     await input.beforeRequest?.(new URL(url));
     const sendAs = (bearer: string) => follow(url, bearer, credentialOf(entry, bearer, input.values ?? {}), options);
@@ -191,6 +214,7 @@ export function createClient(entry: Entry, input: {
   };
 
   return {
+    baseUrl,
     request,
     async json(path, options) {
       return responseJson(entry, await request(path, options));

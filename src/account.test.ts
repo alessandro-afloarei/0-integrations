@@ -3,6 +3,7 @@ import { identifyAccount } from './account.js';
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
+import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
@@ -73,4 +74,12 @@ test('a credential check sends its request at once and returns no account', asyn
   const fake = fakeFetch([{ url: 'https://api.apollo.io/api/v1/users/api_profile', respond: json({ id: 'u' }) }]);
   expect(await identifyAccount(apollo, { fetch: fake.fetch, token: 't' })).toEqual({ account: null, values: {} });
   expect(fake.calls).toHaveLength(1);
+});
+
+test("Fireflies' GraphQL identify is one POST of its query to the base", async () => {
+  const fake = fakeFetch([{ method: 'POST', url: 'https://api.fireflies.ai/graphql',
+    respond: json({ data: { user: { user_id: 'u1', name: 'Lee' } } }) }]);
+  expect(await identifyAccount(fireflies, { fetch: fake.fetch, token: 't' })).toEqual({ account: { id: 'u1', name: 'Lee' }, values: {} });
+  expect(fake.calls).toHaveLength(1);
+  expect(JSON.parse(fake.calls[0]?.body ?? '')).toEqual({ query: fireflies.identify.request.graphql, variables: {} });
 });

@@ -15,7 +15,10 @@ export type Recording = { provider: string; synthetic: boolean; source: string; 
 
 /** The calls every provider's client must get right, written once per provider. */
 export type KitScenario<C, I> = {
+  /** The recording's name: `src/catalogue/<provider>.recording.json`. */
   provider: string;
+  /** What the scenario names in place of the test account's own (an account id, an address): swapped when recording. */
+  standIn?: string;
   client(input: { apiKey: string; fetch: typeof fetch }): C;
   /** The call that proves a key works. */
   identify(client: C): Promise<unknown>;
@@ -38,7 +41,7 @@ const requestBody = async (request: Request): Promise<unknown> => {
 };
 
 /** A fetch answering from a recording: each request must match one exchange of that key, or the test names it. */
-function replay(recording: Recording, key: Exchange['key']): typeof fetch {
+export function replay(recording: Recording, key: Exchange['key']): typeof fetch {
   return async (input, init) => {
     const request = new Request(input, init);
     const body = await requestBody(request);

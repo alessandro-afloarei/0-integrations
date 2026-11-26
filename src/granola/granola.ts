@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { paginate, type Page } from '../paginate.js';
+import { nextCursor } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { granola } from '../catalogue/granola.js';
 import { datetime } from '../shapes.js';
@@ -66,7 +67,7 @@ export function granolaClient(input: { apiKey: string; fetch: typeof fetch; minI
       if (updatedAfter) query.updated_after = updatedAfter;
       if (cursor) query.cursor = cursor;
       const page = parseAnswer(listSchema, await get('/notes', query));
-      return { ...parseEntries(summarySchema, page.notes), cursor: page.hasMore && page.cursor ? page.cursor : null };
+      return { ...parseEntries(summarySchema, page.notes), cursor: nextCursor(granola.paging.cursor, page) };
     },
     async note(id) {
       const path = `/notes/${encodeURIComponent(id)}`;
@@ -79,7 +80,7 @@ export function granolaClient(input: { apiKey: string; fetch: typeof fetch; minI
       for await (const page of paginate(async cursor => {
         const result = parseAnswer(transcriptPageSchema, await get(`${path}/transcript`,
           { page_size: '100', ...(cursor ? { cursor } : {}) }));
-        return { items: result.transcript, skipped: [], cursor: result.hasMore ? result.cursor : null };
+        return { items: result.transcript, skipped: [], cursor: nextCursor(granola.paging.cursor, result) };
       })) {
         transcript.push(...page.items);
         if (++pages === TRANSCRIPT_PAGES) {

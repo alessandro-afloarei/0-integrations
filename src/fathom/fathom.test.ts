@@ -3,7 +3,7 @@ import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { fakeFetch, sequence } from '../testing.js';
 import { fakeFathom, type FakeFathomMeeting } from './fake.js';
 import { fathomClient } from './fathom.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/fathom.recording.json' with { type: 'json' };
 import { fathomScenario } from './scenario.test-support.js';
 
 const BASE = 'https://api.fathom.ai/external/v1';
@@ -76,4 +76,9 @@ test('reports a second 429 in a row as rate_limited, with its wait', async () =>
     () => Response.json({}, { status: 429, headers: { 'retry-after': '7' } })) }]);
   await expect(client(fake.fetch).transcript(1)).rejects.toMatchObject({ code: 'rate_limited', retryAfterMs: 7000 });
   expect(fake.calls).toHaveLength(2);
+});
+
+test('a blank next_cursor ends the list', async () => {
+  const fake = fakeFetch([{ url: `${BASE}/meetings`, respond: () => Response.json({ limit: 10, next_cursor: '', items: [] }) }]);
+  expect(await client(fake.fetch).meetings({})).toMatchObject({ cursor: null });
 });

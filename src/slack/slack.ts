@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createClient } from '../http.js';
-import { paginate } from '../paginate.js';
+import { nextCursor, walk } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { slack } from '../catalogue/slack.js';
 
@@ -14,8 +14,7 @@ export type SlackClient = {
 
 const postedSchema = z.object({ ts: z.string() });
 const channelSchema = z.object({ id: z.string(), name: z.string(), is_private: z.boolean().optional() });
-const metadataSchema = z.object({ next_cursor: z.string() });
-const channelsSchema = z.looseObject({ channels: z.array(z.unknown()) });
+const channelsSchema = z.object({ channels: z.array(z.unknown()) });
 
 export function slackClient(input: { token: string; fetch: typeof fetch }): SlackClient {
   const http = createClient(slack, { token: () => Promise.resolve(input.token), fetch: input.fetch });
@@ -30,18 +29,14 @@ export function slackClient(input: { token: string; fetch: typeof fetch }): Slac
       const skipped: (string | null)[] = [];
       let channelsCut = false;
       let count = 0;
-      for await (const page of paginate(async cursor => {
-        const body = parseAnswer(channelsSchema, await http.json('/conversations.list', { query: { types: 'public_channel,private_channel',
-          exclude_archived: 'true', limit: '200', ...(cursor ? { cursor } : {}) } }));
-        const parsed = parseEntries(channelSchema, body.channels);
-        return { items: parsed.items.map(channel => ({ id: channel.id, name: channel.name, isPrivate: channel.is_private === true })),
-          skipped: parsed.skipped, cursor: metadataSchema.safeParse(body.response_metadata).data?.next_cursor || null };
-      })) {
-        channels.push(...page.items);
+      for await (const body of walk(http, slack.paging.cursor, '/conversations.list',
+        { query: { types: 'public_channel,private_channel', exclude_archived: 'true', limit: '200' } })) {
+        const page = parseEntries(channelSchema, parseAnswer(channelsSchema, body).channels);
+        channels.push(...page.items.map(channel => ({ id: channel.id, name: channel.name, isPrivate: channel.is_private === true })));
         skipped.push(...page.skipped);
         // Preserve the picker cap: at most five pages of 200 channels.
         if (++count === 5) {
-          channelsCut = page.cursor !== null;
+          channelsCut = nextCursor(slack.paging.cursor, body) !== null;
           break;
         }
       }

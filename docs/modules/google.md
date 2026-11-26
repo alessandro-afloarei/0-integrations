@@ -13,10 +13,5 @@ is the calendar's owner when the calendar's id is their address. Google answers 
 
 Signing a member in, each account's id and revoking a grant: [connect › Google and Microsoft](connect.md#google-and-microsoft).
 
-`fakeMicrosoft` and `fakeGoogle` (`microsoft/fake`, `google/fake`) answer the sign-in (consent with PKCE, code exchange,
-refresh, Google's revoke) and the reads from synthetic mailboxes: `signIn(state)` names who consents (null declines),
-`mailboxes(address)` what they hold, and `tokens` maps fixed access tokens to an address, as the kit's `GOOD_KEY`. Each
-answers as its provider does where a reader could go wrong: Graph refuses a sort its filter does not lead
-(`InefficientFilter`), lists bodies as HTML, and answers an all-day event's midnight in the mailbox's own zone
-(`utcOffsetMinutes`); Gmail leaves spam and trash out of a listing, answers `format=metadata` with the headers asked for
-only, and keeps a body past 4 KB apart, under an attachment id; Google Calendar refuses `orderBy=startTime` without `singleEvents`.
+`google/fake` exports `fakeGoogle`: the sign-in and the reads on synthetic mailboxes, described with `fakeMicrosoft` on
+the [Microsoft page](microsoft.md).

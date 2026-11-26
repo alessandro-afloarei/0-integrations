@@ -10,4 +10,5 @@ export const slack = defineProvider({
   errors: { detail: 'error', failed: { path: 'ok', equals: false },
     revoked: ['invalid_auth', 'token_revoked', 'account_inactive', 'invalid_refresh_token', 'invalid_grant', 'not_authed'] },
   identify: { id: 'tokenAnswer.team.id', name: 'tokenAnswer.team.name' }, save: { botUserId: 'tokenAnswer.bot_user_id' },
+  paging: { cursor: { kind: 'cursor', next: 'response_metadata.next_cursor', send: { query: 'cursor' } } },
 });

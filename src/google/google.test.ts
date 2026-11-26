@@ -7,8 +7,8 @@ import type { FakeMailbox } from '../mailbox/fake.js';
 import { KIT_MAILBOX, kitMailbox } from '../mailbox/kit.test-support.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { fakeFetch, sequence } from '../testing.js';
-import calendarRecording from './fixtures/calendar-recording.json' with { type: 'json' };
-import mailRecording from './fixtures/mail-recording.json' with { type: 'json' };
+import calendarRecording from '../catalogue/google.calendar.recording.json' with { type: 'json' };
+import mailRecording from '../catalogue/google.mail.recording.json' with { type: 'json' };
 import { googleMailbox } from './google.js';
 import { fakeGoogle } from './fake.js';
 import { googleCalendarScenario, googleMailScenario, KIT_CLIENT, KIT_REDIRECT, kitGoogle } from './scenario.test-support.js';
@@ -65,6 +65,13 @@ test('lists mail after a time by its metadata, leaving out drafts, spam, trash a
   const gone = answering({ [`${GMAIL}/users/me/messages`]: [() => Response.json({ messages: [{ id: 'gone', threadId: 't' }] })],
     [`${GMAIL}/users/me/messages/gone`]: [() => Response.json({ error: { code: 404, status: 'NOT_FOUND', errors: [{ reason: 'notFound' }] } }, { status: 404 })] });
   await expect(reader(gone.fetch).messages({})).resolves.toEqual({ items: [], skipped: [], cursor: null });
+});
+
+test('a blank nextPageToken ends the mail and the events', async () => {
+  const fake = answering({ [`${GMAIL}/users/me/messages`]: [() => Response.json({ nextPageToken: '' })],
+    [`${CALENDAR}/calendars/primary/events`]: [() => Response.json({ items: [], nextPageToken: '' })] });
+  expect(await reader(fake.fetch).messages({})).toMatchObject({ cursor: null });
+  expect(await reader(fake.fetch).events('primary', { start: '2026-11-01T00:00:00Z', end: '2026-11-02T00:00:00Z' })).toMatchObject({ cursor: null });
 });
 
 test("reads Google's quota refusal as a rate limit, and a revoked grant as rejected", async () => {

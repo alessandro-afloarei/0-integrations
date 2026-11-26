@@ -4,11 +4,11 @@ import { createClient, type HttpClient } from '../http.js';
 import { headerValue, keptHeaders, type MailboxEmail, type MailboxEmailAddress, type MailboxEvent, type MailboxEventTime,
   type MailboxReader } from '../mailbox/mailbox.js';
 import type { Page } from '../paginate.js';
+import { nextLink, ownPath } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { microsoft } from '../catalogue/microsoft.js';
 import { datetime, pageSize, utc } from '../shapes.js';
 
-const GRAPH = microsoft.http.baseUrl;
 const text = z.string().nullish().transform(value => value ?? '');
 const emailAddress = z.object({ name: z.string().nullish(), address: z.string().nullish() });
 const recipient = z.object({ emailAddress });
@@ -88,15 +88,6 @@ async function graphUser(http: HttpClient): Promise<{ email: string }> {
   return { email };
 }
 
-/** An address on Graph under the member's own `/me`, as the path after Graph's base; null for anywhere else. */
-function ownPath(address: string): string | null {
-  const graph = new URL(GRAPH);
-  if (!URL.canParse(address)) return null;
-  const url = new URL(address);
-  return url.origin === graph.origin && url.pathname.startsWith(`${graph.pathname}/me/`)
-    ? url.pathname.slice(graph.pathname.length) + url.search : null;
-}
-
 /** One member's Outlook mail and calendar through Microsoft Graph, on their delegated grant. */
 export function graphMailbox(input: { token: (rejected?: string) => Promise<string>; fetch: typeof fetch }): MailboxReader {
   const http = createClient(microsoft, { token: input.token, fetch: input.fetch,
@@ -124,17 +115,13 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
   };
 
   /**
-   * A page of a Graph list. The next page is Graph's `@odata.nextLink`, which may name the resource in its own form
-   * (`/me/calendars('…')/calendarView`): it is followed only on Graph and under the member's own `/me`, read as the address
-   * resolves (dot segments, `%2e%2e` among them), so the token goes nowhere else, and kept as that path.
+   * A page of a Graph list. The next page is Graph's `@odata.nextLink`, followed only under the member's own `/me/` (the
+   * entry's `pathPrefix`), so the token goes nowhere else, and kept as that path.
    */
   async function list(path: string, query: Record<string, string>, cursor: string | undefined): Promise<{ value: unknown[]; cursor: string | null }> {
-    if (cursor !== undefined && ownPath(GRAPH + cursor) === null) throw new TypeError('cursor_invalid');
+    if (cursor !== undefined && ownPath(microsoft.paging.nextLink, http.baseUrl, http.baseUrl + cursor) === null) throw new TypeError('cursor_invalid');
     const answer = parseAnswer(listSchema, await http.json(cursor ?? path, cursor === undefined ? { query } : {}));
-    const next = answer['@odata.nextLink'] ?? null;
-    const nextPath = next === null ? null : ownPath(next);
-    if (next !== null && nextPath === null) throw new ProviderHttpError('invalid_response', null, 'next_link_foreign');
-    return { value: answer.value, cursor: nextPath };
+    return { value: answer.value, cursor: nextLink(microsoft.paging.nextLink, http.baseUrl, answer) };
   }
 
   async function emails(path: string, query: Record<string, string>, cursor: string | undefined): Promise<Page<MailboxEmail>> {

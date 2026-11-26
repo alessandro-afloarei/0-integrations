@@ -1,8 +1,8 @@
 import * as oauth from 'oauth4webapi';
-import { lookupNames, sendCall } from './account.js';
+import { lookupNames } from './account.js';
 import type { Auth, Entry } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { createClient } from './http.js';
+import { callRequest, createClient } from './http.js';
 import { codeOf, responseJson, safeDetail } from './http-response.js';
 import { holds } from './rules.js';
 
@@ -106,7 +106,7 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
 }
 
 export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
-  code: string; redirectUri: string; codeVerifier?: string; fetch: typeof fetch;
+  code: string; redirectUri: string; codeVerifier?: string | undefined; fetch: typeof fetch;
 }): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
   const c = context(entry, client, input.fetch);
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
@@ -168,7 +168,7 @@ export async function revokeGrant(entry: Entry, input: { accessToken?: string; r
     const { accessToken } = input;
     if (accessToken === undefined) return;
     const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch });
-    responseJson(entry, await sendCall(http, revoke.request));
+    responseJson(entry, await http.request(...callRequest(revoke.request)));
   } catch (error) {
     const gone = error instanceof GrantRevoked || (error instanceof ProviderHttpError && error.detail !== null
       && (revoke.goneErrors ?? []).includes(error.detail));

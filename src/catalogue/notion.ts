@@ -8,4 +8,7 @@ export const notion = defineProvider({
   // The latest API version: it names a trashed page `in_trash` (`archived` is gone).
   http: { baseUrl: 'https://api.notion.com/v1', headers: { 'notion-version': '2026-03-11' }, minIntervalMs: 350, retry: {} },
   identify: { request: { path: '/users/me' }, id: 'id', name: 'bot.workspace_name' },
+  paging: { cursor: { kind: 'cursor', next: 'next_cursor', more: 'has_more', send: { body: 'start_cursor' } } },
+  operations: { 'pages.markdown': { path: '/pages/{pageId}/markdown?markdown_version=v2',
+    params: { pageId: { in: 'path', type: 'string', required: true } }, result: { markdown: 'string', truncated: 'boolean' } } },
 });

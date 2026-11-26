@@ -1,10 +1,9 @@
 # Unipile
 
-`exa`, `firecrawl` and `unipile` are provider modules: `exaClient`, `firecrawlClient` and `unipileClient` take the key
-and the app's fetch and return typed calls, so the app never builds a provider request or reads a provider answer.
-The library checks every answer with zod, which no public type names, so an app's own zod version never meets it;
-an answer in the wrong shape is a `ProviderHttpError` with code `invalid_response`. `unipileClient` speaks Unipile V2, one address for every
-workspace (`https://api.unipile.com/v2`, the `unipile` provider's `baseUrl`), with the workspace's V2 key.
+`unipileClient({ apiKey, fetch })` takes the workspace's key and the app's fetch and returns typed calls, so the app
+never builds a request or reads an answer; an answer in the wrong shape is a `ProviderHttpError` with code
+`invalid_response`. It speaks Unipile V2, one address for every workspace (`https://api.unipile.com/v2`, the `unipile`
+entry's `baseUrl`), with the workspace's V2 key.
 
 The hosted sign-in is two calls: `client.authLink(link)` answers the sign-in URL, and `client.account(accountId, signal?)`
 the account it made, `{createdAt, provider, email, scopes}`. The optional signal bounds the account lookup.
@@ -72,3 +71,6 @@ account may name its `provider` (default `linkedin`), `email` (answered as its p
 folders its mail names (`INBOX`, `SENT`, `DRAFT`, `TRASH` and `SPAM` with their roles); its calendars; and a calendar's
 events by start, filtered by `start`, `end` and `updated_after`. Every list pages by cursor, never by offset. An unknown account or calendar is a 404 in Unipile's error shape, and so is a deleted account,
 everywhere in that fake instance.
+
+The kit scenarios `unipile.mail` and `unipile.calendar` name a stand-in account: record them with the workspace's key as
+`RECORD_KEY` and a test account's id as `RECORD_ACCOUNT` ([testing](testing.md#the-provider-kit)).

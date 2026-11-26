@@ -65,13 +65,23 @@ test('reports the entries it could not read, by id', async () => {
   expect(await client(fake).notes({})).toEqual({ items: [summary(note)], skipped: ['not_bad', null], cursor: null });
 });
 
-test('a page claiming more with no cursor is the last', async () => {
+test('a page claiming more with no cursor is cursor_missing', async () => {
   const fake = fakeFetch([{ url: NOTES, respond: () => Response.json({ notes: [], hasMore: true, cursor: null }) }]);
-  expect(await client(fake).notes({})).toEqual({ items: [], skipped: [], cursor: null });
+  await expect(client(fake).notes({})).rejects.toMatchObject({ code: 'invalid_response', detail: 'cursor_missing' });
   const blank = fakeFetch([{ url: NOTES, respond: () => Response.json({ notes: [], hasMore: true, cursor: '' }) }]);
-  expect(await client(blank).notes({})).toEqual({ items: [], skipped: [], cursor: null });
+  await expect(client(blank).notes({})).rejects.toMatchObject({ code: 'invalid_response', detail: 'cursor_missing' });
   const more = fakeFetch([{ url: NOTES, respond: () => Response.json({ notes: [], hasMore: true, cursor: 'c2' }) }]);
   expect(await client(more).notes({})).toMatchObject({ cursor: 'c2' });
+});
+
+test.each([null, ''])('a transcript page claiming more with cursor %j is cursor_missing', async cursor => {
+  const fake = fakeFetch([{ url: /\/v1\/notes\/not_1/u, respond: sequence(
+    () => Response.json({ message: 'too large' }, { status: 413 }),
+    () => Response.json({ ...note, transcript: null }),
+    () => Response.json({ transcript: [line('One')], hasMore: true, cursor }),
+  ) }]);
+  await expect(client(fake).note('not_1')).rejects.toMatchObject({ code: 'invalid_response', detail: 'cursor_missing' });
+  expect(fake.calls).toHaveLength(3);
 });
 
 test('refuses a list or a note in the wrong shape', async () => {

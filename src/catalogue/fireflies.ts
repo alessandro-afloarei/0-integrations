@@ -15,4 +15,6 @@ export const fireflies = defineProvider({
   identify: { request: { graphql: 'query FirefliesUser { user { user_id email name } }' }, id: 'data.user.user_id',
     name: 'data.user.name' },
   webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha256=', deliveryId: { body: ['event', 'meeting_id'] } },
+  operations: { user: { kind: 'read', graphql: 'query FirefliesUser { user { user_id email name } }',
+    result: { data: { user: { user_id: 'string', email: 'string', name: 'string' } } } } },
 });

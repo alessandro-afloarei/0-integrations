@@ -9,7 +9,8 @@ const PAGE = 2;
 const client: KitScenario<UnipileClient, unknown>['client'] = ({ apiKey, fetch }) => unipileClient({ apiKey, fetch });
 
 export const unipileMailScenario: KitScenario<UnipileClient, UnipileEmail> = {
-  provider: 'unipile-mail',
+  provider: 'unipile.mail',
+  standIn: KIT_ACCOUNT,
   client,
   identify: unipile => unipile.account(KIT_ACCOUNT),
   page: (unipile, { since, cursor }) => unipile.emails(KIT_ACCOUNT, { after: since, cursor, limit: PAGE }),
@@ -21,12 +22,13 @@ export const unipileMailScenario: KitScenario<UnipileClient, UnipileEmail> = {
 
 /** The primary calendar's events. */
 export const unipileCalendarScenario: KitScenario<UnipileClient, UnipileEvent> = {
-  provider: 'unipile-calendar',
+  provider: 'unipile.calendar',
+  standIn: KIT_ACCOUNT,
   client,
   identify: unipile => unipile.account(KIT_ACCOUNT),
   async page(unipile, { since, cursor }) {
     const primary = (await unipile.calendars(KIT_ACCOUNT)).find(calendar => calendar.is_primary);
-    if (!primary) throw new Error('unipile-calendar: the account has no primary calendar');
+    if (!primary) throw new Error('unipile.calendar: the account has no primary calendar');
     return unipile.events(KIT_ACCOUNT, primary.id, { updatedAfter: since, cursor, limit: PAGE });
   },
   id: event => event.id,

@@ -1,11 +1,69 @@
 # Changelog
 
-## Unreleased
+## 0.13.0
 
 Every line below breaks 0.12 unless it says otherwise.
 
+### Entries
+
 - New: `0-integrations/catalogue` (`defineProvider` and the entry types), one entry per provider at
   `0-integrations/catalogue/<id>`, and `0-integrations/catalogue.json`, all 17 providers as plain data.
+- `0-integrations/providers` is gone: import a provider's entry from `0-integrations/catalogue/<id>`
+  (`import { hubspot } from '0-integrations/catalogue/hubspot'`).
+- The types of `0-integrations/providers` have their counterparts in `0-integrations/catalogue`: `ProviderDefinition`
+  is `Entry`, `OAuth2Definition` is the `oauth2` member of `Auth`, `RetryPolicy` is `Retry`, `HmacScheme` is `Webhook`.
+- An app that wrote its own `ProviderDefinition` or `HmacScheme` writes an entry instead (`defineProvider`, its scheme
+  as `webhook`); `docs/modules/catalogue.md` describes the fields.
+- A definition's fields are read from the entry: `def.baseUrl` is `entry.http.baseUrl`, `def.oauth2.authUrl` is
+  `entry.auth[0].authorizeUrl`, `def.oauth2.revokeUrl` is `entry.revoke.url`, `def.oauth2.revokedErrors` is
+  `entry.errors.revoked`, and `GOOGLE_CALENDAR_BASE` is `google.http.bases.calendar`.
+- `GOOGLE_SCOPES`, `MICROSOFT_SCOPES`, `HUBSPOT_SCOPES` and `SLACK_SCOPES` are gone: read `<entry>.scopes.default`.
+
+### Connect
+
+- `startConnect(entry, options?)` and `finishConnect(entry, input)` run any catalogue entry. The connect objects
+  `googleConnect`, `microsoftConnect`, `hubspotConnect` and `slackConnect` are gone: pass the entry
+  (`startConnect(hubspot, …)`). `startConnect` requires an OAuth entry's options.
+- `OAuthConnect`, `DirectConnect`, `ConnectIdentity`, `ConnectResult` and `ConnectField` give way to `Entry`,
+  `Connected<E>` and `Field`. An app's own form keeps its own type and calls its own identify; or it declares an entry
+  and calls `startConnect(entry)` and `finishConnect(entry, { secret, values, fetch })`.
+- An app that wrapped a connect object's `identify` (a spread `hubspotConnect`) calls `finishConnect(entry, …)` and maps
+  the result, or its error, itself.
+- `ConnectStart` has no `hosted` kind, and a form's fields are the entry's (`title`, not `label`; `secret` is `true` or
+  absent).
+- `finishConnect` returns `{ secret, values, account }`, typed from the entry: `values` replaces `details`. HubSpot's
+  `portalId` is `account.id`, Slack's `botUserId` is `values.botUserId` (absent, not `null`, when Slack names none), and
+  Google's and Microsoft's address is `account.name`.
+- A key entry's secret is its secret fields by name (`{ apiKey }`) and its values its plain fields: only declared
+  fields are kept, and each must be given, not blank, before anything is sent (`connect_field_required: <name>`). A key
+  entry that declares no secret field is refused first (`connect_secret_field_missing: <entry id>`).
+- An id that is only whitespace is `invalid_response` (`missing_fields`) for every provider; only a lowercased one was.
+- A provider may answer an account id as a positive integer, read as its decimal string, for every provider (Slack,
+  Google and Microsoft required a string).
+- A malformed identity is `invalid_response` with detail `missing_fields` and the answer's status for every provider
+  (HubSpot's carried status and detail `null`).
+
+### Calls
+
+- New: `0-integrations/client`: `client(entry, options)` returns the entry's declared operations, typed from it, and
+  `.json`, `.request` and `.paginate` for raw calls.
+- `0-integrations/http` is gone. An app that called `createClient({ provider, token, fetch, … })` calls
+  `client(entry, { token, fetch, … })` from `0-integrations/client`, whose `.json` and `.request` answer as before; `token`
+  may also be a plain string, and `fetch` is the global one by default. `HttpClient` is `Client<E>`, and `RequestOptions`
+  and `ProviderResponse` come from `0-integrations/client`. An entry always has a base URL (`base_url_required` is gone),
+  and Aircall's credential is built from `values: { apiId }` and the API token.
+- New: the first declared operations: notion `pages.markdown`, fireflies `user`, aircall `calls.transcript`, called as
+  `client(entry, …).pages.markdown(…)` and so on.
+- A missing or blank token is refused with `TypeError('token_missing')` when a request needs it, before anything is
+  sent: a token function that answers one, at first or on renewal, and a missing or blank string token, in every module
+  and client (each was sent as an empty credential).
+- A request path that starts with neither `/` nor `?` (and is not empty) is refused with
+  `TypeError('url_path_relative')` before anything is sent: `json('users')` reached `/v1users`.
+- A base URL with a trailing slash (`https://x.test/v1/`) is read without it: a request went to `/v1//a`, and a next
+  link under it was read wrongly.
+- A request whose URL leaves its base's origin (`https://api.x.test` + `@evil.test/y`) is refused with
+  `TypeError('url_outside_origin')` before the token is read or anything is sent.
+- A GET sent with `idempotent: false` is no longer retried after a 429 (0.12 retried every GET).
 - A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
   by the retry wait. The retry wait no longer accepts forms such as `2e3`, `+2`, `0x10` or `Infinity`: they fall back to
   the body's wait or the default.
@@ -13,66 +71,76 @@ Every line below breaks 0.12 unless it says otherwise.
   every provider. An OAuth refusal's detail now follows the HTTP rule: 1 to 64 characters of letters, digits, `_`, `.`
   or `-`, in any position. A code holding the credential its request sent, before or after that `.`, is no detail; for
   OAuth Basic client authentication that includes the encoded `Authorization` value.
-- unipile: any refusal `type` that passes the sanitiser is carried as the detail, `/` read as `.`; before, only `api/…`
-  and `provider/…` types were, so `errors/…` types are now carried too.
 - Every provider that reads an error code or a wait from the body skips an empty-string code and reads the next path,
   and a path also reads an own dotted key (`{ "error.code": … }`, `{ "error.retryAfterMs": … }`) and an object keyed
   `0` (`{ "errors": { "0": … } }`): apollo, breakcold, fireflies, google and microsoft read such bodies differently than
   before.
-- A request whose URL leaves its base's origin (`https://api.x.test` + `@evil.test/y`) is refused with
-  `TypeError('url_outside_origin')` before the token is read or anything is sent.
-- `createClient(entry, { token, fetch, values?, … })` takes a catalogue entry first, and an entry always has a base URL
-  (`base_url_required` is gone); Aircall's credential is built from `values: { apiId }` and the API token.
-- slack: a code outside 2xx is read too: a 401 `invalid_auth` (or another revoked code) is `GrantRevoked`, and a 429
-  carries Slack's `error` (`ratelimited`) as its detail.
-- fireflies: `identify(client)` is gone: call `client.user()`.
-- slack: an answer is refused when its `ok` is false; a 200 that carries no `ok` is read by its data.
-- lusha: an account without v3 access carries the answer's status (it was always 403) and its `Retry-After` in
-  `retryAfterMs` (it was always `null`).
-- fireflies: a 2xx that is no JSON is `invalid_response` with the answer's status (it was `null`) and its `Retry-After`
-  in `retryAfterMs`. A non-2xx whose first GraphQL code is an empty string and that has no `extensions.code` is
-  `unavailable` (it was `request_failed`).
-- unipile: its entry declares its `apiKey` field, so `startConnect(unipile)` returns a form that asks for it (it was empty).
-- unipile: `unipileConnect` is gone: call `client.authLink(link)` for the sign-in URL and
-  `client.account(accountId, signal)` for the account.
-- `accessToken` always refreshes 15 minutes before expiry: a provider definition's `refreshMarginMs` is gone.
+
+### OAuth and credentials
+
 - `authorizeUrl`, `exchangeCode`, `refreshGrant` and `accessToken({ provider })` take a catalogue entry; a token answer
   is refused inside a 200 when the entry's `auth.failed` holds, with the code `errors.detail` reads (Slack's as before).
 - `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke, by RFC 7009 or by the entry's
-  request, and replaces `revokeGrant(definition, client, token, …)`; an entry without `revoke` is done, and only an
-  RFC 7009 revoke needs `client` (`oauth_client_required` without it).
-- slack: `slackClient(…).revoke()` is gone: call `revokeGrant(slack, { accessToken, fetch })`.
-- `verifyWebhook` takes `entry.webhook`; new `deliveryId(entry.webhook, request)` reads the delivery id an entry declares.
-- breakcold: `parseWebhook` is gone: read `deliveryId(breakcold.webhook, request)`.
-- `startConnect(entry, options?)` and `finishConnect(entry, input)` run any catalogue entry. `OAuthConnect`,
-  `DirectConnect`, `ConnectIdentity`, `ConnectResult`, `ConnectField` and the connect objects `googleConnect`,
-  `microsoftConnect`, `hubspotConnect` and `slackConnect` are gone; `ConnectStart` has no `hosted` kind, and a form's
-  fields are the entry's (`title`, not `label`; `secret` is `true` or absent).
-- `GOOGLE_SCOPES`, `MICROSOFT_SCOPES`, `HUBSPOT_SCOPES` and `SLACK_SCOPES` are gone: read `<entry>.scopes.default`.
-  slack: `identify` is gone; the entry's `identify` and `save` read the token answer.
-- `finishConnect` returns `{ secret, values, account }`, typed from the entry: `values` replaces `details`. HubSpot's
-  `portalId` is `account.id`, Slack's `botUserId` is `values.botUserId` (absent, not `null`, when Slack names none), and
-  Google's and Microsoft's address is `account.name`. A key entry's secret is its secret fields by name (`{ apiKey }`)
-  and its values its plain fields: only declared fields are kept, and each must be given, not blank, before anything is
-  sent (`connect_field_required: <name>`); a key entry that declares no secret field is refused first
-  (`connect_secret_field_missing: <entry id>`). `startConnect` requires an OAuth entry's options.
+  request, and replaces `revokeGrant(definition, client, token, …)`. An entry without `revoke` is done (it threw
+  `revoke_unsupported`), and only an RFC 7009 revoke needs `client` (`oauth_client_required` without it).
+- A connect object's `revoke` is `revokeGrant(entry, …)`: HubSpot's and Google's `revokeGrant(entry, { refreshToken,
+  client, fetch })` (or `{ ...grant, client, fetch }`), Slack's `revokeGrant(slack, { accessToken, fetch })`.
+- `exchangeCode`'s `extras` are the token answer's top-level keys that the entry's `identify` and `save` read
+  (`tokenAnswer.<key>`), and `scope` under `scopes.requireGranted`; a 0.12 definition listed them in `oauth2.extras`. An
+  app's own entry gets a key into `extras` by naming its path in `identify` or `save`.
+- `accessToken` always refreshes 15 minutes before expiry: a provider definition's `refreshMarginMs` is gone.
 - google: a token answer without `scope` passes `requireGranted`, since it granted the scopes requested (RFC 6749
   §5.1); it was refused as `scope_missing`.
-- An id that is only whitespace is `invalid_response` (`missing_fields`) for every provider; only a lowercased one was.
-- A provider may answer an account id as a positive integer, read as its decimal string, for every provider (Slack,
-  Google and Microsoft required a string).
-- slack: `botUserId` is saved as Slack answers it (it was kept only when a string, else `null`).
-- A malformed identity is `invalid_response` with detail `missing_fields` and the answer's status for every provider
-  (HubSpot's carried status and detail `null`).
+
+### Webhooks
+
+- `verifyWebhook` takes `entry.webhook`.
+- New: `deliveryId(entry.webhook, request)` reads the delivery id an entry declares.
+- New: `deliveryId(fireflies.webhook, request)` replaces an app's own Fireflies delivery id (`event:meeting_id`).
+- breakcold: `parseWebhook` is gone: read `deliveryId(breakcold.webhook, request)`.
+
+### Paging
+
+- New: an entry may declare `paging`, named `cursor` and `nextUrl` shapes.
+- fathom and google: a blank `next_cursor` or `nextPageToken` ends the list (it was returned as the cursor `''`).
+- granola: a notes or transcript page whose `hasMore` holds with no cursor is `invalid_response` (`cursor_missing`); the
+  list ended silently (a blank transcript cursor read the first page again).
+- hubspot: in `owners()`, a blank `after` ends the list (it was sent again), and so does a `paging` or `paging.next`
+  that is not an object, or a `paging.next` whose `after` is missing or not a string (each was `invalid_response`). An
+  `after` that comes back is `invalid_response` (`cursor_repeated`).
+
+### Modules
+
+- fireflies: `identify(client)` is gone: call `client.user()`.
+- fireflies: a 2xx that is no JSON is `invalid_response` with the answer's status (it was `null`) and its `Retry-After`
+  in `retryAfterMs`. A non-2xx whose first GraphQL code is an empty string and that has no `extensions.code` is
+  `unavailable` (it was `request_failed`).
 - hubspot: a portal id is any non-empty string or positive integer (a string had to match `^[1-9]\d*$`), and a `null`
   `hub_id` reads account-info (it was refused).
+- hubspot: `owners()` answers `{ items, skipped }`: a malformed owner is skipped and its id reported (it failed the
+  whole list), and an owner whose email is null is left out of both, as one with no email was (a null email failed
+  the list).
+- lusha: an account without v3 access carries the answer's status (it was always 403) and its `Retry-After` in
+  `retryAfterMs` (it was always `null`).
 - microsoft: the account id is Graph's `id` lowercased (Graph ids are lowercase GUIDs). A user with no address (neither
   `mail` nor `userPrincipalName`, or one without `@`) now signs in, named by its address if any, else its id; the
   mailbox reader still refuses it as `no_mailbox` at its first read.
 - microsoft: a Graph mailbox read no longer refuses a `/me` answer that has no `id`.
-- `0-integrations/providers` and its types (`ProviderDefinition`, `OAuth2Definition`, `RetryPolicy`, `HmacScheme`) are
-  gone: import the entry from `0-integrations/catalogue/<id>`. `GOOGLE_CALENDAR_BASE` is gone: read
-  `google.http.bases.calendar`.
+- notion: `text(pageId)` refuses an empty, `.` or `..` page id with `TypeError('param_invalid: pageId')` before anything
+  is sent (it sent `/pages//markdown`, or a path the URL resolved away).
+- aircall: `transcript(callId)` refuses a call id that is not a safe integer with `TypeError('param_invalid: callId')`
+  (it sent `/calls/1.5/transcription`).
+- slack: `slackClient(…).revoke()` is gone: call `revokeGrant(slack, { accessToken, fetch })`.
+- slack: `identify` is gone; the entry's `identify` and `save` read the token answer, and `botUserId` is saved as Slack
+  answers it (it was kept only when a string, else `null`).
+- slack: an answer is refused when its `ok` is false; a 200 that carries no `ok` is read by its data.
+- slack: a code outside 2xx is read too: a 401 `invalid_auth` (or another revoked code) is `GrantRevoked`, and a 429
+  carries Slack's `error` (`ratelimited`) as its detail.
+- unipile: `unipileConnect` is gone: call `client.authLink(link)` for the sign-in URL and
+  `client.account(accountId, signal)` for the account.
+- unipile: its entry declares its `apiKey` field, so `startConnect(unipile)` returns a form that asks for it (it was empty).
+- unipile: any refusal `type` that passes the sanitiser is carried as the detail, `/` read as `.`; before, only `api/…`
+  and `provider/…` types were, so `errors/…` types are now carried too.
 
 ## 0.12.0
 

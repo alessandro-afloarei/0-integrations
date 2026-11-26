@@ -38,10 +38,44 @@ export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[
 export type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64';
   timestamp?: { header: string; toleranceSeconds?: number };
   deliveryId?: { header: string } | { body: readonly Path[] } };
+export type Where = { query: string } | { body: string };
+export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where } | { kind: 'nextUrl'; next: Path;
+  /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
+  pathPrefix?: string };
+/** A value's declared type. In an object, a key ending in `?` may be missing or null, and is read as absent. */
+export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
+/** An operation's argument and where it is sent; `nullable` lets it be sent as JSON `null`. */
+export type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
+  enum?: readonly string[]; description?: string };
+/** A named read or write. `kind` defaults from the method; `paging` names an entry's shape, `records` the list in a page. */
+export type Operation = ({ method?: Method; path: Template } | { graphql: string }) & {
+  kind?: 'read' | 'write' | 'delete'; params?: Readonly<Record<string, Param>>; result?: Shape; records?: Path;
+  paging?: string; notFound?: 'null' };
 /** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. */
 export type Entry = { id: string; name: string; fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
   scopes?: { default: readonly string[]; requireGranted?: true }; identify?: Identify;
-  save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook };
+  save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook;
+  paging?: Readonly<Record<string, Paging>>; operations?: Readonly<Record<string, Operation>> };
+
+/** The scalar each shape name stands for. */
+type Scalars = { string: string; integer: number; number: number; boolean: boolean; unknown: unknown };
+/** An optional shape key without its `?`; never for a required one. */
+type OptionalKey<K> = K extends `${infer N}?` ? N : never;
+/** The TypeScript type a shape declares: a `key?` is optional, never null (a null is read as absent). */
+export type TypeOf<S> = S extends keyof Scalars ? Scalars[S] : S extends readonly [infer E] ? TypeOf<E>[]
+  : { -readonly [K in keyof S as Exclude<K, `${string}?`>]: TypeOf<S[K]> } & { -readonly [K in keyof S as OptionalKey<K>]?: TypeOf<S[K]> };
+/** The client's own calls: an operation id whose first segment EQUALS one is refused (`'requests.create'` is fine), and
+ * so is `then` itself, which would make the client a thenable. `clashing` in rules.ts is the run time's copy. */
+type Reserved = 'json' | 'request' | 'paginate';
+type Unreserved<Ops> = { [K in keyof Ops]: K extends Reserved | `${Reserved}.${string}` | 'then'
+  ? "json, request, paginate and then are the client's own: rename this operation" : Ops[K] };
+/** The `{name}`s of a path template. */
+type PathParams<P> = P extends `${string}{${infer N}}${infer R}` ? N | PathParams<R> : never;
+/** Each `{name}` of an operation's path is a required `path` parameter, and its `paging` a shape the entry declares. */
+type Declared<Ops, Pagings> = { [K in keyof Ops]: (Ops[K] extends { path: infer P } ? [PathParams<P>] extends [never] ? unknown
+  : { params: { [N in PathParams<P> & string]: { in: 'path'; required: true } } } : unknown)
+  & (Ops[K] extends { paging: infer G } ? G extends keyof Pagings ? unknown : 'paging names no shape this entry declares' : unknown) };
 
 /** One provider, as plain data. The literal's type is kept, so a client's types are inferred from it. */
-export function defineProvider<const D extends Entry>(data: D): D { return data; }
+export function defineProvider<const D extends Entry>(
+  data: D & { operations?: Unreserved<D['operations']> & Declared<D['operations'], D['paging']> }): D { return data; }

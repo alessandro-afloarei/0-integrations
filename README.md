@@ -1,7 +1,8 @@
 # 0-integrations
 
-0-integrations handles sign-in, token storage and refresh, authenticated calls and incoming webhooks for many services.
-It runs inside your own Node app, with no hosted service and no account to create.
+0-integrations connects a Node app to other services: sign-in, credentials and token refresh, authenticated calls,
+paging and incoming webhooks. It is a library that runs inside your own app. There is no hosted service and no account
+to create.
 
 ## Install
 
@@ -12,7 +13,101 @@ pnpm add 0-integrations
 It needs Node 22 or later and is ESM only. Import the module you need through its subpath; there is no root barrel.
 The TypeScript declarations are the API reference.
 
-## The four seams
+## How it works
+
+Each provider is an entry: one file of plain data that says how to sign in, how to learn the account, how the
+credential travels, how errors read and which calls the provider offers. One engine runs any entry. A provider that
+needs real code, such as answers with meaning, incremental reads or parsed webhooks, also has a module built on its
+entry, with a fake for tests.
+
+What an app keeps for each account is a connection: a secret to seal (an API key, or an OAuth grant) and plain values to
+store. Sign-in is `startConnect` and `finishConnect`, and calls go through `client`.
+
+## Connect a key provider
+
+```ts
+import { attio } from '0-integrations/catalogue/attio';
+import { finishConnect, startConnect } from '0-integrations/connect';
+
+const { fields } = await startConnect(attio); // the form to draw: one secret field, "API key"
+const { secret, account } = await finishConnect(attio, { secret: { apiKey }, fetch });
+// secret: { apiKey }, to seal; account: { id, name } of the workspace. A bad key throws ProviderHttpError `rejected`.
+```
+
+## Connect an OAuth provider
+
+```ts
+import { google } from '0-integrations/catalogue/google';
+import { finishConnect, startConnect } from '0-integrations/connect';
+
+// Send the browser to `start.url`; keep `state` and `start.codeVerifier` on the server.
+const start = await startConnect(google, { clientId: oauthClient.clientId, redirectUri, state });
+
+// In the callback, once the state matches, with the verifier kept at the start:
+const { secret, account } = await finishConnect(google, {
+  client: oauthClient, code, redirectUri, codeVerifier, fetch, onRevokeFailed: error => { report(error); },
+});
+// secret: the grant, to seal; account: { id, name }, the member's address.
+```
+
+The [HubSpot page](docs/modules/hubspot.md) runs a whole OAuth connect against the HubSpot fake, with no account or
+network.
+
+## Call a provider
+
+```ts
+import { notion } from '0-integrations/catalogue/notion';
+import { client } from '0-integrations/client';
+
+const api = client(notion, { token: apiKey });
+const page = await api.pages.markdown({ pageId }); // typed: { markdown: string; truncated: boolean }
+const me = await api.json('/users/me'); // raw: authenticated, paced, classified errors
+```
+
+Any entry gives the raw calls `json`, `request` and `paginate`; an entry that declares operations adds them, typed. For
+an OAuth connection, `token` is a function that renews the token: [client](docs/modules/client.md) shows one.
+
+## Providers
+
+Every provider's entry is a file in [`src/catalogue/`](src/catalogue), published at `0-integrations/catalogue/<id>`.
+The build writes them all, each with its tier, to `0-integrations/catalogue.json`: that file is the provider list, and
+an entry needs no line here. The providers below also have a module and a fake at `<id>/fake`.
+
+| Module | Auth | Reads | Writes | Webhooks |
+|---|---|---|---|---|
+| [Aircall](docs/modules/aircall.md) | Key | calls, transcripts | — | — |
+| [Apollo](docs/modules/apollo.md) | Key | people and company enrichment | — | — |
+| [Attio](docs/modules/attio.md) | Key | records, notes, members | — | — |
+| [Breakcold](docs/modules/breakcold.md) | Key | workspaces, records, notes, meetings | — | signature, delivery id |
+| [Exa](docs/modules/exa.md) | Key | web search | — | — |
+| [Fathom](docs/modules/fathom.md) | Key | meetings, transcripts | — | — |
+| [Firecrawl](docs/modules/firecrawl.md) | Key | site maps, page scrapes | — | — |
+| [Fireflies](docs/modules/fireflies.md) | Key | transcripts, search | — | signature, event, delivery id |
+| [GitHub](docs/modules/github.md) | Key | repositories, issues, pull requests | — | — |
+| [Google](docs/modules/google.md) | OAuth | Gmail, Google Calendar | — | — |
+| [Granola](docs/modules/granola.md) | Key | notes, transcripts | — | — |
+| [HubSpot](docs/modules/hubspot.md) | OAuth | CRM objects, associations, stages, owners, stage history | — | — |
+| [Lusha](docs/modules/lusha.md) | Key | person and company lookups, credits | — | — |
+| [Microsoft](docs/modules/microsoft.md) | OAuth | Outlook mail and calendar | — | — |
+| [Notion](docs/modules/notion.md) | Key | shared pages, page text | — | — |
+| [Slack](docs/modules/slack.md) | OAuth | channels | post a message | — |
+| [Unipile](docs/modules/unipile.md) | Key, plus hosted sign-in | accounts, mail, calendars | delete an account | — |
+
+## Core
+
+| Module | What it does |
+|---|---|
+| [`catalogue`](docs/modules/catalogue.md) | `defineProvider` and the entry types; `catalogue/<id>` is one entry, `catalogue.json` all of them |
+| [`connect`](docs/modules/connect.md) | `startConnect` and `finishConnect`: one flow for OAuth and key forms, run from an entry |
+| [`client`](docs/modules/client.md) | `client(entry, { token })`: the entry's operations, and `json`, `request` and `paginate` |
+| [`oauth`](docs/modules/oauth.md) | Consent URLs, code exchange, refresh and revoke, with PKCE |
+| [`credentials`](docs/modules/credentials.md) | Reads API keys and refreshes OAuth tokens under a lock |
+| [`vault`](docs/modules/vault.md) | Seals JSON secrets under per-tenant data keys |
+| [`webhooks`](docs/modules/webhooks.md) | HMAC signature checks over the raw body bytes, and delivery ids |
+| [`paginate`](docs/modules/paginate.md) | Walks a module's pages and refuses a repeated cursor |
+| [`errors`](docs/modules/errors.md) | Coded errors such as `ProviderHttpError` and `GrantRevoked`, never carrying provider bodies or secrets |
+| [`testing`](docs/modules/testing.md) | Scripted fetch, in-memory stores and locks, and a check for your own credential store |
+| [`mailbox`](docs/modules/mailbox.md) | One shape for a member's mail and calendar, whatever the transport |
 
 To store credentials (`vault` and `credentials`), an app implements four seams; the library contains no database or
 Redis client. `testing` has in-memory versions of the stores and the lock for tests:
@@ -24,79 +119,10 @@ KeySource: expose current KEK version, write format, and get(version).
 WithLock: run work under a named lock, or return "busy".
 ```
 
-## Example: connect HubSpot
-
-This example runs against the HubSpot fake, so it needs no account or network.
-
-```ts
-import { hubspot } from '0-integrations/catalogue/hubspot';
-import { startConnect, finishConnect } from '0-integrations/connect';
-import { fakeHubSpot } from '0-integrations/hubspot/fake';
-import { fakeFetch } from '0-integrations/testing';
-
-const redirectUri = 'https://app.test/api/integrations/hubspot/callback';
-const http = fakeFetch(fakeHubSpot({ ...portalData, client, redirectUri }));
-const { url } = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
-const consent = await http.fetch(url, { redirect: 'manual' });
-const back = new URL(consent.headers.get('location') ?? '');
-if (back.searchParams.get('state') !== state) throw new Error('state_mismatch');
-const code = back.searchParams.get('code');
-if (!code) throw new Error('missing_code');
-const { secret, account } = await finishConnect(hubspot, {
-  client, code, redirectUri, fetch: http.fetch, onRevokeFailed,
-});
-// secret: the OAuth grant to seal; account: { id: '42', name: 'Portal 42' }
-```
-
-The example uses app-owned `portalData`, OAuth `client`, a fresh stored `state`, and an `onRevokeFailed` observer.
-In the app, consume and validate that state once; keep the returned secret on the server.
-In an app you redirect the browser to `url`, read `code` and `state` in your callback, check the state, and pass
-your real (guarded) `fetch` to `finishConnect`.
-
-## Modules
-
-| Module | What it does |
-|---|---|
-| [`errors`](docs/modules/errors.md) | Coded errors such as `ProviderHttpError` and `GrantRevoked`, never carrying provider bodies or secrets |
-| [`catalogue`](docs/design/entries-and-engine.md) | `defineProvider` and the entry types; `catalogue/<id>` is one provider's entry as plain data, `catalogue.json` every entry as JSON |
-| [`vault`](docs/modules/vault.md) | Seals JSON secrets under per-tenant data keys |
-| [`oauth`](docs/modules/oauth.md) | Consent URLs, code exchange, refresh and revoke, with PKCE |
-| [`connect`](docs/modules/connect.md) | `startConnect` and `finishConnect`: one flow for OAuth and key forms, run from a catalogue entry |
-| [`credentials`](docs/modules/credentials.md) | Reads API keys and refreshes OAuth tokens under a lock |
-| [`http`](docs/modules/http.md) | An authenticated client with timeouts, pacing and capped 429 waits |
-| [`webhooks`](docs/modules/webhooks.md) | HMAC signature checks over the raw body bytes |
-| [`paginate`](docs/modules/paginate.md) | Walks a client's pages and refuses a repeated cursor |
-| [`testing`](docs/modules/testing.md) | Scripted fetch, in-memory stores and locks, and a check for your own credential store |
-| [`mailbox`](docs/modules/mailbox.md) | One shape for a member's mail and calendar, whatever the transport |
-
-## Providers
-
-Each provider has its own subpath, and its fake sits beside it at `<provider>/fake`.
-
-| Provider | Auth | Reads | Writes | Webhooks | Fake |
-|---|---|---|---|---|---|
-| [Aircall](docs/modules/aircall.md) | Key | calls, transcripts | — | — | `aircall/fake` |
-| [Apollo](docs/modules/apollo.md) | Key | people and company enrichment | — | — | `apollo/fake` |
-| [Attio](docs/modules/attio.md) | Key | records, notes, members | — | — | `attio/fake` |
-| [Breakcold](docs/modules/breakcold.md) | Key | workspaces, records, notes, meetings | — | signature, delivery id | `breakcold/fake` |
-| [Exa](docs/modules/exa.md) | Key | web search | — | — | `exa/fake` |
-| [Fathom](docs/modules/fathom.md) | Key | meetings, transcripts | — | — | `fathom/fake` |
-| [Firecrawl](docs/modules/firecrawl.md) | Key | site maps, page scrapes | — | — | `firecrawl/fake` |
-| [Fireflies](docs/modules/fireflies.md) | Key | transcripts, search | — | signature, event | `fireflies/fake` |
-| [GitHub](docs/modules/github.md) | Key | repositories, issues, pull requests | — | — | `github/fake` |
-| [Google](docs/modules/google.md) | OAuth | Gmail, Google Calendar | — | — | `google/fake` |
-| [Granola](docs/modules/granola.md) | Key | notes, transcripts | — | — | `granola/fake` |
-| [HubSpot](docs/modules/hubspot.md) | OAuth | CRM objects, associations, stages, owners, stage history | — | — | `hubspot/fake` |
-| [Lusha](docs/modules/lusha.md) | Key | person and company lookups, credits | — | — | `lusha/fake` |
-| [Microsoft](docs/modules/microsoft.md) | OAuth | Outlook mail and calendar | — | — | `microsoft/fake` |
-| [Notion](docs/modules/notion.md) | Key | shared pages, page text | — | — | `notion/fake` |
-| [Slack](docs/modules/slack.md) | OAuth | channels | post a message | — | `slack/fake` |
-| [Unipile](docs/modules/unipile.md) | Key, plus hosted sign-in | accounts, mail, calendars | delete an account | — | `unipile/fake` |
-
 ## Roadmap and contributing
 
 - [ROADMAP.md](ROADMAP.md): where the library is going.
-- [CONTRIBUTING.md](CONTRIBUTING.md): setup, the one check command, and what a new provider module ships with.
+- [CONTRIBUTING.md](CONTRIBUTING.md): setup, the one check command, and how to add a provider.
 - [SECURITY.md](SECURITY.md): how to report a vulnerability privately.
 - [CHANGELOG.md](CHANGELOG.md): every release, with the migration for each breaking change.
 

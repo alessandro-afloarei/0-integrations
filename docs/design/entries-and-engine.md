@@ -175,8 +175,8 @@ type Send = { header: string; value?: Template } | { basic: readonly [Template, 
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today.
-- A sign-in the provider hosts on its own page (Unipile's) is not a kind: the entry is a `key` entry for the app's own
-  key, and the provider's module offers the hosted link and the account lookup as calls.
+- A sign-in the provider hosts on its own page is not a kind: the entry is a `key` entry for the app's own key, and the
+  provider's module offers the hosted link and the account lookup as calls.
 
 ### `identify` and `save`
 
@@ -290,17 +290,34 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 ```
 
 - An operation's key is its id (`'issues.create'`). `kind` defaults from the method: GET is a read, DELETE a delete,
-  anything else a write. A search sent as POST says `kind: 'read'`, and reads are the calls the engine retries.
+  anything else a write. A GraphQL operation is a POST, so a write unless it says `kind: 'read'`. A search sent as POST
+  says `kind: 'read'`, and reads are the calls the engine retries.
 - A shape key ending in `?` may be missing or null, and is read as absent.
-- `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`.
+- `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 204
+  (the usual answer to DELETE, PUT and PATCH) answers `null`, which `unknown` already covers. Any other answer without
+  JSON, and a 204 to an operation with a `result`, is `invalid_response`.
 - A path's `{name}` must be a declared `path` parameter; the compiler refuses the entry otherwise.
+- An operation id's first dot-separated segment is never `json`, `request` or `paginate` (compared for equality, so
+  `requests.list` is fine): those are the client's own calls. Nor is an id `then`, which would make the client a
+  thenable. No id has an empty segment or is a dotted prefix of another (`pages` beside `pages.markdown`). The
+  compiler refuses a reserved first segment and `then`; the table test and `client()` refuse every one of these, and
+  `client()` refuses an app's own with `operation_clash: <id>`.
+- At run time each argument is checked by its declared type (and `enum`) before anything is sent; one that does not fit
+  is a `TypeError` naming it (`param_missing: <name>`, `param_invalid: <name>`). An argument that is not declared, or is
+  `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
+  out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
+  strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body` parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}`
+  when none), posted with the query to the base.
+- A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
+  a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
+  any, with their `id`s (or `null`). Without `records` it yields each page's whole answer.
 - There are no sync concepts here: no parent and child streams, no incremental cursors, no transforms. An app calls an
   operation with the parent's id.
 
 ### What data cannot say
 
 There are no hooks, and `defineProvider` takes one argument. What an entry cannot say is a call of the provider's
-module: Unipile's hosted sign-in link and its two-request account lookup are its module's `authLink` and `account`.
+module: a hosted sign-in link and a two-request account lookup are calls of that provider's module.
 A hook is added only when a provider's sign-in or identity can be neither data nor a module call.
 
 ## The engine
@@ -316,7 +333,7 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 | `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
 | `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, plus `deliveryId(entry.webhook, request)`. |
-| `client` (new) | `client(entry, { token, values?, headers?, fetch? })` returns the typed operations, plus `json`, `request` and `pages` for raw calls. `token` is a string or a function that renews it. |
+| `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default. |
 | `vault` | Unchanged. A connection's plain values are the app's to keep. |
 
 ```ts
@@ -325,7 +342,8 @@ import { attio } from '0-integrations/catalogue/attio';
 
 const api = client(attio, { token: process.env.ATTIO_KEY });
 const self = await api.json('/self');                          // raw, authenticated, retried
-for await (const record of api.records.list({ object: 'people' })) { /* typed */ }
+// An entry that declares operations adds them, typed:
+// for await (const issue of api.issues.list({ teamId }, { onSkipped: ids => log(ids) })) { … }
 ```
 
 **Types.** `defineProvider` takes a `const` type parameter, so the client's methods, arguments, results and paging are

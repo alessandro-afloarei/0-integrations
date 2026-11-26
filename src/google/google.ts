@@ -3,6 +3,7 @@ import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { decodeWords, headerValue, keptHeaders, parseAddressList, type MailboxEmail, type MailboxEvent, type MailboxEventTime,
   type MailboxReader } from '../mailbox/mailbox.js';
+import { nextCursor } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { google } from '../catalogue/google.js';
 import { datetime, pageSize } from '../shapes.js';
@@ -151,7 +152,7 @@ export function googleMailbox(input: { token: (rejected?: string) => Promise<str
         if (!read) parsed.skipped.push(message.id);
         return read ? [read] : [];
       });
-      return { items, skipped: parsed.skipped, cursor: listed.nextPageToken ?? null };
+      return { items, skipped: parsed.skipped, cursor: nextCursor(google.paging.pageToken, listed) };
     },
     async thread(threadId) {
       const thread = parseAnswer(threadSchema, await gmail.json(`/users/me/threads/${encodeURIComponent(threadId)}`, { query: { format: 'full' } }));
@@ -194,7 +195,7 @@ export function googleMailbox(input: { token: (rejected?: string) => Promise<str
           event_type: event.eventType ?? 'default', transparency: event.transparency ?? 'opaque',
           visibility: event.visibility === 'private' || event.visibility === 'confidential' ? 'private' : 'public' }];
       });
-      return { items, skipped: parsed.skipped, cursor: answer.nextPageToken ?? null };
+      return { items, skipped: parsed.skipped, cursor: nextCursor(google.paging.pageToken, answer) };
     },
   };
 }

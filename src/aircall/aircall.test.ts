@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
-import { fakeFetch } from '../testing.js';
+import { fakeFetch, sequence } from '../testing.js';
 import { aircallClient } from './aircall.js';
 import { fakeAircall, type FakeAircallCall } from './fake.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/aircall.recording.json' with { type: 'json' };
 import { aircallScenario } from './scenario.test-support.js';
 
 const BASE = 'https://api.aircall.io/v1';
@@ -53,6 +53,13 @@ test('reads a transcript, none while Aircall has none, and refuses a company wit
   await expect(client(http.fetch).transcript(2)).resolves.toBeNull();
   await expect(client(http.fetch).transcript(3)).rejects.toMatchObject({ code: 'request_failed', status: 403,
     detail: 'ai_assist_required' });
+});
+
+test('a transcript answered by a 204 or by a 200 that is no JSON is invalid_response', async () => {
+  const http = fakeFetch([{ url: `${BASE}/calls/1/transcription`, respond: sequence(() => new Response(null, { status: 204 }),
+    () => new Response('<html>proxy</html>', { status: 200 })) }]);
+  await expect(client(http.fetch).transcript(1)).rejects.toMatchObject({ code: 'invalid_response', status: 204 });
+  await expect(client(http.fetch).transcript(1)).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
 });
 
 test("reads a webhook-style string user id as Aircall's number, and a null user id or phone number as none", async () => {
