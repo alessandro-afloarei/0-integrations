@@ -32,7 +32,7 @@ export const capsule = defineProvider({
       result: { party } },
     'parties.create': { docs: `${ref}/Party#createParty`, method: 'POST', path: '/parties',
       params: { party: { in: 'body', required: true, type: { type: 'string', ...written },
-        description: 'type is person (firstName, lastName) or organisation (name).' } }, result: { party } },
+        description: 'type is person (firstName, lastName) or organisation (name, which it requires: "trying to create an organisation without a name" answers 422).' } }, result: { party } },
     'parties.update': { docs: `${ref}/Party#updateParty`, method: 'PUT', path: '/parties/{partyId}',
       params: { partyId, party: { in: 'body', required: true, type: written,
         description: 'Only the fields sent change; an email address without an id is added.' } }, result: { party } },
