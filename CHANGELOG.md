@@ -10,6 +10,13 @@ Every line below breaks 0.12 unless it says otherwise.
 - New: `0-integrations/client`: `client(entry, options)` takes the options `createClient` took, with `token` also a
   plain string and `fetch` the global one by default; `.json`, `.request`, `.paginate` and the entry's operations.
 - `0-integrations/http` is gone: `client(entry, …).json` and `.request` replace `createClient`.
+- New: the notion, fireflies and aircall entries declare their first operations: `pages.markdown`, `user` and
+  `calls.transcript`.
+- notion, fireflies, aircall: `notionClient`, `firefliesClient` and `aircallClient` throw `TypeError('token_missing')`
+  for a missing or blank API key or token (it was sent as an empty credential).
+- notion: `text(pageId)` refuses an empty, `.` or `..` page id with `TypeError('param_invalid: pageId')` before anything
+  is sent (it sent `/pages//markdown`, or a path the URL resolved away). aircall: `transcript(callId)` refuses a call id that is not a safe
+  integer with `TypeError('param_invalid: callId')` (it sent `/calls/1.5/transcription`).
 - A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
   by the retry wait. The retry wait no longer accepts forms such as `2e3`, `+2`, `0x10` or `Infinity`: they fall back to
   the body's wait or the default.
