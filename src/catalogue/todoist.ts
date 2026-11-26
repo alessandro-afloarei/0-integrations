@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Todoist: OAuth 2, or a personal API token, both as Bearer. Errors name their code in `error_tag`; a 429 is too
- * many requests from one user (https://developer.todoist.com/api/v1/sync/overview.md). Webhooks fire only for users who
- * signed in through the app's OAuth 2; each is the base64 HMAC-SHA256 of the body, keyed with the client secret, in
- * `X-Todoist-Hmac-SHA256` (https://developer.todoist.com/api/v1/webhooks.md). */
+ * many requests from one user (https://developer.todoist.com/api/v1/sync/overview.md). `tasks.get` reads active tasks
+ * only: a completed one reads as absent. Webhooks fire only for users of the app's OAuth 2: the base64 HMAC-SHA256 of
+ * the body, keyed with the client secret, in `X-Todoist-Hmac-SHA256` (https://developer.todoist.com/api/v1/webhooks.md). */
 const v1 = 'https://developer.todoist.com/api/v1';
 const task = { id: 'string', content: 'string', checked: 'boolean', project_id: 'string', 'parent_id?': 'string',
   'added_at?': 'string', 'updated_at?': 'string' } as const;

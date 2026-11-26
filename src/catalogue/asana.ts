@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Asana: OAuth 2, its app shared with "Any workspace" for other people's (https://developers.asana.com/docs/manage-distribution),
- * or a personal access token, both as Bearer. An app registered for Full permissions cannot ask these scopes: it asks
- * `default`. A 429 names its wait in `Retry-After` (https://developers.asana.com/docs/rate-limits). Bodies and answers
- * sit under `data`; a list pages only when `limit` is sent (https://developers.asana.com/docs/pagination). */
+/** Asana: OAuth 2, its app registered for these four scopes (only pre-approved scopes are accepted; an app with Full
+ * permissions asks `default` instead) and shared with "Any workspace" (https://developers.asana.com/docs/oauth), or a
+ * personal access token, both as Bearer. A 429 names its wait in `Retry-After` (https://developers.asana.com/docs/rate-limits).
+ * Bodies and answers sit under `data`; a list pages only when `limit` is sent (https://developers.asana.com/docs/pagination). */
 const task = { gid: 'string', 'name?': 'string', 'completed?': 'boolean', 'parent?': { 'gid?': 'string' },
   'permalink_url?': 'string', 'created_at?': 'string', 'modified_at?': 'string' } as const;
 const taskGid = { in: 'path', type: 'string', required: true } as const;
