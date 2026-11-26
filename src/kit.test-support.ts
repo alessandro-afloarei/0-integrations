@@ -5,7 +5,7 @@ import type { Entry } from './catalogue.js';
 import { finishConnect } from './connect.js';
 import type { ProviderHttpError } from './errors.js';
 import { paginate, type Page } from './paginate.js';
-import { parseJson, placeholders } from './rules.js';
+import { parseJson } from './rules.js';
 import { fakeFetch, type Route } from './testing.js';
 
 /** One request and its answer. `key` says which key sent it: the scenario's good key or a bad one. */
@@ -39,13 +39,10 @@ export type KitScenario<C, I> = {
 export const GOOD_KEY = 'kit-good-key';
 export const BAD_KEY = 'kit-bad-key';
 
-/** An entry's plain fields as the kit fills them: the default, else the first choice, else `kit-<name>`. A field the
- * base's host takes is `kit-<name>.example.test`: a name (never an address, which a typed host refuses), under a domain
- * that never resolves. */
+/** An entry's plain fields as the kit fills them: the default, else the first choice, else `kit-<name>`. */
 export function kitValues(entry: Entry): Record<string, string> {
-  const inHost = placeholders(entry.http.baseUrl.slice('https://'.length).split('/')[0] ?? '');
-  return Object.fromEntries((entry.fields ?? []).filter(field => field.secret !== true).map(({ name, default: given, choices }) =>
-    [name, given ?? choices?.[0] ?? (inHost.includes(name) ? `kit-${name}.example.test` : `kit-${name}`)]));
+  return Object.fromEntries((entry.fields ?? []).filter(field => field.secret !== true)
+    .map(({ name, default: given, choices }) => [name, given ?? choices?.[0] ?? `kit-${name}`]));
 }
 
 /** Signs in with a key: a key or token entry through `finishConnect` on its plain values (the kit's unless given), an

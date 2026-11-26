@@ -530,7 +530,8 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
    join the table's replay with the first entry that has them and no module.
 3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
    `./testing`) answers identify, a `token` entry's token request and each operation the app answers, filling the base
-   and the credential with the engine's own functions. Every entry with an identify request, and every `token` entry,
+   and the credential with the engine's own functions, and comparing a token request with the one the engine sends for
+   the good key. Every entry with an identify request, and every `token` entry,
    signs in on it with a good key and is `rejected` with a bad one, with no recording.
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.

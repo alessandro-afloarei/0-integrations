@@ -14,12 +14,16 @@ the base filled from `values` with the engine's own rules): a request without it
 - Identify's request answers `account`, or by default `kit-account` at the first answer path of `identify.id` and
   `kit-name` at the first of `name`.
 - A `token` entry's token request answers `kit-token` (at its `token` path), `expires_in: 3600` and a kit value at every
-  `tokenAnswer.*` path the entry reads; one whose Basic or body differs is 400 `{ "error": "invalid_client" }`. Its calls
-  then carry `kit-token`.
+  `tokenAnswer.*` path the entry reads (never over the token or `expires_in`). One whose Basic or body differs from the
+  request the engine sends for `key` is 400 `{ "error": "invalid_client" }`. Its calls then carry `kit-token`.
 - Each operation the app answers is routed by its method and path (each `{name}` one segment, decoded into
-  `call.path`), or for GraphQL by its query. Its function gets `{ path, query, body }` and returns the JSON answered with
+  `call.path`; a literal segment beats a placeholder, so `/items/recent` is never answered by `/items/{id}`), or for
+  GraphQL by its query. Its function gets `{ path, query, body }` and returns the JSON answered with
   200, `undefined` for a 404, or a `Response` answered as it is. Paging is the function's: it answers each page as it
   likes.
+- The fake owns a GraphQL URL: a query it has no answer for throws
+  `fakeProvider: no answer for this GraphQL query at POST <url>`. An app's own route for another query on that URL goes
+  before the fake's routes, or into `operations`.
 - `values` must be complete (the fake applies no `default`, as a client applies none), and a request no route matches is
   `fakeFetch`'s own "no route" error.
 

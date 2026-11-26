@@ -111,7 +111,8 @@ describe('fakeProvider', () => {
     await expect(client(fireflies, { token: 'k', fetch }).user()).resolves.toEqual({ data: { user } });
     expect(calls).toEqual([{ path: {}, query: {}, body: { query: fireflies.operations.user.graphql, variables: {} } }]);
     await expect(fetch('https://api.fireflies.ai/graphql', { method: 'POST', headers: { authorization: 'Bearer k' },
-      body: JSON.stringify({ query: 'query Other { other }' }) })).rejects.toThrow('fakeFetch: no route for POST https://api.fireflies.ai/graphql');
+      body: JSON.stringify({ query: 'query Other { other }' }) }))
+      .rejects.toThrow('fakeProvider: no answer for this GraphQL query at POST https://api.fireflies.ai/graphql');
   });
 
   test('a request no route matches is fakeFetch\'s own "no route" error', async () => {
@@ -136,15 +137,15 @@ describe('fakeProvider', () => {
   });
 
   test("Metabase's fake answers a session to the right JSON body, and its calls require that session", async () => {
-    expect(kitValues(metabase)).toEqual({ host: 'kit-host.example.test', username: 'kit-username' });
-    const values = { host: 'kit-host.example.test', username: 'u' };
+    expect(kitValues(metabase)).toEqual({ host: 'kit-host', username: 'kit-username' });
+    const values = { host: 'kit-host', username: 'u' };
     const withCalls = defineProvider({ ...metabase, operations: { 'user.current': { path: '/user/current' } } });
     const { fetch } = fakeFetch(fakeProvider(withCalls, { key: 'pw', values, operations: { 'user.current': () => ({ email: 'u' }) } }));
-    const session = (password: string) => fetch('https://kit-host.example.test/api/session', { method: 'POST',
+    const session = (password: string) => fetch('https://kit-host/api/session', { method: 'POST',
       headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'u', password }) });
     expect(await answer(await session('pw'))).toEqual({ status: 200, body: { id: 'kit-token', expires_in: 3600 } });
     expect(await answer(await session('nope'))).toEqual({ status: 400, body: { error: 'invalid_client' } });
-    const current = (value: string) => fetch('https://kit-host.example.test/api/user/current', { headers: { 'x-metabase-session': value } });
+    const current = (value: string) => fetch('https://kit-host/api/user/current', { headers: { 'x-metabase-session': value } });
     expect((await current('kit-token')).status).toBe(200);
     expect(await answer(await current('pw'))).toEqual(unauthorized);
     const api = client(withCalls, { token: tokenSource(withCalls, { secret: { password: 'pw' }, values, fetch }), values, fetch });
@@ -155,6 +156,41 @@ describe('fakeProvider', () => {
   test('operations are keyed by the entry\'s own operation ids', () => {
     // @ts-expect-error: Notion declares no `nope`.
     expect(fakeProvider(notion, { key: 'k', operations: { nope: () => null } })).toBeInstanceOf(Array);
+    // @ts-expect-error: Metabase declares no operations at all.
+    expect(fakeProvider(metabase, { key: 'k', values: kitValues(metabase), operations: { nope: () => null } })).toBeInstanceOf(Array);
+  });
+
+  const items = defineProvider({ id: 'items', name: 'Items', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.items.test' },
+    identify: { request: { path: '/users/me' }, id: 'id' },
+    operations: {
+      'items.get': { path: '/items/{id}', params: { id: { in: 'path', type: 'string', required: true } } },
+      'items.recent': { path: '/items/recent' },
+      'users.get': { path: '/users/{userId}', params: { userId: { in: 'path', type: 'string', required: true } } },
+      'menu.get': { path: '/café/{id}', params: { id: { in: 'path', type: 'string', required: true } } },
+    } });
+
+  test('a literal path beats a placeholder, whatever the order declared', async () => {
+    const { fetch } = fakeFetch(fakeProvider(items, { key: 'k', operations: {
+      'items.get': call => ({ got: call.path }), 'items.recent': () => ({ recent: true }), 'users.get': call => ({ user: call.path }) } }));
+    const api = client(items, { token: 'k', fetch });
+    await expect(api.items.recent()).resolves.toEqual({ recent: true });
+    await expect(api.items.get({ id: '7' })).resolves.toEqual({ got: { id: '7' } });
+    await expect(finishConnect(items, { secret: { apiKey: 'k' }, fetch })).resolves.toMatchObject({ account: { id: 'kit-account' } });
+    await expect(api.users.get({ userId: 'u1' })).resolves.toEqual({ user: { userId: 'u1' } });
+  });
+
+  test('a literal path segment that is not ASCII matches its percent-encoded request', async () => {
+    const { fetch } = fakeFetch(fakeProvider(items, { key: 'k', operations: { 'menu.get': call => call.path } }));
+    await expect(client(items, { token: 'k', fetch }).menu.get({ id: 'crème' })).resolves.toEqual({ id: 'crème' });
+  });
+
+  test("a `tokenAnswer.*` kit value never replaces the token or `expires_in`", async () => {
+    const reads = defineProvider({ ...zoom, identify: { id: 'tokenAnswer.expires_in' } });
+    const values = { accountId: 'acc', clientId: 'c' };
+    const { fetch } = fakeFetch(fakeProvider(reads, { key: 'k', values }));
+    await expect(requestToken(reads, { secret: { clientSecret: 'k' }, values, fetch }))
+      .resolves.toMatchObject({ token: 'kit-token', extras: { expires_in: 3600 } });
   });
 });
 
