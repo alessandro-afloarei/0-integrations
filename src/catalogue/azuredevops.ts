@@ -1,7 +1,7 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Azure DevOps Services on a Microsoft Entra grant alone; personal access tokens are not for production apps:
- * https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/authentication-guidance
+/** Azure DevOps Services on a Microsoft Entra grant alone; a personal access token cannot call identify's Profiles API:
+ * https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate
  * Register the app for "Multiple Entra ID tenants" with Azure DevOps' delegated permissions; work or school accounts
  * only, as Entra serves no Microsoft account users for Azure DevOps. */
 const v = '?api-version=7.1';
@@ -28,6 +28,7 @@ export const azuredevops = defineProvider({
   // A 429 sends Retry-After: https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rate-limits
   http: { baseUrl: 'https://dev.azure.com/{organization}', bases: { profile: 'https://app.vssps.visualstudio.com' },
     retry: {} },
+  // https://learn.microsoft.com/en-us/rest/api/azure/devops/profile/profiles/get?view=azure-devops-rest-7.1
   identify: { request: { base: 'profile', path: '/_apis/profile/profiles/me', query: { 'api-version': '7.1' } }, id: 'id',
     name: ['displayName', 'emailAddress'] },
   paging: { skip: { kind: 'offset', send: { query: '$skip' }, list: 'value' } },
@@ -36,6 +37,7 @@ export const azuredevops = defineProvider({
       result: { 'count?': 'integer', value: [repository] } },
     'repositories.get': { docs: `${ref}/git/repositories/get-repository${view}`,
       path: `/_apis/git/repositories/{repositoryId}${v}`, params: { repositoryId: id }, result: repository },
+    // Active pull requests only: the page's `searchCriteria.status` "Defaults to Active if unset".
     'pullRequests.list': { docs: `${ref}/git/pull-requests/get-pull-requests${view}`,
       path: `/_apis/git/repositories/{repositoryId}/pullrequests${v}`, paging: 'skip', records: 'value',
       params: { repositoryId: id, $top: { in: 'query', type: 'integer', description: 'The number of pull requests to retrieve.' } },
@@ -43,6 +45,7 @@ export const azuredevops = defineProvider({
     'pullRequests.get': { docs: `${ref}/git/pull-requests/get-pull-request${view}`,
       path: `/_apis/git/repositories/{repositoryId}/pullrequests/{pullRequestId}${v}`,
       params: { repositoryId: id, pullRequestId: { in: 'path', type: 'integer', required: true } }, result: pullRequest },
+    // No body key is marked required: send sourceRefName and targetRefName as full refs (refs/heads/…), and title.
     'pullRequests.create': { docs: `${ref}/git/pull-requests/create${view}`, method: 'POST',
       path: `/_apis/git/repositories/{repositoryId}/pullrequests${v}`,
       params: { repositoryId: id, sourceRefName: { in: 'body', type: 'string' }, targetRefName: { in: 'body', type: 'string' },
