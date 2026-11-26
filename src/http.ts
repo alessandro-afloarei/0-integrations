@@ -82,16 +82,17 @@ function redirectTarget(url: URL, method: string, response: ProviderResponse): U
 /** What a request's credential adds: a header, or query parameters set on every hop. */
 type Credential = { header?: [name: string, value: string]; query?: [name: string, value: string][] };
 
-/** Bearer by default, a header's bare token, Basic from a template, or the query's parameters from templates. */
+/** Bearer by default, a header's bare token or its `value` filled, Basic from a template, or the query's parameters from
+ * templates. */
 function credentialOf(entry: Entry, token: string, values: Values): Credential {
   const [auth] = entry.auth;
   const send = 'send' in auth ? auth.send : undefined;
   if (send === undefined) return { header: ['authorization', `Bearer ${token}`] };
-  if ('header' in send) return { header: [send.header, token] };
   const secret = entry.fields?.find(field => field.secret === true)?.name;
   // Only a key entry's secret field is its credential: any other kind's never goes with a call, whatever `values` holds.
   const lookup = (name: string) => (name === secret ? (auth.kind === 'key' ? token : undefined)
     : name === 'token' ? token : plainValue(values, name));
+  if ('header' in send) return { header: [send.header, fill(send.value ?? '{token}', lookup, entry.id)] };
   if ('query' in send) return { query: Object.entries(send.query).map(([name, template]) => [name, fill(template, lookup, entry.id)]) };
   const pair = `${fill(send.basic[0], lookup, entry.id)}:${fill(send.basic[1], lookup, entry.id)}`;
   return { header: ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`] };
@@ -268,6 +269,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
 
   async function follow(start: URL, bearer: string, { header, query = [] }: Credential, options: RequestOptions): Promise<ProviderResponse> {
     // Every value the credential rendered (the token, a header's value, each query value): a code echoing one is no detail.
+    // A header's value is kept after its first space (`Bot `, `Basic `): a detail never holds a space.
     const rendered = [bearer, ...query.map(([, value]) => value), ...header ? [header[1].slice(header[1].indexOf(' ') + 1)] : []];
     let url = start;
     for (let hop = 0; ; hop++) {

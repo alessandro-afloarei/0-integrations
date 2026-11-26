@@ -36,6 +36,7 @@ Nothing here is released yet.
   holds a username or password, is `base_host_refused`.
 - New: webhook `hash: 'sha1'` (Intercom) and `part` for headers such as Stripe's `t=…,v1=…`. A signature header over
   8 KiB is refused before it is parsed.
+- New: `send: { header, value }` (Discord's `Bot {token}`, Trello's `OAuth …` header) and `ed25519` webhooks.
 
 ## 0.13.0
 

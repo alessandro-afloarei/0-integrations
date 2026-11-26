@@ -57,7 +57,7 @@ const selectsOne = (item: Selects) => !(item.header !== undefined && item.path !
 const condition = <T extends Selects>(schema: z.ZodType<T>) =>
   schema.refine(selectsOne, 'a condition compares one header or one path, and a header only to a string');
 const when = condition(whenObject);
-const send = z.union([z.strictObject({ header: z.string() }), z.strictObject({ basic: z.tuple([template, template]) }),
+const send = z.union([z.strictObject({ header: z.string(), value: template.optional() }), z.strictObject({ basic: z.tuple([template, template]) }),
   z.strictObject({ query: z.record(z.string(), template) })])
   .refine(item => !('query' in item) || Object.keys(item.query).length > 0, 'a query send names at least one parameter');
 const value = z.union([z.string(), z.array(z.string())]);
@@ -71,6 +71,9 @@ const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
     description: z.string().optional() })).optional(),
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional() };
+const timestamp = z.strictObject({ header: z.string(), toleranceSeconds: z.number().int().positive().optional() });
+/** What every webhook kind may declare. */
+const webhookParts = { deliveryId: z.union([z.strictObject({ header: z.string() }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional() };
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
@@ -110,12 +113,17 @@ const entrySchema = z.strictObject({
     revoked: z.array(z.string()).optional(),
     rules: z.array(z.strictObject({ when, code: z.enum(['rejected', 'rate_limited', 'unavailable', 'not_found', 'request_failed', 'invalid_response']),
       detail: z.string().optional() })).optional() }).optional(),
-  webhook: z.strictObject({ kind: z.literal('hmac'), header: z.string(), signed: template.optional(), prefix: z.string().optional(),
-    encoding: z.literal('base64').optional(), hash: z.literal('sha1', "`hash` is 'sha1' or left out (SHA-256)").optional(),
-    part: z.string().min(1).optional(),
-    timestamp: z.union([z.strictObject({ header: z.string(), toleranceSeconds: z.number().int().positive().optional() }),
-      z.strictObject({ part: z.string().min(1), toleranceSeconds: z.number().int().positive().optional() })]).optional(),
-    deliveryId: z.union([z.strictObject({ header: z.string() }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional() }).optional(),
+  webhook: z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('hmac'), header: z.string(), signed: template.optional(), prefix: z.string().optional(),
+      encoding: z.literal('base64').optional(), hash: z.literal('sha1', "`hash` is 'sha1' or left out (SHA-256)").optional(),
+      part: z.string().min(1).optional(),
+      timestamp: z.union([timestamp, z.strictObject({ part: z.string().min(1), toleranceSeconds: z.number().int().positive().optional() })]).optional(),
+      ...webhookParts }),
+    // A signature checked with a public key: no digest to prefix, encode, hash or pick from a list.
+    z.strictObject({ kind: z.literal('ed25519'), header: z.string(), signed: template.optional(), timestamp: timestamp.optional(),
+      ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
+      ? 'an `ed25519` webhook takes no `prefix`, `encoding`, `hash` or `part`: leave them out' : undefined) }),
+  ]).optional(),
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(),
       send: z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]) }),
@@ -148,15 +156,19 @@ const plainFields = (entry: Entry) => (entry.fields ?? []).filter(field => field
 /** The declared calls that may name a base: identify's request and a request revoke. */
 const calls = (entry: Entry) => [entry.identify?.request, entry.revoke !== undefined && 'request' in entry.revoke ? entry.revoke.request : undefined];
 const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
-/** The templates a Basic or query send fills, and the secret field's name. */
+/** The templates a send fills: Basic's pair, the query's values or a header's `value`. */
 const sentTemplates = (entry: Entry) => {
   const auth = entry.auth[0];
-  return !('send' in auth) || 'header' in auth.send ? [] : 'basic' in auth.send ? auth.send.basic : Object.values(auth.send.query);
+  if (!('send' in auth)) return [];
+  if ('header' in auth.send) return auth.send.value === undefined ? [] : [auth.send.value];
+  return 'basic' in auth.send ? auth.send.basic : Object.values(auth.send.query);
 };
+/** An `hmac` webhook, the one kind with a digest's `prefix` and `part`. */
+const hmac = (entry: Entry) => (entry.webhook?.kind === 'hmac' ? entry.webhook : undefined);
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
   // A Basic or query send that names no secret would send a credential anyone could make.
-  '`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)': (entry: Entry) => sentTemplates(entry).length === 0
+  '`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)': (entry: Entry) => sentTemplates(entry).length === 0
     || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || (entry.auth[0].kind === 'key' && name === secretField(entry))),
   "`auth.send` templates: name only the entry's fields and {token}": (entry: Entry) => sentTemplates(entry).flatMap(placeholders)
     .every(name => name === 'token' || (entry.fields ?? []).some(field => field.name === name)),
@@ -255,10 +267,10 @@ const runnable = {
   "`save` keys apart from the fields' names": (entry: Entry) =>
     Object.keys(entry.save ?? {}).every(name => !(entry.fields ?? []).some(field => field.name === name)),
   // A part's value is the signature alone (Stripe's `v1=<hex>`): a prefix would never be compared.
-  "no `webhook.prefix` beside `webhook.part`": (entry: Entry) => entry.webhook?.part === undefined || entry.webhook.prefix === undefined,
+  "no `webhook.prefix` beside `webhook.part`": (entry: Entry) => hmac(entry)?.part === undefined || hmac(entry)?.prefix === undefined,
   // The timestamp is read from the same header's pieces, which only `part` splits.
-  "a `webhook.timestamp.part` only beside `webhook.part`": (entry: Entry) => entry.webhook?.timestamp === undefined
-    || !('part' in entry.webhook.timestamp) || entry.webhook.part !== undefined,
+  "a `webhook.timestamp.part` only beside `webhook.part`": (entry: Entry) => hmac(entry)?.timestamp === undefined
+    || !('part' in (hmac(entry)?.timestamp ?? {})) || hmac(entry)?.part !== undefined,
   // Without a timestamp, `{timestamp}` signs an empty string and no tolerance is checked.
   '`{timestamp}` in `webhook.signed` only beside a `webhook.timestamp`': (entry: Entry) => entry.webhook?.timestamp !== undefined
     || !placeholders(entry.webhook?.signed ?? '').includes('timestamp'),
@@ -346,12 +358,18 @@ const tokened = { ...key, fields: [{ name: 'clientId', title: 'Client ID' }, { n
 test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
-  ['`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+  ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
-  ['`auth.send` basic or query: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
+  ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { basic: ['{apiId}', ''] } }] })],
   ["`auth.send` templates: name only the entry's fields and {token}", defineProvider({ ...key, fields: [secret],
     auth: [{ kind: 'key', send: { query: { key: '{apiKey}', account: '{acount}' } } }] })],
+  ["`auth.send` templates: name only the entry's fields and {token}", defineProvider({ ...key, fields: [secret],
+    auth: [{ kind: 'key', send: { header: 'authorization', value: 'Bot {tokn}' } }] })],
+  ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key,
+    fields: [secret, { name: 'apiId', title: 'API ID' }], auth: [{ kind: 'key', send: { header: 'authorization', value: 'Id {apiId}' } }] })],
+  ["a `token` entry's `send`: name no secret field", defineProvider({ ...tokened,
+    auth: [{ ...tokened.auth[0], send: { header: 'authorization', value: 'Bearer {token} {clientSecret}' } }] })],
   ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
   ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
@@ -374,7 +392,7 @@ test.each<[Rule, Entry]>([
     fields: [...tokened.fields, { name: 'other', title: 'Other', secret: true }] })],
   ['at most one secret field in `fields`, exactly one on a key or token entry', defineProvider({ ...tokened, fields: [{ name: 'clientId', title: 'Client ID' }] })],
   // A token entry's call carries the token it gave: naming its secret field is no secret sent.
-  ["`auth.send` basic or query: name the secret ({token}, or a key entry's secret field)", defineProvider({ ...tokened,
+  ["`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry's secret field)", defineProvider({ ...tokened,
     auth: [{ ...tokened.auth[0], send: { query: { s: '{clientSecret}' } } }] })],
   ["a `token` entry's `send`: name no secret field", defineProvider({ ...tokened,
     auth: [{ ...tokened.auth[0], send: { basic: ['{clientId}', '{clientSecret}'] } }] })],
@@ -498,6 +516,13 @@ test('a query send that names no parameter fails the schema, with what to fix', 
 test("a webhook `hash` other than 'sha1' fails the schema, with what to fix", () => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'hmac', header: 'x-signature', hash: 'md5' } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(["`hash` is 'sha1' or left out (SHA-256)"]);
+});
+
+test.each(['prefix', 'encoding', 'hash', 'part'])('an `ed25519` webhook with `%s` fails the schema, with what to fix', part => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret],
+    webhook: { kind: 'ed25519', header: 'x-signature-ed25519', [part]: part === 'encoding' ? 'base64' : 'x' } };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
+    .toEqual(['an `ed25519` webhook takes no `prefix`, `encoding`, `hash` or `part`: leave them out']);
 });
 
 test("a base with a host from a field's choices and a path segment from a saved value passes every rule", () => {

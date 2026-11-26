@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { Webhook } from './catalogue.js';
 import { parseJson, readPath } from './rules.js';
@@ -11,8 +11,9 @@ const MAX_HEADER_BYTES = 8 * 1024;
 export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret: string): boolean {
   const received = request.headers.get(webhook.header);
   if (!received || received.length > MAX_HEADER_BYTES) return false;
+  const part = webhook.kind === 'hmac' ? webhook.part : undefined;
   // With `part`, the header is `name=value` pieces split on `,`, each on its first `=`; a piece with no `=` names nothing.
-  const pieces = webhook.part === undefined ? [] : received.split(',').flatMap(piece => {
+  const pieces = part === undefined ? [] : received.split(',').flatMap(piece => {
     const at = piece.indexOf('=');
     return at < 0 ? [] : [{ name: piece.slice(0, at), value: piece.slice(at + 1) }];
   });
@@ -24,14 +25,25 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
     const seconds = Number(timestamp);
     if (!Number.isSafeInteger(seconds) || Math.abs(Math.floor(Date.now() / 1000) - seconds) > (stamp.toleranceSeconds ?? 300)) return false;
   }
-  const hmac = createHmac(webhook.hash ?? 'sha256', secret);
   const substitutions: Record<string, string | Uint8Array> = {
     '{body}': request.rawBody, '{timestamp}': timestamp, '{method}': request.method, '{url}': request.url,
   };
-  for (const part of (webhook.signed ?? '{body}').split(/(\{body\}|\{timestamp\}|\{method\}|\{url\})/)) hmac.update(substitutions[part] ?? part);
+  const content = Buffer.concat((webhook.signed ?? '{body}').split(/(\{body\}|\{timestamp\}|\{method\}|\{url\})/)
+    .map(piece => Buffer.from(substitutions[piece] ?? piece)));
+  if (webhook.kind === 'ed25519') {
+    // The public key is 32 bytes and the signature 64, both hex; anything else, or a key that is no point, is false.
+    if (!/^[0-9a-f]{128}$/iu.test(received) || !/^[0-9a-f]{64}$/iu.test(secret)) return false;
+    try {
+      const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(secret, 'hex').toString('base64url') }, format: 'jwk' });
+      return verify(null, content, key, Buffer.from(received, 'hex'));
+    } catch {
+      return false;
+    }
+  }
+  const hmac = createHmac(webhook.hash ?? 'sha256', secret).update(content);
   // A part's value is the signature alone: `prefix` is not compared there.
-  const expected = Buffer.from((webhook.part === undefined ? webhook.prefix ?? '' : '') + hmac.digest(webhook.encoding ?? 'hex'));
-  return (webhook.part === undefined ? [received] : named(webhook.part)).some(candidate => {
+  const expected = Buffer.from((part === undefined ? webhook.prefix ?? '' : '') + hmac.digest(webhook.encoding ?? 'hex'));
+  return (part === undefined ? [received] : named(part)).some(candidate => {
     const actual = Buffer.from(candidate);
     return actual.length === expected.length && timingSafeEqual(actual, expected);
   });

@@ -1,7 +1,8 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Webhook } from './catalogue.js';
 import { breakcold } from './catalogue/breakcold.js';
+import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { intercom } from './catalogue/intercom.js';
 import { stripe } from './catalogue/stripe.js';
@@ -124,6 +125,47 @@ test('with `part`, the comparison ignores `prefix`', () => {
   const digest = createHmac('sha256', secret).update(body).digest('hex');
   expect(verifyWebhook(config, request({ signature: `v1=${digest}` }), secret)).toBe(true);
   expect(verifyWebhook(config, request({ signature: `v1=sha256=${digest}` }), secret)).toBe(false);
+});
+
+/** Discord's key pair: the public key as 64 hex characters, as the Developer Portal shows it. */
+const hexKey = (key: KeyObject) => Buffer.from(key.export({ format: 'jwk' }).x ?? '', 'base64url').toString('hex');
+const pair = generateKeyPairSync('ed25519');
+const publicKey = hexKey(pair.publicKey);
+/** Discord's headers: the hex Ed25519 signature of `<timestamp><body>`, and the timestamp. */
+function discordSigned(timestamp: string, signature = sign(null, Buffer.concat([Buffer.from(timestamp), body]), pair.privateKey).toString('hex')) {
+  return request({ 'x-signature-ed25519': signature, 'x-signature-timestamp': timestamp });
+}
+
+test("verifies Discord's Ed25519 signature over the timestamp and the raw body", () => {
+  expect(publicKey).toMatch(/^[0-9a-f]{64}$/u);
+  expect(verifyWebhook(discord.webhook, discordSigned(t), publicKey)).toBe(true);
+  expect(verifyWebhook(discord.webhook, discordSigned(t), publicKey.toUpperCase())).toBe(true);
+  const changed = Buffer.from(body);
+  changed[0] = 1;
+  expect(verifyWebhook(discord.webhook, { ...discordSigned(t), rawBody: changed }, publicKey)).toBe(false);
+  // The timestamp is signed: another one beside the same signature fails.
+  const fresh = discordSigned(t).headers.get('x-signature-ed25519') ?? '';
+  expect(verifyWebhook(discord.webhook, discordSigned(String(now - 1), fresh), publicKey)).toBe(false);
+});
+
+test('refuses an Ed25519 signature that is altered, short, not hex, or under another key, never throwing', () => {
+  const good = discordSigned(t).headers.get('x-signature-ed25519') ?? '';
+  const flipped = (parseInt(good.slice(0, 1), 16) ^ 1).toString(16) + good.slice(1);
+  const other = hexKey(generateKeyPairSync('ed25519').publicKey);
+  // A flipped bit, 127 and 130 characters, a non-hex character; another key, a non-hex key, a short one, none, no point.
+  for (const [signature, key] of <[string, string][]>[[flipped, publicKey], [good.slice(1), publicKey], [`${good}00`, publicKey], [`${good.slice(2)}zz`, publicKey],
+    [good, other], [good, `${publicKey.slice(2)}zz`], [good, publicKey.slice(2)], [good, ''], [good, '0'.repeat(64)]]) {
+    expect(verifyWebhook(discord.webhook, discordSigned(t, signature), key)).toBe(false);
+  }
+});
+
+test('an Ed25519 webhook keeps the timestamp rule: plain seconds, inside the tolerance, present', () => {
+  expect(verifyWebhook(discord.webhook, discordSigned(String(now - 300)), publicKey)).toBe(true);
+  expect(verifyWebhook(discord.webhook, discordSigned(String(now - 301)), publicKey)).toBe(false);
+  expect(verifyWebhook(discord.webhook, discordSigned(`${t}.0`), publicKey)).toBe(false);
+  const signature = discordSigned(t).headers.get('x-signature-ed25519') ?? '';
+  expect(verifyWebhook(discord.webhook, request({ 'x-signature-ed25519': signature }), publicKey)).toBe(false);
+  expect(verifyWebhook(discord.webhook, request({ 'x-signature-timestamp': t }), publicKey)).toBe(false);
 });
 
 test('deliveryId reads the declared header or the body paths', () => {

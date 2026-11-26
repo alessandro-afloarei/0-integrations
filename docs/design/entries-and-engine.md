@@ -421,9 +421,9 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
    string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
 
-In the code today: `hmac` with `hash` and `part` (Stripe, Intercom, Breakcold, Fireflies). The `ed25519`, `token` and
-`standard` kinds, `Send.value` and `challenge` arrive in the next steps of the same pull request, each with the provider
-named above.
+In the code today: `hmac` with `hash` and `part` (Stripe, Intercom, Breakcold, Fireflies), `ed25519` and `Send.value`
+(Discord, Trello). The `token` and `standard` kinds and `challenge` arrive in the next steps of the same pull request,
+each with the provider named above.
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a
