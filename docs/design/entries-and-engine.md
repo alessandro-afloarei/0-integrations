@@ -436,7 +436,8 @@ a shape's `send` writes: the walk sends it.
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
   `invalid_response` (`missing_fields`): a malformed answer never reads as an empty list. A page whose list
   equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
-  number would otherwise never end. An operation on a `page` shape names the shape's `list` as its `records` (both
+  number would otherwise never end. Records are expected to differ between pages (they carry ids), so two adjacent pages
+  that are truly identical end the walk the same way. An operation on a `page` shape names the shape's `list` as its `records` (both
   absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
 - `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
   request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the
