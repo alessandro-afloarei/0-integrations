@@ -73,6 +73,26 @@ test('readCappedBody keeps the cap', async () => {
   expect(cancel).toHaveBeenCalledTimes(1);
 });
 
+test("an app's own declaration that does not sign the body, or the timestamp it checks, verifies nothing", () => {
+  const hmacOf = (content: string) => createHmac('sha256', secret).update(content).digest('hex');
+  const noBody: Webhook = { kind: 'hmac', header: 'signature', signed: '{timestamp}', timestamp: { header: 'x-t' } };
+  expect(verifyWebhook(noBody, request({ signature: hmacOf(t), 'x-t': t }), secret)).toBe(false);
+  const unsignedTime: Webhook = { kind: 'hmac', header: 'signature', timestamp: { header: 'x-t' } };
+  expect(verifyWebhook(unsignedTime, request({ signature: createHmac('sha256', secret).update(body).digest('hex'), 'x-t': t }), secret)).toBe(false);
+  const edSigned = (content: Buffer) => sign(null, content, pair.privateKey).toString('hex');
+  const edNoBody: Webhook = { kind: 'ed25519', header: 'x-signature-ed25519', signed: '{timestamp}', timestamp: { header: 'x-signature-timestamp' } };
+  expect(verifyWebhook(edNoBody, discordSigned(t, edSigned(Buffer.from(t))), publicKey)).toBe(false);
+  const edUnsignedTime: Webhook = { kind: 'ed25519', header: 'x-signature-ed25519', timestamp: { header: 'x-signature-timestamp' } };
+  expect(verifyWebhook(edUnsignedTime, discordSigned(t, edSigned(body)), publicKey)).toBe(false);
+});
+
+test('a name in `signed` that is no placeholder is signed as written, an inherited one (`constructor`) included', () => {
+  for (const signed of ['constructor{body}', '{constructor}{body}', 'toString:{body}', '{nope}{body}']) {
+    const digest = createHmac('sha256', secret).update(signed.replace('{body}', '')).update(body).digest('hex');
+    expect(verifyWebhook({ kind: 'hmac', header: 'signature', signed }, request({ signature: digest }), secret)).toBe(true);
+  }
+});
+
 test('the signed template covers method, URL and base64', () => {
   const config: Webhook = { kind: 'hmac', header: 'signature', signed: '{method}{url}{body}', encoding: 'base64' };
   const digest = createHmac('sha256', secret).update('POSThttps://app.test/webhook').update(body).digest('base64');

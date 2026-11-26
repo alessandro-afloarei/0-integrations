@@ -29,13 +29,16 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
   // Plain seconds within the tolerance of now (so always a safe integer).
   if (stamp && !(/^\d+$/.test(timestamp) && Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) <= (stamp.toleranceSeconds ?? 300))) return false;
+  // A declaration that does not sign the body, or the timestamp it checks, can verify nothing safely.
+  const signed = scheme.signed ?? '{body}';
+  if (!signed.includes('{body}') || (stamp !== undefined && !signed.includes('{timestamp}'))) return false;
   const id = standard ? request.headers.get('webhook-id') || null : '';
   if (id === null) return false;
-  const substitutions: Record<string, string | Uint8Array> = {
-    '{body}': request.rawBody, '{timestamp}': timestamp, '{method}': request.method, '{url}': request.url,
-  };
-  const content = Buffer.concat([Buffer.from(standard ? `${id}.` : ''), ...(scheme.signed ?? '{body}')
-    .split(/(\{body\}|\{timestamp\}|\{method\}|\{url\})/).map(piece => Buffer.from(substitutions[piece] ?? piece))]);
+  // A Map: a name that is no placeholder (`constructor`) is signed as written, never read from a prototype.
+  const substitutions = new Map<string, string | Uint8Array>([
+    ['{body}', request.rawBody], ['{timestamp}', timestamp], ['{method}', request.method], ['{url}', request.url]]);
+  const content = Buffer.concat([Buffer.from(standard ? `${id}.` : ''), ...signed
+    .split(/(\{body\}|\{timestamp\}|\{method\}|\{url\})/).map(piece => Buffer.from(substitutions.get(piece) ?? piece))]);
   if (scheme.kind === 'ed25519') {
     // The public key is 32 bytes and the signature 64, both hex; anything else, or a key that is no point, is false.
     if (!/^[0-9a-f]{128}$/iu.test(received) || !/^[0-9a-f]{64}$/iu.test(secret)) return false;
