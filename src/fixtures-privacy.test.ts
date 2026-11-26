@@ -56,7 +56,7 @@ test.each([
 });
 
 test('every fixture holds only synthetic emails and phone numbers', () => {
-  const files = globSync('src/**/fixtures/*.json');
+  const files = globSync(['src/**/fixtures/*.json', 'src/catalogue/*.recording.json']);
   expect(files.length).toBeGreaterThan(10);
   const leaks = files.flatMap(file => findPrivateValues(readFileSync(file, 'utf8')).map(value => `${file}: ${value}`));
   expect(leaks).toEqual([]);

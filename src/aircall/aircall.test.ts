@@ -3,7 +3,7 @@ import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { fakeFetch } from '../testing.js';
 import { aircallClient } from './aircall.js';
 import { fakeAircall, type FakeAircallCall } from './fake.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/aircall.recording.json' with { type: 'json' };
 import { aircallScenario } from './scenario.test-support.js';
 
 const BASE = 'https://api.aircall.io/v1';

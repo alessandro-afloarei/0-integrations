@@ -17,7 +17,8 @@ const client: KitScenario<MailboxReader, unknown>['client'] = ({ apiKey, fetch }
   googleMailbox({ token: () => Promise.resolve(apiKey), fetch });
 
 export const googleMailScenario: KitScenario<MailboxReader, MailboxEmail> = {
-  provider: 'google-mail',
+  provider: 'google.mail',
+  standIn: KIT_MAILBOX,
   client,
   identify: reader => reader.identify(),
   page: (reader, { since, cursor }) => reader.messages({ after: since, cursor, limit: PAGE }),
@@ -30,12 +31,13 @@ export const googleMailScenario: KitScenario<MailboxReader, MailboxEmail> = {
 /** The main calendar's events. `since` starts the window, and Google lists every event the window overlaps: one counts as
  *  read since that time by its end. */
 export const googleCalendarScenario: KitScenario<MailboxReader, MailboxEvent> = {
-  provider: 'google-calendar',
+  provider: 'google.calendar',
+  standIn: KIT_MAILBOX,
   client,
   identify: reader => reader.identify(),
   async page(reader, { since, cursor }) {
     const calendar = await reader.primaryCalendar();
-    if (!calendar) throw new Error('google-calendar: the account has no calendar');
+    if (!calendar) throw new Error('google.calendar: the account has no calendar');
     return reader.events(calendar.id, { start: since ?? KIT_WINDOW.start, end: KIT_WINDOW.end, cursor, limit: PAGE });
   },
   id: event => event.id,

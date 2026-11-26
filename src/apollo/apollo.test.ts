@@ -3,7 +3,7 @@ import { GOOD_KEY, lookupKit, type Recording } from '../kit.test-support.js';
 import { fakeFetch } from '../testing.js';
 import { apolloClient, type ApolloClient, type ApolloOrganization, type ApolloPerson } from './apollo.js';
 import { fakeApollo, type FakeApolloAccount } from './fake.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/apollo.recording.json' with { type: 'json' };
 
 const BASE = 'https://api.apollo.io/api/v1';
 const organization = (name: string, domain: string): ApolloOrganization => ({ id: `org_${domain}`, name, primary_domain: domain,

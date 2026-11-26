@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { fakeFetch, sequence } from '../testing.js';
 import { fakeNotion, type FakeNotionPage, type FakeNotionWorkspace } from './fake.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/notion.recording.json' with { type: 'json' };
 import { notionClient } from './notion.js';
 import { notionScenario } from './scenario.test-support.js';
 

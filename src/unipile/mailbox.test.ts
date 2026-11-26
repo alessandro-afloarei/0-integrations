@@ -3,8 +3,8 @@ import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { paginate } from '../paginate.js';
 import { fakeFetch, sequence } from '../testing.js';
 import { fakeUnipile } from './fake.js';
-import calendarRecording from './fixtures/calendar-recording.json' with { type: 'json' };
-import mailRecording from './fixtures/mail-recording.json' with { type: 'json' };
+import calendarRecording from '../catalogue/unipile.calendar.recording.json' with { type: 'json' };
+import mailRecording from '../catalogue/unipile.mail.recording.json' with { type: 'json' };
 import { KIT_ACCOUNT, unipileCalendarScenario, unipileMailScenario } from './scenario.test-support.js';
 import { unipileClient, unipileMailbox, type UnipileCalendar, type UnipileEmail, type UnipileEvent } from './unipile.js';
 

@@ -3,7 +3,7 @@ import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { fakeFetch, sequence } from '../testing.js';
 import { fakeFathom, type FakeFathomMeeting } from './fake.js';
 import { fathomClient } from './fathom.js';
-import recording from './fixtures/recording.json' with { type: 'json' };
+import recording from '../catalogue/fathom.recording.json' with { type: 'json' };
 import { fathomScenario } from './scenario.test-support.js';
 
 const BASE = 'https://api.fathom.ai/external/v1';
