@@ -294,6 +294,8 @@ test("an operation whose path's own query names the key its paging writes is ref
   const entry = (path: string) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
     paging: { offset: { kind: 'offset', send: { query: 'offset' } } }, operations: { 'things.list': { path, paging: 'offset' } } }) as Entry;
   expect(() => client(entry('/things?offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
+  // Read as the request reads it: a second `?` belongs to the first value, so `offset` is still a key.
+  expect(() => client(entry('/things?q=a?b&offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
   expect(() => client(entry('/things?api-version=7.1'), { token: 'k' })).not.toThrow();
 });
 
