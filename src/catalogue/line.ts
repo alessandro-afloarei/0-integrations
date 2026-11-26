@@ -10,7 +10,7 @@ export const line = defineProvider({
   id: 'line', name: 'LINE', docs: `${ref}#get-bot-info`,
   categories: ['chat'],
   fields: [{ name: 'channelAccessToken', title: 'Channel access token', secret: true,
-    help: 'A long-lived channel access token, issued on the Messaging API tab of the channel in the LINE Developers Console: it does not expire.' }],
+    help: 'The long-lived channel access token of your own LINE Official Account\'s channel, from its Messaging API tab in the LINE Developers Console. A channel has one: reissuing it invalidates the current one.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.line.me', retry: {} },
   identify: { request: { path: '/v2/bot/info' }, id: 'userId', name: ['displayName', 'basicId'] },

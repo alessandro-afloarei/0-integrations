@@ -1,7 +1,7 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Bitbucket Cloud: OAuth 2, or a person's API token as a bearer token. An OAuth consumer's scopes are set on the consumer,
- * not asked for: give it account and pullrequest:write, which grants pullrequest and repository
+/** Bitbucket Cloud: OAuth 2, or a person's API token as a bearer token, no email (https://support.atlassian.com/bitbucket-cloud/docs/using-api-tokens/).
+ * An OAuth consumer's scopes are set on it, not asked for: give it account and pullrequest:write
  * (https://support.atlassian.com/bitbucket-cloud/docs/use-oauth-on-bitbucket-cloud/). Webhooks with a secret sign the body,
  * `X-Hub-Signature: sha256=<hex HMAC-SHA256>` (https://support.atlassian.com/bitbucket-cloud/docs/manage-webhooks/). */
 const link = { 'links?': { 'html?': { 'href?': 'string' } } } as const;
