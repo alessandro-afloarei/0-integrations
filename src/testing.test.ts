@@ -170,7 +170,7 @@ describe('fakeProvider', () => {
       'menu.get': { path: '/café/{id}', params: { id: { in: 'path', type: 'string', required: true } } },
     } });
 
-  test('a literal path beats a placeholder, whatever the order declared', async () => {
+  test('a literal last segment beats a placeholder, whatever the order declared', async () => {
     const { fetch } = fakeFetch(fakeProvider(items, { key: 'k', operations: {
       'items.get': call => ({ got: call.path }), 'items.recent': () => ({ recent: true }), 'users.get': call => ({ user: call.path }) } }));
     const api = client(items, { token: 'k', fetch });
@@ -178,6 +178,27 @@ describe('fakeProvider', () => {
     await expect(api.items.get({ id: '7' })).resolves.toEqual({ got: { id: '7' } });
     await expect(finishConnect(items, { secret: { apiKey: 'k' }, fetch })).resolves.toMatchObject({ account: { id: 'kit-account' } });
     await expect(api.users.get({ userId: 'u1' })).resolves.toEqual({ user: { userId: 'u1' } });
+  });
+
+  const nested = defineProvider({ id: 'nested', name: 'Nested', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.nested.test' },
+    operations: {
+      'byX.get': { path: '/a/{x}/c', params: { x: { in: 'path', type: 'string', required: true } } },
+      'byY.get': { path: '/a/b/{y}', params: { y: { in: 'path', type: 'string', required: true } } },
+      'files.get': { path: '/files/{name}.{ext}', params: { name: { in: 'path', type: 'string', required: true },
+        ext: { in: 'path', type: 'string', required: true } } },
+    } });
+
+  test('the route whose first differing segment is literal wins, whatever the order declared', async () => {
+    const { fetch } = fakeFetch(fakeProvider(nested, { key: 'k', operations: { 'byX.get': call => ({ x: call.path }), 'byY.get': call => ({ y: call.path }) } }));
+    const api = client(nested, { token: 'k', fetch });
+    await expect(api.byY.get({ y: 'c' })).resolves.toEqual({ y: { y: 'c' } });
+    await expect(api.byX.get({ x: 'z' })).resolves.toEqual({ x: { x: 'z' } });
+  });
+
+  test('a literal `.` between placeholders is kept', async () => {
+    const { fetch } = fakeFetch(fakeProvider(nested, { key: 'k', operations: { 'files.get': call => call.path } }));
+    await expect(client(nested, { token: 'k', fetch }).files.get({ name: 'report', ext: 'pdf' })).resolves.toEqual({ name: 'report', ext: 'pdf' });
   });
 
   test('a literal path segment that is not ASCII matches its percent-encoded request', async () => {
