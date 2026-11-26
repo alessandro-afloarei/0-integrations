@@ -85,8 +85,8 @@ export function fakeFetch(routes: readonly Route[]): { fetch: typeof fetch; call
 export type FakeCall = { path: Readonly<Record<string, string>>; query: Readonly<Record<string, string>>; body: unknown };
 type Answer = (call: FakeCall) => unknown;
 
-/** A URL as a route compares it: no query, and a bare origin without its `/`. */
-const target = (url: URL) => `${url.origin}${url.pathname === '/' ? '' : url.pathname}`;
+/** A URL as a route compares it: no query, and no trailing `/` (a bare origin's included). */
+const target = (url: URL) => `${url.origin}${url.pathname.replace(/\/$/u, '')}`;
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&');
 /** A path's literal part as a pattern: percent-encoded as a request's URL is, then escaped. Read after a `_`, so `URL`
  * never takes a part for a dot segment and drops it (`.` in `/files/{name}.{ext}`). */
@@ -106,9 +106,13 @@ function put(into: Record<string, unknown>, path: string, value: unknown): Recor
   else if (rest.length > 0 && typeof inner === 'object' && inner !== null) put(inner as Record<string, unknown>, rest.join('.'), value);
   return into;
 }
-/** The first path a value reads from identify's answer: never the token answer or a connection value. */
-const answerPath = (value: Value | undefined) => (value === undefined ? undefined : lookupNames({ identify: { id: value } })
-  .find(name => !name.startsWith('tokenAnswer.') && !name.startsWith('connection.')));
+/** The paths a value reads from identify's answer, never the token answer or a connection value: each a template
+ * reads, else the first of a list of fallbacks. */
+const answerPaths = (value: Value | undefined) => {
+  const paths = value === undefined ? [] : lookupNames({ identify: { id: value } })
+    .filter(name => !name.startsWith('tokenAnswer.') && !name.startsWith('connection.'));
+  return typeof value === 'string' && value.includes('{') ? paths : paths.slice(0, 1);
+};
 
 /** Routes that answer as the entry declares, for one credential: identify (by default an answer holding a kit account
  * at the entry's id and name paths), a token request for a `token` entry, and each declared operation the app answers.
@@ -125,7 +129,8 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
   /** A route for a path template under a base, each `{name}` one segment, and its specificity; an API route answers
    * 401 to a request without the credential. */
   const route = (method: string, at: string, path: string, answer: (call: FakeCall, sent: Request) => unknown, open = false): [number[], Route] => {
-    const template = path.split('?')[0] ?? '';
+    // Compared as `target` reads a URL: no trailing `/`, so `/` on an origin is the origin.
+    const template = (path.split('?')[0] ?? '').replace(/\/$/u, '');
     const pattern = new RegExp(`^${escaped(at)}${template.split(/\{[^{}]+\}/u).map(literal).join('([^/]+)')}$`, 'u');
     return [specificity(template), { method, url: url => pattern.test(target(url)), async respond(request) {
       const url = new URL(request.url);
@@ -152,8 +157,8 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
   const { request: identify, id, name } = entry.identify ?? {};
   if (identify !== undefined) {
     const at = base(callBase(entry, identify).baseUrl);
-    const answer = () => data.account ?? [[answerPath(id), 'kit-account'], [answerPath(name), 'kit-name']]
-      .reduce((answer, [path, value]) => (path === undefined ? answer : put(answer, path, value)), {});
+    const answer = () => data.account ?? [...answerPaths(id).map(path => [path, 'kit-account'] as const),
+      ...answerPaths(name).map(path => [path, 'kit-name'] as const)].reduce((answer, [path, value]) => put(answer, path, value), {});
     if (identify.graphql === undefined) routes.push(route(identify.method ?? 'GET', at, identify.path ?? '', answer));
     else graphql.push([at, identify.graphql, answer]);
   }

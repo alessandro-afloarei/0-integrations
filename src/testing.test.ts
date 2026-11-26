@@ -196,6 +196,22 @@ describe('fakeProvider', () => {
     await expect(api.byX.get({ x: 'z' })).resolves.toEqual({ x: { x: 'z' } });
   });
 
+  test.each(['https://api.root.test', 'https://api.root.test/v1'])('an identify path of exactly `/` matches on the base %s', async baseUrl => {
+    const root = defineProvider({ id: 'root', name: 'Root', fields: [{ name: 'apiKey', title: 'API key', secret: true }], auth: [{ kind: 'key' }],
+      http: { baseUrl }, identify: { request: { path: '/' }, id: 'id' } });
+    const { fetch } = fakeFetch(fakeProvider(root, { key: 'k' }));
+    await expect(finishConnect(root, { secret: { apiKey: 'k' }, fetch })).resolves.toMatchObject({ account: { id: 'kit-account' } });
+  });
+
+  test('an id template that reads several answer paths is filled at each of them; a list of paths at its first', async () => {
+    const templated = defineProvider({ id: 'templated', name: 'Templated', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.templated.test' },
+      identify: { request: { path: '/me' }, id: '{org.id}/{user.id}', name: ['user.display', 'user.login'] } });
+    const { fetch } = fakeFetch(fakeProvider(templated, { key: 'k' }));
+    await expect(finishConnect(templated, { secret: { apiKey: 'k' }, fetch }))
+      .resolves.toMatchObject({ account: { id: 'kit-account/kit-account', name: 'kit-name' } });
+  });
+
   test('a literal `.` between placeholders is kept', async () => {
     const { fetch } = fakeFetch(fakeProvider(nested, { key: 'k', operations: { 'files.get': call => call.path } }));
     await expect(client(nested, { token: 'k', fetch }).files.get({ name: 'report', ext: 'pdf' })).resolves.toEqual({ name: 'report', ext: 'pdf' });
