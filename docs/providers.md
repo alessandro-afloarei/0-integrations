@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 80 declared, 0 recorded;
-248 typed operations; webhooks: ed25519 1, hmac 20, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
+247 typed operations; webhooks: ed25519 1, hmac 20, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -69,7 +69,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 
 | [RocketReach](https://docs.rocketreach.co/reference/rocketreach-api-account) | sales | key | people.search, people.get, companies.search, companies.get | hmac | declared |
 | [Rollbar](https://docs.rollbar.com/reference/getting-started-1) | monitoring | key | items.list, items.get, items.update | — | declared |
 | [Salesflare](https://api.salesflare.com/docs) | crm | key | contacts.list, contacts.get, contacts.create, contacts.update, accounts.list, opportunities.list | — | declared |
-| [Salesloft](https://developers.salesloft.com/docs/platform/api-basics/oauth-authentication/) | sales | OAuth 2, key | cadences.list, people.list, people.get, people.create, people.update, cadenceMemberships.create | hmac | declared |
+| [Salesloft](https://developers.salesloft.com/docs/platform/api-basics/oauth-authentication/) | sales | OAuth 2, key | cadences.list, people.list, people.get, people.create, people.update | hmac | declared |
 | [Sentry](https://docs.sentry.io/api/auth/) | monitoring | key | issues.list, issues.get, issues.update, projects.list | hmac | declared |
 | [SerpApi](https://serpapi.com/account-api) | search | key | — | — | declared |
 | [Shortcut](https://developer.shortcut.com/api/rest/v3#Authentication) | tasks | key | stories.search, stories.get, stories.create, stories.update, workflows.list | hmac | declared |
