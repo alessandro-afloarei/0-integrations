@@ -28,6 +28,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 | A `User-Agent` the app names, sent when it signs in | Basecamp |
 | A webhook signed as a JWT | Monday, Netlify |
 | A webhook timestamp in milliseconds (the signed body's `webhookTimestamp`; the `Linear-Timestamp` header is not signed) | Linear |
+| A plain value for an OAuth 2 sign-in (a subdomain or region chosen before the redirect) | — |
 | An OAuth 2 token answer whose `scope` is a list of strings, which the engine's OAuth library refuses (Linear's apps created before 1 December 2023, [OAuth 2.0 authentication](https://linear.app/developers/oauth-2-0-authentication)) | Linear |
 | A webhook handshake answered in a header (`X-Hook-Secret`) | Asana |
 | A webhook secret decoded from base64 before it signs | Airtable |

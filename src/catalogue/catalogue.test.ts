@@ -66,24 +66,6 @@ const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole d
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
 const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
 const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
-const SHARED_FIELDS = 'a plain field every sign-in reads, beside two sign-ins: one that only one sign-in\'s `send` or token request reads (a Basic email) has no place beside the other';
-/** The plain fields a sign-in fills: its `send`'s templates and a token request's. */
-function signInReads(auth: Entry['auth'][number]): string[] {
-  const send = 'send' in auth ? auth.send : undefined;
-  const sent = send === undefined ? [] : 'header' in send ? [send.value ?? ''] : 'basic' in send ? send.basic : Object.values(send.query);
-  const request = auth.kind === 'token' ? [auth.request.url, ...Object.values(auth.request.body), ...auth.request.basic ?? []] : [];
-  return [...sent, ...request].flatMap(placeholders);
-}
-/** Beside two sign-ins, a plain field one sign-in reads is read by every sign-in, or by what they share (the base, a
- * lookup): the plain fields are shared. */
-function sharedFields(entry: Entry): boolean {
-  if (entry.auth.length < 2) return true;
-  const shared = [...placeholders(entry.http.baseUrl), ...lookupNames(entry).filter(name => name.startsWith('connection.'))
-    .map(name => name.slice('connection.'.length))];
-  const reads = entry.auth.map(signInReads);
-  return (entry.fields ?? []).filter(field => field.secret !== true).every(({ name }) =>
-    shared.includes(name) || reads.every(read => read.includes(name)) || !reads.some(read => read.includes(name)));
-}
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
@@ -152,7 +134,7 @@ const entrySchema = z.strictObject({
   ])).optional(),
   operations: z.record(z.string(), z.union([z.strictObject({ method: method.optional(), path: template, ...operationParts }),
     z.strictObject({ graphql: z.string(), ...operationParts })])).optional(),
-}).refine(entry => sharedFields(entry as unknown as Entry), SHARED_FIELDS);
+});
 
 /** Every function anywhere in a value, by its path. */
 function functionsIn(value: unknown, at = ''): string[] {
@@ -196,6 +178,9 @@ const sentTemplates = (entry: Entry) => {
 const hmac = (entry: Entry) => (entry.webhook?.kind === 'hmac' ? entry.webhook : undefined);
 /** A webhook whose entry declares what is signed: `hmac` or `ed25519`. */
 const signing = (entry: Entry) => (entry.webhook?.kind === 'hmac' || entry.webhook?.kind === 'ed25519' ? entry.webhook : undefined);
+/** The plain fields an entry reads: in its base, or as `connection.*` in identify and `save`. */
+const plainReads = (entry: Entry) => [...placeholders(entry.http.baseUrl), ...reads(entry, 'connection.')
+  .map(name => name.slice('connection.'.length))].filter(name => plainFields(entry).includes(name));
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
   [TODO_RULE]: (entry: Entry) => !stringsIn(entry).some(text => text.includes('TODO')),
@@ -347,8 +332,28 @@ const runnable = {
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
+  // OAuth 2's `finishConnect` takes no plain values: the grant would be issued, then identify or a call would fail.
+  'no plain field read by an `oauth2` sign-in (its connect asks for none): a provider whose OAuth needs one (a subdomain or region) waits for a plain value at OAuth sign-in': (entry: Entry) =>
+    entry.auth[0].kind !== 'oauth2' || plainReads(entry).length === 0,
+  // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
+  "an operation on a `page` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
+    operations(entry).every(op => op.paging === undefined || entry.paging?.[op.paging]?.kind !== 'page'
+      || op.records === (entry.paging[op.paging] as { list?: string }).list),
+  // The walk sets that parameter itself on every page after the first.
+  "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)": (entry: Entry) => operations(entry).every(op => {
+    const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
+    const sent = shape !== undefined && 'send' in shape ? shape.send : undefined;
+    return sent === undefined || Object.entries(op.params ?? {}).every(([name, param]) => !(param.in in sent && sent[param.in as keyof typeof sent] === name));
+  }),
 };
 type Rule = keyof typeof runnable;
+
+/** An entry as each of its sign-ins: an entry with one sign-in as it is, one with several narrowed to each. */
+const signIns = (entry: Entry): [kind: string, one: Entry][] => entry.auth.map(({ kind }) =>
+  [kind, entry.auth.length > 1 ? signInWith(entry, kind) : entry]);
+/** The rules an entry breaks, each with the sign-in it breaks them in. */
+const broken = (entry: Entry) => signIns(entry).flatMap(([kind, one]) =>
+  (Object.keys(runnable) as Rule[]).filter(rule => !runnable[rule](one)).map(rule => `${rule} (${kind})`));
 
 describe.each(entries)('%s', (id, entry) => {
   test('matches the entry types', () => { expect(entrySchema.safeParse(entry).error).toBeUndefined(); });
@@ -356,8 +361,7 @@ describe.each(entries)('%s', (id, entry) => {
   test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(entry))).toEqual(entry); });
   // Each sign-in is an entry of its own once an app picks it: every rule and the derived fake run on each, named by its
   // kind when there are several.
-  for (const { kind } of entry.auth) {
-    const one: Entry = signInWith(entry, kind);
+  for (const [kind, one] of signIns(entry)) {
     const named = entry.auth.length > 1 ? ` (${kind})` : '';
     test.each(Object.keys(runnable) as Rule[])(`declares %s${named}`, rule => { expect(runnable[rule](one)).toBe(true); });
     // Every sign-in that sends identify, and every token sign-in, signs in on the fake derived from it: no recording needed.
@@ -575,6 +579,18 @@ test.each<[Rule, Entry]>([
     .map((when): [Rule, Entry] => ["a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
         webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when, echo: 'type' } } })]),
+  ["an operation on a `page` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+    auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' }, list: 'items' } },
+    operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'result.items',
+      result: { result: { items: [{ id: 'string' }] } } } } })],
+  ["an operation on a `page` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+    auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' } } },
+    operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'items', result: { items: [{ id: 'string' }] } } } })],
+  ...([[{ kind: 'page', send: { query: 'page' } }, 'page', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'cursor', 'body']] as const)
+    .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)",
+      defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
+        operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
+          params: { [name]: { in: place, type: 'integer' } } } } })]),
   // The compiler refuses these through `defineProvider`; they are entries read as data.
   ['an `operations[].paging` name declared in `paging`', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { list: { path: '/items', paging: 'cursor' } } }],
@@ -613,16 +629,27 @@ test.each<[string, Record<string, unknown>, string]>([
   ['two key sign-ins', { fields: [secret], auth: [{ kind: 'key' }, { kind: 'key', send: { header: 'x-api-key' } }] }, ONE_OF_EACH],
   ['a key beside a token', { fields: [secret], auth: [{ kind: 'key' },
     { kind: 'token', request: { url: 'https://k.test/token', body: { key: '{apiKey}' } } }] }, KEY_OR_TOKEN],
-  ['a Basic email beside OAuth 2', { fields: [secret, { name: 'email', title: 'Email' }], scopes: { default: [] },
-    auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }, SHARED_FIELDS],
 ])('an entry with %s fails the schema, with what to fix', (_, parts, message) => {
   expect(entrySchema.safeParse({ ...key, ...parts }).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
 
-test('a plain field in the base beside two sign-ins, and OAuth 2 then a key, match the schema', () => {
-  const good = { ...key, fields: [secret, { name: 'site', title: 'Site' }], scopes: { default: [] },
-    http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [oauth2.auth[0], { kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }] };
-  expect(entrySchema.safeParse(good).error).toBeUndefined();
+const OAUTH_PLAIN = 'no plain field read by an `oauth2` sign-in (its connect asks for none): a provider whose OAuth needs one (a subdomain or region) waits for a plain value at OAuth sign-in';
+test.each<[string, Entry, string[]]>([
+  // Narrowing a key entry would drop these: a one-sign-in entry is checked as it is.
+  ['a key entry with scopes and an RFC 7009 revoke', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], scopes: { default: ['read'] },
+    revoke: { url: 'https://k.test/revoke', token: ['refresh'] } }), ['no `scopes` or RFC 7009 `revoke` on a key or token entry (key)']],
+  ['an OAuth entry with two secret fields', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [secret, { name: 'other', title: 'Other', secret: true }] }),
+    ['at most one secret field in `fields`, exactly one on a key or token entry (oauth2)']],
+  ['a plain field in the base beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret, { name: 'site', title: 'Site' }], scopes: { default: [] },
+    http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [oauth2.auth[0], { kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }] }),
+    [`${OAUTH_PLAIN} (oauth2)`]],
+  ['a plain field identify reads on an OAuth entry', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'site', title: 'Site' }],
+    identify: { request: { path: '/me' }, id: 'id', name: '{connection.site}' } }), [`${OAUTH_PLAIN} (oauth2)`]],
+])('%s breaks only its rule', (_, entry, rules) => { expect(broken(entry)).toEqual(rules); });
+
+test('a Basic email the key alone reads, beside OAuth 2 and a key, breaks no rule', () => {
+  expect(broken(defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }], scopes: { default: [] },
+    auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }))).toEqual([]);
 });
 
 test('a token request whose body holds an object fails the schema, with what to fix', () => {

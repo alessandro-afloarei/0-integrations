@@ -58,8 +58,7 @@ entry:
   the entry's fields; a send's `value` holds no control character and never spells out a default (`'{token}'`, or
   `authorization: Bearer {token}`), and no field is named `token`;
 - names in each template only what that place allows;
-- lists one or more sign-ins, at most one of each kind, never a key beside a token, OAuth 2 first when there is one,
-  and beside two sign-ins reads no plain field from only one sign-in's `send` or token request;
+- lists one or more sign-ins, at most one of each kind, never a key beside a token, OAuth 2 first when there is one;
 - is one the engine can run, each sign-in on its own: a key or token entry has exactly one secret field, a key entry
   reads no token answer, and neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
   the token itself from `tokenAnswer.*`; a value read from identify's answer has a request to read it from; no `save`
@@ -74,8 +73,10 @@ entry:
   `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, `http.headers` keys) is
   one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
-  place in the request (a GET has no body), a paged operation names a declared shape and no `notFound`, a records path
-  leads to a list, and no id is a client call or a dotted prefix of another.
+  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
+  names a declared shape and no `notFound`, a records path leads to a list (on a `page` shape, the shape's `list`), and
+  no id is a client call or a dotted prefix of another;
+- has an `oauth2` sign-in that reads no plain field (its connect asks for none).
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
 the test signs in once with a good key and once with a bad one (a `token` entry's token request, then identify's when a

@@ -291,12 +291,13 @@ its personal key, sent bare in `authorization`, to the same GraphQL endpoint and
    Required for building apps for other users"). The key is `signInWith(entry, 'key')`. The rule constrains only an
    entry with two sign-ins.
 4. Narrowed to `oauth2`, the entry drops its secret fields (the grant is the secret); narrowed to `key` or `token`, it
-   keeps every field. Plain fields are shared, so beside two sign-ins a plain field that only one sign-in's `send` or
-   token request reads (a Basic email) is refused by the table test.
+   keeps every field. An `oauth2` sign-in reads no plain field, in its base or its lookups: its `finishConnect` takes no
+   `values`, so the grant would be issued and the first call would fail. A provider whose OAuth needs one (a subdomain or
+   region chosen before the redirect) waits. A plain field only the key reads (a Basic email) is the key's alone.
 5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `identify`, `save`,
    `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
 6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
-   per sign-in, on `signInWith(entry, kind)`, each test named with its kind when there are several. The replay runs on
+   per sign-in, on `signInWith(entry, kind)` for an entry with several (one sign-in is checked as it is), each test named with its kind when there are several. The replay runs on
    the recorded sign-in only (rule 9).
 7. The schema takes `auth` of one or more sign-ins with unique kinds, not `key` with `token`, and OAuth 2 first when
    there is one.
@@ -404,7 +405,8 @@ type Where = { query: string } | { body: string } | { variables: string };
 type Size = { send: Where; value?: number };
 ```
 
-The engine owns the stop rules, and entries hold no stop expressions:
+The engine owns the stop rules, and entries hold no stop expressions. An operation declares no parameter in the place
+a shape's `send` writes: the walk sends it.
 
 - `cursor`: with `more`, stop when it is falsy; a truthy `more` with a blank cursor is `invalid_response`
   (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`.
@@ -413,7 +415,8 @@ The engine owns the stop rules, and entries hold no stop expressions:
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty or not a list, a missing path included. A page whose list
   equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
-  number would otherwise never end. `size` arrives later.
+  number would otherwise never end. An operation on a `page` shape names the shape's `list` as its `records` (both
+  absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.
