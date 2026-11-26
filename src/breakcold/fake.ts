@@ -1,9 +1,9 @@
-import { breakcold } from '../providers.js';
+import { breakcold } from '../catalogue/breakcold.js';
 import type { Route } from '../testing.js';
 import type { BreakcoldField, BreakcoldFieldOption, BreakcoldMeeting, BreakcoldNote, BreakcoldObject, BreakcoldRecord,
   BreakcoldSegment, BreakcoldView, BreakcoldWorkspace } from './breakcold.js';
 
-const API = new URL(breakcold.baseUrl ?? '');
+const API = new URL(breakcold.http.baseUrl);
 
 /**
  * A Breakcold organisation that reads `data` with any key. Lists answer in one page, filtered as Breakcold filters them:

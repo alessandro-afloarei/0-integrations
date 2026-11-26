@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { fill, firstPresent, holds, placeholders, readPath } from './rules.js';
+import { fill, holds, placeholders, readPath } from './rules.js';
 
 test('readPath tries the whole rest as one key first, then descends', () => {
   expect(readPath({ '@odata.nextLink': 'x' }, '@odata.nextLink')).toBe('x');
@@ -9,11 +9,6 @@ test('readPath tries the whole rest as one key first, then descends', () => {
   expect(readPath(null, 'a')).toBeUndefined();
   expect(readPath({ a: {} }, 'a.constructor')).toBeUndefined();
   expect(readPath(JSON.parse('{"__proto__":"own"}'), '__proto__')).toBe('own');
-});
-
-test('firstPresent skips undefined and null', () => {
-  expect(firstPresent({ a: null, b: 0 }, ['a', 'b'])).toBe(0);
-  expect(firstPresent({ hub_id: 42 }, 'hub_id')).toBe(42);
 });
 
 test('placeholders lists the names fill replaces, in order', () => {

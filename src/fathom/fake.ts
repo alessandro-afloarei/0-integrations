@@ -1,10 +1,10 @@
-import { fathom } from '../providers.js';
+import { fathom } from '../catalogue/fathom.js';
 import type { Route } from '../testing.js';
 import type { FathomMeeting, FathomTranscriptItem } from './fathom.js';
 
 export type FakeFathomMeeting = FathomMeeting & { transcript: FathomTranscriptItem[] };
 
-const BASE = fathom.baseUrl ?? '';
+const BASE = fathom.http.baseUrl;
 const PAGE = 10;
 
 /**

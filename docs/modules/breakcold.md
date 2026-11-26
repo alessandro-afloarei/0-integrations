@@ -8,7 +8,8 @@ no status and the library's own `detail` (`cursor_repeated`, `cursor_missing`), 
 runs once per call before anything is sent, for an app's metering, and a refusal's `ProviderHttpError.detail` carries
 the provider's own code where the catalogue reads one (Breakcold's `usage_limit`).
 
-Breakcold's `parseWebhook(headers)` reads `x-webhook-delivery-id`. Apps own deduplication and retain original bytes.
+`deliveryId(breakcold.webhook, request)` from `0-integrations/webhooks` reads Breakcold's `x-webhook-delivery-id`, once
+`verifyWebhook` accepted the request ([why](webhooks.md)). Apps own deduplication and retain original bytes.
 
 `breakcold/fake` exports `fakeBreakcold`, which returns routes that answer the calls `breakcoldClient` makes, from data the
 app passes. `fakeBreakcold` accepts optional `readable: {notes?, meetings?}` collections for fixtures that must be available by id

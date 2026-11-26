@@ -2,9 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { eventsIn, type FakeMailbox } from '../mailbox/fake.js';
 import type { MailboxEmail, MailboxEmailAddress, MailboxEvent, MailboxEventTime } from '../mailbox/mailbox.js';
 import type { OAuthClient } from '../oauth.js';
-import { GOOGLE_CALENDAR_BASE, google } from '../providers.js';
+import { google } from '../catalogue/google.js';
 import type { Route } from '../testing.js';
-import { GOOGLE_SCOPES } from './google.js';
 
 export type GoogleFakeData = {
   client: OAuthClient;
@@ -19,10 +18,11 @@ export type GoogleFakeData = {
   granted?: (address: string) => readonly string[];
 };
 
-const GMAIL = google.baseUrl ?? '';
-const AUTHORIZE = google.oauth2?.authUrl ?? '';
-const TOKEN = google.oauth2?.tokenUrl ?? '';
-const REVOKE = google.oauth2?.revokeUrl ?? '';
+const GMAIL = google.http.baseUrl;
+const AUTHORIZE = google.auth[0].authorizeUrl;
+const TOKEN = google.auth[0].tokenUrl;
+const REVOKE = google.revoke.url;
+const SCOPES = google.scopes.default;
 const LABELS: Record<string, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT', trash: 'TRASH', spam: 'SPAM' };
 const RESPONSES = { yes: 'accepted', no: 'declined', maybe: 'tentative', noreply: 'needsAction' } as const;
 
@@ -102,9 +102,9 @@ function page<T>(items: readonly T[], params: URLSearchParams, max: number): { i
 export function fakeGoogle(data: GoogleFakeData): Route[] {
   if (!URL.canParse(data.redirectUri)) throw new TypeError('fake_redirect_uri_invalid');
   const codes = new Map<string, { address: string; challenge: string }>();
-  const scopesOf = (address: string) => data.granted?.(address) ?? GOOGLE_SCOPES;
+  const scopesOf = (address: string) => data.granted?.(address) ?? SCOPES;
   const accessTokens = new Map<string, { address: string; refresh: string | null; scopes: readonly string[] }>(
-    Object.entries(data.tokens ?? {}).map(([token, address]) => [token, { address, refresh: null, scopes: GOOGLE_SCOPES }]));
+    Object.entries(data.tokens ?? {}).map(([token, address]) => [token, { address, refresh: null, scopes: SCOPES }]));
   const refreshTokens = new Map<string, string>();
   const tokenAnswer = (address: string, refresh: string, withRefresh: boolean) => {
     const access = `fake-google-access-${randomUUID()}`;
@@ -126,7 +126,7 @@ export function fakeGoogle(data: GoogleFakeData): Route[] {
   const api = (base: string, path: RegExp, respond: (mailbox: FakeMailbox, url: URL, match: RegExpExecArray) => Response): Route => ({
     method: 'GET', url: url => `${url.origin}${url.pathname}`.startsWith(base) && path.test(url.pathname.slice(new URL(base).pathname.length)),
     respond(request) {
-      const scope = GOOGLE_SCOPES.find(granted => granted.includes(base === GMAIL ? 'gmail' : 'calendar')) ?? '';
+      const scope = SCOPES.find(granted => granted.includes(base === GMAIL ? 'gmail' : 'calendar')) ?? '';
       const mailbox = mailboxOf(request, scope);
       if (mailbox instanceof Response) return mailbox;
       const url = new URL(request.url);
@@ -143,7 +143,7 @@ export function fakeGoogle(data: GoogleFakeData): Route[] {
       const [state, challenge] = [params.get('state') ?? '', params.get('code_challenge') ?? ''];
       if (params.get('client_id') !== data.client.clientId || params.get('redirect_uri') !== data.redirectUri
         || params.get('response_type') !== 'code' || params.get('code_challenge_method') !== 'S256' || !challenge || !state.trim()
-        || params.get('access_type') !== 'offline' || !GOOGLE_SCOPES.every(scope => scopes.has(scope))) {
+        || params.get('access_type') !== 'offline' || !SCOPES.every(scope => scopes.has(scope))) {
         return new Response('Error 400: invalid_request', { status: 400 });
       }
       const back = new URL(data.redirectUri);
@@ -218,12 +218,12 @@ export function fakeGoogle(data: GoogleFakeData): Route[] {
       return messages.length ? Response.json({ id: decodeURIComponent(id), historyId: '1', messages: messages.map(email => wireMessage(email, null)) })
         : notFound();
     }),
-    api(GOOGLE_CALENDAR_BASE, /^\/calendars\/([^/]+)$/u, (mailbox, _url, [, id = '']) => {
+    api(google.http.bases.calendar, /^\/calendars\/([^/]+)$/u, (mailbox, _url, [, id = '']) => {
       const wanted = decodeURIComponent(id);
       return wanted === 'primary' || wanted === mailbox.calendar.id
         ? Response.json({ kind: 'calendar#calendar', id: mailbox.calendar.id, summary: mailbox.calendar.name, timeZone: 'UTC' }) : notFound();
     }),
-    api(GOOGLE_CALENDAR_BASE, /^\/calendars\/([^/]+)\/events$/u, (mailbox, url, [, id = '']) => {
+    api(google.http.bases.calendar, /^\/calendars\/([^/]+)\/events$/u, (mailbox, url, [, id = '']) => {
       const params = url.searchParams;
       if (decodeURIComponent(id) !== mailbox.calendar.id) return notFound();
       if (params.get('orderBy') === 'startTime' && params.get('singleEvents') !== 'true') {

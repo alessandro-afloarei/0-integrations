@@ -21,10 +21,6 @@
       "types": "./dist/errors.d.ts",
       "default": "./dist/errors.js"
     },
-    "./providers": {
-      "types": "./dist/providers.d.ts",
-      "default": "./dist/providers.js"
-    },
     "./vault": {
       "types": "./dist/vault.d.ts",
       "default": "./dist/vault.js"

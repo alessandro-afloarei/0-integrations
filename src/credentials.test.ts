@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { accessToken, readSecret, type WithLock } from './credentials.js';
 import { GrantRevoked, RefreshBusy, SecretUnavailable } from './errors.js';
 import type { Grant } from './oauth.js';
-import { hubspot } from './providers.js';
+import { hubspot } from './catalogue/hubspot.js';
 import { memoryLock, memoryStores, openLock } from './testing.js';
 import { createVault } from './vault.js';
 

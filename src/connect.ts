@@ -1,54 +1,86 @@
-import { authorizeUrl, exchangeCode, pkcePair, type Grant, type OAuthClient } from './oauth.js';
-import type { ProviderDefinition } from './providers.js';
+import { identifyAccount, type Account } from './account.js';
+import type { Entry, Field, Value, Values } from './catalogue.js';
+import { ProviderHttpError } from './errors.js';
+import { authorizeUrl, exchangeCode, pkcePair, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
 
-export type ConnectField = { name: string; label: string; secret: boolean };
-export type ConnectStart = { kind: 'redirect'; url: string; codeVerifier?: string }
-  | { kind: 'form'; fields: readonly ConnectField[] } | { kind: 'hosted'; url: string };
-export type ConnectIdentity<D> = { account: { id: string; name: string }; details: D };
-export type ConnectResult<S, D> = ConnectIdentity<D> & { secret: S };
-export type OAuthConnect<D> = {
-  kind: 'oauth2'; provider: ProviderDefinition; scopes: readonly string[];
-  identify: (input: { grant: Grant; extras: Record<string, unknown>; fetch: typeof fetch }) => Promise<ConnectIdentity<D>>;
-  /** finishConnect revokes after failed identity unless re-consent can return a live connection's token. */
-  reusesGrant?: true;
-  revoke: (input: { grant: Grant; client: OAuthClient; fetch: typeof fetch }) => Promise<void>;
-};
-export type DirectConnect<S, D> = ({ kind: 'form'; fields: readonly ConnectField[] }
-  | { kind: 'hosted'; authorize: () => Promise<string> }) & { identify: (secret: S) => Promise<ConnectIdentity<D>> };
-
+type Redirect = { kind: 'redirect'; url: string; codeVerifier?: string };
+type Form = { kind: 'form'; fields: readonly Field[] };
+export type ConnectStart = Redirect | Form;
+/** `OAuth` for an OAuth 2 entry, `Key` for a key entry, either for an entry whose kind is not known (a union, `Entry`). */
+type ByKind<E extends Entry, OAuth, Key> = [E['auth'][0]['kind']] extends ['oauth2'] ? OAuth
+  : [E['auth'][0]['kind']] extends ['key'] ? Key : OAuth | Key;
+/** The entry's declared fields, one union member each; none for an entry that declares none. */
+type Fields<E extends Entry> = E extends { fields?: readonly (infer F)[] } ? F : never;
+/** Whether the types do not know the entry's field names (a widened `Entry`, or fields typed `readonly Field[]`). */
+type Unnamed<E extends Entry> = string extends Fields<E>['name'] ? true : false;
+/** A record keyed by `K`, or by any string when the entry's field names are unknown. */
+type Keyed<E extends Entry, K extends string, V> = Unnamed<E> extends true ? Readonly<Record<string, V>> : Readonly<Record<K, V>>;
+/** The names `save` keeps, when the entry declares any. */
+type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : never;
+/** A key entry's secret fields, and its plain fields, by name. */
+type Secrets<E extends Entry> = Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>;
+type Plain<E extends Entry> = Keyed<E, Exclude<Fields<E>, { secret: true }>['name'], string>;
+/** A finished sign-in: the secret to seal, the plain values to keep, and the account; one per entry of a union. */
+export type Connected<E extends Entry = Entry> = E extends Entry ? {
+  /** The grant, or a key entry's secret fields by name. */
+  secret: ByKind<E, Grant, Secrets<E>>;
+  /** The plain fields entered, by name, and what `save` kept (present only when the provider answered it). */
+  values: Unnamed<E> extends true ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
+  account: E['identify'] extends { id: Value } ? Account : Account | null;
+} : never;
 type OAuthStart = { clientId: string; redirectUri: string; state: string };
 type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string; fetch: typeof fetch;
   onRevokeFailed: (error: unknown) => void };
+/** A key entry's finish: its secret fields by name, and its plain fields, required when it has any. */
+type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch: typeof fetch } & (Unnamed<E> extends true
+  ? { values?: Values } : Partial<Plain<E>> extends Plain<E> ? { values?: never } : { values: Plain<E> }) : never;
 
-export function startConnect<D>(provider: OAuthConnect<D>, options: OAuthStart): Promise<ConnectStart>;
-export function startConnect<S, D>(provider: DirectConnect<S, D>): Promise<ConnectStart>;
-export async function startConnect<S, D>(provider: OAuthConnect<D> | DirectConnect<S, D>, options?: OAuthStart): Promise<ConnectStart> {
-  if (provider.kind === 'form') return { kind: 'form', fields: provider.fields };
-  if (provider.kind === 'hosted') return { kind: 'hosted', url: await provider.authorize() };
+/** A form of the entry's fields, or the provider's authorization URL (with the PKCE verifier for the app to keep). */
+export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart], []>):
+  Promise<ByKind<E, Redirect, Form>>;
+export async function startConnect(entry: Entry, options?: OAuthStart): Promise<ConnectStart> {
+  const [auth] = entry.auth;
+  if (auth.kind === 'key') return { kind: 'form', fields: entry.fields ?? [] };
   if (!options) throw new TypeError('oauth_options_required');
-  const pkce = provider.provider.oauth2?.pkce ? await pkcePair() : undefined;
-  return { kind: 'redirect', url: authorizeUrl(provider.provider, { ...options, scopes: provider.scopes,
+  const pkce = auth.pkce === false ? undefined : await pkcePair();
+  return { kind: 'redirect', url: authorizeUrl(entry, { ...options, scopes: entry.scopes?.default ?? [],
     ...(pkce ? { codeChallenge: pkce.challenge } : {}) }).toString(), ...(pkce ? { codeVerifier: pkce.verifier } : {}) };
 }
 
-export function finishConnect<D>(provider: OAuthConnect<D>, input: OAuthFinish): Promise<ConnectResult<Grant, D>>;
-export function finishConnect<S, D>(provider: DirectConnect<S, D>, input: { secret: S }): Promise<ConnectResult<S, D>>;
-export async function finishConnect<S, D>(provider: OAuthConnect<D> | DirectConnect<S, D>,
-  input: OAuthFinish | { secret: S }): Promise<ConnectResult<S | Grant, D>> {
-  if (provider.kind !== 'oauth2') {
-    if (!('secret' in input)) throw new TypeError('connect_secret_required');
-    return { secret: input.secret, ...await provider.identify(input.secret) };
+export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish, FormFinish<E>>): Promise<Connected<E>>;
+export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
+  const [auth] = entry.auth;
+  if (auth.kind === 'key') {
+    const { secret: secrets = {}, values: plain = {} }: Partial<FormFinish> = 'secret' in input ? input : {};
+    // Only the declared fields, each filled, all checked before anything is sent: an entry's templates read them.
+    const fields = entry.fields ?? [];
+    // The entry's only secret field is the credential; an app's own entry may declare none, its fault before the caller's.
+    const credential = fields.find(field => field.secret);
+    if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
+    const read = (field: Field) => {
+      const value = (field.secret ? secrets : plain)[field.name];
+      if (typeof value !== 'string' || value.trim() === '') throw new TypeError(`connect_field_required: ${field.name}`);
+      return [field.name, value] as const;
+    };
+    const secret = Object.fromEntries(fields.filter(field => field.secret).map(read));
+    const values = Object.fromEntries(fields.filter(field => !field.secret).map(read));
+    return { secret, ...await identifyAccount(entry, { fetch: input.fetch, token: read(credential)[1], values }) };
   }
-  if (!('client' in input)) throw new TypeError('oauth_options_required');
-  const exchanged = await exchangeCode(provider.provider, input.client, input);
+  if (!('code' in input)) throw new TypeError('oauth_options_required');
+  const { grant, extras } = await exchangeCode(entry, input.client, input);
   try {
-    return { secret: exchanged.grant, ...await provider.identify({ ...exchanged, fetch: input.fetch }) };
+    // RFC 6749 §5.1: a token answer without `scope` granted the scopes requested.
+    const granted = typeof extras.scope === 'string' ? new Set(extras.scope.split(auth.scopeSeparator ?? ' ')) : undefined;
+    if (entry.scopes?.requireGranted && granted && !entry.scopes.default.every(scope => granted.has(scope))) {
+      throw new ProviderHttpError('rejected', null, 'scope_missing');
+    }
+    return { secret: grant, ...await identifyAccount(entry, { fetch: input.fetch, token: grant.accessToken, tokenAnswer: extras }) };
   } catch (error) {
     // A reused grant may belong to a live connection; only the app can decide ownership.
-    if (provider.reusesGrant) throw error;
+    if (auth.reusesGrant) throw error;
     // Cleanup must not hide the original refusal.
     try {
-      await provider.revoke({ grant: exchanged.grant, client: input.client, fetch: input.fetch });
+      await revokeGrant(entry, { ...grant, client: input.client, fetch: input.fetch });
     } catch (revokeError) { input.onRevokeFailed(revokeError); }
     throw error;
   }

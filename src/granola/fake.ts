@@ -1,8 +1,8 @@
-import { granola } from '../providers.js';
+import { granola } from '../catalogue/granola.js';
 import type { Route } from '../testing.js';
 import type { GranolaNote } from './granola.js';
 
-const NOTES = `${granola.baseUrl ?? ''}/notes`;
+const NOTES = `${granola.http.baseUrl}/notes`;
 
 /**
  * Granola for one key at a time: `notes(key)` is what the key reads, null a key Granola refuses. The list is one page of

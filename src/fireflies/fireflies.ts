@@ -1,11 +1,9 @@
 import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
-import { safeDetail } from '../http-response.js';
-import { fireflies } from '../providers.js';
+import { fireflies } from '../catalogue/fireflies.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { retryAfterMs } from '../retry-after.js';
 import { pageSize } from '../shapes.js';
 import { normalizeTranscript, UNTITLED, type FirefliesTranscript } from './transcript.js';
 
@@ -46,21 +44,6 @@ export type FirefliesListItem = {
   is_live?: boolean | null | undefined; meeting_info?: { summary_status?: string | null | undefined } | null | undefined;
 };
 
-function graphqlError(value: unknown): { code: string | null; retryAfter?: number } {
-  if (typeof value !== 'object' || value === null || !('errors' in value) || !Array.isArray(value.errors)) return { code: null };
-  const first: unknown = value.errors[0];
-  if (typeof first !== 'object' || first === null) return { code: null };
-  const extensions = 'extensions' in first && typeof first.extensions === 'object' && first.extensions !== null ? first.extensions : {};
-  const code = 'code' in first && typeof first.code === 'string' ? first.code
-    : 'code' in extensions && typeof extensions.code === 'string' ? extensions.code : null;
-  const metadata = 'metadata' in extensions && typeof extensions.metadata === 'object' && extensions.metadata !== null ? extensions.metadata : {};
-  const retryAfter = 'retryAfter' in metadata ? metadata.retryAfter : undefined;
-  return { code,
-    ...(typeof retryAfter === 'number' && retryAfter >= 0 && retryAfter <= Number.MAX_SAFE_INTEGER
-      ? { retryAfter } : {}) };
-}
-
-
 export type FirefliesUser = { userId: string; email: string; name: string };
 type TranscriptQuery = { userId: string; fromDate: number; toDate: number; cursor?: string | undefined };
 export type FirefliesClient = {
@@ -93,23 +76,9 @@ function pageOffset(query: TranscriptQuery): number {
 }
 
 export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; signal?: AbortSignal }): FirefliesClient {
-  const http = createClient({ provider: fireflies, token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
-  const request = async (query: string, variables: Record<string, unknown>): Promise<unknown> => {
-    const { status, headers, data: body } = await http.request('', { method: 'POST', json: { query, variables }, ...(input.signal ? { signal: input.signal } : {}) });
-    // Fireflies sends auth_failed with HTTP 500: the GraphQL code takes precedence over status.
-    const { code, retryAfter } = graphqlError(body);
-    const now = Date.now();
-    const metadata = { retryAfterMs: retryAfterMs(headers, now, retryAfter === undefined ? undefined : Math.max(0, retryAfter - now)) };
-    const detail = code === null ? null : safeDetail(code);
-    if (code === 'auth_failed' || status === 401) throw new ProviderHttpError('rejected', status, detail, metadata);
-    if (code === 'too_many_requests' || status === 429) throw new ProviderHttpError('rate_limited', status, detail, metadata);
-    if (code === 'object_not_found') throw new ProviderHttpError('not_found', status, detail, metadata);
-    if (code !== null) throw new ProviderHttpError('request_failed', status, detail, metadata);
-    if (status < 200 || status >= 300) throw new ProviderHttpError('unavailable', status, null, metadata);
-    if (typeof body === 'object' && body !== null && 'errors' in body
-      && Array.isArray(body.errors) && body.errors.length > 0) throw new ProviderHttpError('request_failed', status, null, metadata);
-    return body;
-  };
+  const http = createClient(fireflies, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
+  const request = (query: string, variables: Record<string, unknown>): Promise<unknown> =>
+    http.json('', { method: 'POST', json: { query, variables }, ...(input.signal ? { signal: input.signal } : {}) });
   const list = (body: unknown, limit: number) => {
     const entries = parseAnswer(listSchema, body).data.transcripts;
     if (entries.length > limit) throw new ProviderHttpError('invalid_response', null);
@@ -154,8 +123,6 @@ export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; si
 export function changedTranscripts(client: FirefliesClient, query: TranscriptQuery): AsyncGenerator<Page<FirefliesListItem>> {
   return paginate(cursor => client.transcripts({ ...query, cursor: cursor ?? query.cursor }));
 }
-
-export function identify(client: FirefliesClient): Promise<FirefliesUser> { return client.user(); }
 
 const webhookSchema = z.object({
   meeting_id: z.string().min(1), event: z.string().min(1), timestamp: z.union([z.string(), z.number()]),

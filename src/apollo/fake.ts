@@ -1,4 +1,4 @@
-import { apollo } from '../providers.js';
+import { apollo } from '../catalogue/apollo.js';
 import type { Route } from '../testing.js';
 import type { ApolloOrganization, ApolloPerson, ApolloProfile } from './apollo.js';
 
@@ -7,7 +7,7 @@ export type FakeApolloPerson = ApolloPerson & { email: string };
 export type FakeApolloAccount = { profile: ApolloProfile; people: readonly FakeApolloPerson[];
   organizations: readonly ApolloOrganization[] };
 
-const BASE = apollo.baseUrl ?? '';
+const BASE = apollo.http.baseUrl;
 
 /**
  * Apollo for one key at a time: `account(apiKey)` is what it reads, null a key Apollo refuses (401, in plain text). People

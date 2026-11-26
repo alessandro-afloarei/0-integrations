@@ -6,9 +6,8 @@ The library checks every answer with zod, which no public type names, so an app'
 an answer in the wrong shape is a `ProviderHttpError` with code `invalid_response`. `unipileClient` speaks Unipile V2, one address for every
 workspace (`https://api.unipile.com/v2`, the `unipile` provider's `baseUrl`), with the workspace's V2 key.
 
-`unipileConnect({client, link, signal?})` composes the hosted sign-in with `startConnect` and `finishConnect`.
-Start returns `{kind:'hosted', url}`; finish takes `{secret:accountId}` and returns that id as both secret and account
-name/id, plus the account as details: `{createdAt, provider, email, scopes}`. The optional signal bounds the account lookup.
+The hosted sign-in is two calls: `client.authLink(link)` answers the sign-in URL, and `client.account(accountId, signal?)`
+the account it made, `{createdAt, provider, email, scopes}`. The optional signal bounds the account lookup.
 `authLink` refuses blank state; nonce validation, account ownership, accepted creation age and persistence stay with the app.
 
 A `HostedSignIn` is a new account of one of `providers` (`linkedin`, `google`, `outlook`) or `accountId` signed in again,

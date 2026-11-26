@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { fireflies } from '../providers.js';
+import { fireflies } from '../catalogue/fireflies.js';
 import type { Route } from '../testing.js';
 import type { FirefliesUser } from './fireflies.js';
 
@@ -9,7 +9,7 @@ const requestSchema = z.object({ query: z.string(), variables: z.record(z.string
 export function fakeFireflies(data: {
   account: (apiKey: string) => { user: FirefliesUser; transcripts: readonly Record<string, unknown>[] } | null;
 }): Route[] {
-  return [{ method: 'POST', url: fireflies.baseUrl ?? '', async respond(request) {
+  return [{ method: 'POST', url: fireflies.http.baseUrl, async respond(request) {
     const account = data.account((request.headers.get('authorization') ?? '').replace(/^Bearer /u, ''));
     if (account === null) return Response.json({ errors: [{ code: 'auth_failed' }] }, { status: 500 });
     const parsed = requestSchema.safeParse(await request.json());

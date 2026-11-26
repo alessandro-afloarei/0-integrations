@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createClient } from '../http.js';
 import { parseAnswer } from '../parse.js';
-import { exa } from '../providers.js';
+import { exa } from '../catalogue/exa.js';
 
 export type SearchHit = { url: string; title: string; text: string; publishedDate: string | null };
 export type SearchOptions = { category?: 'news'; numResults: number };
@@ -13,7 +13,7 @@ const searchSchema = z.object({
 });
 
 export function exaClient(input: { apiKey: string; fetch: typeof fetch }): ExaClient {
-  const http = createClient({ provider: exa, token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
+  const http = createClient(exa, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
   return {
     async search(query, options) {
       const json = { query, type: 'auto', numResults: options.numResults, contents: { text: { maxCharacters: 2000 } },

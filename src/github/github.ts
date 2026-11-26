@@ -4,8 +4,7 @@ import { createClient } from '../http.js';
 import { responseJson } from '../http-response.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { github as githubEntry } from '../catalogue/github.js';
-import { github } from '../providers.js';
+import { github } from '../catalogue/github.js';
 import { datetime, orNull } from '../shapes.js';
 
 // GitHub's own field names: an app stores these values and reads them back with its own schema.
@@ -63,8 +62,7 @@ function nextPage(link: string | null): string | null {
 
 /** `pageSize` is for tests: GitHub answers at most 100 a page. */
 export function githubClient(input: { token: string; fetch: typeof fetch; minIntervalMs?: number; pageSize?: number }): GitHubClient {
-  const http = createClient({ provider: github, token: () => Promise.resolve(input.token), fetch: input.fetch,
-    headers: githubEntry.http.headers,
+  const http = createClient(github, { token: () => Promise.resolve(input.token), fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   /** GitHub pages by number and names the next one in its Link header, which `request` reads. */
   async function paged<T>(path: string, schema: z.ZodType<T>, cursor: string | undefined,

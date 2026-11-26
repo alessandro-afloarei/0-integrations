@@ -1,7 +1,7 @@
 # Fireflies
 
 `firefliesClient({ apiKey, fetch, signal? })` reads the key owner (`user`), a transcript (`transcript`),
-keyword matches (`search`), or one 50-record offset page (`transcripts`). `identify(client)` is the API-key proof.
+keyword matches (`search`), or one 50-record offset page (`transcripts`); `user()` is the API-key proof.
 `changedTranscripts(client, { userId, fromDate, toDate, cursor? })` yields pages through `paginate`. The window
 filters on transcript creation date, not modification date: edits are not re-yielded once creation falls outside
 the window. Windows must overlap (for example three days). Fireflies gives no order guarantee; apps own deduplication

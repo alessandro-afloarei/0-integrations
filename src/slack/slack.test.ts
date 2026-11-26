@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GrantRevoked, ProviderHttpError } from '../errors.js';
+import { slack } from '../catalogue/slack.js';
+import { GrantRevoked } from '../errors.js';
+import { revokeGrant } from '../oauth.js';
 import { fakeFetch } from '../testing.js';
 import { fakeSlack } from './fake.js';
-import { identify, slackClient } from './slack.js';
+import { slackClient } from './slack.js';
 
 const data = { redirectUri: 'https://app.test/api/integrations/slack/callback', team: { id: 'T1', name: 'Acme' }, botUserId: 'U1', channels: [
   { id: 'C1', name: 'general', isPrivate: false }, { id: 'G1', name: 'deals', isPrivate: true },
@@ -15,7 +17,7 @@ describe('Slack client', () => {
     const client = slackClient({ token: 'xoxb-fixture', fetch: http.fetch });
     expect(await client.channels()).toEqual({ items: [data.channels[1], data.channels[0]], skipped: [], channelsCut: false });
     expect((await client.postMessage({ channel: 'C1', text: 'hi' })).ts).toMatch(/^\d+\.000100$/u);
-    await expect(client.revoke()).resolves.toBeUndefined();
+    await expect(revokeGrant(slack, { accessToken: 'xoxb-fixture', fetch: http.fetch })).resolves.toBeUndefined();
     await expect(client.postMessage({ channel: 'C0GONE', text: 'hi' }))
       .rejects.toMatchObject({ code: 'request_failed', status: 200, detail: 'channel_not_found' });
   });
@@ -49,10 +51,15 @@ describe('Slack client', () => {
     expect(Date.now()).toBe(started);
   });
 
-  it.each([{}, { ok: true }, { ok: true, ts: 1 }, { ok: 'true', ts: '1' }])('rejects malformed post success %j', async body => {
+  it.each([{}, { ok: true }, { ok: true, ts: 1 }])('rejects malformed post success %j', async body => {
     const http = fakeFetch([{ url: 'https://slack.com/api/chat.postMessage', respond: () => Response.json(body) }]);
     await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).postMessage({ channel: 'C1', text: 'hi' }))
       .rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
+  it('reads a 200 whose ok is not the boolean false by its data', async () => {
+    const http = fakeFetch([{ url: 'https://slack.com/api/chat.postMessage', respond: () => Response.json({ ok: 'true', ts: '1' }) }]);
+    await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).postMessage({ channel: 'C1', text: 'hi' })).resolves.toEqual({ ts: '1' });
   });
 
   it.each(['a secret-bearing body', 'xoxb_token', 'x'.repeat(65)])('never exposes unsafe error detail %s', async error => {
@@ -84,17 +91,6 @@ describe('Slack client', () => {
     ], skipped: ['bad'], channelsCut: false });
     expect(http.calls).toHaveLength(1);
   });
-
-  it('identifies only the team and bot user', () => {
-    expect(identify({ extras: { team: { id: 'T1', name: 'Acme' }, bot_user_id: 'U1', authed_user: { access_token: 'discard' } } }))
-      .toEqual({ account: { id: 'T1', name: 'Acme' }, details: { botUserId: 'U1' } });
-    expect(identify({ extras: { team: { id: 'T1', name: '' } } }))
-      .toEqual({ account: { id: 'T1', name: 'T1' }, details: { botUserId: null } });
-  });
-
-  it.each([{}, { team: null }, { team: { name: 'Acme' } }, { team: { id: '' } }])('refuses missing team identity %j', extras => {
-    expect(() => identify({ extras })).toThrow(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
-  });
 });
 
 
@@ -106,16 +102,20 @@ describe('Slack review regressions', () => {
     await expect(result).rejects.toMatchObject({ detail: error });
   });
 
-  it.each(['invalid_auth', 'token_revoked', 'account_inactive', 'not_authed'])('revoking an already-gone token %s succeeds', async error => {
-    const http = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => Response.json({ ok: false, error }) }]);
-    await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).revoke()).resolves.toBeUndefined();
+  it('reads a refusal outside 2xx too: a 401 invalid_auth is GrantRevoked', async () => {
+    const http = fakeFetch([{ url: 'https://slack.com/api/chat.postMessage',
+      respond: () => Response.json({ ok: false, error: 'invalid_auth' }, { status: 401 }) }]);
+    const result = slackClient({ token: 'xoxb-1', fetch: http.fetch }).postMessage({ channel: 'C1', text: 'hi' });
+    await expect(result).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(result).rejects.toMatchObject({ detail: 'invalid_auth' });
+    expect(http.calls).toHaveLength(1);
   });
 
   it('sends no JSON Content-Type on GETs', async () => {
     const http = fakeFetch(fakeSlack(data));
     const client = slackClient({ token: 'xoxb-1', fetch: http.fetch });
     await client.channels();
-    await client.revoke();
+    await revokeGrant(slack, { accessToken: 'xoxb-1', fetch: http.fetch });
     expect(http.calls.map(call => call.headers['content-type'])).toEqual([undefined, undefined]);
   });
 

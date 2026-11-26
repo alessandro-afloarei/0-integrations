@@ -3,7 +3,7 @@ import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { aircall } from '../providers.js';
+import { aircall } from '../catalogue/aircall.js';
 
 // Aircall's own field names: an app stores these values and reads them back with its own schema.
 export type AircallUser = { id: number; name: string; email: string };
@@ -62,8 +62,7 @@ const CURSOR = /^(\d*):([1-9]\d*)$/u;
 /** Aircall pages up to 50 calls; `pageSize` is for tests. */
 export function aircallClient(input: { apiId: string; apiToken: string; fetch: typeof fetch; minIntervalMs?: number;
   pageSize?: number }): AircallClient {
-  const token = Buffer.from(`${input.apiId}:${input.apiToken}`).toString('base64');
-  const http = createClient({ provider: aircall, token: () => Promise.resolve(token), fetch: input.fetch,
+  const http = createClient(aircall, { token: () => Promise.resolve(input.apiToken), values: { apiId: input.apiId }, fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   return {
     async company() {

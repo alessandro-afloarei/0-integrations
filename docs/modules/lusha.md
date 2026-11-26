@@ -9,6 +9,6 @@ enrich without premium reveals: base firmographics, charged per match as `reveal
 `creditsCharged` is Lusha's own `billing.creditsCharged`, the figure to budget with, since Lusha's FAQ charges no miss
 and its introduction a minimum of one credit a request. A failed enrichment is `unavailable`, detail `enrich_failed`;
 running out of credits is `request_failed` 402. Lusha documents no `Retry-After`, so a 429 is waited out once after a
-minute, then reported. An account without v3 access is `request_failed` 403, detail
-`v3_not_enabled`, so an app can tell it from a bad key. Lusha's legal notice bars third-party platforms from embedding or
-exposing its API or data without Lusha's prior written consent. `lusha/fake` exports `fakeLusha({ account: apiKey => … })`.
+minute, then reported. An account without v3 access is `request_failed` with detail `v3_not_enabled` and the answer's
+status (Lusha answers 403), so an app can tell it from a bad key. Lusha's legal notice bars third-party platforms from
+embedding or exposing its API or data without Lusha's prior written consent. `lusha/fake` exports `fakeLusha({ account: apiKey => … })`.

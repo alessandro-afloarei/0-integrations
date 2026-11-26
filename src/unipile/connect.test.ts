@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { finishConnect, startConnect } from '../connect.js';
 import { ProviderHttpError } from '../errors.js';
 import { fakeFetch, respondFrom } from '../testing.js';
 import { fakeUnipile } from './fake.js';
@@ -22,36 +21,31 @@ function setup(accountId: () => string | Promise<string> = () => 'acc_1') {
   return { fake, client: unipile.unipileClient({ apiKey: 'fixture-key', fetch: fake.fetch }), respond: respondFrom(routes) };
 }
 
-function adapter(client: unipile.UnipileClient, signal?: AbortSignal) {
-  return unipile.unipileConnect({ client, link, ...(signal ? { signal } : {}) });
-}
-
-test('start and finish use the hosted client and return the account id as the secret', async () => {
+test('the hosted sign-in is the link, then the account it made', async () => {
   const fake = fakeFetch(fakeUnipile(data));
-  const connect = adapter(unipile.unipileClient({ apiKey: 'fixture-key', fetch: fake.fetch }));
-  expect(await startConnect(connect)).toEqual({ kind: 'hosted', url: 'https://auth.unipile.com/hosted' });
-  expect(await finishConnect(connect, { secret: 'acc_1' })).toEqual({ secret: 'acc_1', account: { id: 'acc_1', name: 'acc_1' },
-    details: { createdAt: '2026-11-02T04:00:00.000Z', provider: 'linkedin', email: null, scopes: [] } });
+  const client = unipile.unipileClient({ apiKey: 'fixture-key', fetch: fake.fetch });
+  expect(await client.authLink(link)).toBe('https://auth.unipile.com/hosted');
   expect(JSON.parse(fake.calls[0]?.body ?? '')).toEqual(wire);
+  expect(await client.account('acc_1')).toEqual({ createdAt: '2026-11-02T04:00:00.000Z', provider: 'linkedin', email: null, scopes: [] });
 });
 
 test('a missing account remains a typed not_found refusal', async () => {
   const { client } = setup();
-  await expect(finishConnect(adapter(client), { secret: 'acc_missing' })).rejects.toMatchObject({ code: 'not_found', status: 404 });
+  await expect(client.account('acc_missing')).rejects.toMatchObject({ code: 'not_found', status: 404 });
 });
 
-test.each(['start', 'finish'])('a refused workspace key remains a typed error on %s', async operation => {
+test.each(['authLink', 'account'])('a refused workspace key remains a typed error on %s', async operation => {
   const fake = fakeFetch([{ url: /https:/u, respond: () => new Response(null, { status: 401 }) }]);
-  const connect = adapter(unipile.unipileClient({ apiKey: 'fixture-key', fetch: fake.fetch }));
-  const result = operation === 'start' ? startConnect(connect) : finishConnect(connect, { secret: 'acc_1' });
+  const client = unipile.unipileClient({ apiKey: 'fixture-key', fetch: fake.fetch });
+  const result = operation === 'authLink' ? client.authLink(link) : client.account('acc_1');
   await expect(result).rejects.toBeInstanceOf(ProviderHttpError);
   await expect(result).rejects.toMatchObject({ code: 'rejected', status: 401 });
   expect(fake.calls).toHaveLength(1);
 });
 
-test('finish forwards the account deadline before a request is sent', async () => {
+test('the account lookup keeps its deadline before a request is sent', async () => {
   const { client, fake } = setup();
-  await expect(finishConnect(adapter(client, AbortSignal.abort()), { secret: 'acc_1' })).rejects.toMatchObject({ code: 'unavailable' });
+  await expect(client.account('acc_1', AbortSignal.abort())).rejects.toMatchObject({ code: 'unavailable' });
   expect(fake.calls).toHaveLength(0);
 });
 

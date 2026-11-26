@@ -1,7 +1,7 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Aircall: 120 requests a minute per company, and an overrun blocks the key for 60 seconds. Basic auth: `aircallClient`
- * sends base64(`api_id:api_token`) as the token. */
+/** Aircall: 120 requests a minute per company, and an overrun blocks the key for 60 seconds. Basic auth from the
+ * API ID and the API token. */
 export const aircall = defineProvider({
   id: 'aircall', name: 'Aircall',
   fields: [{ name: 'apiId', title: 'API ID' }, { name: 'apiToken', title: 'API token', secret: true }],

@@ -1,4 +1,4 @@
-import { lusha } from '../providers.js';
+import { lusha } from '../catalogue/lusha.js';
 import type { Route } from '../testing.js';
 import type { LushaCompany, LushaPerson, LushaUsage } from './lusha.js';
 
@@ -8,7 +8,7 @@ export type FakeLushaAccount = { credits: LushaUsage['credits']; contacts: reado
   companies: readonly LushaCompany[] };
 type Wanted = { email?: string; linkedinUrl?: string; firstName?: string; lastName?: string; companyDomain?: string; domain?: string };
 
-const BASE = lusha.baseUrl ?? '';
+const BASE = lusha.http.baseUrl;
 const bare = (domain: string | null | undefined) => domain?.toLowerCase().replace(/^www\./u, '');
 
 /**

@@ -1,9 +1,6 @@
 import { z } from "zod";
-import type { OAuthConnect } from "../connect.js";
-import { revokeGrant } from "../oauth.js";
 import { createClient } from "../http.js";
-import { hubspot as hubspotEntry } from "../catalogue/hubspot.js";
-import { hubspot } from "../providers.js";
+import { hubspot } from "../catalogue/hubspot.js";
 import { parseAnswer } from "../parse.js";
 import { paginate, type Page } from "../paginate.js";
 import { datetime } from "../shapes.js";
@@ -43,28 +40,6 @@ const pipelinesSchema = z.object({ results: z.array(z.object({ stages: z.array(z
 const ownersSchema = z.object({ results: z.array(z.object({ email: z.string().optional(), firstName: z.string().optional(),
   lastName: z.string().optional() })), paging: z.object({ next: z.object({ after: z.string() }).optional() }).optional() });
 
-export const HUBSPOT_SCOPES: readonly string[] = hubspotEntry.scopes.default;
-
-export const hubspotConnect: OAuthConnect<{ portalId: string }> = {
-  kind: "oauth2", provider: hubspot, reusesGrant: true,
-  scopes: HUBSPOT_SCOPES,
-  async identify({ grant, extras, fetch }) {
-    const portalId = await portalOf(hubspotClient({ token: () => Promise.resolve(grant.accessToken), fetch }), extras);
-    return { account: { id: portalId, name: `Portal ${portalId}` }, details: { portalId } };
-  },
-  async revoke({ grant, client, fetch }) {
-    // Access-only grants expire naturally; HubSpot revokes refresh tokens.
-    if (grant.refreshToken === null) return;
-    await revokeGrant(hubspot, client, grant.refreshToken, { fetch });
-  },
-};
-
-/** The token answer names the portal when available; older answers need account-info. */
-async function portalOf(client: HubSpotClient, extras: Record<string, unknown>): Promise<string> {
-  if (extras.hub_id === undefined) return client.portalId();
-  return String(parseAnswer(portalIdSchema, extras.hub_id));
-}
-
 export function hubspotClient(input: {
   /** The run's access token; asked again once, naming the token HubSpot answered 401 to, so a refresh replaces it. */
   token: (rejected?: string) => Promise<string>;
@@ -72,7 +47,7 @@ export function hubspotClient(input: {
   fetch: typeof fetch;
   minIntervalMs?: number;
 }) {
-  const http = createClient({ provider: hubspot, token: input.token, fetch: input.fetch, ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
+  const http = createClient(hubspot, { token: input.token, fetch: input.fetch, ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
 
   const call = async <T>(path: string, schema: z.ZodType<T>, body?: unknown, query: Record<string, string> = {}): Promise<T> => {
     return parseAnswer(schema, await http.json(path, { query, ...(body === undefined ? {} : { method: "POST", json: body, idempotent: true }) }));

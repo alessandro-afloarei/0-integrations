@@ -5,21 +5,21 @@ owners. `changedRecords` walks changed records in ascending object-id order, res
 search offset, so no query pages past HubSpot's 10,000-result cap. The app supplies the access-token function and
 fetch, and can stop when its scan budget is spent.
 
-`hubspotConnect` from `hubspot` composes with `startConnect` and `finishConnect`, asking for OAuth and read access
-to companies, contacts, deals and owners. Identity uses the token answer's `hub_id` first, otherwise account-info, and returns
-`account: { id: portalId, name: "Portal <portalId>" }`, `details: { portalId }`, and `secret: grant`. Both identity sources
-require a positive integer or a string matching `^[1-9]\d*$`; malformed token identity fails without falling back.
-The secret keeps the shared `Grant` shape. `HUBSPOT_SCOPES` exports the same ordered scope list used by
-`hubspotConnect`. HubSpot can return the portal's existing refresh token on re-consent, so the connect contract's
-`reusesGrant: true` skips failed-identity cleanup. An orphan grant is returned on the next consent; revoking it
-could end a live connection. The app must check ownership before discarding a grant. Explicit revoke still
-revokes the refresh token; access-only grants expire naturally.
+Sign in with `startConnect(hubspot, …)` and `finishConnect(hubspot, …)`, with the entry from
+`0-integrations/catalogue/hubspot`, asking for OAuth and read access to companies, contacts, deals and owners
+(`hubspot.scopes.default`). Identity uses the token answer's `hub_id` first, otherwise account-info, and returns
+`account: { id: portalId, name: "Portal <portalId>" }`, `values: {}`, and `secret: grant`. A portal id is a non-empty
+string or a positive integer; anything else is `invalid_response` (`missing_fields`), and a malformed `hub_id` fails
+without falling back. The secret keeps the shared `Grant` shape. HubSpot can return the portal's existing refresh token
+on re-consent, so the entry's `reusesGrant: true` skips failed-identity cleanup. An orphan grant is returned on the
+next consent; revoking it could end a live connection. The app must check ownership before discarding a grant.
+`revokeGrant(hubspot, { ...grant, client, fetch })` still revokes the refresh token; access-only grants expire naturally.
 
 `fakeHubSpot({ client: { clientId, clientSecret }, redirectUri, ...portalData })` from `hubspot/fake` requires the
 registered client and an absolute HTTP(S) callback without userinfo or a fragment. Register the exact callback
 used in both `startConnect` and `finishConnect`. Feed the real authorize URL to the fake, then extract its redirect's
 one-use `code`; static fixture codes are refused. Authorization requires the registered client ID and every
-`HUBSPOT_SCOPES` scope. Exchange, refresh and revoke require matching `client_id` and `client_secret`; invalid
+scope of `hubspot.scopes.default`. Exchange, refresh and revoke require matching `client_id` and `client_secret`; invalid
 credentials return 401 `invalid_client` without spending a valid code. Exchange binds codes to the exact callback
 and accepts only `authorization_code` or `refresh_token` grant types.
 
@@ -43,21 +43,20 @@ or be returned by consent before that instance can revoke it. These are syntheti
 production revocation guarantees. The app still consumes and validates callback state before finishing.
 
 ```ts
+import { hubspot } from '0-integrations/catalogue/hubspot';
 import { startConnect, finishConnect } from '0-integrations/connect';
-import { hubspotConnect } from '0-integrations/hubspot';
 import { fakeHubSpot } from '0-integrations/hubspot/fake';
 import { fakeFetch } from '0-integrations/testing';
 
 const redirectUri = 'https://app.test/api/integrations/hubspot/callback';
 const http = fakeFetch(fakeHubSpot({ ...portalData, client, redirectUri }));
-const begun = await startConnect(hubspotConnect, { clientId: client.clientId, redirectUri, state });
-if (begun.kind !== 'redirect') throw new Error('expected_redirect');
-const consent = await http.fetch(begun.url, { redirect: 'manual' });
+const { url } = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
+const consent = await http.fetch(url, { redirect: 'manual' });
 const back = new URL(consent.headers.get('location') ?? '');
 if (back.searchParams.get('state') !== state) throw new Error('state_mismatch');
 const code = back.searchParams.get('code');
 if (!code) throw new Error('missing_code');
-const connected = await finishConnect(hubspotConnect, {
+const connected = await finishConnect(hubspot, {
   client, code, redirectUri, fetch: http.fetch, onRevokeFailed,
 });
 ```

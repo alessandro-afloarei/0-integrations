@@ -1,5 +1,14 @@
 import type { Path, Template, When } from './catalogue.js';
 
+/** The text as JSON, or undefined when it is none. */
+export function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Reads a dotted path; at each level the whole rest is tried as one own key first, so `@odata.nextLink` is one key. */
 export function readPath(value: unknown, path: Path): unknown {
   if (typeof value !== 'object' || value === null) return undefined;
@@ -9,15 +18,6 @@ export function readPath(value: unknown, path: Path): unknown {
   if (dot === -1) return undefined;
   const head = path.slice(0, dot);
   return Object.hasOwn(record, head) ? readPath(record[head], path.slice(dot + 1)) : undefined;
-}
-
-/** The first value found that is neither undefined nor null. */
-export function firstPresent(value: unknown, paths: Path | readonly Path[]): unknown {
-  for (const path of typeof paths === 'string' ? [paths] : paths) {
-    const found = readPath(value, path);
-    if (found !== undefined && found !== null) return found;
-  }
-  return undefined;
 }
 
 /** A `{name}`: no braces inside, never empty. */

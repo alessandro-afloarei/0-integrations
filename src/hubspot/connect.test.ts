@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { hubspot } from '../catalogue/hubspot.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked, ProviderHttpError } from '../errors.js';
-import { refreshGrant, type Grant } from '../oauth.js';
-import { hubspot } from '../providers.js';
+import { refreshGrant, revokeGrant, type Grant } from '../oauth.js';
 import { fakeFetch, respondFrom, type Route } from '../testing.js';
 import { fakeHubSpot } from './fake.js';
-import * as hubspotModule from './hubspot.js';
-import { hubspotConnect } from './hubspot.js';
 
 const callback = 'https://app.test/api/integrations/hubspot/callback';
 const start = { clientId: 'client', redirectUri: callback, state: 'state +&/?=' };
@@ -17,9 +15,7 @@ const revokeUrl = `${tokenUrl}/revoke`;
 const accountUrl = 'https://api.hubapi.com/account-info/2026-09/details';
 
 async function authorize(http: ReturnType<typeof fakeFetch>): Promise<string> {
-  const begun = await startConnect(hubspotConnect, start);
-  if (begun.kind !== 'redirect') throw new Error('expected_redirect');
-  const response = await http.fetch(begun.url, { redirect: 'manual' });
+  const response = await http.fetch((await startConnect(hubspot, start)).url, { redirect: 'manual' });
   expect(response.status).toBe(302);
   const back = new URL(response.headers.get('location') ?? '');
   expect(back.origin + back.pathname).toBe(callback);
@@ -29,8 +25,10 @@ async function authorize(http: ReturnType<typeof fakeFetch>): Promise<string> {
   return code;
 }
 
+const revoke = (grant: Grant, fetch: typeof globalThis.fetch) => revokeGrant(hubspot, { ...grant, client, fetch });
+
 const finish = (http: ReturnType<typeof fakeFetch>, code: string, onRevokeFailed = vi.fn()) =>
-  finishConnect(hubspotConnect, { client, code, redirectUri: callback, fetch: http.fetch, onRevokeFailed });
+  finishConnect(hubspot, { client, code, redirectUri: callback, fetch: http.fetch, onRevokeFailed });
 
 function withTokenAnswer(routes: Route[], change: (body: Record<string, unknown>) => void): Route[] {
   const respond = respondFrom(routes);
@@ -45,17 +43,9 @@ function withTokenAnswer(routes: Route[], change: (body: Record<string, unknown>
 
 afterEach(() => vi.useRealTimers());
 
-describe('HubSpot connect composition', () => {
-  it('exposes the shared OAuth entry with the exact read scopes and no standalone identity helper', async () => {
-    expect(hubspotConnect.kind).toBe('oauth2');
-    expect(hubspotConnect.provider).toBe(hubspot);
-    expect(hubspotModule).toHaveProperty('HUBSPOT_SCOPES', hubspotConnect.scopes);
-    expect(hubspotConnect).toHaveProperty('reusesGrant', true);
-    expect(hubspotConnect.scopes).toEqual(['oauth', 'crm.objects.companies.read', 'crm.objects.contacts.read',
-      'crm.objects.deals.read', 'crm.objects.owners.read']);
-    expect(hubspotModule).not.toHaveProperty('identify');
-    expect(hubspotModule).not.toHaveProperty('portalOf');
-    const begun = await startConnect(hubspotConnect, start);
+describe('HubSpot sign-in', () => {
+  it('starts with the exact read scopes', async () => {
+    const begun = await startConnect(hubspot, start);
     expect(begun).toEqual({ kind: 'redirect', url: 'https://app.hubspot.com/oauth/authorize?client_id=client&scope=oauth+crm.objects.companies.read+crm.objects.contacts.read+crm.objects.deals.read+crm.objects.owners.read&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fhubspot%2Fcallback&state=state+%2B%26%2F%3F%3D' });
   });
 
@@ -71,7 +61,7 @@ describe('HubSpot connect composition', () => {
     expect(issued.refresh_token).toMatch(/^fixture-refresh-/u);
     expect(result).toEqual({
       secret: { accessToken: issued.access_token, refreshToken: issued.refresh_token, expiresAt: '2026-11-01T00:30:00.000Z' },
-      account: { id: '42', name: 'Portal 42' }, details: { portalId: '42' },
+      account: { id: '42', name: 'Portal 42' }, values: {},
     });
     expect(http.calls.map(call => call.url.split('?')[0])).toEqual(['https://app.hubspot.com/oauth/authorize', tokenUrl]);
     expect(Object.fromEntries(new URLSearchParams(http.calls[1]?.body))).toEqual({ client_id: client.clientId,
@@ -87,7 +77,7 @@ describe('HubSpot connect composition', () => {
     const result = await finish(http, await authorize(http));
     const id = source === 'fallback' ? '42' : '43';
     expect(result.account).toEqual({ id, name: `Portal ${id}` });
-    expect(result.details).toEqual({ portalId: id });
+    expect(result.values).toEqual({});
     expect(http.calls.filter(call => call.url === accountUrl)).toHaveLength(source === 'fallback' ? 1 : 0);
     if (source === 'fallback') expect(http.calls.at(-1)?.headers.authorization).toBe(`Bearer ${result.secret.accessToken}`);
   });
@@ -104,7 +94,7 @@ describe('HubSpot connect composition', () => {
     }));
     const onRevokeFailed = vi.fn();
     await expect(finish(http, await authorize(http), onRevokeFailed)).rejects.toEqual(
-      new ProviderHttpError(failure === 'account-unavailable' ? 'unavailable' : 'invalid_response', failure === 'account-unavailable' ? 503 : null));
+      failure === 'account-unavailable' ? new ProviderHttpError('unavailable', 503) : new ProviderHttpError('invalid_response', 200, 'missing_fields'));
     expect(http.calls.filter(call => call.url === accountUrl)).toHaveLength(failure === 'extras-zero' ? 0 : 1);
     expect(http.calls.some(call => call.url === revokeUrl)).toBe(false);
     const refreshToken = issued.refresh_token;
@@ -120,7 +110,7 @@ describe('HubSpot connect composition', () => {
       return Response.json({ error: client.clientSecret }, { status: failure === 'unavailable' ? 503 : 401 });
     } }]);
     const grant: Grant = { accessToken: 'fixture-access', refreshToken: 'fixture-refresh', expiresAt: null };
-    const error = await hubspotConnect.revoke({ grant, client, fetch: http.fetch }).catch((error: unknown) => error);
+    const error = await revoke(grant, http.fetch).catch((error: unknown) => error);
     expect(error).toEqual(new ProviderHttpError(failure === 'rejected' ? 'request_failed' : 'unavailable',
       failure === 'network' ? null : failure === 'unavailable' ? 503 : 401));
     expect(JSON.stringify(error)).not.toContain(client.clientSecret);
@@ -131,14 +121,14 @@ describe('HubSpot connect composition', () => {
   it('does nothing on revoke without a refresh token', async () => {
     const http = fakeFetch([]);
     const grant: Grant = { accessToken: 'fixture-access', refreshToken: null, expiresAt: null };
-    await hubspotConnect.revoke({ grant, client, fetch: http.fetch });
+    await revoke(grant, http.fetch);
     expect(http.calls).toHaveLength(0);
   });
 
   it('keeps a failed identity without attempting to revoke an access-only grant', async () => {
     const http = fakeFetch(withTokenAnswer(fakeHubSpot({ ...portal, hubId: 0 }), body => { delete body.refresh_token; }));
     const onRevokeFailed = vi.fn();
-    await expect(finish(http, await authorize(http), onRevokeFailed)).rejects.toEqual(new ProviderHttpError('invalid_response', null));
+    await expect(finish(http, await authorize(http), onRevokeFailed)).rejects.toEqual(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
     expect(http.calls.some(call => call.url === revokeUrl)).toBe(false);
     expect(onRevokeFailed).not.toHaveBeenCalled();
   });
@@ -147,10 +137,10 @@ describe('HubSpot connect composition', () => {
     const http = fakeFetch(fakeHubSpot(portal));
     const code = await authorize(http);
     const onRevokeFailed = vi.fn();
-    await expect(finishConnect(hubspotConnect, { client: { ...client, clientId: 'wrong-client' },
+    await expect(finishConnect(hubspot, { client: { ...client, clientId: 'wrong-client' },
       redirectUri: callback, code, fetch: http.fetch, onRevokeFailed }))
       .rejects.toEqual(new ProviderHttpError('request_failed', 401, 'invalid_client'));
-    await expect(finishConnect(hubspotConnect, { client, redirectUri: `${callback}?changed=1`, code,
+    await expect(finishConnect(hubspot, { client, redirectUri: `${callback}?changed=1`, code,
       fetch: http.fetch, onRevokeFailed })).rejects.toBeInstanceOf(GrantRevoked);
     await finish(http, code);
     await expect(finish(http, code)).rejects.toBeInstanceOf(GrantRevoked);
@@ -207,10 +197,10 @@ describe('HubSpot connect composition', () => {
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: 'invalid_token' });
     }
-    await hubspotConnect.revoke({ grant: first.secret, client, fetch: http.fetch });
+    await revoke(first.secret, http.fetch);
     const repeated = await http.fetch(revokeUrl, { method: 'POST', body: new URLSearchParams({ token: refreshToken, client_id: client.clientId, client_secret: client.clientSecret }) });
     expect(repeated.status).toBe(200);
-    await hubspotConnect.revoke({ grant: first.secret, client, fetch: http.fetch });
+    await revoke(first.secret, http.fetch);
     await expect(refreshGrant(hubspot, client, refreshToken, { fetch: http.fetch })).rejects.toBeInstanceOf(GrantRevoked);
     await expect(refreshGrant(hubspot, client, second.secret.refreshToken, { fetch: http.fetch })).rejects.toBeInstanceOf(GrantRevoked);
     expect(second.secret.refreshToken).toBe(refreshToken);
@@ -245,7 +235,7 @@ describe('HubSpot connect composition', () => {
     const resumed = await refreshGrant(hubspot, client, saved.secret.refreshToken, { fetch: restarted.fetch });
     const discarded = revoked === 'old' ? resumed : connected.secret;
     const retainedToken = revoked === 'old' ? connected.secret.refreshToken : saved.secret.refreshToken;
-    await hubspotConnect.revoke({ grant: discarded, client, fetch: restarted.fetch });
+    await revoke(discarded, restarted.fetch);
     await expect(refreshGrant(hubspot, client, retainedToken, { fetch: restarted.fetch }))
       .rejects.toBeInstanceOf(GrantRevoked);
     if (!discarded.refreshToken) throw new Error('expected_refresh_token');
@@ -265,7 +255,7 @@ describe('HubSpot connect composition', () => {
       else {
         saved = (await finish(original, await authorize(original))).secret;
         if (savedKind === 'replacement') {
-          await hubspotConnect.revoke({ grant: saved, client, fetch: original.fetch });
+          await revoke(saved, original.fetch);
           saved = (await finish(original, await authorize(original))).secret;
         }
       }
@@ -285,7 +275,7 @@ describe('HubSpot connect composition', () => {
       expect(nextConsent.secret.refreshToken).toBe(connected.secret.refreshToken);
       expect(resumed.refreshToken).toBe(connected.secret.refreshToken);
       const discarded = revoked === 'saved' ? saved : connected.secret;
-      await hubspotConnect.revoke({ grant: discarded, client, fetch: http.fetch });
+      await revoke(discarded, http.fetch);
       const holders = new Set([saved.refreshToken, connected.secret.refreshToken, resumed.refreshToken]);
       for (const token of holders) {
         if (!token) throw new Error('expected_refresh_token');
@@ -296,7 +286,7 @@ describe('HubSpot connect composition', () => {
       // Repeating revoke for any old alias must not end the new grant or revive an old holder.
       for (const token of holders) {
         if (!token) throw new Error('expected_refresh_token');
-        await hubspotConnect.revoke({ grant: { ...saved, refreshToken: token }, client, fetch: http.fetch });
+        await revoke({ ...saved, refreshToken: token }, http.fetch);
         await expect(refreshGrant(hubspot, client, token, { fetch: http.fetch })).rejects.toBeInstanceOf(GrantRevoked);
       }
       if (!replacement.secret.refreshToken) throw new Error('expected_refresh_token');
@@ -312,7 +302,7 @@ describe('HubSpot connect composition', () => {
     let failedRefreshToken: unknown;
     const restarted = fakeFetch(withTokenAnswer(fakeHubSpot(portal), body => { failedRefreshToken = body.refresh_token; body.hub_id = 0; }));
     const onRevokeFailed = vi.fn();
-    await expect(finish(restarted, await authorize(restarted), onRevokeFailed)).rejects.toEqual(new ProviderHttpError('invalid_response', null));
+    await expect(finish(restarted, await authorize(restarted), onRevokeFailed)).rejects.toEqual(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
     if (typeof failedRefreshToken !== 'string' || !saved.secret.refreshToken) throw new Error('expected_refresh_token');
     const failedToken = failedRefreshToken;
     expect(restarted.calls.some(call => call.url === revokeUrl)).toBe(false);
@@ -353,11 +343,11 @@ describe('HubSpot connect composition', () => {
     const saved = await finish(original, await authorize(original));
     if (!saved.secret.refreshToken) throw new Error('expected_refresh_token');
     const restarted = fakeFetch(fakeHubSpot(portal));
-    await expect(hubspotConnect.revoke({ grant: saved.secret, client, fetch: restarted.fetch }))
+    await expect(revoke(saved.secret, restarted.fetch))
       .rejects.toEqual(new ProviderHttpError('request_failed', 400, 'invalid_token'));
     const resumed = await refreshGrant(hubspot, client, saved.secret.refreshToken, { fetch: restarted.fetch });
     expect(resumed.refreshToken).toBe(saved.secret.refreshToken);
-    await hubspotConnect.revoke({ grant: resumed, client, fetch: restarted.fetch });
+    await revoke(resumed, restarted.fetch);
     await expect(refreshGrant(hubspot, client, saved.secret.refreshToken, { fetch: restarted.fetch })).rejects.toBeInstanceOf(GrantRevoked);
     const anotherRestart = fakeFetch(fakeHubSpot(portal));
     await expect(refreshGrant(hubspot, client, saved.secret.refreshToken, { fetch: anotherRestart.fetch }))

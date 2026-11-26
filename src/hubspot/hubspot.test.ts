@@ -1,6 +1,8 @@
 import { fakeFetch } from "../testing.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { changedRecords, hubspotClient, hubspotConnect } from "./hubspot.js";
+import { identifyAccount } from "../account.js";
+import { hubspot } from "../catalogue/hubspot.js";
+import { changedRecords, hubspotClient } from "./hubspot.js";
 import { ProviderHttpError } from "../errors.js";
 import { fakeHubSpot, type HubSpotFakeData } from "./fake.js";
 
@@ -25,7 +27,10 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 const page = (results: unknown[], after?: string) => json({ total: 3, results, ...(after ? { paging: { next: { after } } } : {}) });
 const noWait = { minIntervalMs: 0 };
-const grant = { accessToken: "fixture-access-secret", refreshToken: "fixture-refresh-secret", expiresAt: null };
+/** HubSpot's identity as its entry declares it, from a token answer and, without its `hub_id`, account-info. */
+const identify = (tokenAnswer: Record<string, unknown>, fetch: typeof globalThis.fetch) =>
+  identifyAccount(hubspot, { fetch, token: "fixture-access-secret", tokenAnswer });
+const malformed = new ProviderHttpError("invalid_response", 200, "missing_fields");
 const emptyPortal: HubSpotFakeData = { client: { clientId: "client", clientSecret: "fixture-client-secret" }, redirectUri: "https://app.test/api/integrations/hubspot/callback", hubId: 42, companies: [], contacts: [], deals: [], dealCompanies: {}, pipelines: [], owners: [] };
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(1000); });
@@ -232,36 +237,36 @@ describe("the HubSpot client", () => {
       "https://api.hubapi.com/crm/owners/2026-09?limit=100&after=a%2Bb%3D+c%26d%2F%3F%23"]);
   });
 
-  const invalidPortalIds = ["0", "00", "00123", "", " ", "12x", "-1", "1.5", "1e3", 0, -1, 1.5, null, [], {}, true];
+  const invalidPortalIds = ["", 0, -1, 1.5, [], {}, true];
 
-  it.each(invalidPortalIds.map(hub_id => ({ hub_id })))("hubspotConnect.identify refuses malformed hub_id ($hub_id) without a request", async ({ hub_id }) => {
+  it.each(invalidPortalIds.map(hub_id => ({ hub_id })))("identify refuses malformed hub_id ($hub_id) without a request", async ({ hub_id }) => {
     const stub = scripted();
-    await expect(hubspotConnect.identify({ grant, extras: { hub_id }, fetch: stub.fetch })).rejects.toEqual(new ProviderHttpError("invalid_response", null));
+    await expect(identify({ hub_id }, stub.fetch)).rejects.toEqual(malformed);
     expect(stub.calls).toHaveLength(0);
   });
 
-  it.each(invalidPortalIds.map(portalId => ({ portalId })))("hubspotConnect.identify refuses malformed account-info portalId ($portalId)", async ({ portalId }) => {
+  it.each([...invalidPortalIds, null].map(portalId => ({ portalId })))("identify refuses malformed account-info portalId ($portalId)", async ({ portalId }) => {
     const stub = scripted(json({ portalId }));
-    await expect(hubspotConnect.identify({ grant, extras: {}, fetch: stub.fetch })).rejects.toEqual(new ProviderHttpError("invalid_response", null));
+    await expect(identify({}, stub.fetch)).rejects.toEqual(malformed);
     expect(stub.calls.map(call => call.url)).toEqual(["https://api.hubapi.com/account-info/2026-09/details"]);
   });
 
-  it.each([123, "123"])("hubspotConnect.identify preserves a valid numeric or digit-string identity (%s)", async id => {
+  it.each([123, "123"])("identify preserves a valid numeric or digit-string identity (%s)", async id => {
     const stub = scripted(json({ portalId: id }));
-    expect(await hubspotConnect.identify({ grant, extras: { hub_id: id }, fetch: stub.fetch })).toEqual({ account: { id: String(id), name: `Portal ${String(id)}` }, details: { portalId: String(id) } });
+    expect(await identify({ hub_id: id }, stub.fetch)).toEqual({ account: { id: String(id), name: `Portal ${String(id)}` }, values: {} });
     expect(stub.calls).toHaveLength(0);
-    expect(await hubspotConnect.identify({ grant, extras: {}, fetch: stub.fetch })).toEqual({ account: { id: String(id), name: `Portal ${String(id)}` }, details: { portalId: String(id) } });
+    expect(await identify({}, stub.fetch)).toEqual({ account: { id: String(id), name: `Portal ${String(id)}` }, values: {} });
     expect(stub.calls).toHaveLength(1);
   });
 
   it("keeps token extras and account-info secrets out of identity errors", async () => {
     const secret = "fixture-provider-secret";
-    const stub = scripted(json({ portalId: secret, access_token: secret }));
-    const fromExtras = await hubspotConnect.identify({ grant, extras: { hub_id: secret, refresh_token: secret }, fetch: stub.fetch }).catch((error: unknown) => error);
+    const stub = scripted(json({ portalId: [secret], access_token: secret }));
+    const fromExtras = await identify({ hub_id: { secret }, refresh_token: secret }, stub.fetch).catch((error: unknown) => error);
     expect(stub.calls).toHaveLength(0);
-    const fromAccount = await hubspotConnect.identify({ grant, extras: {}, fetch: stub.fetch }).catch((error: unknown) => error);
+    const fromAccount = await identify({}, stub.fetch).catch((error: unknown) => error);
     for (const error of [fromExtras, fromAccount]) {
-      expect(error).toEqual(new ProviderHttpError("invalid_response", null));
+      expect(error).toEqual(malformed);
       expect(String(error)).not.toContain(secret);
       expect(JSON.stringify(error)).not.toContain(secret);
     }
@@ -304,19 +309,14 @@ describe("the HubSpot client", () => {
     expect(stub.calls).toHaveLength(1);
   });
 
-  it("hubspotConnect.identify prefers hub_id and reads account-info without one", async () => {
+  it("identify prefers hub_id and reads account-info without one", async () => {
     const stub = fakeFetch(fakeHubSpot(emptyPortal));
-    expect(await hubspotConnect.identify({ grant, extras: { hub_id: 12 }, fetch: stub.fetch })).toEqual({ account: { id: "12", name: "Portal 12" }, details: { portalId: "12" } });
-    expect(await hubspotConnect.identify({ grant, extras: { hub_id: "13" }, fetch: stub.fetch })).toEqual({ account: { id: "13", name: "Portal 13" }, details: { portalId: "13" } });
+    expect(await identify({ hub_id: 12 }, stub.fetch)).toEqual({ account: { id: "12", name: "Portal 12" }, values: {} });
+    expect(await identify({ hub_id: "13" }, stub.fetch)).toEqual({ account: { id: "13", name: "Portal 13" }, values: {} });
     expect(stub.calls).toHaveLength(0);
-    expect(await hubspotConnect.identify({ grant, extras: {}, fetch: stub.fetch })).toEqual({ account: { id: "42", name: "Portal 42" }, details: { portalId: "42" } });
-    expect(stub.calls).toHaveLength(1);
-  });
-
-  it.each([null, [], {}, true].map(hub_id => ({ hub_id })))("hubspotConnect.identify refuses a hub_id that is neither number nor string ($hub_id)", async ({ hub_id }) => {
-    const stub = scripted();
-    await expect(hubspotConnect.identify({ grant, extras: { hub_id }, fetch: stub.fetch })).rejects.toEqual(new ProviderHttpError("invalid_response", null));
-    expect(stub.calls).toHaveLength(0);
+    expect(await identify({}, stub.fetch)).toEqual({ account: { id: "42", name: "Portal 42" }, values: {} });
+    expect(await identify({ hub_id: null }, stub.fetch)).toEqual({ account: { id: "42", name: "Portal 42" }, values: {} });
+    expect(stub.calls).toHaveLength(2);
   });
 });
 

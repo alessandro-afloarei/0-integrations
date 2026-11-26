@@ -1,13 +1,12 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { DirectConnect } from '../connect.js';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { headerValue, keptHeaders, type MailboxCalendar, type MailboxEmail, type MailboxEmailAddress, type MailboxEvent,
   type MailboxEventTime, type MailboxReader } from '../mailbox/mailbox.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { unipile } from '../providers.js';
+import { unipile } from '../catalogue/unipile.js';
 import { datetime, orNull, pageSize, utc } from '../shapes.js';
 
 export type LinkedInCompany = { id: string; name: string; tagline: string; description: string; industry: string[];
@@ -103,7 +102,7 @@ const eventSchema = z.object({
   attendees: z.array(z.object({ email: z.string(), display_name: emptyAsNull, is_organizer: z.boolean(), is_resource: z.boolean(),
     response_status: z.enum(['yes', 'no', 'maybe', 'noreply']) })).nullish().transform(list => list ?? []),
   organizer: z.object({ email: z.string(), display_name: emptyAsNull }),
-  conference: z.object({ provider: z.string(), url: orNull(z.string()) }).nullish().transform(conference => conference ?? null),
+  conference: orNull(z.object({ provider: z.string(), url: orNull(z.string()) })),
   event_type: z.string(), transparency: z.string(),
   // Required: an event that does not say whether it is private is skipped, never taken as public.
   visibility: z.enum(['public', 'private']),
@@ -149,8 +148,7 @@ const eventRead = eventSchema.transform(({ timezone, ...event }, context): Mailb
 
 /** Unipile V2. The sign-in link is a POST, so a 429 on it is never waited out: a person is waiting on it. */
 export function unipileClient(input: { apiKey: string; fetch: typeof fetch }): UnipileClient {
-  const http = createClient({ provider: unipile, token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
-    headers: { accept: 'application/json' } });
+  const http = createClient(unipile, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
   const on = (accountId: string, path: string) => `/${encodeURIComponent(accountId)}${path}`;
 
   /**
@@ -273,14 +271,6 @@ export function unipileClient(input: { apiKey: string; fetch: typeof fetch }): U
       }
     },
   };
-}
-
-/** The account id is the secret; the app decides ownership, acceptable creation age and persistence. */
-export function unipileConnect(input: { client: UnipileClient; link: HostedSignIn; signal?: AbortSignal }):
-DirectConnect<string, UnipileAccount> {
-  return { kind: 'hosted', authorize: () => input.client.authLink(input.link),
-    identify: async accountId => ({ account: { id: accountId, name: accountId },
-      details: await input.client.account(accountId, input.signal) }) };
 }
 
 /** One account of the workspace as a mailbox reader: its mail by metadata, a thread whole, its main calendar and events. */

@@ -1,7 +1,6 @@
 import type { Entry, Errors, Http, Retry } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError, type ProviderErrorCode } from './errors.js';
 import type { ProviderResponse } from './http.js';
-import type { ProviderDefinition } from './providers.js';
 import { retryAfterMs } from './retry-after.js';
 import { holds, readPath, type Answer } from './rules.js';
 
@@ -22,33 +21,23 @@ export function safeDetail(code: string, secrets: readonly string[] = []): strin
   return /^[\w.-]{1,64}$/u.test(detail) && !holdsSecret ? detail : null;
 }
 
-/** The credential each answer's request sent, so a code echoing it is never a detail; it never leaves this library. */
-const credentials = new WeakMap<ProviderResponse, string>();
+/** The credentials each answer's request sent, so a code echoing one is never a detail; they never leave this library. */
+const credentials = new WeakMap<ProviderResponse, readonly string[]>();
 
-/** Records the credential `response`'s request sent; only the HTTP client calls it. */
-export function sentWith(response: ProviderResponse, credential: string): ProviderResponse {
-  credentials.set(response, credential);
+/** Records the credentials `response`'s request sent; only the HTTP client calls it. */
+export function sentWith(response: ProviderResponse, sent: readonly string[]): ProviderResponse {
+  credentials.set(response, sent);
   return response;
 }
 
-/** A provider's code as an answer's detail: never one holding the credential its request sent. */
-function answerDetail(response: ProviderResponse, code: string): string | null {
-  return safeDetail(code, [credentials.get(response) ?? '']);
-}
-
-/** Shared by json() and providers which must also read headers on HTTP-successful error responses. */
-export function responseJson(provider: ProviderDefinition, response: ProviderResponse): unknown {
-  const { status, headers, data } = response;
-  if (status < 200 || status >= 300) {
-    const detail = provider.errorDetail?.(data);
-    const limit = provider.rateLimit?.(status, headers, data);
-    throw new ProviderHttpError(limit ? 'rate_limited' : statusCode(status), status,
-      detail === undefined ? null : answerDetail(response, detail),
-      { retryAfterMs: retryAfterMs(headers, Date.now(), limit?.waitMs ?? provider.retry.waitFromBody?.(data)) });
+/** An answer as its data, or the error the entry's rules make of it; a 2xx without JSON is `invalid_response`. */
+export function responseJson(entry: Pick<Entry, 'http' | 'errors'>, response: ProviderResponse): unknown {
+  const error = classify(entry, response);
+  if (error) throw error;
+  if (response.data === undefined) {
+    throw new ProviderHttpError('invalid_response', response.status, null, { retryAfterMs: retryAfterMs(response.headers, Date.now()) });
   }
-  if (data === undefined) throw new ProviderHttpError('invalid_response', status, null,
-    { retryAfterMs: retryAfterMs(headers, Date.now()) });
-  return data;
+  return response.data;
 }
 
 /** The provider's own code: the first of `detail`'s paths holding a non-empty string, kept only if `allow` lists it. */
@@ -68,7 +57,7 @@ export function bodyWaitOf(retry: Retry | undefined, body: unknown, now: number)
 }
 
 /** A rate limit the entry declares beyond a 429: the first rule that holds, waiting its reset, else the default. */
-export function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined } | undefined {
+function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined } | undefined {
   const rule = http.rateLimit?.when.find(item => holds(item, answer));
   if (rule === undefined) return undefined;
   const reset = rule.resetAt === undefined ? Number.NaN : Number(answer.headers.get(rule.resetAt.header));
@@ -90,7 +79,8 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   const answer = { status, headers, body, code };
   // Steps 1 to 3 read only an answer that is an error: outside 2xx, or a 2xx `failed` marks.
   if (ok && (errors.failed === undefined || !holds(errors.failed, answer))) return null;
-  const detail = code === undefined ? null : answerDetail(response, code);
+  // Never a code holding a credential the request sent.
+  const detail = code === undefined ? null : safeDetail(code, credentials.get(response) ?? []);
   if (code !== undefined && errors.revoked?.includes(code)) return new GrantRevoked(detail);
   const bodyWait = bodyWaitOf(entry.http.retry, body, now);
   // An error a rule decides is no declared rate limit, so it never carries that limit's wait.

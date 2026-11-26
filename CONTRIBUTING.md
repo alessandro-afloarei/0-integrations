@@ -15,6 +15,9 @@ server, database or provider account. Run `pnpm build` for ESM and declarations,
 
 ## A provider module
 
+- A provider is its entry, `src/catalogue/<id>.ts`: plain data the engine runs, which the catalogue test checks with
+  no test code of yours. Add a module only when the provider needs real code.
+
 Every new provider module ships three things beside its client:
 
 - **A fake** at `<provider>/fake`: routes that answer the calls the client makes, from data the test passes.

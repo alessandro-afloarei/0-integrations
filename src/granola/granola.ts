@@ -3,7 +3,7 @@ import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
-import { granola } from '../providers.js';
+import { granola } from '../catalogue/granola.js';
 import { datetime } from '../shapes.js';
 
 // Granola's own field names: an app stores these values and reads them back with its own schema.
@@ -51,7 +51,7 @@ const transcriptPageSchema = z.object({ transcript: z.array(transcriptItemSchema
 const TRANSCRIPT_PAGES = 50;
 
 export function granolaClient(input: { apiKey: string; fetch: typeof fetch; minIntervalMs?: number }): GranolaClient {
-  const http = createClient({ provider: granola, token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
+  const http = createClient(granola, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   /** The body, or null for a 413 (a transcript too large to inline). */
   const get = (path: string, query: Record<string, string>): Promise<unknown> => http.json(path, { query })

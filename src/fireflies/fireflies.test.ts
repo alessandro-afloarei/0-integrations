@@ -3,7 +3,7 @@ import { ProviderHttpError } from '../errors.js';
 import { fakeFetch } from '../testing.js';
 import { fakeFireflies } from './fake.js';
 import { FirefliesTranscriptError } from './errors.js';
-import { changedTranscripts, firefliesClient, identify, type FirefliesListItem } from './fireflies.js';
+import { changedTranscripts, firefliesClient, type FirefliesListItem } from './fireflies.js';
 
 const URL = 'https://api.fireflies.ai/graphql';
 const user = { userId: 'u1', email: 'ana@example.invalid', name: 'Ana' };
@@ -40,7 +40,7 @@ test('search selects every field promised by its result type and fake', async ()
 test('round-trips every call through its fake', async () => {
   const fake = fakeFetch(fakeFireflies({ account: key => key === 'key' ? { user, transcripts: [transcript] } : null }));
   const c = client(fake);
-  expect(await identify(c)).toEqual(user);
+  expect(await c.user()).toEqual(user);
   expect(await c.transcripts(window)).toMatchObject({ items: [{ id: 't1' }], skipped: [], cursor: null });
   expect(await c.transcripts({ ...window, fromDate: 2_000 })).toMatchObject({ items: [] });
   await expect(c.transcripts({ ...window, userId: 'other' })).rejects.toMatchObject({ code: 'request_failed', status: 403, detail: 'not_in_team' });
@@ -49,7 +49,7 @@ test('round-trips every call through its fake', async () => {
   expect(await c.search({ userId: 'u1', keyword: 'WORLD', limit: 5 })).toMatchObject({ items: [{ id: 't1' }], skipped: [] });
   expect(await c.search({ userId: 'u1', keyword: 'absent', limit: 5 })).toMatchObject({ items: [] });
   await expect(c.search({ userId: 'other', keyword: 'WORLD', limit: 5 })).rejects.toMatchObject({ code: 'request_failed', status: 403, detail: 'not_in_team' });
-  await expect(identify(client(fake, 'wrong'))).rejects.toMatchObject({ code: 'rejected' });
+  await expect(client(fake, 'wrong').user()).rejects.toMatchObject({ code: 'rejected' });
   expect(fake.calls.every(call => call.method === 'POST' && call.url === URL)).toBe(true);
   expect(fake.calls[0]?.headers.authorization).toBe('Bearer key');
 });
@@ -142,13 +142,13 @@ test.each([
   [429, 'object_not_found', 'rate_limited'], [500, 'query_too_big', 'request_failed'],
 ] as const)('classifies GraphQL errors before status: %i %s', async (status, detail, code) => {
   for (const error of [{ code: detail }, { extensions: { code: detail } }]) {
-    await expect(identify(client(answer({ errors: [error] }, status)))).rejects.toMatchObject({ code, status, detail });
+    await expect(client(answer({ errors: [error] }, status)).user()).rejects.toMatchObject({ code, status, detail });
   }
 });
 
 test('keeps HTTP failures and malformed envelopes distinct', async () => {
-  await expect(identify(client(answer({}, 503)))).rejects.toMatchObject({ code: 'unavailable' });
-  await expect(identify(client(answer({})))).rejects.toMatchObject({ code: 'invalid_response' });
+  await expect(client(answer({}, 503)).user()).rejects.toMatchObject({ code: 'unavailable' });
+  await expect(client(answer({})).user()).rejects.toMatchObject({ code: 'invalid_response' });
   await expect(client(answer({ errors: [{ code: 'object_not_found' }] })).transcript('gone')).resolves.toBeNull();
 });
 
@@ -209,7 +209,7 @@ test('keeps AbortSignal and never includes provider messages in errors', async (
   const fake = answer({ data: { user: { user_id: 'u1', email: 'e', name: 'n' } } });
   await expect(firefliesClient({ apiKey: 'key', fetch: fake.fetch, signal: abort.signal }).user()).rejects.toBeDefined();
   expect(fake.calls).toHaveLength(0);
-  const error: unknown = await identify(client(answer({ errors: [{ code: 'auth_failed', message: 'secret payload' }] }, 500))).catch((e: unknown) => e);
+  const error: unknown = await client(answer({ errors: [{ code: 'auth_failed', message: 'secret payload' }] }, 500)).user().catch((e: unknown) => e);
   expect(error).toBeInstanceOf(ProviderHttpError);
   expect(JSON.stringify(error)).not.toContain('secret payload');
 });
@@ -217,8 +217,13 @@ test('keeps AbortSignal and never includes provider messages in errors', async (
 test.each(['upstream_error; private_context=synthetic-marker', 'x'.repeat(65), 'error\nprivate'])
 ('redacts non-token GraphQL detail without changing query-failure classification: %s', async detail => {
   for (const error of [{ code: detail }, { extensions: { code: detail } }]) {
-    const caught: unknown = await identify(client(answer({ errors: [error] }, 500))).catch((e: unknown) => e);
+    const caught: unknown = await client(answer({ errors: [error] }, 500)).user().catch((e: unknown) => e);
     expect(caught).toMatchObject({ code: 'request_failed', status: 500, detail: null });
     expect(JSON.stringify(caught)).not.toContain(detail);
   }
+});
+
+test('a GraphQL code that echoes the key is no detail', async () => {
+  await expect(client(answer({ errors: [{ code: 'fixture_key' }] }), 'fixture_key').user())
+    .rejects.toMatchObject({ code: 'request_failed', detail: null });
 });

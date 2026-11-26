@@ -3,11 +3,12 @@ import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import type { Entry } from '../catalogue.js';
+import { lookupNames } from '../account.js';
+import { defineProvider, type Entry } from '../catalogue.js';
 import { placeholders } from '../rules.js';
 
 /** Every entry in this folder: no list to edit when one is added. */
-const FILES = globSync('src/catalogue/*.ts').filter(file => !/\.(test|quirks)\.ts$/u.test(file)).sort();
+const FILES = globSync('src/catalogue/*.ts').filter(file => !file.endsWith('.test.ts')).sort();
 const entries: [string, Entry][] = await Promise.all(FILES.map(async file => {
   const id = basename(file, '.ts');
   const found = Object.values(await import(pathToFileURL(file).href) as Record<string, unknown>)
@@ -46,7 +47,6 @@ const entrySchema = z.strictObject({
       clientAuth: z.literal('basic').optional(), scopeSeparator: z.literal(',').optional(),
       authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() }),
-    z.strictObject({ kind: z.literal('hosted'), send: send.optional() }),
   ])).length(1), // one sign-in each until a provider needs two
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
   identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
@@ -79,12 +79,28 @@ function functionsIn(value: unknown, at = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => functionsIn(item, at ? `${at}.${key}` : key));
 }
 
+/** What the engine cannot run, each a rule every entry passes. */
+const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
+const runnable = {
+  // The engine sends only that field as `{token}`.
+  'one secret field, the only one a key entry has': (entry: Entry) => {
+    const secrets = (entry.fields ?? []).filter(field => field.secret === true).length;
+    return entry.auth[0].kind === 'key' ? secrets === 1 : secrets <= 1;
+  },
+  // No silent GET to the base URL.
+  "a request when a value reads identify's answer": (entry: Entry) => entry.identify?.request !== undefined
+    || lookupNames(entry).every(name => name.startsWith('tokenAnswer.') || name.startsWith('connection.')),
+  'no token answer, scopes or RFC 7009 revoke on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key'
+    || (reads(entry, 'tokenAnswer.').length === 0 && entry.scopes === undefined && !(entry.revoke !== undefined && 'url' in entry.revoke)),
+  'scopes on an oauth2 entry': (entry: Entry) => entry.auth[0].kind !== 'oauth2' || entry.scopes !== undefined,
+};
+type Rule = keyof typeof runnable;
+
 describe.each(entries)('%s', (id, entry) => {
-  /** The entry's data: a provider's quirks are code beside it, never data. */
-  const data: unknown = Object.fromEntries(Object.entries(entry).filter(([key]) => key !== 'quirks'));
-  test('matches the entry types', () => { expect(entrySchema.safeParse(data).error).toBeUndefined(); });
-  test('holds no function', () => { expect(functionsIn(data)).toEqual([]); });
-  test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(data))).toEqual(data); });
+  test('matches the entry types', () => { expect(entrySchema.safeParse(entry).error).toBeUndefined(); });
+  test('holds no function', () => { expect(functionsIn(entry)).toEqual([]); });
+  test('prints to JSON as it is', () => { expect(JSON.parse(JSON.stringify(entry))).toEqual(entry); });
+  test.each(Object.keys(runnable) as Rule[])('declares %s', rule => { expect(runnable[rule](entry)).toBe(true); });
   test('names only what each place allows in its templates', () => {
     const fields = (entry.fields ?? []).map(field => field.name);
     const auth = entry.auth[0];
@@ -94,12 +110,12 @@ describe.each(entries)('%s', (id, entry) => {
     // entered, or a value `save` keeps), or a path into the identify answer. A value without braces is itself a path.
     const connection = [...(entry.fields ?? []).filter(field => field.secret !== true).map(field => field.name),
       ...Object.keys(entry.save ?? {})].map(name => `connection.${name}`);
-    const reads = [entry.identify?.id, entry.identify?.name, ...Object.values(entry.save ?? {})].flat().filter(item => item !== undefined);
-    const lookups = [...reads.flatMap(read => (read.includes('{') ? placeholders(read) : [read])), ...placeholders(entry.identify?.request?.path ?? '')];
-    for (const name of lookups) {
+    for (const name of lookupNames(entry)) {
       if (name.startsWith('connection.')) expect(connection).toContain(name);
       else expect(name).toMatch(/^[\w@$-]+(\.[\w@$-]+)*$/u);
     }
+    // identify's request path holds none until a provider needs one.
+    expect(placeholders(entry.identify?.request?.path ?? '')).toEqual([]);
     for (const name of placeholders(entry.webhook?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 });
@@ -119,3 +135,25 @@ test.each([
   ['compares a header to a string', { header: 'x-ratelimit-remaining', equals: '0' }],
   ['compares a path to a boolean', { path: 'active', equals: false }],
 ])('a condition that %s matches the schema', (_, good) => { expect(when.safeParse(good).success).toBe(true); });
+
+const key = { id: 'k', name: 'K', http: { baseUrl: 'https://api.k.test' } } as const;
+const oauth2 = { ...key, auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }] } as const;
+const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
+test.each<[Rule, Entry]>([
+  ['one secret field, the only one a key entry has', defineProvider({ ...key, auth: [{ kind: 'key' }] })],
+  ['one secret field, the only one a key entry has', defineProvider({ ...key, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
+  ['one secret field, the only one a key entry has', defineProvider({ ...oauth2, scopes: { default: [] },
+    fields: [secret, { name: 'other', title: 'Other', secret: true }] })],
+  ["a request when a value reads identify's answer", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    identify: { id: 'workspace_id' } })],
+  ["a request when a value reads identify's answer", defineProvider({ ...oauth2, scopes: { default: [] },
+    identify: { id: 'tokenAnswer.team.id' }, save: { region: 'Region {region}' } })],
+  ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    identify: { id: 'tokenAnswer.team.id' } })],
+  ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    scopes: { default: ['read'] } })],
+  ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
+  ['scopes on an oauth2 entry', defineProvider(oauth2)],
+])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
