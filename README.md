@@ -126,7 +126,8 @@ WithLock: run work under a named lock, or return "busy".
 ## Roadmap and contributing
 
 - [ROADMAP.md](ROADMAP.md): where the library is going.
-- [CONTRIBUTING.md](CONTRIBUTING.md): setup, the one check command, and how to add a provider.
+- [CONTRIBUTING.md](CONTRIBUTING.md): setup, the one check command, and how to add a provider in five steps, the
+  first `pnpm new <id>`.
 - [SECURITY.md](SECURITY.md): how to report a vulnerability privately.
 - [CHANGELOG.md](CHANGELOG.md): every release, with the migration for each breaking change.
 

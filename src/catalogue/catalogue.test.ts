@@ -1,14 +1,14 @@
 import { globSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { identifyAccount, lookupNames } from '../account.js';
+import { lookupNames } from '../account.js';
 import { defineProvider, type Entry, type Field, type Shape } from '../catalogue.js';
-import { finishConnect } from '../connect.js';
 import { createClient } from '../http.js';
-import { BAD_KEY, GOOD_KEY, replay, type Recording } from '../kit.test-support.js';
+import { BAD_KEY, GOOD_KEY, kitValues, replayProblem, signIn, type Recording } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
+import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
 /** Every entry in this folder: no list to edit when one is added. */
@@ -29,17 +29,6 @@ const recordings = globSync('src/catalogue/*.recording.json').sort().map(file =>
 });
 /** Whether a recording's file name names one of the entries: `<id>.` starts it. */
 const besideAnEntry = (file: string, ids: readonly string[]) => ids.some(id => file.startsWith(`${id}.`));
-
-/** A key entry's plain fields, each `kit-<name>`. */
-const kitValues = (entry: Entry) =>
-  Object.fromEntries((entry.fields ?? []).filter(field => field.secret !== true).map(field => [field.name, `kit-${field.name}`]));
-
-/** Signs in with a key: a key entry through `finishConnect`, an OAuth entry's token through `identifyAccount`. */
-function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch) {
-  if (entry.auth[0].kind === 'oauth2') return identifyAccount(entry, { token: key, fetch });
-  const secret = (entry.fields ?? []).find(field => field.secret === true)?.name ?? '';
-  return finishConnect(entry, { secret: { [secret]: key }, values: kitValues(entry), fetch });
-}
 
 const https = z.string().startsWith('https://');
 /** A header name as `Headers` takes it: one lowercase HTTP token (RFC 9110). `Headers.get('X Signature')` throws. */
@@ -154,6 +143,15 @@ function functionsIn(value: unknown, at = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => functionsIn(item, at ? `${at}.${key}` : key));
 }
 
+/** Every string anywhere in a value, keys included. */
+function stringsIn(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (typeof value !== 'object' || value === null) return [];
+  return Object.entries(value).flatMap(([key, item]) => [key, ...stringsIn(item)]);
+}
+/** `pnpm new` writes a skeleton whose every unknown is `TODO`: it fails here until each is filled. */
+const TODO_RULE = "no TODO left from pnpm new: replace each with the provider's documented value";
+
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
@@ -182,6 +180,7 @@ const hmac = (entry: Entry) => (entry.webhook?.kind === 'hmac' ? entry.webhook :
 const signing = (entry: Entry) => (entry.webhook?.kind === 'hmac' || entry.webhook?.kind === 'ed25519' ? entry.webhook : undefined);
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 const runnable = {
+  [TODO_RULE]: (entry: Entry) => !stringsIn(entry).some(text => text.includes('TODO')),
   // A Basic or query send that names no secret would send a credential anyone could make.
   '`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)': (entry: Entry) => sentTemplates(entry).length === 0
     || sentTemplates(entry).flatMap(placeholders).some(name => name === 'token' || (entry.auth[0].kind === 'key' && name === secretField(entry))),
@@ -348,23 +347,23 @@ describe.each(entries)('%s', (id, entry) => {
     for (const name of placeholders(signing(entry)?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 
-  // With a recording beside it, identify replays a good and a bad key on its recordings' exchanges merged, sending its
-  // request once; a missing exchange fails with the request it wanted. The account names what the recording holds.
+  // Every entry that sends identify, and every token entry, signs in on the fake derived from it: no recording needed.
+  if (entry.identify?.request !== undefined || entry.auth[0].kind === 'token') {
+    test.each(['good', 'bad'] as const)('signs in on its derived fake with a %s key', async key => {
+      const { fetch } = fakeFetch(fakeProvider(entry, { key: GOOD_KEY, values: kitValues(entry) }));
+      const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
+      if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
+      else expect((await signedIn).account === null).toBe(entry.identify?.id === undefined);
+    });
+  }
+
+  // With a recording beside it, the sign-in replays a good and a bad key on its recordings' exchanges merged, through the
+  // check the recorder runs before it writes one: a file the recorder accepts, the table accepts.
   const [first, ...rest] = recordings.filter(({ file }) => file.startsWith(`${id}.`));
-  if (entry.identify?.request === undefined || first === undefined) return;
+  if ((entry.identify?.request === undefined && entry.auth[0].kind !== 'token') || first === undefined) return;
   const recording = { ...first, provider: id, exchanges: [first, ...rest].flatMap(item => item.exchanges) };
-  const recorded = JSON.stringify([recording.exchanges.filter(item => item.key === 'good').map(item => item.response), kitValues(entry)]);
-  test.each(['good', 'bad'] as const)('signs in on its recording with a %s key, sending identify once', async key => {
-    const fetch = vi.fn(replay(recording, key));
-    const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
-    if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
-    else {
-      // No account only when the entry declares no id: identify is then a credential check.
-      const { account } = await signedIn;
-      if (account === null) expect(entry.identify?.id).toBeUndefined();
-      else expect(recorded.toLowerCase()).toContain(account.id.toLowerCase());
-    }
-    expect(fetch).toHaveBeenCalledTimes(1);
+  test('replays its sign-ins: the key to an account where the entry names an id, the bad key rejected', async () => {
+    expect(await replayProblem(entry, recording)).toBeNull();
   });
 });
 
@@ -407,6 +406,7 @@ const tokened = { ...key, fields: [{ name: 'clientId', title: 'Client ID' }, { n
 test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
+  [TODO_RULE, defineProvider({ ...key, docs: 'https://TODO', auth: [{ kind: 'key' }], fields: [secret] })],
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],

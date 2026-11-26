@@ -9,9 +9,11 @@ afternoon, not a week. For each service it covers, the library provides:
 - authenticated reads and writes;
 - incoming webhooks.
 
-**Today** (0.13.0) the library is the core (`catalogue`, `connect`, `client`, `oauth`, `credentials`, `vault`,
-`webhooks`, `paginate`, `testing`), 17 catalogue entries that one engine runs, and a module with a fake for each of
-those providers. The adapters and the connect screen are planned; the rest of this page describes where it is going.
+**Today** (0.13.0, with Stage B not yet released) the library is the core (`catalogue`, `connect`, `client`, `oauth`,
+`credentials`, `vault`, `webhooks`, `paginate`, `testing`), 28 catalogue entries that one engine runs, and a module with
+a fake for 17 of those providers. Any entry gets a fake derived from it, `pnpm new <id>` writes a new entry's skeleton,
+and the recorder records an entry from a test account. The adapters and the connect screen are planned; the rest of
+this page describes where it is going.
 
 ## Goals
 
@@ -47,8 +49,8 @@ Each layer will use only the ones below it, and each piece will be usable alone:
 catalogue without the adapters.
 
 - **Core.** Runs any entry: connect, OAuth, credentials, the vault, HTTP with retries, paging, webhook checks and
-  declared operations. A sync helper the app runs in its own job runner, and an SSRF guard for templated URLs, are
-  planned. Today there is no SSRF guard: the app passes its own guarded `fetch`.
+  declared operations. `guardedFetch` refuses private addresses, and is the default for a host the person types. A
+  sync helper the app runs in its own job runner is planned.
 - **Declared catalogue.** Holds one typed entry per provider, written from the provider's own docs and checked by one
   table test. An entry is pure data: sign-in, form fields, identity (which also checks the credential), revoke, HTTP,
   retry and error rules, paging shapes, webhook scheme, scopes and named operations, with a client whose types are
@@ -83,7 +85,7 @@ Each phase ends with a release. Breaking changes are listed in the changelog wit
 | # | Phase | Done when |
 |---|---|---|
 | 0 | Open-source readiness | Apache 2.0 license, contributor docs, security policy and issue templates; the repository public |
-| 1 | Entry format and generic engine | Stage A, done in 0.13.0: the entry format, its table test, `catalogue.json`, tiers, generic identify and revoke, the paging walker, declared operations with an inferred typed client, and the 17 providers moved onto entries. Stage B: keys in the query string, field choices, templated base URLs and a guarded `fetch`; the remaining OAuth 2 variations; client-credentials and session logins; more webhook schemes; 5xx and network retries on reads; a fake derived from an entry and a scaffolder |
+| 1 | Entry format and generic engine | Stage A, done in 0.13.0: the entry format, its table test, `catalogue.json`, tiers, generic identify and revoke, the paging walker, declared operations with an inferred typed client, and the 17 providers moved onto entries. Stage B, done: keys in the query string, field choices, templated base URLs and a guarded `fetch`; JSON token bodies, a second base, a separate refresh URL; client-credentials and session logins; more webhook schemes and challenge handshakes; 5xx and network retries on reads; a fake derived from an entry, the recorder for an entry with no module, and a scaffolder; 28 entries. Next: the release of Stage B |
 | 2 | Breadth | 300 or more entries, added in category batches with their main operations, 100 or more at `recorded` or above |
 | 3 | Adapters | The Postgres, Redis and route-handler packages |
 | 4 | Connect screen | The React connect screen, drawn from `catalogue.json` |

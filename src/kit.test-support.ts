@@ -1,7 +1,12 @@
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
-import type { ProviderHttpError } from './errors.js';
+import { identifyAccount, lookupNames } from './account.js';
+import type { Entry } from './catalogue.js';
+import { finishConnect } from './connect.js';
+import { ProviderHttpError } from './errors.js';
 import { paginate, type Page } from './paginate.js';
+import { safeDetail } from './http-response.js';
+import { parseJson } from './rules.js';
 import { fakeFetch, type Route } from './testing.js';
 
 /** One request and its answer. `key` says which key sent it: the scenario's good key or a bad one. */
@@ -35,9 +40,24 @@ export type KitScenario<C, I> = {
 export const GOOD_KEY = 'kit-good-key';
 export const BAD_KEY = 'kit-bad-key';
 
+/** An entry's plain fields as the kit fills them: the default, else the first choice, else `kit-<name>`. */
+export function kitValues(entry: Entry): Record<string, string> {
+  return Object.fromEntries((entry.fields ?? []).filter(field => field.secret !== true)
+    .map(({ name, default: given, choices }) => [name, given ?? choices?.[0] ?? `kit-${name}`]));
+}
+
+/** Signs in with a key: a key or token entry through `finishConnect` on its plain values (the kit's unless given), an
+ * OAuth entry's token through `identifyAccount`. */
+export function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch, values = kitValues(entry)) {
+  if (entry.auth[0].kind === 'oauth2') return identifyAccount(entry, { token: key, fetch });
+  const secret = (entry.fields ?? []).find(field => field.secret === true)?.name ?? '';
+  return finishConnect(entry, { secret: { [secret]: key }, values, fetch });
+}
+
+/** A request's JSON body, or its text when it is a form (a token request's). */
 const requestBody = async (request: Request): Promise<unknown> => {
   const text = await request.text();
-  return text ? JSON.parse(text) as unknown : undefined;
+  return text === '' ? undefined : parseJson(text) ?? text;
 };
 
 /** A fetch answering from a recording: each request must match one exchange of that key, or the test names it. */
@@ -52,8 +72,28 @@ export function replay(recording: Recording, key: Exchange['key']): typeof fetch
   };
 }
 
-/** Records every exchange a real fetch makes, the key replaced with the kit's, for `src/record.test.ts`. */
-export function recorder(real: typeof fetch, apiKey: string, key: Exchange['key']): { fetch: typeof fetch; exchanges: Exchange[] } {
+/**
+ * The one replay check, which the table test runs on every recording beside an entry and the recorder runs before it
+ * writes one: the good key signs in, to an account when the entry names an id, and the bad key is `rejected`, each
+ * sending no more requests than the recording holds for it. The account is the engine's, read from the file and the kit
+ * values alone: that the file holds nothing real is the recorder's swap and last check, not this. Null when it holds,
+ * else the sign-in it changes.
+ */
+export async function replayProblem(entry: Entry, recording: Recording): Promise<string | null> {
+  const sent = { good: 0, bad: 0 };
+  const counted = (key: Exchange['key']): typeof fetch => (input, init) => { sent[key] += 1; return replay(recording, key)(input, init); };
+  const held = (key: Exchange['key']) => recording.exchanges.filter(exchange => exchange.key === key).length;
+  const good = await signIn(entry, GOOD_KEY, counted('good')).catch(() => undefined);
+  if (good === undefined || (good.account === null) !== (entry.identify?.id === undefined) || sent.good > held('good')) {
+    return 'the sign-in with the key';
+  }
+  const bad = await signIn(entry, BAD_KEY, counted('bad')).then(() => undefined, (error: unknown) => error);
+  return bad instanceof ProviderHttpError && bad.code === 'rejected' && sent.bad <= held('bad') ? null : 'the bad key as rejected';
+}
+
+/** Records every exchange a real fetch makes, as sent and answered, for `src/record.test.ts`: `scrub` makes them safe to
+ * write. */
+export function recorder(real: typeof fetch, key: Exchange['key']): { fetch: typeof fetch; exchanges: Exchange[] } {
   const exchanges: Exchange[] = [];
   return { exchanges, async fetch(input, init) {
     const request = new Request(input, init);
@@ -65,11 +105,111 @@ export function recorder(real: typeof fetch, apiKey: string, key: Exchange['key'
       const value = response.headers.get(name);
       return value === null ? [] : [[name, value]];
     }));
-    exchanges.push({ key, method: request.method, url: request.url.replaceAll(apiKey, GOOD_KEY),
-      ...(body === undefined ? {} : { body }), status: response.status, headers,
-      response: text ? JSON.parse(text) as unknown : null });
+    // An answer that is not JSON is written as null: the engine reads nothing from it.
+    exchanges.push({ key, method: request.method, url: request.url, ...(body === undefined ? {} : { body }),
+      status: response.status, headers, response: parseJson(text) ?? null });
     return response;
   } };
+}
+
+/** Every path the engine reads from an entry's answers. `values`: identify's and `save`'s (with `tokenAnswer.` stripped,
+ * read from the token answer), a token answer's token and `expires_in`, and the body's wait. `codes`: each condition's
+ * `path` and the error code's paths, where only a provider code is kept. */
+export function answerReads(entry: Entry): { values: string[]; codes: string[] } {
+  const { identify, errors, http } = entry;
+  const [auth] = entry.auth;
+  const detail = errors?.detail ?? [];
+  const values = [...lookupNames(entry).filter(name => !name.startsWith('connection.')).map(name => name.replace(/^tokenAnswer\./u, '')),
+    ...auth.kind === 'token' ? [auth.request.token ?? 'access_token', 'expires_in'] : [],
+    ...http.retry?.waitFromBody === undefined ? [] : [http.retry.waitFromBody.path]];
+  const codes = [...[...identify?.rejectWhen ?? [], errors?.failed, ...(errors?.rules ?? []).map(rule => rule.when), ...http.rateLimit?.when ?? []]
+    .flatMap(when => (when?.path === undefined ? [] : [when.path])), ...typeof detail === 'string' ? [detail] : detail];
+  return { values, codes: codes.filter(path => !values.includes(path)) };
+}
+
+/** Only what `paths` read from `value`, found as `readPath` finds it (a whole key first, then a key and the rest), in
+ * the answer's own shape; nothing else. A path that reaches an object or a list keeps only its shell (`{}`, `[]`), which
+ * the paths read inside it fill. At a path of `codes`, a string is kept only when it is a provider code as an error's
+ * detail takes one (`safeDetail`). Undefined when nothing is an object to read from. */
+export function onlyRead(value: unknown, paths: readonly string[], codes: readonly string[] = [], prefix = ''): unknown {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const whole = paths.filter(path => Object.hasOwn(record, path));
+  const nested = new Map<string, string[]>();
+  for (const path of paths) {
+    const head = path.slice(0, path.indexOf('.'));
+    if (!whole.includes(path) && path.includes('.') && Object.hasOwn(record, head)) nested.set(head, [...nested.get(head) ?? [], path.slice(head.length + 1)]);
+  }
+  const shell = (item: unknown) => (Array.isArray(item) ? [] : typeof item === 'object' && item !== null ? {} : item);
+  const prose = (path: string, item: unknown) => typeof item === 'string' && codes.includes(prefix + path) && safeDetail(item) !== item;
+  const kept: Record<string, unknown> = Object.fromEntries([...whole.flatMap((path): [string, unknown][] =>
+    (prose(path, record[path]) ? [] : [[path, shell(record[path])]])),
+    ...[...nested].flatMap(([head, rest]): [string, unknown][] => {
+      const inner = onlyRead(record[head], rest, codes, `${prefix}${head}.`);
+      return inner === undefined ? [] : [[head, inner]];
+    })]);
+  return Array.isArray(value) ? Object.assign([], kept) : kept;
+}
+
+/** A real value the recorder found, and the kit's stand-in written in its place. */
+export type Swap = [real: string, kit: string];
+/** A shorter value would match unrelated text: swapping it would not be safe. */
+const SHORTEST_SWAP = 4;
+/** A value as a recording may hold it: as it is, JSON-escaped, percent-encoded and form-encoded. */
+const forms = (value: string) => [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value),
+  new URLSearchParams({ v: value }).toString().slice(2)];
+/** `value` with each string through `text` and each number replaced only when it is a whole real value. */
+function swapped(value: unknown, text: (text: string) => string, whole: ReadonlyMap<string, string>): unknown {
+  if (typeof value === 'string') return text(value);
+  if (typeof value === 'number') return whole.get(String(value)) ?? value;
+  if (typeof value !== 'object' || value === null) return value;
+  if (Array.isArray(value)) return value.map(item => swapped(item, text, whole));
+  return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, swapped(item, text, whole)]));
+}
+/** Percent and `+` escapes decoded, so no encoding hides a value from the last check. */
+const decoded = (text: string) => text.replaceAll('+', ' ').replace(/%([0-9a-f]{2})/giu, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
+/** Each run that may be base64 or base64url (a Basic pair, a JWT's part), decoded from each of its first four
+ * characters, so one that starts inside a run (`abc<b64>`, `Basic<b64>`) is decoded on its own boundary too. A run ends
+ * at `=`, where Node stops decoding (`state=<b64>`). */
+const unbased = (text: string) => (text.match(/[A-Za-z0-9+/_-]{6,}/gu) ?? [])
+  .flatMap(run => [0, 1, 2, 3].map(at => Buffer.from(run.slice(at), 'base64').toString('utf8')));
+
+/**
+ * The exchanges safe to write. Each real value of `sent` (the key, a plain value, a token issued) is replaced by its
+ * stand-in inside the URL, the request body's strings and the headers kept; in the answer, a value of `sent` or
+ * `answered` (the account's id and name, a saved value) is replaced only where it is a whole string or number. Then each
+ * part of each exchange is searched, ignoring case, percent-decoded and with each base64-like run decoded: a real value
+ * still in it, or one too short to swap safely, refuses the recording, naming the exchange and the part. Nothing is
+ * written partly scrubbed, and no message holds a real value.
+ */
+export function scrub(exchanges: readonly Exchange[], swaps: { sent: readonly Swap[]; answered?: readonly Swap[] }): Exchange[] {
+  const all = [...swaps.sent, ...swaps.answered ?? []];
+  const short = all.find(([real]) => real.length < SHORTEST_SWAP);
+  if (short) throw new Error(`recording refused: the value for ${short[1]} is under ${String(SHORTEST_SWAP)} characters, too short to swap safely`);
+  // Each real value is first replaced by a marker no JSON text holds (a raw NUL), checked, then by its stand-in: the
+  // check exempts only what the scrub put in, never text that merely spells a stand-in.
+  const marker = (at: number) => `\u0000${String(at)}\u0000`;
+  const standIn = new Map<string, string>();
+  all.forEach(([real], at) => { if (at < swaps.sent.length) for (const form of forms(real)) if (!standIn.has(form)) standIn.set(form, marker(at)); });
+  // One pass, longest first: a stand-in written is never read again.
+  const pattern = new RegExp([...standIn.keys()].sort((a, b) => b.length - a.length)
+    .map(form => form.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&')).join('|') || '(?!)', 'gu');
+  const inText = (text: string) => text.replace(pattern, form => standIn.get(form) ?? form);
+  const whole = new Map(all.map(([real], at): [string, string] => [real, marker(at)]).reverse());
+  const out = exchanges.map(({ response, ...exchange }) => ({ ...Object.fromEntries(Object.entries(exchange).map(([part, value]) =>
+    [part, ['key', 'method', 'status'].includes(part) ? value : swapped(value, inText, whole)])),
+  response: swapped(response, text => whole.get(text) ?? text, whole) }) as Exchange);
+  // What is left in each part of each exchange: as written, decoded and unbased, ignoring case. The refusal names where,
+  // never what.
+  out.forEach((exchange, at) => {
+    for (const part of ['url', 'headers', 'body', 'response'] as const) {
+      const written = JSON.stringify(exchange[part] ?? null);
+      const seen = [written, decoded(written)].flatMap(text => [text, ...unbased(text)]).map(text => text.toLowerCase());
+      const left = all.find(([real]) => forms(real).some(form => seen.some(text => text.includes(form.toLowerCase()))));
+      if (left) throw new Error(`recording refused: the value for ${left[1]} is still in exchange ${String(at + 1)}'s ${part} after the swap`);
+    }
+  });
+  return out.map(exchange => swapped(exchange, text => text.replace(/\u0000(\d+)\u0000/gu, (_, at: string) => all[Number(at)]?.[1] ?? ''), new Map()) as Exchange);
 }
 
 /** Runs the scenario's calls on a real key: what `src/record.test.ts` saves as a provider's recording. */

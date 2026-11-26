@@ -206,7 +206,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
 `oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
 `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
-and `Where.variables`. `paging` and `operations` arrive with the walker and the client.
+and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -523,16 +523,31 @@ and writes `dist/catalogue.json`.
 One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the folder:
 
 1. **Shape.** The entry matches the schema. It holds no function. Every URL is https. Every placeholder names a
-   declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip.
-2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): identify with
-   a good and a bad credential. The module kits run the first page, a walk to the end and a 429 on the same
-   recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange and revoke, and webhook samples
-   join the table's replay with the first entry that has them and no module.
-3. **Fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is held to
-   the recording.
+   declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip. No string
+   holds `TODO`, what `pnpm new` leaves for each unknown.
+2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): a `token`
+   entry's token request and identify, with a good and a bad credential. The module kits run the first page, a walk to
+   the end and a 429 on the same recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange
+   and revoke, and webhook samples join the table's replay with the first entry that has them and no module.
+3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
+   `./testing`) answers identify, a `token` entry's token request and each operation the app answers, filling the base
+   and the credential with the engine's own functions, and comparing a token request with the one the engine sends for
+   the good key. Every entry that sends a request to sign in (an identify request, or a `token` entry's token request)
+   signs in on it with a good key and is `rejected` with a bad one, with no recording.
+4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
+   held to the recording.
 
-A recording is a real capture from a real account, cleaned by the privacy check. A made-up one tests the code but
-leaves the entry `declared`. The module kits stay for what an entry cannot know, such as incremental reads.
+A recording is a real capture from a real account; a made-up one tests the code but leaves the entry `declared`. The
+recorder (`src/record.test.ts`) records an entry with no module that sends a request to sign in, and refuses any other
+that has no kit scenario. Each exchange keeps its method, URL, request body, status and `retry-after`, and from the
+answer only the paths the entry reads (an object or a list reached by one keeps only its shell; at an error or
+condition path, only a provider code, a number or a boolean). The key, the plain values and the tokens issued are
+swapped for the kit's stand-ins in the URL, the body and that header; in the answers, they and the account's id, name
+and saved values are swapped where they are a whole value. It refuses to write when a sign-in was redirected, when a
+value is under 4 characters, when a real value is still in an exchange (searched before the stand-ins go in, ignoring
+case, percent-decoded and with base64 runs decoded), and when the file fails the table test's own replay check: the
+key signs in (to an account when the entry names an id) and the bad key is `rejected`, each sending no more requests
+than the file holds. The module kits stay for what an entry cannot know, such as incremental reads.
 
 `pnpm check` remains the one gate, with no network.
 
@@ -564,25 +579,31 @@ removed in the step that replaces it; nothing is kept for 0.12 callers.
 11. Declared operations and the inferred client; `./http` becomes internal.
 12. Release 0.13.0 with a migration list.
 
-**Stage B: expansion.** Four pull requests. Each item arrives with a first provider that needs it, an entry citing
+**Stage B: expansion. Done.** Four pull requests. Each item arrived with a first provider that needs it, an entry citing
 its docs, and engine tests as proof:
 
-1. **Where a call can go.** Keys in the query (SerpApi); field choices and defaults, and a base filled from a value with
-   a host pattern (Intercom); a guarded `fetch` that refuses private addresses, for a host the person types (GitLab);
-   retry of 5xx and network failures on reads, with jitter (Microsoft, Google).
-2. **How a token is obtained.** JSON token bodies, a second base for identify, a path segment and a saved value in the
-   base (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session sign-ins
-   (Zoom, Metabase); a templated token URL (PayPal, Metabase).
-3. **More webhook schemes.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 and a header value
+1. **Where a call can go. Done.** Keys in the query (SerpApi); field choices and defaults, and a base filled from a
+   value with a host pattern (Intercom); a guarded `fetch` that refuses private addresses, for a host the person types
+   (GitLab); retry of 5xx and network failures on reads, with jitter (Microsoft, Google).
+2. **How a token is obtained. Done.** JSON token bodies, a second base for identify, a path segment and a saved value in
+   the base (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session
+   sign-ins (Zoom, Metabase); a templated token URL (PayPal, Metabase).
+3. **More webhook schemes. Done.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 and a header value
    template (Discord, Trello), shared tokens (Google), Standard Webhooks (GitLab), and a challenge handshake (Slack,
    Discord).
-4. **The kit.** A fake derived from any entry, the recorder for an entry with no module, a scaffolder (`pnpm new <id>`)
-   and a five-step guide to adding a provider.
+4. **The kit. Done.** A fake derived from any entry (`fakeProvider`), the recorder for an entry with no module, a
+   scaffolder (`pnpm new <id>`, one key skeleton whose every unknown is `TODO`, which the table test refuses) and a
+   five-step guide to adding a provider (`CONTRIBUTING.md`).
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
 code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
-authorize and token URLs (Shopify); placeholders in `bases`; retry of writes; second challenge shapes; webhook schemes
-that are code (Twilio, HubSpot v3, PayPal, SendGrid).
+authorize and token URLs (Shopify); `Operation.base`; placeholders in `bases`; `{ value, title }` choices;
+`categories`; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+(Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
+
+Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments
+and paging in the derived fake (an operation's function sees the raw request and answers each page itself); a
+skeleton per sign-in kind (one key skeleton; the guide says how to change `auth`).
 
 OAuth 1, JWT and service-account sign-in, and multipart bodies wait for the first provider that needs them.
 
