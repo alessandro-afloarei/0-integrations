@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { defineProvider } from './catalogue.js';
+import { defineProvider, signInWith } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
@@ -49,7 +49,7 @@ describe('fakeProvider', () => {
   });
 
   test("Discord's fake checks `Bot <token>`", async () => {
-    const { fetch } = fakeFetch(fakeProvider(discord, { key: 'k' }));
+    const { fetch } = fakeFetch(fakeProvider(signInWith(discord, 'key'), { key: 'k' }));
     const sent = (value: string) => fetch('https://discord.com/api/v10/users/@me', { headers: { authorization: value } });
     expect((await sent('Bot k')).status).toBe(200);
     expect(await answer(await sent('Bearer k'))).toEqual(unauthorized);
