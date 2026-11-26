@@ -10,10 +10,11 @@ afternoon, not a week. For each service it covers, the library provides:
 - incoming webhooks.
 
 **Today** (0.13.0, with Stage B not yet released) the library is the core (`catalogue`, `connect`, `client`, `oauth`,
-`credentials`, `vault`, `webhooks`, `paginate`, `testing`), the entries listed in `docs/providers.md`, which one engine
-runs, and a module with a fake for 17 of those providers. Any entry gets a fake derived from it, `pnpm new <id>` writes
-a new entry's skeleton, and the recorder records an entry from a test account. The adapters and the connect screen are
-planned; the rest of this page describes where it is going.
+`credentials`, `vault`, `webhooks`, `paginate`, `testing`), the entries listed in [`docs/providers.md`](docs/providers.md),
+which one engine runs, and a module with a fake for 17 of those providers. Any entry gets a fake derived from it,
+`pnpm new <id>` writes a new entry's skeleton, and the recorder records an entry from a test account. What providers
+need that the engine cannot say yet is on the [waiting list](docs/waiting-list.md). The adapters and the connect screen
+are planned; the rest of this page describes where it is going.
 
 ## Goals
 

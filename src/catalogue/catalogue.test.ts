@@ -1,32 +1,15 @@
-import { globSync, readFileSync } from 'node:fs';
-import { basename } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
 import { defineProvider, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
-import { BAD_KEY, GOOD_KEY, kitValues, replayProblem, signIn, type Recording } from '../kit.test-support.js';
+import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, replayProblem, signIn } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
-/** Every entry in this folder: no list to edit when one is added. */
-const FILES = globSync('src/catalogue/*.ts').filter(file => !file.endsWith('.test.ts')).sort();
-const entries: [string, Entry][] = await Promise.all(FILES.map(async file => {
-  const id = basename(file, '.ts');
-  const found = Object.values(await import(pathToFileURL(file).href) as Record<string, unknown>)
-    .find(value => typeof value === 'object' && value !== null && 'id' in value && value.id === id);
-  if (!found) throw new Error(`${file} exports no entry whose id is ${id}`);
-  return [id, found as Entry];
-}));
-
-/** Every recording in this folder, by its file name: `<id>.recording.json` or `<id>.<part>.recording.json`. Read as the build
- * reads it: only `synthetic: false` is a real recording. */
-const recordings = globSync('src/catalogue/*.recording.json').sort().map(file => {
-  const json = JSON.parse(readFileSync(file, 'utf8')) as Omit<Recording, 'synthetic'> & { synthetic?: unknown };
-  return { ...json, file: basename(file), synthetic: json.synthetic !== false };
-});
+const entries = await catalogueEntries();
+const recordings = catalogueRecordings();
 /** Whether a recording's file name names one of the entries: `<id>.` starts it. */
 const besideAnEntry = (file: string, ids: readonly string[]) => ids.some(id => file.startsWith(`${id}.`));
 

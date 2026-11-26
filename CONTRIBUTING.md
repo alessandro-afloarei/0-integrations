@@ -30,12 +30,18 @@ one takes five steps:
    category's template, each with its own `docs` page; follow the result-shape rules. A fact you cannot cite from the
    provider's page stays out. The design's [Breadth entries](docs/design/entries-and-engine.md#breadth-entries) gives
    the templates and the rules.
-3. `pnpm check`. The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake
-   derived from it (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry
-   has an identify request or a token request.
+3. `pnpm providers`, which writes the entry's row into [`docs/providers.md`](docs/providers.md), then `pnpm check`.
+   The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake derived from it
+   (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry has an identify
+   request or a token request. `pnpm check` also fails while the committed page differs from the entries.
 4. Optional: record it from a test account (below), read the file, and commit it. An entry the recorder can record (one
    with no module that sends a request when it signs in) becomes `recorded`.
 5. Add one line to `CHANGELOG.md` under `Unreleased`, then open a pull request.
+
+When a provider needs something the engine cannot say yet (a paging kind, a body format, a webhook scheme), never
+force it into another shape. Declare what the engine can say and leave the rest out; when its sign-in or its account
+lookup does not fit, write no entry. Either way, add it to [`docs/waiting-list.md`](docs/waiting-list.md) under the
+mechanism it needs. A mechanism is built once three providers wait for it.
 
 `src/catalogue/catalogue.test.ts` runs over every file in the folder, with no test code of yours. It checks that the
 entry:

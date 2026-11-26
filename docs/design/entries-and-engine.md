@@ -493,7 +493,7 @@ paging, the error code path, rate-limit numbers, the webhook scheme) is read fro
 Its URL is in the entry: the entry's `docs` (sign-in and identify), the operation's `docs`, or, for a fact on another
 page (a rate limit, regions, a webhook, an error format), the entry's leading comment. What cannot be cited is left
 out: a smaller true entry beats a larger guessed one. What the engine cannot say is left out too, never forced into a
-wrong shape, and the mechanism it needs goes on the waiting list.
+wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
 
 **Sign-in.** The provider's personal key or token when it reaches the category's operations (`key`, its `send` as the
 docs show it); else its self-serve OAuth 2 authorization code grant (`oauth2`); else a documented one-request token

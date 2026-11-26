@@ -1,3 +1,6 @@
+import { globSync, readFileSync } from 'node:fs';
+import { basename } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { identifyAccount, lookupNames } from './account.js';
@@ -36,6 +39,27 @@ export type KitScenario<C, I> = {
   /** Whether the client waits out a 429 (the provider's retry policy), or reports it. */
   retriesRateLimit: boolean;
 };
+
+/** Every entry in `src/catalogue/`, as `[id, entry]` sorted by id: no list to edit when one is added. */
+export async function catalogueEntries(): Promise<[string, Entry][]> {
+  const files = globSync('src/catalogue/*.ts').filter(file => !file.endsWith('.test.ts')).sort();
+  return Promise.all(files.map(async file => {
+    const id = basename(file, '.ts');
+    const found = Object.values(await import(pathToFileURL(file).href) as Record<string, unknown>)
+      .find(value => typeof value === 'object' && value !== null && 'id' in value && value.id === id);
+    if (!found) throw new Error(`${file} exports no entry whose id is ${id}`);
+    return [id, found as Entry];
+  }));
+}
+
+/** Every recording in `src/catalogue/`, by its file name: `<id>.recording.json` or `<id>.<part>.recording.json`. Read as
+ * the build reads it: only `synthetic: false` is a real recording. */
+export function catalogueRecordings(): (Recording & { file: string })[] {
+  return globSync('src/catalogue/*.recording.json').sort().map(file => {
+    const json = JSON.parse(readFileSync(file, 'utf8')) as Omit<Recording, 'synthetic'> & { synthetic?: unknown };
+    return { ...json, file: basename(file), synthetic: json.synthetic !== false };
+  });
+}
 
 export const GOOD_KEY = 'kit-good-key';
 export const BAD_KEY = 'kit-bad-key';
