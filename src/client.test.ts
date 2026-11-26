@@ -20,6 +20,11 @@ const acme = defineProvider({
       note: { in: 'body', type: 'string' } } },
     'issues.search': { method: 'POST', kind: 'read', path: '/issues/search', params: { q: { in: 'body', type: 'string' } } },
     'issues.touch': { kind: 'write', path: '/touch' },
+    'issues.delete': { method: 'DELETE', path: '/issues/{id}', params: { id: { in: 'path', type: 'string', required: true } } },
+    'issues.archive': { method: 'PUT', path: '/archive', result: { ok: 'boolean' } },
+    'issues.rate': { method: 'POST', path: '/rate', params: { score: { in: 'body', type: 'number' } } },
+    'issues.raw': { path: '/raw', result: { raw: 'unknown' } },
+    feed: { path: '/feed', paging: 'link', result: { 'next?': 'string', n: 'integer' } },
     'requests.list': { path: '/requests' },
     viewer: { kind: 'read', graphql: 'query Viewer($first: Int) { viewer { id } }', params: { first: { in: 'variables', type: 'integer' } } },
   },
@@ -56,10 +61,13 @@ test('each parameter goes to its place; a path value is one encoded segment; an 
 test('an argument the request cannot carry is a TypeError before any request', async () => {
   const { fake, api } = setup(json({}));
   for (const [args, message] of [[{}, 'param_missing: id'], [{ id: null }, 'param_missing: id'], [{ id: '..' }, 'param_invalid: id'],
-    [{ id: '' }, 'param_invalid: id'], [{ id: 7 }, 'param_invalid: id']] as const) {
+    [{ id: '' }, 'param_invalid: id'], [{ id: '.' }, 'param_invalid: id'], [{ id: 7 }, 'param_invalid: id']] as const) {
     await expect(untyped(api.issues.get)(args)).rejects.toThrow(new TypeError(message));
   }
   await expect(untyped(api.issues.create)({ title: 'x', estimate: { points: 1.5 } })).rejects.toThrow(new TypeError('param_invalid: estimate'));
+  for (const score of [Number.NaN, Infinity, -Infinity]) {
+    await expect(api.issues.rate({ score })).rejects.toThrow(new TypeError('param_invalid: score'));
+  }
   const list = api.issues.list as unknown as (args: object) => AsyncGenerator;
   await expect(list({}).next()).rejects.toThrow(new TypeError('param_missing: teamId'));
   await expect(list({ teamId: 'T', state: 'merged' }).next()).rejects.toThrow(new TypeError('param_invalid: state'));
@@ -71,6 +79,20 @@ test('an answer keeps its declared keys; a key? missing or null is absent; anyth
   expect(await api.issues.get({ id: 'x' })).toStrictEqual({ id: 'x', count: 2 });
   await expect(api.issues.get({ id: 'x' })).rejects.toEqual(new ProviderHttpError('invalid_response', null));
   await expect(api.issues.get({ id: 'x' })).rejects.toEqual(new ProviderHttpError('invalid_response', null));
+  // A required 'unknown' key takes any value, null included, but must be there.
+  const raw = setup(sequence(json({ raw: null }), json({ raw: [1, { a: 2 }] }), json({})));
+  expect(await raw.api.issues.raw()).toStrictEqual({ raw: null });
+  expect(await raw.api.issues.raw()).toStrictEqual({ raw: [1, { a: 2 }] });
+  await expect(raw.api.issues.raw()).rejects.toEqual(new ProviderHttpError('invalid_response', null));
+});
+
+test('an empty 2xx answers null when the operation declares no result; with a result it is invalid_response', async () => {
+  const { fake, api } = setup(() => new Response(null, { status: 204 }));
+  expect(await api.issues.delete({ id: 'x' })).toBeNull();
+  await expect(api.issues.archive()).rejects.toMatchObject({ code: 'invalid_response', status: 204 });
+  expect(wire(fake)).toEqual([['DELETE', `${BASE}/issues/x`, ''], ['PUT', `${BASE}/archive`, '']]);
+  const { api: refused } = setup(() => new Response(null, { status: 403 }));
+  await expect(refused.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'rejected', status: 403 });
 });
 
 test('notFound: null answers a 404 with null; any other operation keeps not_found', async () => {
@@ -82,7 +104,7 @@ test('notFound: null answers a 404 with null; any other operation keeps not_foun
 test('a read is retried after a 429, a POST read included; a write never, a GET write included', async () => {
   const limited = () => sequence(json({}, 429), json({}));
   type Api = ReturnType<typeof setup>['api'];
-  for (const call of [(api: Api) => api.issues.search({ q: 'x' }), (api: Api) => api.viewer()]) {
+  for (const call of [(api: Api) => api.issues.search({ q: 'x' }), (api: Api) => api.viewer(), (api: Api) => api.requests.list()]) {
     const { fake, api } = setup(limited());
     await call(api);
     expect(fake.calls).toHaveLength(2);
@@ -96,20 +118,30 @@ test('a read is retried after a 429, a POST read included; a write never, a GET 
   }
 });
 
-test('a paged operation yields its records page by page, skips a bad one and returns the skipped ids', async () => {
+test('a paged operation yields its records page by page and reports each page that skipped a bad one', async () => {
   const { fake, api } = setup(sequence(
     json({ data: { items: [{ id: 'i1', title: 'One', labels: null, extra: 1 }, { id: 'bad-1' }] }, meta: { next: 'c2' } }),
+    json({ data: { items: [{ id: 'i3', title: 'Three' }] }, meta: { next: 'c3' } }),
     json({ data: { items: [{ id: 'i2', title: 'Two', labels: ['a'] }, { id: 9, title: 'Nine' }, 'junk'] }, meta: {} })));
-  const records = api.issues.list({ teamId: 'T 1', state: 'open', limit: 10 });
   const seen: unknown[] = [];
-  let next = await records.next();
-  for (; next.done !== true; next = await records.next()) seen.push(next.value);
-  expect(seen).toStrictEqual([{ id: 'i1', title: 'One' }, { id: 'i2', title: 'Two', labels: ['a'] }]);
-  expect(next.value).toEqual(['bad-1', '9', null]);
+  const skipped: (string | null)[][] = [];
+  for await (const record of api.issues.list({ teamId: 'T 1', state: 'open', limit: 10 }, { onSkipped: ids => skipped.push(ids) })) {
+    seen.push(record);
+  }
+  expect(seen).toStrictEqual([{ id: 'i1', title: 'One' }, { id: 'i3', title: 'Three' }, { id: 'i2', title: 'Two', labels: ['a'] }]);
+  expect(skipped).toEqual([['bad-1'], ['9', null]]);
   expect(fake.calls.map(call => call.url)).toEqual([`${BASE}/teams/T%201/issues?state=open&limit=10`,
-    `${BASE}/teams/T%201/issues?state=open&limit=10&cursor=c2`]);
+    `${BASE}/teams/T%201/issues?state=open&limit=10&cursor=c2`, `${BASE}/teams/T%201/issues?state=open&limit=10&cursor=c3`]);
   const { api: broken } = setup(json({ data: { items: 'none' }, meta: {} }));
   await expect(broken.issues.list({ teamId: 'T' }).next()).rejects.toEqual(new ProviderHttpError('invalid_response', null));
+});
+
+test('a paged operation without records yields each page whole, shaped by its result; a bad page fails', async () => {
+  const { api } = setup(sequence(json({ next: `${BASE}/feed?page=2`, n: 1, extra: true }), json({ n: 2, next: null }), json({ n: 'three' })));
+  const pages: unknown[] = [];
+  for await (const page of api.feed()) pages.push(page);
+  expect(pages).toStrictEqual([{ next: `${BASE}/feed?page=2`, n: 1 }, { n: 2 }]);
+  await expect(api.feed().next()).rejects.toEqual(new ProviderHttpError('invalid_response', null));
 });
 
 test('json and request are authenticated, classified and carry no provider body; paginate walks a declared shape', async () => {
@@ -157,6 +189,17 @@ test("the HTTP client's options pass through: beforeRequest once per call, baseU
 test('an operation id is nested by its dots beside the raw calls', () => {
   const { api } = setup(json({}));
   expect([typeof api.requests.list, typeof api.request, typeof api.issues.get]).toEqual(['function', 'function', 'function']);
+});
+
+test("an app's operation ids that would clash are refused before anything is built", () => {
+  const entry = (operations: Record<string, unknown>) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations }) as Entry;
+  for (const [ids, clash] of [[['a', 'a.__proto__.__proto__.__proto__.polluted'], 'a'], [['a.b', 'a'], 'a'], [['a..b'], 'a..b'],
+    [['.a'], '.a'], [['json'], 'json'], [['request.create'], 'request.create'], [['paginate'], 'paginate'], [['then'], 'then']] as const) {
+    expect(() => client(entry(Object.fromEntries(ids.map(id => [id, { path: '/x' }]))), { token: 'k' }))
+      .toThrow(new TypeError(`operation_clash: ${clash}`));
+  }
+  expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  expect(Object.keys(client(entry({ thenable: { path: '/x' }, 'then.x': { path: '/y' } }), { token: 'k' }))).toContain('then');
 });
 
 test("an app's entry that would send a wrong request is a TypeError naming the cause", async () => {

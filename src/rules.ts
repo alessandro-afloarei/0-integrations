@@ -1,4 +1,4 @@
-import type { Path, Shape, Template, When } from './catalogue.js';
+import type { Operation, Param, Path, Shape, Template, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -26,6 +26,13 @@ export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined
   const keys = shape as { readonly [key: string]: Shape }; // `isArray` does not narrow a readonly tuple away
   const dot = path.indexOf('.');
   return Object.hasOwn(keys, path) ? keys[path] : dot === -1 ? undefined : shapeAt(keys[path.slice(0, dot)], path.slice(dot + 1));
+}
+
+/** Whether a parameter has a place in its operation's request: GraphQL takes only variables; a path operation takes no
+ * variables, and a path parameter only where its path names it. */
+export function placed(op: Operation, name: string, param: Param): boolean {
+  return 'graphql' in op ? param.in === 'variables'
+    : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name));
 }
 
 /** A `{name}`: no braces inside, never empty. */

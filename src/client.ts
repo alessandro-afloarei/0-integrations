@@ -1,9 +1,12 @@
-import type { Entry, Operation, Param, Shape, TypeOf } from './catalogue.js';
+import type { Entry, Operation, Shape, TypeOf } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { callRequest, createClient, type HttpOptions, type ProviderResponse, type RequestOptions } from './http.js';
+import { classify, responseJson } from './http-response.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
-import { fill, placeholders, readPath, shapeAt } from './rules.js';
+import { fill, placed, readPath, shapeAt } from './rules.js';
+
+export type { ProviderResponse, RequestOptions };
 
 /** An argument's type: one of its `enum`, else its shape's, and `null` when it is `nullable`. */
 type ArgOf<P> = (P extends { enum: readonly (infer E)[] } ? E : P extends { type: infer S } ? TypeOf<S> : never)
@@ -13,17 +16,19 @@ type Args<O> = O extends { params: infer Ps }
   ? { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? K : never]: ArgOf<Ps[K]> }
     & { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? never : K]?: ArgOf<Ps[K]> }
   : Record<string, never>;
+/** A paged operation's own option: called once for each page that skipped a record, with what it skipped. */
+type Paged = { onSkipped?: (ids: (string | null)[]) => void };
 /** A call's arguments and options; the arguments may be left out when none is required. */
-type Call<O> = [args: Args<O>, options?: Pick<RequestOptions, 'signal'>];
+type Call<O> = [args: Args<O>, options?: Pick<RequestOptions, 'signal'> & (O extends { paging: string } ? Paged : unknown)];
 /** The type at a dotted path of object keys, the whole rest tried as one key first, as `readPath` reads keys. */
 type Get<T, P> = P extends keyof T ? T[P] : P extends `${infer H}.${infer R}` ? H extends keyof T ? Get<T[H], R> : never : never;
 /** An operation's answer: its `result`'s type, else unknown. */
 type Result<O> = O extends { result: infer S } ? TypeOf<S> : unknown;
 /** One record of a paged operation: an element of the list at `records`. */
 type Item<O> = O extends { records: infer P } ? Get<Result<O>, P> extends readonly (infer E)[] ? E : unknown : unknown;
-/** An operation as a method: a paged one yields its records and returns the skipped records' ids. */
+/** An operation as a method: a paged one yields its records. */
 type MethodOf<O> = (...call: Record<string, never> extends Args<O> ? Partial<Call<O>> : Call<O>) => O extends { paging: string }
-  ? AsyncGenerator<Item<O>, (string | null)[], undefined> : Promise<Result<O> | (O extends { notFound: 'null' } ? null : never)>;
+  ? AsyncGenerator<Item<O>, void, undefined> : Promise<Result<O> | (O extends { notFound: 'null' } ? null : never)>;
 /** An operation id's first dot-separated segment: `'issues'` of `'issues.list'`. */
 type Head<K> = K extends `${infer H}.${string}` ? H : K;
 /** Dotted ids as nested objects: `'issues.list'` is `issues.list`. */
@@ -45,7 +50,8 @@ const INVALID = Symbol('invalid');
 /** A value read by its shape: declared keys only, a `key?` missing or null left out; INVALID when it does not fit. */
 function shaped(shape: Shape, value: unknown): unknown {
   if (typeof shape === 'string') {
-    return shape === 'unknown' || (shape === 'integer' ? Number.isSafeInteger(value) : typeof value === shape) ? value : INVALID;
+    const fits = shape === 'integer' ? Number.isSafeInteger(value) : shape === 'number' ? Number.isFinite(value) : typeof value === shape;
+    return shape === 'unknown' || fits ? value : INVALID;
   }
   if (Array.isArray(shape)) {
     const items = Array.isArray(value) ? value.map(item => shaped((shape as readonly [Shape])[0], item)) : [INVALID];
@@ -69,14 +75,14 @@ const schemaOf = (shape: Shape) => ({ safeParse(data: unknown) {
 } });
 
 function refuse(cause: string): never { throw new TypeError(cause); }
+/** A record with no prototype, so a key such as `__proto__` stays an own key. */
+const bare = () => Object.create(null) as Record<string, unknown>;
 
 /** The request an operation's arguments make: each declared one checked by its shape and sent in its place. */
 function operationRequest(id: string, op: Operation, args: Given, signal?: AbortSignal): [string, RequestOptions] {
-  const at: Record<Param['in'], [string, unknown][]> = { path: [], query: [], body: [], variables: [] };
+  const at = { path: bare(), query: bare(), body: bare(), variables: bare() };
   for (const [name, param] of Object.entries(op.params ?? {})) {
-    if ('graphql' in op ? param.in !== 'variables' : param.in === 'variables' || (param.in === 'path' && !placeholders(op.path).includes(name))) {
-      refuse(`param_unplaced: ${id} ${name}`);
-    }
+    if (!placed(op, name, param)) refuse(`param_unplaced: ${id} ${name}`);
     const value = Object.hasOwn(args, name) ? args[name] : undefined;
     if (value === undefined || (value === null && param.nullable !== true)) {
       if (param.required) refuse(`param_missing: ${name}`);
@@ -88,22 +94,32 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
     if (checked === INVALID || (param.enum !== undefined && !(typeof checked === 'string' && param.enum.includes(checked)))
       || (param.in === 'path' || param.in === 'query') && !scalar
       || (param.in === 'path' && ['', '.', '..'].includes(String(checked)))) refuse(`param_invalid: ${name}`);
-    at[param.in].push([name, checked]);
+    at[param.in][name] = param.in === 'body' || param.in === 'variables' ? checked
+      : param.in === 'path' ? encodeURIComponent(String(checked)) : String(checked);
   }
-  const inPath = new Map(at.path.map(([name, value]) => [name, encodeURIComponent(String(value))]));
   // A read is what the engine retries: a GET unless `kind` says otherwise (GraphQL is a POST, so a write by default).
   const read = op.kind === undefined ? !('graphql' in op) && (op.method ?? 'GET') === 'GET' : op.kind === 'read';
   return callRequest('graphql' in op ? { graphql: op.graphql }
-    : { method: op.method ?? 'GET', path: fill(op.path, name => inPath.get(name) ?? refuse(`param_missing: ${name}`), id) }, {
-    ...(at.query.length > 0 ? { query: Object.fromEntries(at.query.map(([name, value]) => [name, String(value)])) } : {}),
-    ...(at.body.length > 0 ? { json: Object.fromEntries(at.body) } : {}),
-    variables: Object.fromEntries(at.variables), idempotent: read, ...(signal ? { signal } : {}) });
+    : { method: op.method ?? 'GET', path: fill(op.path, name => at.path[name] ?? refuse(`param_missing: ${name}`), id) }, {
+    ...(Object.keys(at.query).length > 0 ? { query: at.query as Record<string, string> } : {}),
+    ...(Object.keys(at.body).length > 0 ? { json: at.body } : {}),
+    variables: at.variables, idempotent: read, ...(signal ? { signal } : {}) });
+}
+
+/** An app's own entry is checked as the table test checks this library's: an id with an empty segment, a dotted prefix of
+ * another, or one of the client's own calls would lose an operation silently. */
+function clash(ids: readonly string[]): string | undefined {
+  return ids.find(id => id.split('.').includes('') || ids.some(other => other.startsWith(`${id}.`))
+    || ['json', 'request', 'paginate'].includes(id.split('.')[0] ?? '') || id === 'then');
 }
 
 /** The client of an entry: its operations, nested by id, and `json`, `request` and `paginate` for raw calls. */
 export function client<const E extends Entry>(entry: E, options: ClientOptions): Client<E> {
   const { token } = options;
   if (token === undefined || (typeof token === 'string' && token.trim() === '')) refuse('token_missing');
+  const operations = Object.entries(entry.operations ?? {});
+  const clashing = clash(operations.map(([id]) => id));
+  if (clashing !== undefined) refuse(`operation_clash: ${clashing}`);
   const http = createClient(entry, { ...options, token: typeof token === 'string' ? () => Promise.resolve(token) : token,
     fetch: options.fetch ?? globalThis.fetch });
   const pagingOf = (name: string) => (entry.paging !== undefined && Object.hasOwn(entry.paging, name) ? entry.paging[name] : undefined)
@@ -114,7 +130,10 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
     if (paging === undefined) {
       return async (args: Given = {}, { signal }: Pick<RequestOptions, 'signal'> = {}) => {
         try {
-          const answer = await http.json(...operationRequest(id, op, args, signal));
+          const response = await http.request(...operationRequest(id, op, args, signal));
+          // An empty 2xx (a 204) answers null when no result is declared; with one it is `invalid_response`.
+          if (result === undefined && response.data === undefined && classify(entry, response) === null) return null;
+          const answer = responseJson(entry, response);
           return result === undefined ? answer : parseAnswer(schemaOf(result), answer);
         } catch (error) {
           if (op.notFound === 'null' && error instanceof ProviderHttpError && error.code === 'not_found') return null;
@@ -122,31 +141,29 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
         }
       };
     }
-    // Each page's records, a bad one skipped and its id reported; without `records`, each page's whole answer.
-    return async function* (args: Given = {}, { signal }: Pick<RequestOptions, 'signal'> = {}) {
+    // Each page's records, a bad one skipped and reported; without `records`, each page's whole answer.
+    return async function* (args: Given = {}, { signal, onSkipped }: Pick<RequestOptions, 'signal'> & Paged = {}) {
       const shape = pagingOf(paging);
       const list = records === undefined || result === undefined ? ['unknown'] as const : shapeAt(result, records);
       if (!Array.isArray(list)) refuse(`records_unshaped: ${id}`);
-      const skipped: (string | null)[] = [];
       for await (const answer of walk(http, shape, ...operationRequest(id, op, args, signal))) {
         if (records === undefined) { yield result === undefined ? answer : parseAnswer(schemaOf(result), answer); continue; }
         const found = readPath(answer, records);
         if (!Array.isArray(found)) throw new ProviderHttpError('invalid_response', null);
         const page = parseEntries(schemaOf((list as readonly [Shape])[0]), found);
-        skipped.push(...page.skipped);
+        if (page.skipped.length > 0) onSkipped?.(page.skipped);
         yield* page.items;
       }
-      return skipped;
     };
   }
 
-  // Containers without a prototype, so an id such as `__proto__.x` stays an own key.
-  const api: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-  for (const [id, op] of Object.entries(entry.operations ?? {})) {
+  // The ids passed `clash`, so every container below is one this loop made; none has a prototype to climb.
+  const api = bare();
+  for (const [id, op] of operations) {
     const segments = id.split('.');
     const last = segments.pop() ?? id;
     let at = api;
-    for (const segment of segments) at = (at[segment] ??= Object.create(null)) as Record<string, unknown>;
+    for (const segment of segments) at = (at[segment] ??= bare()) as Record<string, unknown>;
     at[last] = operation(id, op);
   }
   return Object.assign(api, { json: (path: string, options?: RequestOptions) => http.json(path, options),

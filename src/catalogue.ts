@@ -64,10 +64,11 @@ type OptionalKey<K> = K extends `${infer N}?` ? N : never;
 /** The TypeScript type a shape declares: a `key?` is optional, never null (a null is read as absent). */
 export type TypeOf<S> = S extends keyof Scalars ? Scalars[S] : S extends readonly [infer E] ? TypeOf<E>[]
   : { -readonly [K in keyof S as Exclude<K, `${string}?`>]: TypeOf<S[K]> } & { -readonly [K in keyof S as OptionalKey<K>]?: TypeOf<S[K]> };
-/** The client's own calls: an operation id whose first segment EQUALS one is refused (`'requests.create'` is fine). */
+/** The client's own calls: an operation id whose first segment EQUALS one is refused (`'requests.create'` is fine), and
+ * so is `then` itself, which would make the client a thenable. */
 type Reserved = 'json' | 'request' | 'paginate';
-type Unreserved<Ops> = { [K in keyof Ops]: K extends Reserved | `${Reserved}.${string}`
-  ? "json, request and paginate are the client's own calls: rename this operation" : Ops[K] };
+type Unreserved<Ops> = { [K in keyof Ops]: K extends Reserved | `${Reserved}.${string}` | 'then'
+  ? "json, request, paginate and then are the client's own: rename this operation" : Ops[K] };
 /** The `{name}`s of a path template. */
 type PathParams<P> = P extends `${string}{${infer N}}${infer R}` ? N | PathParams<R> : never;
 /** Each `{name}` of an operation's path is a required `path` parameter, and its `paging` a shape the entry declares. */

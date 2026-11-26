@@ -1,7 +1,7 @@
 import { expect, expectTypeOf, test } from 'vitest';
 import { defineProvider, type Entry } from './catalogue.js';
 import { attio } from './catalogue/attio.js';
-import { client, type Client } from './client.js';
+import { client, type Client, type ProviderResponse, type RequestOptions } from './client.js';
 
 // A fake provider, pure data: its client's types are inferred from this literal.
 const acme = defineProvider({
@@ -50,7 +50,7 @@ declare const api: Client<typeof acme>;
 // Never called: the types are the test. `branded` compares a shape's two halves (required and optional keys) as one type.
 function typed() {
   expectTypeOf<Yielded<ReturnType<typeof api.issues.list>>>().branded.toEqualTypeOf<Issue>();
-  expectTypeOf(api.issues.list({ teamId: 'T1' })).toEqualTypeOf<AsyncGenerator<Yielded<ReturnType<typeof api.issues.list>>, (string | null)[], undefined>>();
+  expectTypeOf(api.issues.list({ teamId: 'T1' })).toEqualTypeOf<AsyncGenerator<Yielded<ReturnType<typeof api.issues.list>>, void, undefined>>();
   expectTypeOf<Yielded<ReturnType<typeof api.events.list>>>().branded.toEqualTypeOf<{ whole: string }>();
   expectTypeOf<Awaited<ReturnType<typeof api.issues.get>>>().branded.toEqualTypeOf<{ id: string; assignee?: string; raw: unknown } | null>();
   expectTypeOf<Awaited<ReturnType<typeof api.issues.create>>>().branded.toEqualTypeOf<{ id: string; url: string }>();
@@ -60,6 +60,9 @@ function typed() {
   expectTypeOf<Awaited<ReturnType<typeof api.viewer>>['viewer']['teams']>().branded.toEqualTypeOf<{ nodes: { id: string }[] }>();
   expectTypeOf(api.user()).toEqualTypeOf<Promise<unknown>>();
   expectTypeOf(api.json('/self')).toEqualTypeOf<Promise<unknown>>();
+  // The raw calls' option and answer types come from `./client`, as `client` itself does.
+  expectTypeOf<Parameters<typeof api.request>[1]>().toEqualTypeOf<RequestOptions | undefined>();
+  expectTypeOf(api.request('/self')).toEqualTypeOf<Promise<ProviderResponse>>();
   expectTypeOf<Parameters<typeof api.paginate>[0]>().toEqualTypeOf<'cursor'>();
   expectTypeOf<Parameters<Client<Entry>['paginate']>[0]>().toEqualTypeOf<string>();
   // The README's example: an environment variable is a token as it is (a missing one is refused when the client is built).
@@ -69,6 +72,10 @@ function typed() {
   void api.user({});
   void api.viewer();
   void api.issues.get({ id: 'I1' }, { signal: AbortSignal.timeout(1000) });
+  // A paged operation reports each page's skipped records; an operation that pages nothing takes no such option.
+  void api.issues.list({ teamId: 'T1' }, { onSkipped: (ids: (string | null)[]) => ids });
+  // @ts-expect-error onSkipped is a paged operation's option
+  void api.issues.get({ id: 'I1' }, { onSkipped: () => undefined });
   void api.issues.create({ title: 'Ship', estimate: { points: 3 }, parent: null });
   // @ts-expect-error id is a required path parameter, so the argument is too
   void api.issues.get();
@@ -110,9 +117,12 @@ function typed() {
     'request.create': { method: 'POST', path: '/requests' },
     // @ts-expect-error paginate is the client's own call
     'paginate.all': { path: '/all' },
+    // @ts-expect-error an object with a `then` is a thenable: `await client(...)` would call it
+    then: { path: '/then' },
   } });
   defineProvider({ ...base, id: 'prefixed', operations: {
     'requests.create': { method: 'POST', path: '/requests' }, 'pages.markdown': { path: '/pages' }, jsonish: { path: '/jsonish' },
+    'then.later': { path: '/later' },
   } });
 }
 

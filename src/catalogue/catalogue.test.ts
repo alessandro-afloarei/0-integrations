@@ -7,7 +7,7 @@ import { identifyAccount, lookupNames } from '../account.js';
 import { defineProvider, type Entry, type Shape } from '../catalogue.js';
 import { finishConnect } from '../connect.js';
 import { BAD_KEY, GOOD_KEY, replay, type Recording } from '../kit.test-support.js';
-import { placeholders, shapeAt } from '../rules.js';
+import { placed, placeholders, shapeAt } from '../rules.js';
 import { tierOf } from '../tier.js';
 
 /** Every entry in this folder: no list to edit when one is added. */
@@ -118,13 +118,14 @@ function functionsIn(value: unknown, at = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => functionsIn(item, at ? `${at}.${key}` : key));
 }
 
-/** An id the client's own calls take: its first dot-separated segment equals one (a prefix is fine). */
-const clientCall = (id: string) => ['json', 'request', 'paginate'].includes(id.split('.')[0] ?? '');
+/** An id the client's own calls take: its first dot-separated segment equals one (a prefix is fine), or `then` itself. */
+const clientCall = (id: string) => ['json', 'request', 'paginate'].includes(id.split('.')[0] ?? '') || id === 'then';
 
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
 const operationIds = (entry: Entry) => Object.keys(entry.operations ?? {});
+const params = (entry: Entry) => operations(entry).flatMap(op => Object.values(op.params ?? {}));
 const runnable = {
   // The engine sends only that field as `{token}`.
   'one secret field, the only one a key entry has': (entry: Entry) => {
@@ -147,8 +148,12 @@ const runnable = {
     id.split('.').every(Boolean) && !operationIds(entry).some(other => other.startsWith(`${id}.`))),
   // A parameter with no place in the request would be left off it silently.
   'a place in the request for every parameter': (entry: Entry) => operations(entry).every(op =>
-    Object.entries(op.params ?? {}).every(([name, param]) => 'graphql' in op ? param.in === 'variables'
-      : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name)))),
+    Object.entries(op.params ?? {}).every(([name, param]) => placed(op, name, param))),
+  // The client checks an argument against its enum as a string.
+  'an enum only on a string parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
+  // A path segment and a query value are one string each: never null, a list or an object.
+  'only a scalar, non-nullable parameter in a path or a query': (entry: Entry) => params(entry).every(param =>
+    (param.in !== 'path' && param.in !== 'query') || (param.nullable === undefined && typeof param.type === 'string')),
   // Otherwise the records are typed `unknown`.
   "a records path to a list in the operation's result": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
@@ -253,6 +258,10 @@ test.each<[Rule, Entry]>([
     ['a place in the request for every parameter', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
     ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
     ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
+    ['an enum only on a string parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],
+    ['only a scalar, non-nullable parameter in a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
+    ['only a scalar, non-nullable parameter in a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
+    ['only a scalar, non-nullable parameter in a path or a query', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
   ] as const).map(([rule, operations]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations })]),
   // The compiler refuses these through `defineProvider`; they are entries read as data.
   ['a declared paging shape for every paged operation', { ...key, auth: [{ kind: 'key' }], fields: [secret],
@@ -263,6 +272,8 @@ test.each<[Rule, Entry]>([
     operations: { get: { path: '/items/{id}', params: { id: { in: 'path', type: 'string' } } } } }],
   ["no operation id that is the client's own call", { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { 'request.create': { method: 'POST', path: '/requests' } } }],
+  ["no operation id that is the client's own call", { ...key, auth: [{ kind: 'key' }], fields: [secret],
+    operations: { then: { path: '/then' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
 test('an entry whose operations keep every rule passes them all', () => {
@@ -273,14 +284,16 @@ test('an entry whose operations keep every rule passes them all', () => {
         params: { space: { in: 'path', type: 'string', required: true }, q: { in: 'query', type: 'string' } },
         result: { data: { items: [{ id: 'string' }] }, 'next?': 'string' } },
       'pages.events': { path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
-      'requests.create': { method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true } } },
+      'requests.create': { method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
+        state: { in: 'query', type: 'string', enum: ['open'] }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
+      'then.later': { path: '/later' },
       me: { graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
   expect(entrySchema.safeParse(good).error).toBeUndefined();
 });
 
-test.each([['json', true], ['request.create', true], ['paginate.all', true],
-  ['requests.create', false], ['pages.markdown', false], ['jsonish', false]])('operation id %s is a client call: %s', (id, taken) => {
+test.each([['json', true], ['request.create', true], ['paginate.all', true], ['then', true],
+  ['requests.create', false], ['pages.markdown', false], ['jsonish', false], ['then.later', false], ['thenable', false]])('operation id %s is a client call: %s', (id, taken) => {
   expect(clientCall(id)).toBe(taken);
 });

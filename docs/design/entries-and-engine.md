@@ -290,21 +290,26 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 ```
 
 - An operation's key is its id (`'issues.create'`). `kind` defaults from the method: GET is a read, DELETE a delete,
-  anything else a write. A search sent as POST says `kind: 'read'`, and reads are the calls the engine retries.
+  anything else a write. A GraphQL operation is a POST, so a write unless it says `kind: 'read'`. A search sent as POST
+  says `kind: 'read'`, and reads are the calls the engine retries.
 - A shape key ending in `?` may be missing or null, and is read as absent.
-- `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`.
+- `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and an
+  empty 2xx (a 204, the usual answer to DELETE, PUT and PATCH) answers `null`, which `unknown` already covers; with a
+  `result`, an empty answer is `invalid_response`.
 - A path's `{name}` must be a declared `path` parameter; the compiler refuses the entry otherwise.
 - An operation id's first dot-separated segment is never `json`, `request` or `paginate` (compared for equality, so
-  `requests.list` is fine): those are the client's own calls.
+  `requests.list` is fine): those are the client's own calls. Nor is an id `then`, which would make the client a
+  thenable. No id has an empty segment or is a dotted prefix of another (`pages` beside `pages.markdown`). The
+  compiler and the table test refuse such an entry, and `client()` refuses an app's own with `operation_clash: <id>`.
 - At run time each argument is checked by its declared type (and `enum`) before anything is sent; one that does not fit
   is a `TypeError` naming it (`param_missing: <name>`, `param_invalid: <name>`). An argument that is not declared, or is
   `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
   out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
-  strings, numbers or booleans. `body` parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}`
+  strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body` parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}`
   when none), posted with the query to the base.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
-  a record that does not fit is skipped and its `id` (or `null`) is in the list the generator returns. Without
-  `records` it yields each page's whole answer.
+  a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
+  any, with their `id`s (or `null`). Without `records` it yields each page's whole answer.
 - There are no sync concepts here: no parent and child streams, no incremental cursors, no transforms. An app calls an
   operation with the parent's id.
 
@@ -336,7 +341,8 @@ import { attio } from '0-integrations/catalogue/attio';
 
 const api = client(attio, { token: process.env.ATTIO_KEY });
 const self = await api.json('/self');                          // raw, authenticated, retried
-// An entry that declares operations adds them, typed: `for await (const issue of api.issues.list({ teamId })) {}`
+// An entry that declares operations adds them, typed:
+// for await (const issue of api.issues.list({ teamId }, { onSkipped: ids => log(ids) })) { … }
 ```
 
 **Types.** `defineProvider` takes a `const` type parameter, so the client's methods, arguments, results and paging are
