@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Attio: OAuth 2, its scopes set on the app in the developer console (unpublished, it installs in up to 25 workspaces),
- * or a workspace API key. 100 reads a second, list notes 10; a 429 names a date (usually the next second), which the
- * default wait covers. */
+/** Attio: OAuth 2, its scopes set on the app in the developer console (unpublished, it installs in up to 25
+ * workspaces), or a workspace API key. 100 reads a second, list notes 10; a 429 names a date (usually the next second),
+ * which the default wait covers. */
 export const attio = defineProvider({
   id: 'attio', name: 'Attio', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://docs.attio.com/rest-api/guides/authentication',
