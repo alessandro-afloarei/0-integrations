@@ -124,6 +124,15 @@ const clientCall = (id: string) => ['json', 'request', 'paginate'].includes(id.s
 /** What the engine cannot run, each a rule every entry passes. */
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
+const operationIds = (entry: Entry) => Object.keys(entry.operations ?? {});
+/** The shape at a dotted path through keys that are always there, the whole rest tried as one key first, as the records
+ * reader reads it. */
+function shapeAt(shape: Shape | undefined, path: string): Shape | undefined {
+  if (typeof shape !== 'object' || Array.isArray(shape)) return undefined;
+  const keys = shape as { readonly [key: string]: Shape }; // `isArray` does not narrow a readonly tuple away
+  const dot = path.indexOf('.');
+  return Object.hasOwn(keys, path) ? keys[path] : dot === -1 ? undefined : shapeAt(keys[path.slice(0, dot)], path.slice(dot + 1));
+}
 const runnable = {
   // The engine sends only that field as `{token}`.
   'one secret field, the only one a key entry has': (entry: Entry) => {
@@ -140,7 +149,17 @@ const runnable = {
     operations(entry).every(op => op.paging === undefined || Object.hasOwn(entry.paging ?? {}, op.paging)),
   "a required path parameter for every {name} in an operation's path": (entry: Entry) => operations(entry).every(op =>
     !('path' in op) || placeholders(op.path).every(name => op.params?.[name]?.in === 'path' && op.params[name].required === true)),
-  "no operation id that is the client's own call": (entry: Entry) => !Object.keys(entry.operations ?? {}).some(clientCall),
+  "no operation id that is the client's own call": (entry: Entry) => !operationIds(entry).some(clientCall),
+  // `pages` and `pages.markdown` would be one property of the client; `a..b` none.
+  'operation ids of non-empty segments, none a dotted prefix of another': (entry: Entry) => operationIds(entry).every(id =>
+    id.split('.').every(Boolean) && !operationIds(entry).some(other => other.startsWith(`${id}.`))),
+  // A parameter with no place in the request would be left off it silently.
+  'a place in the request for every parameter': (entry: Entry) => operations(entry).every(op =>
+    Object.entries(op.params ?? {}).every(([name, param]) => 'graphql' in op ? param.in === 'variables'
+      : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name)))),
+  // Otherwise the records are typed `unknown`.
+  "a records path to a list in the operation's result": (entry: Entry) => operations(entry).every(op =>
+    op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
 };
 type Rule = keyof typeof runnable;
 
@@ -233,7 +252,17 @@ test.each<[Rule, Entry]>([
   ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
   ['scopes on an oauth2 entry', defineProvider(oauth2)],
-  // The compiler refuses the last two through `defineProvider`; these are entries read as data.
+  ...([
+    ['operation ids of non-empty segments, none a dotted prefix of another', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
+    ['operation ids of non-empty segments, none a dotted prefix of another', { '': { path: '/a' } }],
+    ['operation ids of non-empty segments, none a dotted prefix of another', { 'a..b': { path: '/a' } }],
+    ['a place in the request for every parameter', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
+    ['a place in the request for every parameter', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
+    ['a place in the request for every parameter', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
+    ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
+    ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
+  ] as const).map(([rule, operations]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations })]),
+  // The compiler refuses these through `defineProvider`; they are entries read as data.
   ['a declared paging shape for every paged operation', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { list: { path: '/items', paging: 'cursor' } } }],
   ["a required path parameter for every {name} in an operation's path", { ...key, auth: [{ kind: 'key' }], fields: [secret],
@@ -243,6 +272,21 @@ test.each<[Rule, Entry]>([
   ["no operation id that is the client's own call", { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { 'request.create': { method: 'POST', path: '/requests' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
+
+test('an entry whose operations keep every rule passes them all', () => {
+  const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } } },
+    operations: {
+      'pages.list': { path: '/pages/{space}', paging: 'cursor', records: 'data.items',
+        params: { space: { in: 'path', type: 'string', required: true }, q: { in: 'query', type: 'string' } },
+        result: { data: { items: [{ id: 'string' }] }, 'next?': 'string' } },
+      'pages.events': { path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
+      'requests.create': { method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true } } },
+      me: { graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
+    } });
+  expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
+  expect(entrySchema.safeParse(good).error).toBeUndefined();
+});
 
 test.each([['json', true], ['request.create', true], ['paginate.all', true],
   ['requests.create', false], ['pages.markdown', false], ['jsonish', false]])('operation id %s is a client call: %s', (id, taken) => {
