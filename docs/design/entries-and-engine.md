@@ -257,7 +257,8 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     `expires_in` that is a positive finite number of seconds is its life (none: kept until refused); the caller that
     requested a token gets it, however short its life. A 2xx without a token is `invalid_response` (`missing_fields`);
     400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the answer's `error`; any other answer is classified
-    as usual. No detail holds a secret field, a body value filled from one, or the Basic value sent. The request is sent once, never retried: it is no read of the provider's API.
+    as usual. No detail holds a secret field, a body value filled from one, or the Basic value sent.
+    The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
     the token until 60 seconds before its expiry or until it is passed back as refused, concurrent calls share one
     request, and a failed request is not kept. It applies no field's `default`, so an app passes it, and `client`, the

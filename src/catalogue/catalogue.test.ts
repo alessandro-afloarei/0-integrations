@@ -220,10 +220,11 @@ const runnable = {
   "an `identify.request` whenever a value reads identify's answer": (entry: Entry) => entry.identify?.request !== undefined
     || lookupNames(entry).every(name => name.startsWith('tokenAnswer.') || name.startsWith('connection.')),
   // The engine withholds these keys; an entry naming one would read nothing where it meant the token.
-  'no `identify` or `save` value that reads the token itself from `tokenAnswer.*` (it is never returned: read another key)': (entry: Entry) => {
+  'no `identify` or `save` value that reads a token from `tokenAnswer.*`, its own or one nested (never returned: read another key)': (entry: Entry) => {
     const auth = entry.auth[0];
     const own = auth.kind === 'token' ? [(auth.request.token ?? 'access_token').split('.')[0]] : ['access_token', 'refresh_token'];
-    return reads(entry, 'tokenAnswer.').every(name => !own.includes(name.split('.')[1]));
+    const nested = ['access_token', 'refresh_token', 'id_token'];
+    return reads(entry, 'tokenAnswer.').every(name => !own.includes(name.split('.')[1]) && !nested.includes(name.split('.').at(-1) ?? ''));
   },
   'no `tokenAnswer.*` on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key' || reads(entry, 'tokenAnswer.').length === 0,
   // A token entry asks no scopes and gives no OAuth grant to revoke.
@@ -377,8 +378,11 @@ test.each<[Rule, Entry]>([
   ...[defineProvider({ ...tokened, save: { t: 'tokenAnswer.access_token' } }),
     defineProvider({ ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, token: 'id' } }], identify: { id: 'tokenAnswer.id' } }),
     defineProvider({ ...oauth2, scopes: { default: [] }, identify: { id: 'tokenAnswer.refresh_token' } }),
-    defineProvider({ ...oauth2, scopes: { default: [] }, save: { a: 'tokenAnswer.access_token.x' } })]
-    .map((entry): [Rule, Entry] => ["no `identify` or `save` value that reads the token itself from `tokenAnswer.*` (it is never returned: read another key)", entry]),
+    defineProvider({ ...oauth2, scopes: { default: [] }, save: { a: 'tokenAnswer.access_token.x' } }),
+    // A second credential nested in the answer (a user token under another key).
+    defineProvider({ ...oauth2, scopes: { default: [] }, save: { u: 'tokenAnswer.authed_user.access_token' } }),
+    defineProvider({ ...oauth2, scopes: { default: [] }, identify: { id: 'tokenAnswer.openid.id_token' } })]
+    .map((entry): [Rule, Entry] => ["no `identify` or `save` value that reads a token from `tokenAnswer.*`, its own or one nested (never returned: read another key)", entry]),
   ['`scopes` on an oauth2 entry', defineProvider(oauth2)],
   ...([
     ['an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder', { baseUrl: 'https://{region}.k.test' }],
