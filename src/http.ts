@@ -270,7 +270,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
             if (stated === undefined ? onlyStated : stated > retry.maxWaitMs) return;
             // Without a stated wait, a 429 waits the provider's default, with no jitter, any other status the backoff.
             const fallback = response.status === 429 ? retry.defaultWaitMs : backoffMs(retry.maxWaitMs, retryCount);
-            return ky.retry({ delay: Math.min(stated ?? fallback, retry.maxWaitMs) });
+            return ky.retry({ delay: Math.min(stated === undefined ? fallback : Math.ceil(stated), retry.maxWaitMs) });
           }],
         },
       });

@@ -1205,6 +1205,11 @@ describe("a retry never comes before the provider's stated wait", () => {
     await retriesAfter(todo, () => Response.json({ error_extra: { retry_after: 1.5 } }, { status: 429 }), 1500);
   });
 
+  test('a fractional wait is rounded up, never cut short: 1.0005 s retries at 1001 ms', async () => {
+    const todo = retrying({ wait: { path: 'error_extra.retry_after', unit: 's' } });
+    await retriesAfter(todo, () => Response.json({ error_extra: { retry_after: 1.0005 } }, { status: 429 }), 1001);
+  });
+
   test("the error of a 429 carries the declared header's wait", async () => {
     expect(await sentOnce(reset('s', { limit: 0 }), answer(429, { 'ratelimit-reset': '3' })))
       .toMatchObject({ code: 'rate_limited', retryAfterMs: 3000 });
