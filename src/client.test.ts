@@ -278,6 +278,18 @@ test("an app's entry that would send a wrong request is refused when its client 
   ] as const) expect(() => client(entry(op), { token: 'k' })).toThrow(new TypeError(message));
 });
 
+test("an app's operation with a parameter in the place its paging shape's `send` writes is refused when built", () => {
+  const entry = (shape: object, place: 'query' | 'body') => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { list: shape }, operations: { 'things.list': { method: 'POST', kind: 'read', path: '/things', paging: 'list',
+      params: { at: { in: place, type: 'integer' } } } } }) as Entry;
+  for (const [shape, place] of [[{ kind: 'page', send: { query: 'at' } }, 'query'], [{ kind: 'offset', send: { body: 'at' } }, 'body'],
+    [{ kind: 'cursor', next: 'next', send: { query: 'at' } }, 'query']] as const) {
+    expect(() => client(entry(shape, place), { token: 'k' })).toThrow(new TypeError('param_paged: things.list at'));
+  }
+  // The same name in the other place is the caller's own.
+  expect(() => client(entry({ kind: 'offset', send: { body: 'at' } }, 'query'), { token: 'k' })).not.toThrow();
+});
+
 test("an app's operation on an `offset` shape whose `records` is not the shape's `list` is refused when built", () => {
   const entry = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
     paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'items' } },

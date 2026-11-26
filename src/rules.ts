@@ -42,6 +42,14 @@ export function pagedRecords(op: Operation, shape: Paging): boolean {
   return (shape.kind !== 'page' && shape.kind !== 'offset') || op.records === shape.list;
 }
 
+/** The parameter an operation declares in the place its paging shape's `send` writes, if any: the walk sends that value
+ * itself, and a caller's would start the walk there and be overwritten after the first page. */
+export function pagedParam(op: Operation, shape: Paging): string | undefined {
+  const sent = 'send' in shape ? shape.send : undefined;
+  return sent === undefined ? undefined
+    : Object.entries(op.params ?? {}).find(([name, param]) => param.in in sent && sent[param.in as keyof typeof sent] === name)?.[0];
+}
+
 /** The first operation id a client cannot hold: one with an empty segment, a dotted prefix of another (`pages` beside
  * `pages.markdown`), one whose first segment is the client's own call, or `then`, which would make the client a thenable.
  * `Reserved` in catalogue.ts is the compiler's copy of these names. */

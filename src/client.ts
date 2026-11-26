@@ -4,7 +4,7 @@ import { callRequest, createClient, defaultFetch, type HttpOptions, type Provide
 import { responseJson } from './http-response.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
-import { clashing, fill, pagedRecords, placed, readPath, shapeAt } from './rules.js';
+import { clashing, fill, pagedParam, pagedRecords, placed, readPath, shapeAt } from './rules.js';
 
 export type { ProviderResponse, RequestOptions };
 export { guardedFetch } from './guard.js';
@@ -138,6 +138,8 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
     }
     const shape = op.notFound === undefined ? pagingOf(paging) : refuse(`not_found_paged: ${id}`);
     if (!pagedRecords(op, shape)) refuse(`records_unpaged: ${id}`);
+    const sent = pagedParam(op, shape);
+    if (sent !== undefined) refuse(`param_paged: ${id} ${sent}`);
     // The records: the list at `records`, or a list `result` itself (a list at the answer's top level).
     const list = records === undefined ? result : result === undefined ? ['unknown'] as const : shapeAt(result, records);
     const item = Array.isArray(list) ? (list as readonly [Shape])[0] : records === undefined ? undefined : refuse(`records_unshaped: ${id}`);

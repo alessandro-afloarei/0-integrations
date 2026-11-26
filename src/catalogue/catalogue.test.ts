@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { clashing, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { clashing, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -344,8 +344,7 @@ const runnable = {
   // The walk sets that parameter itself on every page after the first.
   "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)": (entry: Entry) => operations(entry).every(op => {
     const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
-    const sent = shape !== undefined && 'send' in shape ? shape.send : undefined;
-    return sent === undefined || Object.entries(op.params ?? {}).every(([name, param]) => !(param.in in sent && sent[param.in as keyof typeof sent] === name));
+    return shape === undefined || pagedParam(op, shape) === undefined;
   }),
 };
 type Rule = keyof typeof runnable;
