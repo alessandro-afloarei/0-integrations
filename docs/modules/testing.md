@@ -125,8 +125,9 @@ the replay reads what the provider sent.
 
 - a sign-in request was answered with a redirect: point the entry at the final URL (a redirect's target can name the
   account, and the replay answers each request once);
-- the file fails the table test's own replay check (`replayProblem`): the key signs in, sending each request once, to
-  the account the entry's derived fake signs in to, and the bad key is `rejected`. Dropping or swapping changed what a
+- the file fails the table test's own replay check (`replayProblem`): the key signs in, sending no request twice, to the
+  account the entry's own rule gives over the kit's stand-ins at the paths the file holds (so a fallback list follows
+  the path the provider answered), and the bad key is `rejected`. Dropping or swapping changed what a
   rule reads (a `rejectWhen` on a header, which is not
   written; a message a rule compared; a swapped value a condition tests). The message says which sign-in changed;
 - a value to swap is under 4 characters (an account id `7`, a region `eu`): it would match unrelated text, so record

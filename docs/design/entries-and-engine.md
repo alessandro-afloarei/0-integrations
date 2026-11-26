@@ -546,7 +546,8 @@ swapped for the kit's stand-ins in the URL, the body and that header; in the ans
 and saved values are swapped where they are a whole value. It refuses to write when a sign-in was redirected, when a
 value is under 4 characters, when a real value is still in an exchange (searched before the stand-ins go in, ignoring
 case, percent-decoded and with base64 runs decoded), and when the file fails the table test's own replay check: the
-key signs in to the account the entry's derived fake gives, and the bad key is `rejected`. The module kits stay for
+key signs in to the account the entry's own rule gives over the kit's stand-ins at the paths the file holds, and the
+bad key is `rejected`. The module kits stay for
 what an entry cannot know, such as incremental reads.
 
 `pnpm check` remains the one gate, with no network.

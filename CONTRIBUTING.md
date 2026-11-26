@@ -62,13 +62,14 @@ entry:
   leads to a list, and no id is a client call or a dotted prefix of another.
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
-the test signs in once with a good key and once with a bad one, each sending a `token` entry's token request and
-identify once (a bad key stops at the token request). The bad key must be `rejected`. A recording the recorder wrote
-from an account replays to the account the entry's derived fake signs in to (its kit values); in one written by hand,
-the account id must appear in the recorded answers. The recorder runs this same check before it writes. A recording is `{ provider, synthetic, source, recordedAt, exchanges }`, each exchange
-`{ key: 'good' | 'bad', method, url, body?, status, headers?, response }` (a form body is kept as its text); the replay
-matches the method, the whole URL and the body, and fills a plain field with its kit value (its `default`, else its first
-choice, else `kit-<name>`).
+the test signs in once with a good key and once with a bad one, sending no request twice (a `token` entry's token
+request, then identify's when a value reads it; a bad key stops at its first request). The bad key must be `rejected`.
+A recording the recorder wrote from an account replays to the account the entry's own rule gives over the kit's
+stand-ins at the paths the recording holds; in one written by hand, the account id must appear in the recorded answers.
+The recorder runs this same check before it writes. A recording is `{ provider, synthetic, source, recordedAt,
+exchanges }`, each exchange `{ key: 'good' | 'bad', method, url, body?, status, headers?, response }` (a form body is
+kept as its text); the replay matches the method, the whole URL and the body, and fills a plain field with its kit
+value (its `default`, else its first choice, else `kit-<name>`).
 
 To record an entry with no module from a test account, read the key at a prompt (bash and zsh) and run the recorder:
 `printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
