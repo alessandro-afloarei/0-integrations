@@ -159,8 +159,9 @@ its `save` keeps.
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given.
 - The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
   one) is `template_missing`. Only `finishConnect` applies a field's `default` (and returns it in `values`): a client,
-  and a revoke, never do, so they need the connection's `values`. A value in the host that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host`
-  checks only the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
+  and a revoke, never do, so they need the connection's `values`. A value in the host that is not a host part (ASCII
+  letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only the name) is
+  `TypeError('base_value_invalid: <entry id> {<name>}')`.
 - The filled base must parse, be https with no user or password, and a templated host must match `http.host`, else
   `TypeError('base_host_refused: <entry id>')`. The credential then never leaves the filled base's origin.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
@@ -238,8 +239,8 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   provider is sent it today.
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
-- `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object with
-  `content-type: application/json`, the client id and secret in it unless `clientAuth: 'basic'` (Atlassian). The
+- `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
+  (Atlassian) with `content-type: application/json`, the client id and secret in it unless `clientAuth: 'basic'`. The
   answer is read as a form-bodied one is.
 - `token` turns what the person entered into a short-lived token with one request: client credentials (Zoom, PayPal) or
   a session sign-in (Metabase). It has no refresh: a new request is the refresh.

@@ -177,16 +177,19 @@ const runnable = {
   },
   'a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder': (entry: Entry) => placeholders(entry.http.baseUrl)
     .every(name => (entry.fields ?? []).some(field => field.name === name && field.secret !== true) || Object.hasOwn(entry.save ?? {}, name)),
+  // A named base is used as written: a `{name}` in it would send the token to a host spelt with braces.
+  '`http.bases` written out in full, with no placeholder (none is ever filled)': (entry: Entry) =>
+    Object.values(entry.http.bases ?? {}).every(base => placeholders(base).length === 0),
   // Otherwise the call is refused, `base_unknown`, when it is made.
   "a call's `base` one of `http.bases`": (entry: Entry) => calls(entry).every(call => call?.base === undefined
     || Object.hasOwn(entry.http.bases ?? {}, call.base)),
   // A choice the engine would refuse fails here, not when a person picks it.
   "`fields[].choices` and `default` that fill the base to a host `http.host` takes": (entry: Entry) => {
     const named = (entry.fields ?? []).filter(field => placeholders(entry.http.baseUrl).includes(field.name));
+    // A saved value has no choices: a stand-in fills it.
+    const saved = Object.keys(entry.save ?? {}).map((name): [string, string] => [name, 'x']);
     const first = (field: Field) => field.default ?? field.choices?.[0] ?? 'x';
     return named.every(field => [...field.choices ?? [], ...field.default === undefined ? [] : [field.default]].every(value => {
-      // A saved value has no choices: a stand-in fills it.
-      const saved = Object.keys(entry.save ?? {}).map((name): [string, string] => [name, 'x']);
       const values = { ...Object.fromEntries([...saved, ...named.map((other): [string, string] => [other.name, first(other)])]), [field.name]: value };
       try {
         return createClient(entry, { token: () => Promise.resolve('t'), fetch: globalThis.fetch, values }).baseUrl !== '';
@@ -385,6 +388,8 @@ test.each<[Rule, Entry]>([
     http: { ...key.http, bases: { api: 'https://other.k.test' } }, identify: { request: { base: 'nope', path: '/me' } } })],
   ["a call's `base` one of `http.bases`", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     revoke: { request: { base: 'api', method: 'POST', path: '/revoke' } } })],
+  ['`http.bases` written out in full, with no placeholder (none is ever filled)', defineProvider({ ...key, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region' }], http: { ...key.http, bases: { api: 'https://{region}.k.test' } } })],
   ["`save` keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([

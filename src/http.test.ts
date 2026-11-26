@@ -724,7 +724,9 @@ test("Jira's base takes the saved cloud id as one path segment", async () => {
   }
 });
 
-test.each([['..', 'base_value_invalid: jira {cloudId}'], ['.', 'base_value_invalid: jira {cloudId}'], ['', 'template_missing: jira {cloudId}']])(
+// A lone surrogate is no well-formed Unicode: `encodeURIComponent` would throw a raw URIError.
+test.each([['..', 'base_value_invalid: jira {cloudId}'], ['.', 'base_value_invalid: jira {cloudId}'], ['\uD800', 'base_value_invalid: jira {cloudId}'],
+  ['a\uDFFFb', 'base_value_invalid: jira {cloudId}'], ['', 'template_missing: jira {cloudId}']])(
   "a hostile path value %j is refused before the token is read or anything is sent", async (cloudId, message) => {
     const fake = filled(jira, { cloudId });
     await expect(fake.client.json('/rest/api/3/myself')).rejects.toThrow(new TypeError(message));

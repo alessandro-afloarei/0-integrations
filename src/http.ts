@@ -116,8 +116,10 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
     return value;
   }, entry.id) + fill(tail, name => {
     const value = plainValue(values, name);
-    if (value === '.' || value === '..') throw invalid(name);
-    return value === undefined ? value : encodeURIComponent(value);
+    if (value === undefined) return value;
+    // A lone surrogate is no well-formed Unicode: `encodeURIComponent` would throw a raw URIError.
+    if (value === '.' || value === '..' || !String(value).isWellFormed()) throw invalid(name);
+    return encodeURIComponent(value);
   }, entry.id);
   const url = URL.canParse(filled) ? new URL(filled) : undefined;
   const hosted = url !== undefined && (placeholders(head).length === 0 || host === '*' || url.hostname === host

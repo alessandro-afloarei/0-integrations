@@ -21,7 +21,8 @@ Nothing here is released yet.
 - A Firecrawl scrape that runs a script (`actions`) skips the automatic retries: a 5xx or a dropped connection goes
   straight to the plain read, and a 429 fails with the wait Firecrawl names (before, its 429 was retried). A plain
   scrape and a map are retried as reads.
-- New: `oauth2.json` (the token endpoint takes JSON) and `oauth2.refreshUrl`; first used by Figma's refresh endpoint.
+- New: `oauth2.json` (the token endpoint takes JSON), first used by Jira, and `oauth2.refreshUrl`, first used by Figma's
+  refresh endpoint.
 - New: a declared call may name one of `http.bases` (`Call.base`); a base may take a path segment from a plain or saved
   value. First used by Jira (Atlassian 3LO).
 - New: the `token` sign-in kind, one declared request for client credentials or a session sign-in, and

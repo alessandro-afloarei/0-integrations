@@ -264,6 +264,18 @@ test('json: the exchange, the refresh and a revoke send their parameters as one 
   ]);
 });
 
+test('json with Basic client authentication: the credential is the header, and the JSON body holds no client secret', async () => {
+  const basicJson = defineProvider({ ...jsonBodied, id: 'basicjson', auth: [{ ...jsonBodied.auth[0], clientAuth: 'basic' }] });
+  const fake = endpoint(token);
+  await exchangeCode(basicJson, client, { ...exchange, fetch: fake.fetch });
+  expect(fake.calls[0]?.headers.authorization).toBe(`Basic ${Buffer.from('id:private%2Dclient%2Dsecret').toString('base64')}`);
+  expect(fake.calls[0]?.headers['content-type']).toBe('application/json');
+  const body = JSON.parse(fake.calls[0]?.body ?? '') as Record<string, unknown>;
+  expect(body).toMatchObject({ grant_type: 'authorization_code', code: exchange.code, redirect_uri: exchange.redirectUri });
+  expect(body).not.toHaveProperty('client_secret');
+  expect(fake.calls[0]?.body).not.toContain(client.clientSecret);
+});
+
 test('json: a refused refresh is read as any OAuth answer, and its detail never holds the secret sent', async () => {
   await expect(refreshGrant(jsonBodied, client, 'old', { fetch: endpoint({ error: 'invalid_grant' }, 400).fetch }))
     .rejects.toBeInstanceOf(GrantRevoked);
