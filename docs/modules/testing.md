@@ -117,8 +117,9 @@ number.
 entry's `token` path `kit-token`: inside the URL, the request body and `retry-after` (as written, JSON-escaped,
 percent- or form-encoded), and in the answers where they are a whole value. In the answers, the account's id and name
 become `kit-account` and `kit-name` (read in identify's answer or the token answer), and each `save` value
-`kit-<name>` (its key's name). A number is replaced only when it is a whole value. Codes at the error and condition paths are written as answered, apart from the values above, so
-the replay reads what the provider sent.
+`kit-<name>` (its key's name). A blank string at an identity or `save` path is written as the provider answered it:
+there is nothing to swap. A number is replaced only when it is a whole value. Codes at the error and condition paths are
+written as answered, apart from the values above, so the replay reads what the provider sent.
 
 **When it refuses.** Before it writes, the recorder replays the file as the table test does. It writes nothing when:
 
