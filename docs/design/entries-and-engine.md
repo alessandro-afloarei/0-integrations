@@ -196,7 +196,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
-`Send.value`, `oauth2.send`, `Call.base` and `Operation.base`, placeholders in `identify`'s request path, the `s` and
+`Send.value`, `oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
 `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
 and `Where.variables`. `paging` and `operations` arrive with the walker and the client.
 
@@ -212,12 +212,15 @@ accepts only a string or a number from them.
 ```ts
 type Auth =
   | { kind: 'key'; send?: Send }
-  | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; pkce?: false; clientAuth?: 'basic';
-      scopeSeparator?: ','; authorizeParams?: Record<string, string>; tokenTypes?: readonly string[];
-      failed?: When; reusesGrant?: true; send?: Send };
+  | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
+      clientAuth?: 'basic'; scopeSeparator?: ','; authorizeParams?: Record<string, string>;
+      tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true; send?: Send }
+  | { kind: 'token'; request: TokenRequest; send?: Send };
 
 type Send = { header: string; value?: Template } | { basic: readonly [Template, Template] }
   | { query: Record<string, Template> };
+type TokenRequest = { url: Template; body: Record<string, Template>; json?: true;
+  basic?: readonly [Template, Template]; token?: Path };
 ```
 
 - `send` says how the credential travels. With no `send` it is `{ header: 'authorization', value: 'Bearer {token}' }`.
@@ -230,6 +233,29 @@ type Send = { header: string; value?: Template } | { basic: readonly [Template, 
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today.
+- `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
+  `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
+- `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object with
+  `content-type: application/json`, the client id and secret in it unless `clientAuth: 'basic'` (Atlassian). The
+  answer is read as a form-bodied one is.
+- `token` turns what the person entered into a short-lived token with one request: client credentials (Zoom, PayPal) or
+  a session sign-in (Metabase). It has no refresh: a new request is the refresh.
+  - The request's URL is filled by the base rule (a host placeholder's result must match `http.host`; a fixed URL is
+    used as written). Its body's templates and `basic` are filled from the plain values and the secret fields by name,
+    and it is posted as a form, or as one JSON object with `json: true`, with the entry's `http.headers`, redirects not
+    followed, through the entry's default `fetch` (`guardedFetch` for `http.host: '*'`) unless the app passes one.
+  - Its answer: a 2xx whose `token` path (`access_token` by default) holds a non-empty string is the token, and a root
+    `expires_in` that is a positive finite number of seconds is its life (none: kept until refused). A 2xx without a
+    token is `invalid_response` (`missing_fields`); 400, 401 and 403 are `rejected` (RFC 6749 §5.2); any other answer
+    is classified as usual. No detail holds a secret field or the Basic value sent.
+  - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
+    the token until 60 seconds before its expiry or until it is passed back as refused, concurrent calls share one
+    request, and a failed request is not kept.
+  - `startConnect` returns the form. `finishConnect(entry, { secret, values?, fetch? })` reads the fields as a key
+    entry does (defaults, choices), requests a token (the credential check), identifies with it, with the token
+    answer's keys the entry names as `tokenAnswer.*`, and returns the secret fields as `secret`; the token is not
+    returned.
+  - Its `send` may name `{token}` (the token obtained) and plain fields, never a secret field.
 - A sign-in the provider hosts on its own page is not a kind: the entry is a `key` entry for the app's own key, and the
   provider's module offers the hosted link and the account lookup as calls.
 
@@ -257,6 +283,9 @@ lookup, where `{id}` is the id already found: `'Portal {id}'`.
 - `lowercase` lowercases and trims the id and the name when they are strings.
 - `rejectWhen` names answers that mean a bad credential despite their status. The error is `rejected`. A rule's
   `detail` is the detail reported, so a `rejectWhen` condition cannot test the provider's code.
+- A request's `base` names a key of `http.bases`: identify's request and a request revoke are sent to that base, and
+  the credential stays on its origin. An unknown name is `TypeError('base_unknown: <name>')` before anything is sent.
+  Jira's identify goes to `api.atlassian.com` while its own base still waits for the `cloudId` it saves.
 - With no `id`, identify is only a credential check. There is no separate `verify`: none of the 17 providers needs
   the two apart.
 - Only the paths an entry names leave the token answer. Nothing else of it is returned or stored.
@@ -478,8 +507,8 @@ its docs, and engine tests as proof:
 1. **Where a call can go.** Keys in the query (SerpApi); field choices and defaults, and a base filled from a value with
    a host pattern (Intercom); a guarded `fetch` that refuses private addresses, for a host the person types (GitLab);
    retry of 5xx and network failures on reads, with jitter (Microsoft, Google).
-2. **How a token is obtained.** JSON token bodies, a second base for a declared call and a base from saved values
-   (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session sign-ins
+2. **How a token is obtained.** JSON token bodies, a second base for identify, a path segment and a saved value in the
+   base (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session sign-ins
    (Zoom, Metabase); a templated token URL (PayPal, Metabase).
 3. **More webhook schemes.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 and a header value
    template (Discord, Trello), shared tokens (Google), Standard Webhooks (GitLab), and a challenge handshake (Slack,
@@ -488,8 +517,9 @@ its docs, and engine tests as proof:
    and a five-step guide to adding a provider.
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
-code flow; templated OAuth authorize and token URLs (Shopify); placeholders in `bases`; retry of writes; second
-challenge shapes; webhook schemes that are code (Twilio, HubSpot v3, PayPal, SendGrid).
+code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
+authorize and token URLs (Shopify); placeholders in `bases`; retry of writes; second challenge shapes; webhook schemes
+that are code (Twilio, HubSpot v3, PayPal, SendGrid).
 
 OAuth 1, JWT and service-account sign-in, and multipart bodies wait for the first provider that needs them.
 

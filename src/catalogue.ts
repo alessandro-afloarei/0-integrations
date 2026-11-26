@@ -17,10 +17,13 @@ export type Field = { name: string; title: string; secret?: true; default?: stri
 /** How the credential travels. None: `authorization: Bearer {token}`. A header alone: the bare `{token}`. `query`:
  * each parameter's template, set on the URL of every request and redirect hop. */
 export type Send = { header: string } | { basic: readonly [Template, Template] } | { query: Readonly<Record<string, Template>> };
+/** `oauth2.refreshUrl`: where a refresh posts (else `tokenUrl`). `json`: the token endpoint, its refresh and an RFC 7009
+ * revoke take the parameters as one JSON object instead of a form. */
 export type Auth =
   | { kind: 'key'; send?: Send }
-  | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; pkce?: false; clientAuth?: 'basic'; scopeSeparator?: ',';
-    authorizeParams?: Readonly<Record<string, string>>; tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true };
+  | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
+    clientAuth?: 'basic'; scopeSeparator?: ','; authorizeParams?: Readonly<Record<string, string>>;
+    tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true };
 export type Call = { method?: Method; path?: Template; query?: Readonly<Record<string, string>>; graphql?: string };
 /** A path, the first present of several paths, or a template (a string with braces) over the same lookup. */
 export type Value = Path | readonly Path[];

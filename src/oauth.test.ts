@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { authorizeUrl, exchangeCode, pkcePair, refreshGrant, revokeGrant } from './oauth.js';
 import { defineProvider } from './catalogue.js';
+import { figma } from './catalogue/figma.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { microsoft } from './catalogue/microsoft.js';
@@ -240,4 +241,47 @@ test('an error never carries the Basic client credential the request sent, form-
     () => revokeGrant(basic, { refreshToken: 'r', client: basicClient, fetch: echo.fetch }),
   ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(`Basic ${sent}`));
+});
+
+/** A token endpoint that takes JSON, the client id and secret in the body, no PKCE (Atlassian's shape). */
+const jsonBodied = defineProvider({ id: 'jsonbodied', name: 'JSON', auth: [{ kind: 'oauth2', authorizeUrl: 'https://json.test/authorize',
+  tokenUrl: 'https://json.test/token', json: true, pkce: false }], scopes: { default: [] },
+  revoke: { url: 'https://json.test/revoke', token: ['refresh'] }, http: { baseUrl: 'https://api.json.test' } });
+
+test('json: the exchange, the refresh and a revoke send their parameters as one JSON object', async () => {
+  const fake = endpoint(token);
+  await exchangeCode(jsonBodied, client, { ...exchange, fetch: fake.fetch });
+  await refreshGrant(jsonBodied, client, 'old', { fetch: fake.fetch });
+  await revokeGrant(jsonBodied, { refreshToken: 'old', client, fetch: fake.fetch });
+  expect(fake.calls.map(call => call.headers['content-type'])).toEqual(Array(3).fill('application/json'));
+  expect(fake.calls.map(call => JSON.parse(call.body) as unknown)).toEqual([
+    { grant_type: 'authorization_code', code: exchange.code, redirect_uri: exchange.redirectUri,
+      client_id: client.clientId, client_secret: client.clientSecret },
+    { grant_type: 'refresh_token', refresh_token: 'old', client_id: client.clientId, client_secret: client.clientSecret },
+    { token: 'old', client_id: client.clientId, client_secret: client.clientSecret },
+  ]);
+});
+
+test('json: a refused refresh is read as any OAuth answer, and its detail never holds the secret sent', async () => {
+  await expect(refreshGrant(jsonBodied, client, 'old', { fetch: endpoint({ error: 'invalid_grant' }, 400).fetch }))
+    .rejects.toBeInstanceOf(GrantRevoked);
+  // Atlassian documents a 403 for a refresh token that is gone.
+  await expect(refreshGrant(jsonBodied, client, 'old', { fetch: endpoint({ error: 'invalid_grant' }, 403).fetch }))
+    .rejects.toBeInstanceOf(GrantRevoked);
+  await expect(refreshGrant(jsonBodied, client, 'old', { fetch: endpoint({ error: client.clientSecret }, 400).fetch }))
+    .rejects.toMatchObject({ code: 'request_failed', status: 400, detail: null });
+});
+
+test("refreshUrl: Figma exchanges at its token URL and refreshes at its refresh URL, keeping the refresh token it sent", async () => {
+  const fake = fakeFetch([
+    { url: 'https://api.figma.com/v1/oauth/token', respond: () => Response.json({ ...token, user_id_string: '1234567890123456789' }) },
+    { url: 'https://api.figma.com/v1/oauth/refresh', respond: () => Response.json({ access_token: 'new', token_type: 'bearer', expires_in: 7_776_000 }) },
+  ]);
+  const { grant, extras } = await exchangeCode(figma, client, { ...exchange, codeVerifier: 'v'.repeat(43), fetch: fake.fetch });
+  expect(grant.refreshToken).toBe('r');
+  expect(extras).toEqual({ user_id_string: '1234567890123456789' });
+  expect(await refreshGrant(figma, client, 'r', { fetch: fake.fetch })).toMatchObject({ accessToken: 'new', refreshToken: 'r' });
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.figma.com/v1/oauth/token', 'https://api.figma.com/v1/oauth/refresh']);
+  expect(fake.calls.map(call => call.headers['content-type'])).toEqual(Array(2).fill('application/x-www-form-urlencoded;charset=UTF-8'));
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual(Array(2).fill(`Basic ${Buffer.from('id:private%2Dclient%2Dsecret').toString('base64')}`));
 });

@@ -6,6 +6,11 @@ uses it. Inject fetch on each network call; the app owns the state nonce. `excha
 fields the entry reads (`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token
 answer the entry's `failed` condition marks is refused with the entry's own code.
 
+`refreshGrant` posts to the entry's `refreshUrl` when it names one (Figma), else to `tokenUrl`; a refresh answer
+without a `refresh_token` keeps the one sent. With `json: true` (Atlassian) the exchange, the refresh and an RFC 7009
+revoke send their parameters as one JSON object (`content-type: application/json`); Basic client authentication stays a
+header.
+
 `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke: an RFC 7009 revoke of the
 first token the entry's `revoke.token` names (it needs `client`, else `oauth_client_required`), or the entry's
 `revoke.request` sent with the access token. A 2xx, `invalid_grant`, a revoked code and the entry's `goneErrors` are

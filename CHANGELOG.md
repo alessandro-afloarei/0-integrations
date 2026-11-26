@@ -21,6 +21,7 @@ Nothing here is released yet.
 - A Firecrawl scrape that runs a script (`actions`) skips the automatic retries: a 5xx or a dropped connection goes
   straight to the plain read, and a 429 fails with the wait Firecrawl names (before, its 429 was retried). A plain
   scrape and a map are retried as reads.
+- New: `oauth2.json` (the token endpoint takes JSON) and `oauth2.refreshUrl`; first used by Figma's refresh endpoint.
 
 ## 0.13.0
 

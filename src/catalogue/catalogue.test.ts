@@ -81,7 +81,8 @@ const entrySchema = z.strictObject({
     choices: z.array(z.string()).optional() })).optional(),
   auth: z.array(z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('key'), send: send.optional() }),
-    z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, pkce: z.literal(false).optional(),
+    z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, refreshUrl: https.optional(),
+      json: z.literal(true, '`json` is `true` or left out').optional(), pkce: z.literal(false).optional(),
       clientAuth: z.literal('basic').optional(), scopeSeparator: z.literal(',').optional(),
       authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() }),
@@ -370,6 +371,13 @@ test.each([[{ title: '' }, "a field's title says what to enter: give it words"],
   'a field with %j fails the schema, with what to fix', (part, message) => {
     const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', ...part }] };
     expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+  });
+
+test.each([[{ refreshUrl: 'http://k.test/refresh' }, 'refreshUrl', 'Invalid string: must start with "https://"'],
+  [{ json: false }, 'json', '`json` is `true` or left out']])(
+  'an oauth2 sign-in with %j fails the schema, with what to fix', (part, key, message) => {
+    const bad = { ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], ...part }] };
+    expect(entrySchema.safeParse(bad).error?.issues.map(issue => [issue.path.at(-1), issue.message])).toEqual([[key, message]]);
   });
 
 test('a query send that names no parameter fails the schema, with what to fix', () => {

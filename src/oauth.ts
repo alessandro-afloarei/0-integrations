@@ -45,9 +45,17 @@ export async function pkcePair(): Promise<{ verifier: string; challenge: string 
   return { verifier, challenge: await oauth.calculatePKCECodeChallenge(verifier) };
 }
 
-function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThis.fetch) {
+type CustomFetch = NonNullable<oauth.HttpRequestOptions<'POST', URLSearchParams>[typeof oauth.customFetch]>;
+
+/** The form oauth4webapi builds, sent as one JSON object of the same names and values. */
+const jsonBodies = (fetch: typeof globalThis.fetch): CustomFetch => (url, options) => fetch(url, { ...options,
+  headers: { ...options.headers, 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(options.body)) });
+
+/** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. */
+function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThis.fetch, refresh = false) {
   const config = oauth2(entry);
-  const as: oauth.AuthorizationServer = { issuer: new URL(config.tokenUrl).origin, token_endpoint: config.tokenUrl,
+  const as: oauth.AuthorizationServer = { issuer: new URL(config.tokenUrl).origin,
+    token_endpoint: refresh ? config.refreshUrl ?? config.tokenUrl : config.tokenUrl,
     ...(entry.revoke && 'url' in entry.revoke ? { revocation_endpoint: entry.revoke.url } : {}) };
   const client = { client_id: credentials.clientId };
   const auth = config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret);
@@ -57,7 +65,7 @@ function context(entry: Entry, credentials: OAuthClient, fetch: typeof globalThi
   const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
     config, as, client, auth, secrets: [credentials.clientSecret, ...(basic === undefined ? [] : [basic])],
-    options: { [oauth.customFetch]: fetch, signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
+    options: { [oauth.customFetch]: config.json ? jsonBodies(fetch) : fetch, signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
     processing: { recognizedTokenTypes: Object.fromEntries((config.tokenTypes ?? []).map(type => [type.toLowerCase(), () => undefined])) },
   };
 }
@@ -125,7 +133,7 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: {
 
 export async function refreshGrant(entry: Entry, client: OAuthClient, refreshToken: string,
   input: { fetch: typeof fetch }): Promise<Grant> {
-  const c = context(entry, client, input.fetch);
+  const c = context(entry, client, input.fetch, true);
   const secrets = [...c.secrets, refreshToken];
   const response = await send(c, entry, secrets, () => oauth.refreshTokenGrantRequest(c.as, c.client, c.auth, refreshToken, c.options));
   try {
