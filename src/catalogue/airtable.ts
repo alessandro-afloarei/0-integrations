@@ -27,7 +27,7 @@ export const airtable = defineProvider({
     'records.get': { docs: `${api}/get-record.md`, path: '/{baseId}/{tableIdOrName}/{recordId}', notFound: 'null',
       params: { ...table, recordId }, result: record },
     'records.create': { docs: `${api}/create-records.md`, method: 'POST', path: '/{baseId}/{tableIdOrName}',
-      params: { ...table, fields: { in: 'body', type: 'unknown' } }, result: record },
+      params: { ...table, fields: { in: 'body', type: 'unknown', required: true } }, result: record },
     'records.update': { docs: `${api}/update-record.md`, method: 'PATCH', path: '/{baseId}/{tableIdOrName}/{recordId}',
       params: { ...table, recordId, fields: { in: 'body', type: 'unknown', required: true } }, result: record },
     'bases.list': { docs: `${api}/list-bases.md`, path: '/meta/bases', paging: 'offset', records: 'bases',
