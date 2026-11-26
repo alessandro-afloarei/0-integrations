@@ -65,8 +65,10 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     const credential = fields.find(field => field.secret);
     if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const read = (field: Field) => {
-      const given: unknown = Object.getOwnPropertyDescriptor(field.secret ? secrets : plain, field.name)?.value;
-      // Own values only (an inherited `constructor` is none). Left out or blank takes the default; another type is refused.
+      // Own values only, a getter's included (an inherited `constructor` is none). Left out or blank takes the default;
+      // another type is refused.
+      const source = field.secret ? secrets : plain;
+      const given: unknown = Object.hasOwn(source, field.name) ? source[field.name] : undefined;
       if (given !== undefined && typeof given !== 'string') throw new TypeError(`connect_field_invalid: ${field.name}`);
       const value = given !== undefined && given.trim() !== '' ? given : field.secret ? undefined : field.default;
       if (value === undefined) throw new TypeError(`connect_field_required: ${field.name}`);

@@ -140,9 +140,9 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     if (base) return base;
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
     // A base parses and holds no username or password, an app's own included; refused by entry id alone, since Node's
-    // own errors name the URL (`ERR_INVALID_URL` keeps it in `input`) and its query key.
-    const parsed = URL.parse(url);
-    if (parsed === null || parsed.username !== '' || parsed.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
+    // own errors name the URL (`ERR_INVALID_URL` keeps it in `input`) and its query key. No `URL.parse`: Node 22.1+.
+    const parsed = URL.canParse(url) ? new URL(url) : undefined;
+    if (parsed === undefined || parsed.username !== '' || parsed.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
     return (base = { url, origin: parsed.origin });
   };
   const [auth] = entry.auth;

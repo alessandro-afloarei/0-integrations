@@ -498,6 +498,15 @@ test('a base that does not parse is refused by entry id alone, its userinfo in n
     .not.toMatch(/user-x|pass-y|exa mple|secret-key/u);
 });
 
+test('a base is read without URL.parse, which Node 22.0 lacks', async () => {
+  const parse = vi.spyOn(URL, 'parse').mockImplementation(() => { throw new Error('URL.parse is not a function'); });
+  try {
+    const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+    await client(serpapi, { token: 'k', fetch: fake.fetch }).json('/account');
+    expect(fake.calls[0]?.url).toBe('https://serpapi.com/account?api_key=k');
+  } finally { parse.mockRestore(); }
+});
+
 test('a code that is the token sent in the query is no detail', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ error: 't' }, { status: 400 }) }]);
   await expect(queryClient(fake.fetch).json('/a')).rejects.toMatchObject({ code: 'request_failed', detail: null });

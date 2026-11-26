@@ -160,6 +160,14 @@ describe('field defaults and choices', () => {
     expect(fake.calls.map(call => call.url)).toEqual(['https://api.intercom.io/me']);
   });
 
+  it('an own getter is a value given: a getter-backed region connects to its host', async () => {
+    const fake = http();
+    const values = { get apiHost() { return 'api.eu.intercom.io'; } };
+    const result = await finishConnect(intercom, { secret: { accessToken: 'tok' }, values, fetch: fake.fetch });
+    expect(result.values).toEqual({ apiHost: 'api.eu.intercom.io' });
+    expect(fake.calls.map(call => call.url)).toEqual(['https://api.eu.intercom.io/me']);
+  });
+
   it.each(intercom.fields[0].choices)('a value among the choices (%s) is used and passes the host pattern', async apiHost => {
     const fake = http();
     const { values } = await finishConnect(intercom, { secret: { accessToken: 'tok' }, values: { apiHost }, fetch: fake.fetch });
