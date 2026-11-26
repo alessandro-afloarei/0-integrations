@@ -41,7 +41,8 @@ one takes five steps:
      the list to its container (a project, a board), are required; an operation that needs a header whose value changes
      per call stays out and goes on the [waiting list](docs/waiting-list.md);
    - when the page asks for at least one of several equal inputs that find or create one record (an email, a LinkedIn URL, a
-     domain), none is required and each input's description names the group: the provider refuses a call with none;
+     domain), none is required and the operation declares the page's sets as `anyOf` (`[['email'], ['phone', 'last_name']]`),
+     which the descriptions do not repeat;
    - a call the docs say spends credits is `kind: 'write'`, whatever its method, and its leading comment names the
      credit page;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
@@ -96,7 +97,8 @@ entry:
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
   names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's
-  `list`), and no id is a client call or a dotted prefix of another;
+  `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id
+  is a client call or a dotted prefix of another;
 - has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields,
   and whose URLs, base and `http.bases` share one host when any of them is typed: a token goes only to the host that
   issued it.

@@ -532,7 +532,7 @@ provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft 
 ```ts
 type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Record<string, Param>; result?: Shape; records?: Path;
-  paging?: string; notFound?: 'null'; base?: string };
+  paging?: string; notFound?: 'null'; base?: string; anyOf?: readonly (readonly Path[])[] };
 type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
 type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
@@ -561,6 +561,13 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
   parameters are sent as one JSON object, `{}` when none is given, `variables` as GraphQL's variables (`{}` when none),
   posted with the query to the base.
+- `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
+  creates one record by any of several equal inputs (Salesloft's `[['email_address'], ['phone', 'last_name']]`). A path
+  names a parameter or, past a dot, a key of its object `type` (`contact.email`, through `key` or `key?`), and is read
+  from the arguments as checked; one that is `undefined`, `null` or a blank string is not given. After each argument's
+  own check and before anything is sent, a call that gives no set whole is `param_group_missing: <id>`; `client()`
+  refuses a path that names no declared argument when it is built (`param_group_unknown: <id> <path>`). The table test
+  asks for two or more sets, none empty, and no path naming a `required` parameter.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
   any, with their `id`s (or `null`). Without `records`, a list `result` is the records themselves (a list at the answer's
@@ -651,9 +658,8 @@ only as an acknowledgement, or not at all, has no `result`. Parameters: path ids
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
 When a page requires at least one of several equal inputs to find or create one record (an email, a LinkedIn URL, a domain), none
-is `required` and each input's description names the group: the engine sends what the app gives, and the provider
-refuses a call with none until the engine can refuse it first ("A group of parameters of which at least one is
-required" on the [waiting list](../waiting-list.md#mechanisms)). For a list, the filter that scopes it stays required.
+is `required`: the operation declares the page's sets as `anyOf`, and the descriptions do not repeat them. For a list,
+the filter that scopes it stays required.
 
 ## The engine
 

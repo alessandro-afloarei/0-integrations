@@ -4,6 +4,9 @@
 
 Nothing here is released yet.
 
+- New: an operation may declare `anyOf`, sets of arguments of which a call must give one whole; `client()` refuses a
+  call that gives none (`param_group_missing`) before anything is sent. Cognism, Freshsales, Hunter, LeadIQ, lemlist,
+  People Data Labs, Reply.io and Salesloft declare their groups.
 - The 28 entries written before every value had to be cited from the provider's documentation are checked against
   their providers' pages.
 - Exa's and Firecrawl's `docs` links point to their current pages.
