@@ -29,8 +29,8 @@ const me = await api.json('/users/me');
 - `baseUrl` replaces the entry's, used as given: an app's own base is neither filled nor checked against `http.host`.
 - `minIntervalMs` replaces the entry's.
 - `headers` are merged with the entry's, a header of the same name winning, and the credential is set last.
-- `beforeRequest(url)` runs once per call before anything is sent (an app's metering). What it throws reaches the caller.
-  The URL it sees never holds a credential sent in the query.
+- `beforeRequest(url)` runs once per call before anything is sent (an app's metering). What it throws reaches the
+  caller. The URL it sees never holds a credential sent in the query.
 
 An OAuth connection passes a function that reads the grant and refreshes it under a lock:
 
@@ -56,9 +56,12 @@ seconds by default) and is paced `minIntervalMs` apart. A read is sent again onl
 `http.retry`, never with a caller's `signal`, and at most `retry.limit` times: after a 429 (waiting what it names, else
 `retry.defaultWaitMs`), and after a 408, 500, 502, 503 or 504 or a network failure (waiting a positive `Retry-After`,
 else a random share of one second doubled at each retry: at most 1, 2, 4 seconds and so on). No wait is longer than
-`retry.maxWaitMs`. A write, a timeout (it is `unavailable` at once), a 501, any other 4xx and an `address_blocked`
-refusal are never retried. A GET is a read unless `idempotent` says otherwise. An error answer is a `ProviderHttpError` or a `GrantRevoked`
-([errors](errors.md)), classified by the entry's rules.
+`retry.maxWaitMs`. A call not marked idempotent, a timeout (it is `unavailable` at once), a 501, any other 4xx and
+an `address_blocked` refusal are never retried; an idempotent DELETE is. A GET is idempotent unless `idempotent` says
+otherwise. The limit counts per request sent: a redirect hop and the resend after a 401 each get their own. An error
+answer is a `ProviderHttpError` or a `GrantRevoked` ([errors](errors.md)), classified by the entry's rules. An error the
+app's own `fetch` throws reaches the caller as it is, unless it is a network failure (`unavailable`); the library's own
+errors never hold the URL.
 
 ## The address guard
 
@@ -85,6 +88,10 @@ What the guard does not cover:
 - An app's own `fetch` (a test fake, a wrapper, a proxy): the library cannot see what it resolves, so for a typed host
   it refuses only an address literal (`127.0.0.1`, `2130706433`) before the token is read. Pass `guardedFetch`, or no
   `fetch`, in production for an entry whose host is typed.
+- An IPv6-only host behind NAT64: a typed host with only an IPv4 address resolves to a `64:ff9b::/96` address, which
+  is blocked, so it is refused.
+- A port: a typed host is a name alone (`gitlab.example.com`, never `gitlab.example.com:8443`) until a provider needs
+  one.
 - A proxy: `guardedFetch` dials through its own agent and never through a proxy, even when Node is told to follow
   `HTTPS_PROXY` (`NODE_USE_ENV_PROXY=1`); a proxy an app's own `fetch` sends through resolves and dials for it,
   unchecked.
@@ -111,15 +118,15 @@ entries declare operations today: notion `pages.markdown`, fireflies `user` and 
   `TypeError('param_invalid: <name>')`. An argument that is not declared, or is `undefined`, is not sent. An operation
   with no required parameter may be called with no argument.
 - The answer is read by the operation's `result`: undeclared keys are dropped, and an answer that does not fit is
-  `invalid_response`. With no `result` the answer is `unknown`, and a 204 answers `null`; any other answer without JSON is
-  `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
+  `invalid_response`. With no `result` the answer is `unknown`, and a 204 answers `null`; any other answer without JSON
+  is `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
 - A paged operation is read with `for await`. It yields the records at `records`, page by page; a record that does not
   fit is skipped, and the `onSkipped(ids)` option hears once from each page that skipped any.
 
 The client's own calls take some names. An operation id whose first dot-separated segment equals `json`, `request` or
 `paginate` (`requests.list` is fine), an id `then`, an id with an empty segment, and an id that is a dotted prefix of
-another (`pages` beside `pages.markdown`) are refused: the reserved names by `defineProvider` at compile time, and all of
-them by `client` as `TypeError('operation_clash: <id>')` for an app's own entry.
+another (`pages` beside `pages.markdown`) are refused: the reserved names by `defineProvider` at compile time, and all
+of them by `client` as `TypeError('operation_clash: <id>')` for an app's own entry.
 
 A wrong entry throws when its client is built: besides a clashing id, a parameter with no place in the request, such
 as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging shape the entry does not declare

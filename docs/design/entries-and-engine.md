@@ -147,8 +147,9 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 #### A base filled from a value
 
 A placeholder in `http.baseUrl` names a plain field and sits in its host (between `https://` and the next `/`; a
-path segment from a value arrives later). A base with one needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.` and a domain (any name
-ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's region is the first:
+path segment from a value arrives later). A base with one needs `http.host`, the host the filled base must have: a
+name (`api.example.com`), `*.` and a domain (any name ending in `.example.com`, never `example.com` itself), or `*`
+(any). Intercom's region is the first:
 `baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
@@ -288,18 +289,19 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   empty one is skipped and the next path read. A `/` in it becomes `.`, and it must then pass the library's strict
   pattern, so no provider text or secret reaches an error. `allow` keeps only the listed codes. It checks the first
   code found, so a refused one hides a later path.
-- Only a read is retried: a GET unless the caller says `idempotent: false`, or a call the caller marks idempotent (an
-  operation of `kind: 'read'`), never with a caller's `signal`. It is retried after a 429, a 408, 500, 502, 503 or 504,
-  or a network failure (the connection could not be made, or was dropped before an answer), up to `retry.limit` retries
-  of any of these together.
+- Only a call marked idempotent is retried: a GET unless the caller says `idempotent: false`, or any call the caller
+  marks `idempotent: true` (an operation of `kind: 'read'`, an idempotent DELETE), never with a caller's `signal`. It is
+  retried after a 429, a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was
+  dropped before an answer), up to `retry.limit` retries of any of these together. The limit counts per request sent:
+  a redirect hop and the resend after a 401 each get their own.
 - A 429 waits `Retry-After`, else `waitFromBody`, else `retry.defaultWaitMs`, capped by `maxWaitMs`, with no jitter. The
-  others wait a positive `Retry-After`, capped by `maxWaitMs`; without one, the n-th retry (n from 0) waits a full-jitter
-  backoff: a random share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. The
-  backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
-- Never retried: a write, a timeout (the caller has already waited the whole `timeoutMs`; a retry would only multiply
-  it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`, the OAuth token endpoint
-  and an RFC 7009 revoke. An answer that step 3 reclassifies is reported, not retried. The last answer is classified as
-  any other; a timeout, and a network failure after the last retry, are `unavailable`.
+  others wait a positive `Retry-After`, capped by `maxWaitMs`; without one, the n-th retry (n from 0) waits a
+  full-jitter backoff: a random share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so
+  on. The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
+- Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
+  retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
+  the OAuth token endpoint and an RFC 7009 revoke. An answer that step 3 reclassifies is reported, not retried. The
+  last answer is classified as any other; a timeout, and a network failure after the last retry, are `unavailable`.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
   1 second. A `limit` of 0 means no retry; an error still carries the wait the provider names.
 - The error taxonomy does not change.
@@ -370,8 +372,9 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   is a `TypeError` naming it (`param_missing: <name>`, `param_invalid: <name>`). An argument that is not declared, or is
   `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
   out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
-  strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body` parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}`
-  when none), posted with the query to the base.
+  strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
+  parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}` when none), posted with the query to
+  the base.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
   any, with their `id`s (or `null`). Without `records` it yields each page's whole answer.
@@ -443,8 +446,8 @@ leaves the entry `declared`. The module kits stay for what an entry cannot know,
 ## What an app developer learns
 
 Two concepts: an **entry** (a provider) and a **connection** (one account's secret and plain values, which the app
-keeps). Sign-in is `startConnect` and `finishConnect`; calls go through `client`. OAuth app credentials are arguments, never a stored
-"integration" object.
+keeps). Sign-in is `startConnect` and `finishConnect`; calls go through `client`. OAuth app credentials are arguments,
+never a stored "integration" object.
 
 ## Order of work
 

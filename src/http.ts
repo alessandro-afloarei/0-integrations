@@ -57,7 +57,8 @@ async function retryBody(response: Response, timeoutMs: number): Promise<string>
 }
 
 const MAX_REDIRECTS = 5;
-/** The statuses a read is retried after: a rate limit, a timeout and the passing server failures (never 501). */
+/** The statuses a read is retried after: a 429, a 408 (the server's request timeout) and the passing server failures
+ * (never 501). */
 const RETRIED = [408, 429, 500, 502, 503, 504];
 
 /**
