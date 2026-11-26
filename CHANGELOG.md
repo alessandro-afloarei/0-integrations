@@ -4,6 +4,13 @@
 
 Nothing here is released yet.
 
+- A retry never comes before the provider's stated wait: an answer whose `Retry-After` (or declared wait) is longer
+  than the entry's cap is not retried and reports that wait.
+- New: `retry.onlyStated` retries only an answer that states its wait; `retry.wait` reads a wait from a header
+  (seconds or an epoch time; of several headers, the longest present) or a body field, and replaces `waitFromBody`; a
+  rate-limit rule's `wait` replaces `resetAt`.
+- Buildkite and PagerDuty wait their reset headers (PagerDuty a minute when a 429 comes without one); Todoist waits its
+  error body's `retry_after`; Jira retries only when an answer names `Retry-After`.
 - New: an operation may declare `anyOf`, sets of arguments of which a call must give one whole; `client()` refuses a
   call that gives none (`param_group_missing`) before anything is sent. Cognism, Freshsales, Hunter, LeadIQ, lemlist,
   People Data Labs, Reply.io and Salesloft declare their groups.

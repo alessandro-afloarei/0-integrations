@@ -232,8 +232,7 @@ keeps the global one.
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
-`Operation.base`, placeholders in `identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs`
-reset unit, `Size`, and `Where.variables`.
+`Operation.base`, placeholders in `identify`'s request path, `Size`, and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -380,10 +379,9 @@ the same lookup, where `{id}` is the id already found: `'Portal {id}'`.
 ### `http.retry`, `http.rateLimit` and `errors`
 
 ```ts
-type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number;
-  waitFromBody?: { path: Path; unit: 'ms' | 's' | 'epochMs' | 'epochSeconds' } };
-type RateLimit = { when: readonly (When & { resetAt?: { header: string; unit: 'epochSeconds' | 'epochMs' } })[];
-  defaultWaitMs?: number };
+type Wait = ({ header: string | readonly string[] } | { path: Path }) & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' };
+type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number; onlyStated?: true; wait?: Wait };
+type RateLimit = { when: readonly (When & { wait?: Wait })[]; defaultWaitMs?: number };
 type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[];
   rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
@@ -394,9 +392,9 @@ classified in this order, and the first step that decides wins:
 
 1. `errors.revoked`: the provider's code is on the list, so the grant is gone (`GrantRevoked`).
 2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code. The error carries only
-   `Retry-After`, else the body's wait: never a rate limit's.
+   `Retry-After`, else `retry.wait`: never a rate limit's.
 3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is
-   `Retry-After`, else the matching rule's `resetAt`, else `rateLimit.defaultWaitMs`, else the body's wait.
+   `Retry-After`, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`, else `retry.wait`.
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -410,17 +408,26 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   retried after a 429, a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was
   dropped before an answer), up to `retry.limit` retries of any of these together. The limit counts per request sent:
   a redirect hop and the resend after a 401 each get their own.
-- A 429 waits `Retry-After`, else `waitFromBody`, else `retry.defaultWaitMs`, capped by `maxWaitMs`, with no jitter. The
-  others wait a positive `Retry-After`, capped by `maxWaitMs`; without one, the n-th retry (n from 0) waits a
-  full-jitter backoff: a random share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so
-  on. The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
+- A **wait** (`Wait`) is read from a header, or several (the longest of those present counts), holding a positive
+  decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
+  instants, whose wait is the instant minus now, at least 0. Anything else states no wait. One reader serves the retry
+  and the error.
+- An answer's **stated wait** is a positive `Retry-After`, else, on a 429, `retry.wait`. A retry never comes before
+  it: an answer whose stated wait is longer than `maxWaitMs` is not retried, whatever its status, and its error carries
+  that wait. With `retry.onlyStated`, an answer that states no wait is not retried either, and neither is a network
+  failure (Jira: "Only retry if the API is idempotent and the response includes a Retry-After header").
+- Otherwise a 429 waits its stated wait, else `retry.defaultWaitMs`, with no jitter. The others wait a positive
+  `Retry-After`; without one, the n-th retry (n from 0) waits a full-jitter backoff: a random share of
+  `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. No wait is longer than `maxWaitMs`.
+  The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
 - Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
   retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
   the OAuth token endpoint, a `token` entry's request and an RFC 7009 revoke. An answer that step 3 reclassifies is
   reported, not retried. The last answer is classified as any other; a timeout, and a network failure after the last
   retry, are `unavailable`.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
-  1 second. A `limit` of 0 means no retry; an error still carries the wait the provider names.
+  1 second; the table refuses a `defaultWaitMs` above `maxWaitMs`. A `limit` of 0 means no retry; an error still carries
+  the wait the provider names.
 - The error taxonomy does not change.
 
 ### `paging`
@@ -722,15 +729,16 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
 
 A recording is a real capture from a real account; a made-up one tests the code but leaves the entry `declared`. The
 recorder (`src/record.test.ts`) records an entry with no module that sends a request to sign in, and refuses any other
-that has no kit scenario. Each exchange keeps its method, URL, request body, status and `retry-after`, and from the
-answer only the paths the entry reads (an object or a list reached by one keeps only its shell; at an error or
-condition path, only a provider code, a number or a boolean). The key, the plain values and the tokens issued are
-swapped for the kit's stand-ins in the URL, the body and that header; in the answers, they and the account's id, name
-and saved values are swapped where they are a whole value. It refuses to write when a sign-in was redirected, when a
-value is under 4 characters, when a real value is still in an exchange (searched before the stand-ins go in, ignoring
-case, percent-decoded and with base64 runs decoded), and when the file fails the table test's own replay check: the
-key signs in (to an account when the entry names an id) and the bad key is `rejected`, each sending no more requests
-than the file holds. The module kits stay for what an entry cannot know, such as incremental reads.
+that has no kit scenario. Each exchange keeps its method, URL, request body, status, `retry-after` and the entry's
+declared wait headers, and from the answer only the paths the entry reads (an object or a list reached by one keeps
+only its shell; at an error or condition path, only a provider code, a number or a boolean). The key, the plain values
+and the tokens issued are swapped for the kit's stand-ins in the URL, the body and those headers; in the answers, they
+and the account's id, name and saved values are swapped where they are a whole value. It refuses to write when a
+sign-in was redirected, when a value is under 4 characters, when a real value is still in an exchange (searched before
+the stand-ins go in, ignoring case, percent-decoded and with base64 runs decoded), and when the file fails the table
+test's own replay check: the key signs in (to an account when the entry names an id) and the bad key is `rejected`,
+each sending no more requests than the file holds. The module kits stay for what an entry cannot know, such as
+incremental reads.
 
 `pnpm check` remains the one gate, with no network.
 

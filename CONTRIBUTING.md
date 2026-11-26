@@ -92,8 +92,11 @@ entry:
   of them and the `default` fills the base to a host `http.host` takes, and a secret field has neither;
 - declares a webhook the engine can trust: `{body}` is signed (by default, or in `signed`), and `{timestamp}` exactly
   when a timestamp is declared, read apart from the signature (another `part` or header); a `part` name holds no `,`,
-  `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, `http.headers` keys) is
-  one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
+  `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, a wait's, `http.headers`
+  keys) is one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
+- retries as the engine can: a `retry.wait` or a rate-limit rule's `wait` reads one header (or a list) or one body
+  path, in `s`, `ms`, `epochSeconds` or `epochMs`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000 when left
+  out);
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
   names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's
@@ -118,11 +121,11 @@ An entry with OAuth 2 and a key is recorded with its key: a recording is of the 
 The recorder refuses a provider with a module but no kit scenario of that name, and an entry that sends no request
 when it signs in. Otherwise it signs in with the key and with a bad key, and writes
 `src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request
-body, status and `retry-after` (no other header), and from the answer only the paths the entry reads; at an error or
-condition path, only a provider code, a number or a boolean. It swaps the key, the plain values, the tokens issued, the
-account's id and name and the saved values for the kit's stand-ins. It refuses to write when a sign-in was redirected,
-when a value is too short to swap or a real value is still in an exchange, and when the file, replayed before it is
-written, fails the table test's own replay check
+body, status, `retry-after` and the entry's declared wait headers (no other header), and from the answer only the
+paths the entry reads; at an error or condition path, only a provider code, a number or a boolean. It swaps the key,
+the plain values, the tokens issued, the account's id and name and the saved values for the kit's stand-ins. It refuses
+to write when a sign-in was redirected, when a value is too short to swap or a real value is still in an exchange, and
+when the file, replayed before it is written, fails the table test's own replay check
 ([testing](docs/modules/testing.md#recording-an-entry-with-no-module) says exactly what is written, swapped and
 refused). Only such a capture from a real test account (`synthetic: false`)
 makes the entry `recorded`; never copy a file from a `.record-test-*` folder, which the recorder's own tests write on a
