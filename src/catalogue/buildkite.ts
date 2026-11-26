@@ -1,6 +1,6 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Buildkite: an API access token as a bearer token. A 429 names its wait in seconds in `RateLimit-User-Reset`
+/** Buildkite: an API access token as a bearer token. A 429's wait is the seconds in its limit's `RateLimit-*-Reset`
  * (https://buildkite.com/docs/apis/rest-api/rate-limits). Webhooks send a plain token by default: set the webhook's
  * Token to `X-Buildkite-Signature`, the hex HMAC-SHA256 of `timestamp.body`, for `webhook` to verify
  * (https://buildkite.com/docs/apis/webhooks/pipelines). */
@@ -17,7 +17,8 @@ export const buildkite = defineProvider({
   fields: [{ name: 'accessToken', title: 'API access token', secret: true,
     help: 'Give it the read_user, read_builds, write_builds and read_pipelines scopes, and a Token Expiry: it defaults to seven days.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.buildkite.com/v2', retry: {} },
+  http: { baseUrl: 'https://api.buildkite.com/v2',
+    retry: { wait: { header: ['ratelimit-reset', 'ratelimit-user-reset', 'ratelimit-deepbuildslist-reset'], unit: 's' } } },
   identify: { request: { path: '/user' }, id: 'id', name: ['name', 'email'] },
   paging: { link: { kind: 'linkHeader' } },
   webhook: { kind: 'hmac', header: 'x-buildkite-signature', signed: '{timestamp}.{body}', part: 'signature',
