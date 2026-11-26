@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
 import { createClient } from '../http.js';
+import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
 import { argumentShape, clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
@@ -187,7 +188,7 @@ const plainReads = (entry: Entry) => [...placeholders(entry.http.baseUrl), ...re
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 /** An OAuth 2 sign-in's URLs, as the engine reads them. */
 const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
-const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (60 000 when left out): the cap would cut a longer default';
+const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (1 000 and 60 000 when left out): the cap would cut a longer default';
 const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
@@ -215,7 +216,7 @@ const runnable = {
   '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one': (entry: Entry) => entry.categories !== undefined
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
-  [RETRY_DEFAULT]: ({ http: { retry } }: Entry) => (retry?.defaultWaitMs ?? 0) <= (retry?.maxWaitMs ?? 60_000),
+  [RETRY_DEFAULT]: ({ http: { retry } }: Entry) => { const { defaultWaitMs, maxWaitMs } = retryPolicy(retry); return defaultWaitMs <= maxWaitMs; },
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
   [HOST_PATTERN]: (entry: Entry) => (declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
@@ -673,7 +674,7 @@ test.each<[Rule, Entry]>([
     operations: { 'request.create': { method: 'POST', path: '/requests' } } }],
   ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { then: { path: '/then' } } }],
-  ...[{ defaultWaitMs: 30_000, maxWaitMs: 10_000 }, { defaultWaitMs: 90_000 }].map((retry): [Rule, Entry] => [RETRY_DEFAULT,
+  ...[{ defaultWaitMs: 30_000, maxWaitMs: 10_000 }, { defaultWaitMs: 90_000 }, { maxWaitMs: 500 }].map((retry): [Rule, Entry] => [RETRY_DEFAULT,
     defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, retry } })]),
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
