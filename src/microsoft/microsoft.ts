@@ -6,13 +6,14 @@ import { headerValue, keptHeaders, type MailboxEmail, type MailboxEmailAddress, 
   type MailboxReader } from '../mailbox/mailbox.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
+import { microsoft as microsoftEntry } from '../catalogue/microsoft.js';
 import { microsoft } from '../providers.js';
+import { datetime, pageSize, utc } from '../shapes.js';
 
 /** A member's own mailbox and calendar, read-only; `offline_access` gives the refresh token. */
-export const MICROSOFT_SCOPES: readonly string[] = ['offline_access', 'User.Read', 'Mail.Read', 'Calendars.Read'];
+export const MICROSOFT_SCOPES: readonly string[] = microsoftEntry.scopes.default;
 
 const GRAPH = microsoft.baseUrl ?? '';
-const datetime = z.iso.datetime({ offset: true });
 const text = z.string().nullish().transform(value => value ?? '');
 const emailAddress = z.object({ name: z.string().nullish(), address: z.string().nullish() });
 const recipient = z.object({ emailAddress });
@@ -46,17 +47,6 @@ const LIST_FIELDS = 'id,conversationId,internetMessageId,receivedDateTime,subjec
 const ROLES = { sentitems: 'sent', deleteditems: 'trash', junkemail: 'spam' } as const;
 const RESPONSES: Record<string, MailboxEvent['attendees'][number]['response_status']> = {
   accepted: 'yes', organizer: 'yes', tentativelyAccepted: 'maybe', declined: 'no' };
-
-function pageSize(limit = 100): number {
-  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new TypeError('limit_invalid');
-  return limit;
-}
-
-/** Graph takes an ISO time; one without its offset would be read in Graph's own zone, so it is refused before a request. */
-function utc(value: string): string {
-  if (!datetime.safeParse(value).success) throw new TypeError('date_invalid');
-  return new Date(value).toISOString();
-}
 
 /** An OData string literal: quotes doubled. */
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
@@ -182,11 +172,11 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
     // Drafts are left out at the source; `receivedDateTime` leads the filter, as Graph requires of the field it sorts by.
     async messages({ after, cursor, limit }) {
       return emails('/me/messages', { $filter: `receivedDateTime ge ${utc(after ?? '1970-01-01T00:00:00Z')} and isDraft eq false`,
-        $orderby: 'receivedDateTime desc', $top: String(pageSize(limit)), $select: LIST_FIELDS }, cursor);
+        $orderby: 'receivedDateTime desc', $top: String(pageSize(limit, 1000)), $select: LIST_FIELDS }, cursor);
     },
     async thread(threadId, { cursor, limit }) {
       return emails('/me/messages', { $filter: `conversationId eq ${literal(threadId)} and isDraft eq false`,
-        $top: String(pageSize(limit)), $select: `${LIST_FIELDS},body,internetMessageHeaders` }, cursor);
+        $top: String(pageSize(limit, 1000)), $select: `${LIST_FIELDS},body,internetMessageHeaders` }, cursor);
     },
     async primaryCalendar() {
       const calendar = parseAnswer(calendarSchema, await http.json('/me/calendar', { query: { $select: 'id,name' } }));
@@ -195,7 +185,7 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
     async events(calendarId, { start, end, cursor, limit }) {
       const [{ email: owner }, page] = await Promise.all([identify(), list(`/me/calendars/${encodeURIComponent(calendarId)}/calendarView`,
         // No $select: Graph answers an event's createdDateTime and lastModifiedDateTime only without one.
-        { startDateTime: utc(start), endDateTime: utc(end), $top: String(pageSize(limit)) }, cursor)]);
+        { startDateTime: utc(start), endDateTime: utc(end), $top: String(pageSize(limit, 1000)) }, cursor)]);
       const parsed = parseEntries(eventSchema, page.value);
       const items: MailboxEvent[] = [];
       for (const event of parsed.items) {

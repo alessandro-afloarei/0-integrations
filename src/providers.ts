@@ -1,3 +1,24 @@
+import type { Auth, Entry, Errors, Webhook } from './catalogue.js';
+import { aircall as aircallEntry } from './catalogue/aircall.js';
+import { apollo as apolloEntry } from './catalogue/apollo.js';
+import { attio as attioEntry } from './catalogue/attio.js';
+import { breakcold as breakcoldEntry } from './catalogue/breakcold.js';
+import { exa as exaEntry } from './catalogue/exa.js';
+import { fathom as fathomEntry } from './catalogue/fathom.js';
+import { fireflies as firefliesEntry } from './catalogue/fireflies.js';
+import { firecrawl as firecrawlEntry } from './catalogue/firecrawl.js';
+import { github as githubEntry } from './catalogue/github.js';
+import { google as googleEntry } from './catalogue/google.js';
+import { granola as granolaEntry } from './catalogue/granola.js';
+import { hubspot as hubspotEntry } from './catalogue/hubspot.js';
+import { lusha as lushaEntry } from './catalogue/lusha.js';
+import { microsoft as microsoftEntry } from './catalogue/microsoft.js';
+import { notion as notionEntry } from './catalogue/notion.js';
+import { slack as slackEntry } from './catalogue/slack.js';
+import { unipile as unipileEntry } from './catalogue/unipile.js';
+import { bodyWaitOf, codeOf, rateLimitOf, retryPolicy, safeDetail } from './http-response.js';
+import { holds, placeholders } from './rules.js';
+
 export type RetryPolicy = {
   limit: number;
   maxWaitMs: number;
@@ -45,196 +66,99 @@ export type ProviderDefinition = {
   rateLimit?: (status: number, headers: Headers, body: unknown) => { waitMs: number } | undefined;
 };
 
-export const hubspot: ProviderDefinition = {
-  id: 'hubspot', baseUrl: 'https://api.hubapi.com', timeoutMs: 30000, minIntervalMs: 250,
-  retry: { limit: 1, maxWaitMs: 10000, defaultWaitMs: 1000 },
-  errorDetail: body => {
-    if (typeof body !== 'object' || body === null || !('category' in body)) return undefined;
-    // Admit known categories only: a credential can also look like a short error code.
-    return body.category === 'MISSING_SCOPES' || body.category === 'VALIDATION_ERROR' ? body.category : undefined;
-  },
-  oauth2: {
-    authUrl: 'https://app.hubspot.com/oauth/authorize', tokenUrl: 'https://api.hubapi.com/oauth/2026-03/token',
-    revokeUrl: 'https://api.hubapi.com/oauth/2026-03/token/revoke', clientAuth: 'post', pkce: false, scopeDelimiter: ' ',
-    extras: ['hub_id'],
-  },
-};
-
-export const slack: ProviderDefinition = {
-  id: 'slack', baseUrl: 'https://slack.com/api', timeoutMs: 15000, minIntervalMs: 0,
-  retry: { limit: 0, maxWaitMs: 0, defaultWaitMs: 0 },
-  oauth2: {
-    authUrl: 'https://slack.com/oauth/v2/authorize', tokenUrl: 'https://slack.com/api/oauth.v2.access',
-    clientAuth: 'post', pkce: false, scopeDelimiter: ',', tokenTypes: ['bot'], errorsInBody: true,
-    revokedErrors: ['invalid_auth', 'token_revoked', 'account_inactive', 'invalid_refresh_token', 'invalid_grant', 'not_authed'],
-    extras: ['team', 'bot_user_id'],
-  },
-};
-
-export const fireflies: ProviderDefinition = {
-  id: 'fireflies', baseUrl: 'https://api.fireflies.ai/graphql', timeoutMs: 30000, minIntervalMs: 0,
-  retry: { limit: 0, maxWaitMs: 0, defaultWaitMs: 0 },
-  webhook: { signed: '{body}', signatureHeader: 'x-hub-signature', prefix: 'sha256=', encoding: 'hex' },
-};
-
-export const granola: ProviderDefinition = {
-  id: 'granola', baseUrl: 'https://public-api.granola.ai/v1', timeoutMs: 30000, minIntervalMs: 200,
-  retry: { limit: 0, maxWaitMs: 0, defaultWaitMs: 0 },
-};
-
-/** Fathom's External API: 60 calls a minute per account, a transcript 30 (Fathom may lower it to 5). */
-export const fathom: ProviderDefinition = {
-  id: 'fathom', baseUrl: 'https://api.fathom.ai/external/v1', auth: { header: 'x-api-key', prefix: '' },
-  timeoutMs: 30000, minIntervalMs: 1000,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 5000 },
-};
-
-/** Attio: 100 reads a second, list notes 10; a 429 names a date (usually the next second), which the default wait covers. */
-export const attio: ProviderDefinition = {
-  id: 'attio', baseUrl: 'https://api.attio.com/v2', timeoutMs: 30000, minIntervalMs: 100,
-  retry: { limit: 1, maxWaitMs: 10000, defaultWaitMs: 1000 },
-};
-
-/** Aircall: 120 requests a minute per company, and an overrun blocks the key for 60 seconds. Basic auth: `aircallClient`
- * sends base64(`api_id:api_token`) as the token. */
-export const aircall: ProviderDefinition = {
-  id: 'aircall', baseUrl: 'https://api.aircall.io/v1', auth: { header: 'authorization', prefix: 'Basic ' },
-  timeoutMs: 30000, minIntervalMs: 500,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 60000 },
-};
-
-/** Notion: 180 requests a minute per connection (600 on Business and Enterprise) in a fixed window, plus a budget every
- * connection of the workspace shares. A 429 names its wait in Retry-After, at most a minute for the connection's own limit. */
-export const notion: ProviderDefinition = {
-  id: 'notion', baseUrl: 'https://api.notion.com/v1', timeoutMs: 30000, minIntervalMs: 350,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 1000 },
-};
-
-/** GitHub: 5,000 requests an hour per person, shared with their other tokens and apps, and calling on while limited can get
- * an integration banned: no retry. A limit answers 403 or 429. The hourly one has `x-ratelimit-remaining: 0` and lasts until
- * `x-ratelimit-reset` (epoch seconds); a secondary one says so in its message and asks for a minute when no Retry-After
- * names its wait. */
-export const github: ProviderDefinition = {
-  id: 'github', baseUrl: 'https://api.github.com', timeoutMs: 30000, minIntervalMs: 250,
-  retry: { limit: 0, maxWaitMs: 0, defaultWaitMs: 0 },
-  rateLimit: (status, headers, body) => {
-    const exhausted = headers.get('x-ratelimit-remaining') === '0';
-    const message = typeof body === 'object' && body !== null && 'message' in body ? body.message : null;
-    const limited = status === 429 || (status === 403
-      && (exhausted || headers.has('retry-after') || (typeof message === 'string' && /rate limit/iu.test(message))));
-    if (!limited) return undefined;
-    const reset = Number(headers.get('x-ratelimit-reset'));
-    return { waitMs: exhausted && Number.isSafeInteger(reset) && reset > 0 ? Math.max(0, reset * 1000 - Date.now()) : 60_000 };
-  },
-};
-
-/** Apollo: limits are per team and endpoint, the Free plan's enrichment 50 a minute. A plan window's 429 names its wait in
- * `retry-after`; a platform one names none and asks for 60 seconds. */
-export const apollo: ProviderDefinition = {
-  id: 'apollo', baseUrl: 'https://api.apollo.io/api/v1', auth: { header: 'x-api-key', prefix: '' },
-  timeoutMs: 30000, minIntervalMs: 1200,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 60000 },
-  // `error_details.code` (`AUTH.AUTHENTICATION.API_KEY_INVALID`), Apollo's only error payload from 2027-02-16.
-  errorDetail: body => {
-    const details = typeof body === 'object' && body !== null && 'error_details' in body ? body.error_details : null;
-    const code: unknown = typeof details === 'object' && details !== null && 'code' in details ? details.code : null;
-    return typeof code === 'string' ? code : undefined;
-  },
-};
-
-/** Lusha: the Free and Starter plans allow 40 calls a minute (account usage 5), and no `Retry-After` is documented. */
-export const lusha: ProviderDefinition = {
-  id: 'lusha', baseUrl: 'https://api.lusha.com', auth: { header: 'api_key', prefix: '' },
-  timeoutMs: 30000, minIntervalMs: 1500,
-  retry: { limit: 1, maxWaitMs: 60000, defaultWaitMs: 60000 },
-  // Lusha refuses an account without v3 access with a 403, as it does an inactive one; only its message tells them apart.
-  errorDetail: body => (typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string'
-    && body.message.startsWith('V3 API access is not enabled') ? 'v3_not_enabled' : undefined),
-};
-
-/** Breakcold's documented error object, `{ error: { code, message, requestId, retryAfterMs? } }`, or nothing. */
-function breakcoldError(body: unknown): { code?: unknown; retryAfterMs?: unknown } {
-  if (typeof body !== 'object' || body === null || !('error' in body)) return {};
-  return typeof body.error === 'object' && body.error !== null ? body.error : {};
+/** Today's definition of a provider, read from its entry; 0.13.0 removes `ProviderDefinition` and this with it. */
+function definitionOf(entry: Entry): ProviderDefinition {
+  const { http, errors = {} } = entry;
+  const [auth] = entry.auth;
+  // Slack and Fireflies read their errors inside a 200 in their own modules: their definitions carried no function.
+  const inBody = errors.failed !== undefined;
+  const waitFromBody = !inBody && http.retry?.waitFromBody !== undefined;
+  return {
+    id: entry.id, baseUrl: http.baseUrl, timeoutMs: http.timeoutMs ?? 30_000, minIntervalMs: http.minIntervalMs ?? 0,
+    ...('send' in auth ? { auth: 'basic' in auth.send ? { header: 'authorization', prefix: 'Basic ' } : { header: auth.send.header, prefix: '' } } : {}),
+    retry: { ...retryPolicy(http.retry), ...(waitFromBody ? { waitFromBody: (body: unknown) => bodyWaitOf(http.retry, body, Date.now()) } : {}) },
+    ...(auth.kind === 'oauth2' ? { oauth2: oauth2Of(entry, auth) } : {}),
+    ...(entry.webhook ? { webhook: schemeOf(entry.webhook) } : {}),
+    ...(!inBody && (errors.detail !== undefined || errors.rules?.some(rule => rule.detail !== undefined))
+      ? { errorDetail: (body: unknown) => detailOf(errors, body) } : {}),
+    ...(http.rateLimit ? { rateLimit: (status: number, headers: Headers, body: unknown) => {
+      const limit = rateLimitOf(http, { status, headers, body, code: codeOf(errors, body) }, Date.now());
+      return limit && { waitMs: limit.waitMs ?? 0 };
+    } } : {}),
+  };
 }
 
-export const breakcold: ProviderDefinition = {
-  id: 'breakcold', baseUrl: 'https://rest.breakcold.com/api/v1', timeoutMs: 30000, minIntervalMs: 0,
-  retry: {
-    limit: 1, maxWaitMs: 60000, defaultWaitMs: 0,
-    waitFromBody: body => { const { retryAfterMs } = breakcoldError(body); return typeof retryAfterMs === 'number' ? retryAfterMs : undefined; },
-  },
-  webhook: {
-    signed: '{timestamp}.{body}', signatureHeader: 'x-webhook-signature', prefix: 'sha256=', encoding: 'hex',
-    timestamp: { header: 'x-webhook-timestamp', toleranceSeconds: 300 },
-  },
-  errorDetail: body => { const { code } = breakcoldError(body); return typeof code === 'string' ? code : undefined; },
-};
-
-/** A provider's error code from `{ error: { code } }` (Graph) or `{ error: { errors: [{ reason }], status } }` (Google). */
-function nestedErrorCode(body: unknown): string | undefined {
-  if (typeof body !== 'object' || body === null || !('error' in body)) return undefined;
-  const { error } = body;
-  if (typeof error !== 'object' || error === null) return undefined;
-  if ('code' in error && typeof error.code === 'string') return error.code;
-  const reason = 'errors' in error && Array.isArray(error.errors) ? (error.errors[0] as { reason?: unknown } | undefined)?.reason : undefined;
-  if (typeof reason === 'string') return reason;
-  return 'status' in error && typeof error.status === 'string' ? error.status : undefined;
+/** An entry's OAuth sign-in as today's definition: PKCE on, the client secret in the body, scopes joined by a space. */
+function oauth2Of(entry: Entry, auth: Extract<Auth, { kind: 'oauth2' }>): OAuth2Definition {
+  const extras = tokenAnswerKeys(entry);
+  return {
+    authUrl: auth.authorizeUrl, tokenUrl: auth.tokenUrl,
+    ...(entry.revoke && 'url' in entry.revoke ? { revokeUrl: entry.revoke.url } : {}),
+    clientAuth: auth.clientAuth ?? 'post', pkce: auth.pkce !== false, scopeDelimiter: auth.scopeSeparator ?? ' ',
+    ...(auth.authorizeParams ? { authParams: auth.authorizeParams } : {}),
+    ...(auth.tokenTypes ? { tokenTypes: auth.tokenTypes } : {}),
+    ...(auth.failed ? { errorsInBody: true } : {}),
+    ...(entry.errors?.revoked ? { revokedErrors: entry.errors.revoked } : {}),
+    ...(extras.length > 0 ? { extras } : {}),
+  };
 }
 
-/** Microsoft Graph on a member's delegated grant (Outlook mail and calendar). A 429 names its wait in `Retry-After`.
- * Microsoft has no endpoint that revokes one app's delegated grant. */
-export const microsoft: ProviderDefinition = {
-  id: 'microsoft', baseUrl: 'https://graph.microsoft.com/v1.0', timeoutMs: 30000, minIntervalMs: 0,
-  retry: { limit: 2, maxWaitMs: 30000, defaultWaitMs: 5000 },
-  errorDetail: nestedErrorCode,
-  oauth2: {
-    authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-    tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-    clientAuth: 'post', pkce: true, scopeDelimiter: ' ', authParams: { response_type: 'code', response_mode: 'query' },
-  },
-};
+/** The token answer's top-level keys the entry reads (`identify`, `save`), then `scope` when every scope must be granted. */
+function tokenAnswerKeys(entry: Entry): string[] {
+  const reads = [entry.identify?.id, entry.identify?.name, ...Object.values(entry.save ?? {})].flat().filter(read => read !== undefined);
+  const paths = reads.flatMap(read => (read.includes('{') ? placeholders(read) : [read]));
+  const keys = paths.filter(path => path.startsWith('tokenAnswer.')).map(path => path.split('.')[1] ?? '');
+  return [...new Set([...keys, ...(entry.scopes?.requireGranted ? ['scope'] : [])])];
+}
 
-/** Gmail on a member's grant; Google Calendar sits on its own base. */
-export const GOOGLE_CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3';
-const GOOGLE_RATE_LIMITS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded']);
+/** An entry's webhook as today's scheme: SHA-256 over the entry's `signed` template (the raw body by default), hex, a
+ * five-minute tolerance unless it says otherwise. */
+function schemeOf(webhook: Webhook): HmacScheme {
+  return { signed: webhook.signed ?? '{body}', signatureHeader: webhook.header, prefix: webhook.prefix ?? '',
+    encoding: webhook.encoding ?? 'hex',
+    ...(webhook.timestamp ? { timestamp: { header: webhook.timestamp.header, toleranceSeconds: webhook.timestamp.toleranceSeconds ?? 300 } } : {}) };
+}
 
-/** Gmail and Google Calendar on a member's grant. Google answers a quota limit as 403 as well as 429; `prompt=consent`
- * returns a refresh token on every sign-in, and `access_type=offline` one at all. */
-export const google: ProviderDefinition = {
-  id: 'google', baseUrl: 'https://gmail.googleapis.com/gmail/v1', timeoutMs: 30000, minIntervalMs: 0,
-  retry: { limit: 2, maxWaitMs: 30000, defaultWaitMs: 5000 },
-  errorDetail: nestedErrorCode,
-  rateLimit: (status, _headers, body) => {
-    const code = nestedErrorCode(body);
-    return status === 429 || (status === 403 && code !== undefined && GOOGLE_RATE_LIMITS.has(code)) ? { waitMs: 60_000 } : undefined;
-  },
-  oauth2: {
-    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token',
-    revokeUrl: 'https://oauth2.googleapis.com/revoke', clientAuth: 'post', pkce: true, scopeDelimiter: ' ',
-    authParams: { response_type: 'code', access_type: 'offline', prompt: 'consent' },
-    // What the member granted: Google's consent screen lets them untick a scope.
-    extras: ['scope'],
-  },
-};
+/** A rule's detail when it reads the body alone (today's errorDetail saw no status or header), else the provider's code. */
+function detailOf(errors: Errors, body: unknown): string | undefined {
+  const answer = { status: 0, headers: new Headers(), body, code: codeOf(errors, body) };
+  const rule = errors.rules?.find(item => item.detail !== undefined && item.when.status === undefined
+    && item.when.header === undefined && holds(item.when, answer));
+  return rule?.detail ?? (answer.code === undefined ? undefined : safeDetail(answer.code) ?? undefined);
+}
 
-export const unipile: ProviderDefinition = {
-  id: 'unipile', baseUrl: 'https://api.unipile.com/v2', auth: { header: 'x-api-key', prefix: '' }, timeoutMs: 30000, minIntervalMs: 0,
-  retry: { limit: 3, maxWaitMs: 60000, defaultWaitMs: 30000 },
-  // Unipile names a refusal by `type`, its thrower first (`provider/insufficient_permissions`, `api/expired_authorization`):
-  // a member's grant falling short reads apart from our own key. The slash becomes a dot, as a detail allows.
-  errorDetail: body => {
-    const type = typeof body === 'object' && body !== null && 'type' in body ? body.type : null;
-    return typeof type === 'string' && /^(api|provider)\/\w+$/u.test(type) ? type.replace('/', '.') : undefined;
-  },
-};
+export const hubspot = definitionOf(hubspotEntry);
 
-export const firecrawl: ProviderDefinition = {
-  id: 'firecrawl', baseUrl: 'https://api.firecrawl.dev', timeoutMs: 120000, minIntervalMs: 0,
-  retry: { limit: 3, maxWaitMs: 60000, defaultWaitMs: 30000 },
-};
+export const slack = definitionOf(slackEntry);
 
-export const exa: ProviderDefinition = {
-  id: 'exa', baseUrl: 'https://api.exa.ai', auth: { header: 'x-api-key', prefix: '' }, timeoutMs: 30000, minIntervalMs: 0,
-  retry: { limit: 3, maxWaitMs: 60000, defaultWaitMs: 30000 },
-};
+export const fireflies = definitionOf(firefliesEntry);
+
+export const granola = definitionOf(granolaEntry);
+
+export const fathom = definitionOf(fathomEntry);
+
+export const attio = definitionOf(attioEntry);
+
+export const aircall = definitionOf(aircallEntry);
+
+export const notion = definitionOf(notionEntry);
+
+export const github = definitionOf(githubEntry);
+
+export const apollo = definitionOf(apolloEntry);
+
+export const lusha = definitionOf(lushaEntry);
+
+export const breakcold = definitionOf(breakcoldEntry);
+
+export const microsoft = definitionOf(microsoftEntry);
+
+export const GOOGLE_CALENDAR_BASE = googleEntry.http.bases.calendar;
+
+export const google = definitionOf(googleEntry);
+
+export const unipile = definitionOf(unipileEntry);
+
+export const firecrawl = definitionOf(firecrawlEntry);
+
+export const exa = definitionOf(exaEntry);

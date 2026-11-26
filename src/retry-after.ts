@@ -26,11 +26,11 @@ function httpDate(value: string, nowMs: number): number | null {
   return new Date(timestamp).toUTCString() === canonical ? timestamp : null;
 }
 
-/** Diagnostic delay only: this does not change the HTTP client's existing capped retry policy. */
+/** The wait a response names: a valid Retry-After, else the body's wait. The retry caps it; errors carry it as is. */
 export function retryAfterMs(headers: Headers, nowMs: number, bodyWaitMs?: number): number | null {
   const value = headers.get('retry-after');
   if (value !== null) {
-    if (/^\d+$/u.test(value)) {
+    if (/^\d+(?:\.\d+)?$/u.test(value)) {
       const milliseconds = delay(Number(value) * 1000);
       if (milliseconds !== null) return milliseconds;
     } else {

@@ -1,0 +1,49 @@
+import type { ProviderErrorCode } from './errors.js';
+
+/** A string with `{name}` placeholders. Which names it may use depends on where it is read: see the design. */
+export type Template = string;
+/** A dotted path into an answer (`data.user.id`, `errors.0.code`); at each level the whole rest is tried as one key first. */
+export type Path = string;
+export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+/** A connection's plain values: JSON only. */
+export type Values = Readonly<Record<string, unknown>>;
+/** Every stated part must hold. `status: 'error'` is any answer outside 2xx. One of `header` or `path`, never both,
+ * selects the value compared; a comparison (`equals`, `in`, `startsWith`, `contains`) needs one of them, and with no
+ * comparison the value only has to be there. `detail` tests the provider's own code. */
+export type When = { status?: number | 'error'; header?: string; path?: Path; detail?: string | true;
+  equals?: string | number | boolean; in?: readonly string[]; startsWith?: string; contains?: string };
+export type Field = { name: string; title: string; secret?: true };
+/** How the credential travels. None: `authorization: Bearer {token}`. A header alone: the bare `{token}`. */
+export type Send = { header: string } | { basic: readonly [Template, Template] };
+export type Auth =
+  | { kind: 'key'; send?: Send }
+  | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; pkce?: false; clientAuth?: 'basic'; scopeSeparator?: ',';
+    authorizeParams?: Readonly<Record<string, string>>; tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true }
+  | { kind: 'hosted'; send?: Send };
+export type Request = { method?: Method; path?: Template; query?: Readonly<Record<string, string>>; graphql?: string };
+/** A path, the first present of several paths, or a template (a string with braces) over the same lookup. */
+export type Value = Path | readonly Path[];
+export type Identify = { request?: Request; id?: Value; name?: Value; lowercase?: true;
+  /** Answers that mean a bad credential whatever their status; `detail` is the detail the error reports. */
+  rejectWhen?: readonly (Omit<When, 'detail'> & { detail?: string })[] };
+export type Revoke = ({ url: string; token: readonly ('refresh' | 'access')[] } | { request: Request })
+  & { goneErrors?: readonly string[] };
+export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number;
+  waitFromBody?: { path: Path; unit: 'ms' | 'epochMs' } };
+export type RateLimit = { when: readonly (When & { resetAt?: { header: string; unit: 'epochSeconds' } })[];
+  defaultWaitMs?: number };
+export type Http = { baseUrl: string; bases?: Readonly<Record<string, string>>; headers?: Readonly<Record<string, string>>;
+  timeoutMs?: number; minIntervalMs?: number; retry?: Retry; rateLimit?: RateLimit };
+export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
+  revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
+export type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64';
+  timestamp?: { header: string; toleranceSeconds?: number };
+  deliveryId?: { header: string } | { body: readonly Path[] } };
+/** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. */
+export type Data = { id: string; name: string; fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
+  scopes?: { default: readonly string[]; requireGranted?: true }; identify?: Identify;
+  save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook };
+export type Entry = Data;
+
+/** One provider, as plain data. The literal's type is kept, so a client's types are inferred from it. */
+export function defineProvider<const D extends Data>(data: D): D { return data; }

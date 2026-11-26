@@ -2,9 +2,11 @@ import { z } from "zod";
 import type { OAuthConnect } from "../connect.js";
 import { revokeGrant } from "../oauth.js";
 import { createClient } from "../http.js";
+import { hubspot as hubspotEntry } from "../catalogue/hubspot.js";
 import { hubspot } from "../providers.js";
 import { parseAnswer } from "../parse.js";
 import { paginate, type Page } from "../paginate.js";
+import { datetime } from "../shapes.js";
 
 export type HubSpotObject = "companies" | "contacts" | "deals";
 const hubspotRecordSchema = z.object({ id: z.string(), properties: z.record(z.string(), z.string().nullable()),
@@ -28,7 +30,7 @@ const searchSchema = z.object({ total: z.number(), results: z.array(hubspotRecor
 const batchReadSchema = z.object({ results: z.array(hubspotRecordSchema) });
 const stageHistorySchema = z.object({ results: z.array(z.object({ id: z.string(),
   propertiesWithHistory: z.object({ dealstage: z.array(z.object({ value: z.string(),
-    timestamp: z.iso.datetime({ offset: true }), sourceType: z.string().optional() })).nullish() }).nullish(),
+    timestamp: datetime, sourceType: z.string().optional() })).nullish() }).nullish(),
 })) });
 const associationSchema = z.object({ toObjectId: z.union([z.number(), z.string()]),
   associationTypes: z.array(z.object({ category: z.unknown().optional(), typeId: z.unknown().optional() })).nullish() });
@@ -41,7 +43,7 @@ const pipelinesSchema = z.object({ results: z.array(z.object({ stages: z.array(z
 const ownersSchema = z.object({ results: z.array(z.object({ email: z.string().optional(), firstName: z.string().optional(),
   lastName: z.string().optional() })), paging: z.object({ next: z.object({ after: z.string() }).optional() }).optional() });
 
-export const HUBSPOT_SCOPES: readonly string[] = ["oauth", "crm.objects.companies.read", "crm.objects.contacts.read", "crm.objects.deals.read", "crm.objects.owners.read"];
+export const HUBSPOT_SCOPES: readonly string[] = hubspotEntry.scopes.default;
 
 export const hubspotConnect: OAuthConnect<{ portalId: string }> = {
   kind: "oauth2", provider: hubspot, reusesGrant: true,

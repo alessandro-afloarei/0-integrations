@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
+import { safeDetail } from '../http-response.js';
 import { fireflies } from '../providers.js';
 import { paginate, type Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { retryAfterMs } from '../retry-after.js';
+import { pageSize } from '../shapes.js';
 import { normalizeTranscript, UNTITLED, type FirefliesTranscript } from './transcript.js';
 
 const LIVE_LIST_QUERY = `query FirefliesCallList($userId: String, $fromDate: DateTime, $toDate: DateTime, $limit: Int, $skip: Int) {
@@ -98,7 +100,7 @@ export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; si
     const { code, retryAfter } = graphqlError(body);
     const now = Date.now();
     const metadata = { retryAfterMs: retryAfterMs(headers, now, retryAfter === undefined ? undefined : Math.max(0, retryAfter - now)) };
-    const detail = code !== null && /^[\w.-]{1,64}$/u.test(code) ? code : null;
+    const detail = code === null ? null : safeDetail(code);
     if (code === 'auth_failed' || status === 401) throw new ProviderHttpError('rejected', status, detail, metadata);
     if (code === 'too_many_requests' || status === 429) throw new ProviderHttpError('rate_limited', status, detail, metadata);
     if (code === 'object_not_found') throw new ProviderHttpError('not_found', status, detail, metadata);
@@ -140,7 +142,7 @@ export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; si
       return raw === null ? null : normalizeTranscript(raw);
     },
     async search(query) {
-      if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > PAGE_SIZE) throw new TypeError('limit_invalid');
+      pageSize(query.limit, PAGE_SIZE);
       const { items, skipped } = list(await request(LIVE_SEARCH_QUERY, query), query.limit);
       return { items, skipped };
     },

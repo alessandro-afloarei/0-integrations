@@ -82,7 +82,7 @@ Each phase ends with a release. Breaking changes are listed in the changelog wit
 | # | Phase | Done when |
 |---|---|---|
 | 0 | Open-source readiness | Apache 2.0 license, contributor docs, security policy and issue templates; the repository public |
-| 1 | Entry format and generic engine | The entry format, its lints, `catalogue.json`, tiers and generated typed operations; today's providers moved onto entries; new auth modes, templated URLs, generic identify, revoke and verify, 5xx retry and more webhook schemes |
+| 1 | Entry format and generic engine | The entry format, its lints, `catalogue.json`, tiers and declared operations with an inferred typed client; today's providers moved onto entries; new auth modes, templated URLs, generic identify, revoke and verify, 5xx retry and more webhook schemes |
 | 2 | Breadth | 300 or more entries, added in category batches with their main operations, 100 or more at `recorded` or above |
 | 3 | Adapters | The Postgres, Redis and route-handler packages |
 | 4 | Connect screen | The React connect screen, drawn from `catalogue.json` |

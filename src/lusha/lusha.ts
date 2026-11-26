@@ -3,6 +3,7 @@ import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { parseAnswer } from '../parse.js';
 import { lusha } from '../providers.js';
+import { orNull, text } from '../shapes.js';
 
 // Lusha's own field names: an app stores these values and reads them back with its own schema.
 export type LushaUsage = { credits: { total: number; used: number; remaining: number } };
@@ -34,9 +35,6 @@ export type LushaClient = {
   company(domain: string): Promise<LushaLookup<LushaCompany>>;
 };
 
-/** A value Lusha may leave out or null: read as null. */
-const orNull = <T extends z.ZodType>(schema: T) => schema.nullish().transform(value => value ?? null);
-const text = orNull(z.string());
 const count = orNull(z.number());
 const location = orNull(z.object({ country: text, state: text, city: text }));
 const socialLinks = orNull(z.object({ linkedin: text }));

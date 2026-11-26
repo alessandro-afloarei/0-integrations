@@ -1,8 +1,9 @@
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import { ProviderHttpError } from './errors.js';
-import { responseJson } from './http-response.js';
+import { responseJson, sentWith } from './http-response.js';
 import type { ProviderDefinition } from './providers.js';
+import { retryAfterMs } from './retry-after.js';
 
 export type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -101,10 +102,10 @@ export function createClient(input: {
     return renewal;
   }
 
-  /** Waits: a positive Retry-After in seconds, else the wait the body names, else the provider's default. */
+  /** Waits: a positive Retry-After, else the wait the body names, else the provider's default. */
   async function waitFor(response: Response): Promise<number> {
-    const seconds = Number(response.headers.get('retry-after'));
-    if (seconds > 0) return seconds * 1000;
+    const header = retryAfterMs(response.headers, Date.now());
+    if (header !== null && header > 0) return header;
     const fromBody = provider.retry.waitFromBody?.(parse(await retryBody(response, provider.timeoutMs)));
     return fromBody !== undefined && Number.isFinite(fromBody) && fromBody >= 0 ? fromBody : provider.retry.defaultWaitMs;
   }
@@ -159,7 +160,7 @@ export function createClient(input: {
     for (let hop = 0; ; hop++) {
       const response = await send(url, bearer, options);
       const next = hop < MAX_REDIRECTS ? redirectTarget(url, options.method ?? 'GET', response) : null;
-      if (next === null) return response;
+      if (next === null) return sentWith(response, bearer);
       url = next;
     }
   }

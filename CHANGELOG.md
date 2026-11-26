@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- New: `0-integrations/catalogue` (`defineProvider` and the entry types), one entry per provider at
+  `0-integrations/catalogue/<id>`, and `0-integrations/catalogue.json`, all 17 providers as plain data.
+  `0-integrations/providers` is unchanged and now derived from the entries.
+- A fractional `Retry-After` is now carried in an error's `retryAfterMs`, and an HTTP-date `Retry-After` is now honoured
+  by the retry wait. The retry wait no longer accepts forms such as `2e3`, `+2`, `0x10` or `Infinity`: they fall back to
+  the body's wait or the default.
+- One sanitiser reads the detail of HTTP and OAuth errors, and a `/` in a provider's code becomes `.` in `detail` for
+  every provider. An OAuth refusal's detail now follows the HTTP rule: 1 to 64 characters of letters, digits, `_`, `.`
+  or `-`, in any position. A code holding the credential its request sent, before or after that `.`, is no detail.
+- unipile: any refusal `type` that passes the sanitiser is carried as the detail, `/` read as `.`; before, only `api/…`
+  and `provider/…` types were, so `errors/…` types are now carried too.
+- Every provider that reads an error code or a wait from the body skips an empty-string code and reads the next path,
+  and a path also reads an own dotted key (`{ "error.code": … }`, `{ "error.retryAfterMs": … }`) and an object keyed
+  `0` (`{ "errors": { "0": … } }`): apollo, breakcold, google and microsoft read such bodies differently than before.
+
 ## 0.12.0
 
 - The package is now `0-integrations`, on npm and at github.com/alessandro-afloarei/0-integrations.

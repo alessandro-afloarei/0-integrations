@@ -3,6 +3,7 @@ import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { fathom } from '../providers.js';
+import { datetime, orNull } from '../shapes.js';
 
 // Fathom's own field names: an app stores these values and reads them back with its own schema.
 export type FathomUser = { name: string; email: string; team: string | null };
@@ -31,12 +32,11 @@ export type FathomClient = {
   transcript(recordingId: number): Promise<FathomTranscriptItem[]>;
 };
 
-const datetime = z.iso.datetime({ offset: true });
 const userSchema = z.object({ name: z.string(), email: z.string(), team: z.string().nullable() });
 // Every key it does not name is dropped, so Fathom's summary, action items and CRM matches never leave the client.
 const meetingSchema = z.object({
   recording_id: z.number().int().positive(), title: z.string(), meeting_title: z.string().nullable(),
-  url: z.string(), share_url: z.string(), meeting_url: z.string().nullable().optional().transform(link => link ?? null),
+  url: z.string(), share_url: z.string(), meeting_url: orNull(z.string()),
   created_at: datetime, scheduled_start_time: z.string().nullable(), scheduled_end_time: z.string().nullable(),
   recording_start_time: datetime, recording_end_time: datetime,
   calendar_invitees: z.array(z.object({ name: z.string().nullable(), email: z.string().nullable(), is_external: z.boolean() })),
