@@ -14,7 +14,7 @@ export const gitbook = defineProvider({
   fields: [{ name: 'accessToken', title: 'Personal access token', secret: true,
     help: 'From Developer settings in your GitBook account. Read only is enough; the token can do what your account can, and its IP rules, if any, must allow the app.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.gitbook.com/v1', retry: {} },
+  http: { baseUrl: 'https://api.gitbook.com/v1', retry: { wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   identify: { request: { path: '/user' }, id: 'id', name: ['displayName', 'email'] },
   paging: { cursor: { kind: 'cursor', next: 'next.page', send: { query: 'page' } } },
   operations: {
