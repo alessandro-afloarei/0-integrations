@@ -525,8 +525,8 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
 1. **Shape.** The entry matches the schema. It holds no function. Every URL is https. Every placeholder names a
    declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip. No string
    holds `TODO`, what `pnpm new` leaves for each unknown.
-2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): identify with
-   a good and a bad credential. The module kits run the first page, a walk to the end and a 429 on the same
+2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): a `token`
+   entry's token request and identify, with a good and a bad credential. The module kits run the first page, a walk to the end and a 429 on the same
    recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange and revoke, and webhook samples
    join the table's replay with the first entry that has them and no module.
 3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
@@ -537,7 +537,8 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.
 
-A recording is a real capture from a real account, cleaned by the privacy check. A made-up one tests the code but
+A recording is a real capture from a real account. An entry's recorder keeps only the paths the entry reads, swaps
+the credential, the plain values and the account for the kit's stand-ins, and refuses to write what it cannot scrub. A made-up one tests the code but
 leaves the entry `declared`. The module kits stay for what an entry cannot know, such as incremental reads.
 
 `pnpm check` remains the one gate, with no network.

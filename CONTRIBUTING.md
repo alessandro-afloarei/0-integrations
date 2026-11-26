@@ -66,15 +66,17 @@ the recorded answers. A recording is `{ provider, synthetic, source, recordedAt,
 matches the method, the whole URL and the body, and fills a plain field with its kit value (its `default`, else its first
 choice, else `kit-<name>`).
 
-To record an entry from a test account, run `RECORD_PROVIDER=<id> RECORD_KEY=<secret>
-[RECORD_VALUES='{"<plain field>":"…"}'] pnpm vitest run src/record.test.ts`
-([testing](docs/modules/testing.md#recording-an-entry-with-no-module)). It signs in once with the key and once with a
-bad one and writes `src/catalogue/<id>.recording.json`. The recorder swaps the key, the plain values, the tokens issued
-and the account's id and name for the kit's stand-ins, and writes nothing it cannot scrub. Anything else of the
-account's in the answers is yours to replace (below). Only such a capture from a real test account (`synthetic: false`)
-makes the entry `recorded`. A recording written by hand from the provider's documented
-examples is marked `synthetic: true`: it tests the entry and leaves its tier `declared`. Every recording must sit beside
-an entry.
+To record an entry from a test account, read the key at a prompt and run the recorder:
+`read -rsp 'Key: ' RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
+For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test account with your app's own OAuth client.
+The recorder signs in with the key and with a bad key, and writes `src/catalogue/<id>.recording.json`, replacing any
+recording of that name. From each answer it keeps only the paths the entry reads. It swaps the key, the plain values,
+the tokens issued and the account's id and name for the kit's stand-ins, and refuses to write when a value is too
+short to swap or a real value is still in the file ([testing](docs/modules/testing.md#recording-an-entry-with-no-module)
+says exactly what is written, swapped and refused). Only such a capture from a real test account (`synthetic: false`)
+makes the entry `recorded`; never copy a file from a `.record-test-*` folder, which the recorder's own tests write on a
+fake. A recording written by hand from the provider's documented examples is marked `synthetic: true`: it tests the
+entry and leaves its tier `declared`. Every recording must sit beside an entry.
 
 Add a module, `src/<id>/<id>.ts`, only when the provider needs real code: answers with meaning, incremental reads,
 parsed webhooks, a sign-in the provider hosts. It builds on its entry with `client(entry, …)`, so its errors, retry and
@@ -90,11 +92,12 @@ paging are the entry's, and ships with:
 
 ## Recordings hold no one's data
 
-Every recording must pass `src/fixtures-privacy.test.ts`, which `pnpm check` runs. It refuses any email address or
-phone number that could belong to a real person: use addresses on reserved domains (`example.com`, `.test`) and the
-fictional 555-0100 to 555-0199 numbers. A live recording keeps every answer whole, so read the file before you commit
-it and replace each real name, address and id with a synthetic one. An entry's recording has the account's id and name
-swapped for `kit-account` and `kit-name` already; anything else the answers hold is yours to replace.
+Every recording must pass `src/fixtures-privacy.test.ts`, which `pnpm check` runs. It refuses any email address off
+the reserved domains (`example.com`, `.test`) and any phone number written with a leading `+` outside the fictional
+555-0100 to 555-0199 range. It does not catch names, street addresses, ids or numbers in other formats, so read every
+recording before you commit it and replace each real one with a synthetic one. A recording of an entry keeps only the
+paths the entry reads, with the account's id and name already swapped for `kit-account` and `kit-name`; a module
+scenario's recording keeps each answer whole.
 
 ## Code you did not write
 

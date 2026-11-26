@@ -58,25 +58,52 @@ recording stays synthetic: `record.test.ts` plays list scenarios only, and a rea
 
 ## Recording an entry with no module
 
-An entry with no module becomes `recorded` from a test account with one command:
+An entry with no module becomes `recorded` from a test account with one command. Read the key at a prompt, so it never
+lands in your shell's history:
 
 ```sh
-RECORD_PROVIDER=<id> RECORD_KEY=<secret> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts
+read -rsp 'Key: ' RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts
 ```
 
-`RECORD_KEY` is the entry's secret field (a `token` entry's too), or an OAuth access token for an OAuth entry.
-`RECORD_VALUES` holds the test account's plain values; a field left out takes its kit value (its `default`, else its
-first choice, else `kit-<name>`). A module's scenario of that name is still recorded first. With none, the recorder signs
-in to the entry (a `token` entry's token request, then identify) once with the key and once with a bad one, and writes
-`src/catalogue/<id>.recording.json` with `synthetic: false`, so the table test replays it with the kit's key and values
-and the entry's tier is `recorded`.
+- `RECORD_KEY` is the entry's secret field (a `token` entry's too). For an OAuth entry it is an access token: sign in
+  to a test account with your app's own OAuth client (`startConnect` and `finishConnect`), and pass the grant's
+  `accessToken`.
+- `RECORD_VALUES` holds the test account's plain values, which are not secret. A field left out takes its kit value
+  (its `default`, else its first choice, else `kit-<name>`).
+- A module's scenario of that name is still recorded first. With none, the recorder signs in to the entry (a `token`
+  entry's token request, then identify) with the key, then with a bad key, which must be refused as `rejected`. It
+  writes `src/catalogue/<id>.recording.json` with `synthetic: false`, replacing any recording of that name, so the
+  table test replays it with the kit's key and values and the entry's tier is `recorded`.
 
-Before it writes, the recorder swaps each real value for the kit's stand-in wherever the provider put it (the URL, the
-request body, the `link`, `content-type` and `retry-after` headers, the answer at any depth, keys included, as written,
-JSON-escaped or percent-encoded): the key for `kit-good-key`, each plain value for its kit value, every token at the
-entry's `token` path for `kit-token`, and the account's id and name, read at identify's paths, for `kit-account` and
-`kit-name`. It writes nothing when a value is under 4 characters (it would match unrelated text: record from an account
-whose values are longer), or when a value is still found once the text is decoded (an encoding it does not know). Its
-messages never quote a value, and nothing read from the environment is printed. The privacy check
-(`src/fixtures-privacy.test.ts`) still runs on the file: anything else of the account's in an answer (another address, a
-person's name) must be replaced by hand with a synthetic one, so read the file before committing it.
+**What is written.** From each answer the recorder keeps only the paths the entry reads, and drops everything else
+before anything is swapped: identify's `id` and `name` paths and every `save` path (a `tokenAnswer.` path is kept in
+the token answer), a token answer's token and `expires_in`, the `path` of each condition in `identify.rejectWhen`,
+`errors.failed`, `errors.rules` and `http.rateLimit.when`, the `errors.detail` paths and a body wait's path. An answer
+that is not JSON is written as `null`: only its status is kept. Each exchange also keeps its method, URL, request body,
+status and its `content-type`, `link`, `location` and `retry-after` headers. A refresh token, an ID token, another
+person's name or a phone number in an answer is never written unless the entry reads it.
+
+**What is swapped.** The key becomes `kit-good-key`, each plain value given its kit value, and every token at the
+entry's `token` path `kit-token`: inside the URL, the request body and the headers kept (as written, JSON-escaped,
+percent- or form-encoded), and in the answers where they are a whole value. The account's id and name, at identify's
+paths, become `kit-account` and `kit-name` in the answers. A value read at another path (a `save` value, an error code)
+is kept as the provider answered it.
+
+**When it refuses.** The recorder writes nothing, and says which stand-in's value is at fault without quoting it,
+when:
+
+- a value to swap is under 4 characters (an account id `7`, a region `eu`): it would match unrelated text, so record
+  from an account whose values are longer;
+- a real value is still in the file once the stand-ins are taken out, searched ignoring case, percent-decoded and with
+  every base64-like run decoded (a Basic pair, a JWT's payload), for example a key echoed inside an error message or a
+  number holding the account id;
+- the sign-in with the key fails, or the bad key is not refused as `rejected`: its message gives the error's code and
+  status only, never the provider's text.
+
+Nothing read from the environment is printed.
+
+**Before you commit it.** `src/fixtures-privacy.test.ts` runs on every recording, but it catches only email addresses
+off the reserved domains and phone numbers written with a leading `+`. It misses names, street addresses, ids and
+numbers in other formats, so read the file before committing it. Never copy a file from a `.record-test-*` folder
+into `src/catalogue/`: those come from the recorder's own tests on a fake, and only a recording from a real account
+makes an entry `recorded`.

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
-import { identifyAccount } from './account.js';
+import { identifyAccount, lookupNames } from './account.js';
 import type { Entry } from './catalogue.js';
 import { finishConnect } from './connect.js';
 import type { ProviderHttpError } from './errors.js';
@@ -80,15 +80,48 @@ export function recorder(real: typeof fetch, key: Exchange['key']): { fetch: typ
     const body = await requestBody(request.clone());
     const response = await real(request);
     const text = await response.clone().text();
-    // `link` names GitHub's next page.
-    const headers = Object.fromEntries(['retry-after', 'content-type', 'link'].flatMap(name => {
+    // `link` names GitHub's next page; `location` a redirect identify follows.
+    const headers = Object.fromEntries(['retry-after', 'content-type', 'link', 'location'].flatMap(name => {
       const value = response.headers.get(name);
       return value === null ? [] : [[name, value]];
     }));
+    // An answer that is not JSON is written as null: the engine reads nothing from it.
     exchanges.push({ key, method: request.method, url: request.url, ...(body === undefined ? {} : { body }),
-      status: response.status, headers, response: text ? JSON.parse(text) as unknown : null });
+      status: response.status, headers, response: parseJson(text) ?? null });
     return response;
   } };
+}
+
+/** Every path the engine reads from an entry's answers: identify's and `save`'s (with `tokenAnswer.` stripped, read
+ * from the token answer), a token answer's token and `expires_in`, each condition's `path`, the error code's paths and
+ * the body's wait. */
+export function answerReads(entry: Entry): string[] {
+  const { identify, errors, http } = entry;
+  const [auth] = entry.auth;
+  const detail = errors?.detail ?? [];
+  return [...lookupNames(entry).filter(name => !name.startsWith('connection.')).map(name => name.replace(/^tokenAnswer\./u, '')),
+    ...auth.kind === 'token' ? [auth.request.token ?? 'access_token', 'expires_in'] : [],
+    ...[...identify?.rejectWhen ?? [], errors?.failed, ...(errors?.rules ?? []).map(rule => rule.when), ...http.rateLimit?.when ?? []]
+      .flatMap(when => (when?.path === undefined ? [] : [when.path])),
+    ...typeof detail === 'string' ? [detail] : detail, ...http.retry?.waitFromBody === undefined ? [] : [http.retry.waitFromBody.path]];
+}
+
+/** Only what `paths` read from `value`, found as `readPath` finds it (a whole key first, then a key and the rest), in
+ * the answer's own shape; nothing else. Undefined when nothing is an object to read from. */
+export function onlyRead(value: unknown, paths: readonly string[]): unknown {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const whole = paths.filter(path => Object.hasOwn(record, path));
+  const nested = new Map<string, string[]>();
+  for (const path of paths) {
+    const head = path.slice(0, path.indexOf('.'));
+    if (!whole.includes(path) && path.includes('.') && Object.hasOwn(record, head)) nested.set(head, [...nested.get(head) ?? [], path.slice(head.length + 1)]);
+  }
+  const kept: Record<string, unknown> = Object.fromEntries([...[...nested].flatMap(([head, rest]): [string, unknown][] => {
+    const inner = onlyRead(record[head], rest);
+    return inner === undefined ? [] : [[head, inner]];
+  }), ...whole.map((path): [string, unknown] => [path, record[path]])]);
+  return Array.isArray(value) ? Object.assign([], kept) : kept;
 }
 
 /** A real value the recorder found, and the kit's stand-in written in its place. */
@@ -98,43 +131,46 @@ const SHORTEST_SWAP = 4;
 /** A value as a recording may hold it: as it is, JSON-escaped, percent-encoded and form-encoded. */
 const forms = (value: string) => [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value),
   new URLSearchParams({ v: value }).toString().slice(2)];
-/** Every key, string and number in a value. */
-const texts = (value: unknown): string[] => (typeof value === 'string' || typeof value === 'number' ? [String(value)]
-  : typeof value === 'object' && value !== null ? Object.entries(value).flatMap(([name, item]) => [name, ...texts(item)]) : []);
-/** `value` with `swap` applied to every key, string and number in it (a number swapped becomes a string). */
-function swapped(value: unknown, swap: (text: string) => string): unknown {
-  if (typeof value === 'string' || typeof value === 'number') {
-    const text = swap(String(value));
-    return text === String(value) ? value : text;
-  }
+/** `value` with each string through `text` and each number replaced only when it is a whole real value. */
+function swapped(value: unknown, text: (text: string) => string, whole: ReadonlyMap<string, string>): unknown {
+  if (typeof value === 'string') return text(value);
+  if (typeof value === 'number') return whole.get(String(value)) ?? value;
   if (typeof value !== 'object' || value === null) return value;
-  if (Array.isArray(value)) return value.map(item => swapped(item, swap));
-  return Object.fromEntries(Object.entries(value).map(([name, item]) => [swap(name), swapped(item, swap)]));
+  if (Array.isArray(value)) return value.map(item => swapped(item, text, whole));
+  return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, swapped(item, text, whole)]));
 }
 /** Percent and `+` escapes decoded, so no encoding hides a value from the last check. */
 const decoded = (text: string) => text.replaceAll('+', ' ').replace(/%([0-9a-f]{2})/giu, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
+/** Each run that may be base64 or base64url (a Basic pair, a JWT's part), decoded. */
+const unbased = (text: string) => (text.match(/[A-Za-z0-9+/_=-]{8,}/gu) ?? []).map(run => Buffer.from(run, 'base64').toString('utf8'));
 
 /**
- * The exchanges with each real value (the key, a plain value, a token issued, the account) replaced by its stand-in in
- * the URL, the body, the headers kept and the answer, at any depth, keys included. A value too short to swap safely, or
- * one still found once decoded, refuses the whole recording: nothing is written partly scrubbed, and no message holds a
- * real value.
+ * The exchanges safe to write. Each real value of `sent` (the key, a plain value, a token issued) is replaced by its
+ * stand-in inside the URL, the request body's strings and the headers kept; in the answer, a value of `sent` or
+ * `answered` (the account's id and name) is replaced only where it is a whole string or number. Then the whole file is
+ * searched, ignoring case, percent-decoded and with each base64-like run decoded: a real value still in it, or one too
+ * short to swap safely, refuses the recording. Nothing is written partly scrubbed, and no message holds a real value.
  */
-export function scrub(exchanges: readonly Exchange[], swaps: readonly Swap[]): Exchange[] {
-  const short = swaps.find(([real]) => real.length < SHORTEST_SWAP);
+export function scrub(exchanges: readonly Exchange[], swaps: { sent: readonly Swap[]; answered?: readonly Swap[] }): Exchange[] {
+  const all = [...swaps.sent, ...swaps.answered ?? []];
+  const short = all.find(([real]) => real.length < SHORTEST_SWAP);
   if (short) throw new Error(`recording refused: the value for ${short[1]} is under ${String(SHORTEST_SWAP)} characters, too short to swap safely`);
   const standIn = new Map<string, string>();
-  for (const [real, kit] of swaps) for (const form of forms(real)) if (!standIn.has(form)) standIn.set(form, kit);
+  for (const [real, kit] of swaps.sent) for (const form of forms(real)) if (!standIn.has(form)) standIn.set(form, kit);
   // One pass, longest first: a stand-in written is never read again.
   const pattern = new RegExp([...standIn.keys()].sort((a, b) => b.length - a.length)
-    .map(form => form.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&')).join('|'), 'gu');
-  const swap = (text: string) => text.replace(pattern, form => standIn.get(form) ?? form);
-  const out = exchanges.map(exchange => Object.fromEntries(Object.entries(exchange).map(([part, value]) =>
-    [part, ['key', 'method', 'status'].includes(part) ? value : swapped(value, swap)])) as Exchange);
-  // What is left once the stand-ins are taken out, as written and decoded.
-  const kits = [...new Set(swaps.map(([, kit]) => kit))];
-  const seen = texts(out).flatMap(text => [text, decoded(text)]).map(text => kits.reduce((rest, kit) => rest.replaceAll(kit, ''), text));
-  const left = swaps.find(([real]) => forms(real).some(form => seen.some(text => text.includes(form))));
+    .map(form => form.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&')).join('|') || '(?!)', 'gu');
+  const inText = (text: string) => text.replace(pattern, form => standIn.get(form) ?? form);
+  const whole = new Map([...all].reverse());
+  const out = exchanges.map(({ response, ...exchange }) => ({ ...Object.fromEntries(Object.entries(exchange).map(([part, value]) =>
+    [part, ['key', 'method', 'status'].includes(part) ? value : swapped(value, inText, whole)])),
+  response: swapped(response, text => whole.get(text) ?? text, whole) }) as Exchange);
+  // What is left once the stand-ins are taken out: as written, decoded and unbased, ignoring case.
+  const written = JSON.stringify(out);
+  const kits = [...new Set(all.map(([, kit]) => kit.toLowerCase()))];
+  const seen = [written, decoded(written)].flatMap(text => [text, ...unbased(text)])
+    .map(text => kits.reduce((rest, kit) => rest.replaceAll(kit, ''), text.toLowerCase()));
+  const left = all.find(([real]) => forms(real).some(form => seen.some(text => text.includes(form.toLowerCase()))));
   if (left) throw new Error(`recording refused: the value for ${left[1]} is still in it after the swap, in a form the recorder does not know`);
   return out;
 }
