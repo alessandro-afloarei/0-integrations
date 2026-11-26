@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Hunter: a search costs 1 credit, an enrichment 0.2, Discover none (https://hunter.io/api-documentation/v2#account);
- * a Domain Search page counts only when it finds results. The rate limit is a 403 `too_many_requests`, a 429 the
- * plan's usage limit (https://hunter.io/api-documentation/v2#errors). On a Free plan a walk ends in a 400
- * `pagination_error` after its first page. Webhooks are unsigned. */
+ * a Domain Search page counts only when it finds results. The rate limit is a 403 `too_many_requests`, a 429 the plan's
+ * usage limit (https://hunter.io/api-documentation/v2#errors). A 400 `pagination_error` ends a walk: Domain Search's
+ * limit + offset past 10 on a Free plan, Discover's offset past 0 on a plan without paging. Webhooks are unsigned. */
 const api = 'https://hunter.io/api-documentation/v2';
 const email = { value: 'string', 'first_name?': 'string', 'last_name?': 'string', 'position?': 'string',
   'department?': 'string', 'linkedin?': 'string', 'confidence?': 'integer' } as const;
