@@ -24,13 +24,13 @@ export const circleci = defineProvider({
   webhook: { kind: 'hmac', header: 'circleci-signature', part: 'v1', deliveryId: { body: ['id'] } },
   operations: {
     'runs.list': { docs: runs, path: '/runs', paging: 'cursor', records: 'data',
-      params: { 'filter[project_id]': { in: 'query', type: 'string' }, 'page[limit]': limit }, result: { data: [run] } },
+      params: { 'filter[project_id]': { in: 'query', type: 'string', required: true }, 'page[limit]': limit }, result: { data: [run] } },
     'runs.get': { docs: runs, path: '/runs/{id}', params: { id: { in: 'path', type: 'string', required: true } }, result: { data: run } },
     'runs.create': { docs: runs, method: 'POST', path: '/runs',
       params: { data: { in: 'body', required: true, type: { attributes: { 'checkout?': ref, 'config?': ref, 'parameters?': 'unknown' },
         references: { pipeline: { id: 'string' } } } } }, result: { data: run } },
     'projects.list': { docs: 'https://circleci.com/docs/api/v3/projects.md', path: '/projects', paging: 'cursor', records: 'data',
-      params: { 'filter[org_id]': { in: 'query', type: 'string' }, 'page[limit]': limit },
+      params: { 'filter[org_id]': { in: 'query', type: 'string', required: true }, 'page[limit]': limit },
       result: { data: [{ id: 'string', 'attributes?': { 'name?': 'string' }, 'references?': { 'org?': { 'id?': 'string' } } }] } },
   },
 });
