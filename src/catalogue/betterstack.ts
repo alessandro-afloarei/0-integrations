@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Better Stack Incidents: a team-based Incidents API token, Bearer; no endpoint names its owner, so listing monitors checks
- * it. JSON:API records; lists follow `pagination.next` (https://betterstack.com/docs/uptime/api/getting-started-with-uptime-api/).
- * A create with a token names its `requester_email`; an update replaces the incident's `metadata`, its one changeable part. */
+/** Better Stack Incidents: a team-based Incidents API token, Bearer; no endpoint names its owner, so listing monitors
+ * checks it. A create with a token names its `requester_email`; an update replaces the incident's `metadata`, its one
+ * changeable part. */
 const incident = { id: 'string', 'attributes?': { 'name?': 'string', 'status?': 'string', 'started_at?': 'string', 'resolved_at?': 'string' } } as const;
 const incidentId = { in: 'path', type: 'string', required: true } as const;
 const perPage = { in: 'query', type: 'integer' } as const;

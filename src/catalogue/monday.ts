@@ -13,7 +13,7 @@ export const monday = defineProvider({
   id: 'monday', name: 'monday.com', docs: 'https://developer.monday.com/api-reference/docs/authentication',
   categories: ['tasks'],
   fields: [{ name: 'apiToken', title: 'Personal API token', secret: true,
-    help: 'For your own account or your team\'s own app (monday.com does not approve marketplace apps that store personal tokens): open your profile picture, then Developers, then API token. It can do what you can in monday.com; guests have none and viewers cannot use the API.' }],
+    help: 'For your own account or your team\'s own app: an app for other people connects with the OAuth 2 sign-in, as monday.com requires. Open your profile picture, then Developers, then API token. It can do what you can in monday.com; guests have none and viewers cannot use the API.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://auth.monday.com/oauth2/authorize',
     tokenUrl: 'https://auth.monday.com/oauth_ms/oauth/token', json: true }, { kind: 'key', send: { header: 'authorization' } }],
   scopes: { default: ['me:read', 'boards:read', 'boards:write'] },

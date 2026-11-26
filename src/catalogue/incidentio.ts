@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** incident.io: an API key, Bearer; `GET /v1/identity` names the key. 1,200 requests a minute per key, 60 for listing
- * incidents, 10 incidents created an hour when a Slack or Teams channel is made (300 otherwise), a 429 with `Retry-After`;
- * errors carry `errors[].code` (https://docs.incident.io/api-reference/introduction). Webhooks come from Svix; the page
- * states no hash or secret form, so none is declared. */
+/** incident.io: an API key, Bearer. 1,200 requests a minute per key, 60 for listing incidents, 10 incidents created an
+ * hour when a Slack or Teams channel is made (300 otherwise), a 429 with `Retry-After`; errors carry `errors[].code`
+ * (https://docs.incident.io/api-reference/introduction). Webhooks come from Svix; the page states no hash or secret
+ * form, so none is declared. */
 const incident = { id: 'string', reference: 'string', name: 'string', incident_status: { id: 'string', name: 'string', category: 'string' },
   'severity?': { id: 'string', name: 'string' }, 'permalink?': 'string', created_at: 'string', updated_at: 'string' } as const;
 const id = { in: 'path', type: 'string', required: true } as const;

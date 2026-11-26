@@ -1,9 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Zulip, zulipchat.com or the organization's own server: the host is typed, so it is reached only through the address
- * guard unless the app passes its own `fetch`. HTTP Basic with the account's API email and its API key
- * (https://zulip.com/api/http-headers); errors carry a `code` (https://zulip.com/api/rest-error-handling). Sending a
- * message takes a form-encoded body, which the engine cannot send yet. */
+ * guard unless the app passes its own `fetch`. Errors carry a `code` (https://zulip.com/api/rest-error-handling).
+ * Sending a message takes a form-encoded body, which the engine cannot send yet. */
 const ref = 'https://zulip.com/api';
 
 export const zulip = defineProvider({
