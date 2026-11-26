@@ -1,5 +1,5 @@
 import { identifyAccount, type Account } from './account.js';
-import type { Entry, Field, Value, Values } from './catalogue.js';
+import type { Entered, Entry, Field, Kept, Plain, Secrets, Value, Values, ValuesOption } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { defaultFetch, filledBase } from './http.js';
 import { authorizeUrl, exchangeCode, pkcePair, requestToken, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
@@ -12,32 +12,16 @@ export type ConnectStart = Redirect | Form;
  * union, `Entry`). */
 type ByKind<E extends Entry, OAuth, Key> = [E['auth'][0]['kind']] extends ['oauth2'] ? OAuth
   : [E['auth'][0]['kind']] extends ['key' | 'token'] ? Key : OAuth | Key;
-/** The entry's declared fields, one union member each; none for an entry that declares none. */
-type Fields<E extends Entry> = E extends { fields?: readonly (infer F)[] } ? F : never;
-/** Whether the types do not know the entry's field names (a widened `Entry`, or fields typed `readonly Field[]`). */
-type Unnamed<E extends Entry> = string extends Fields<E>['name'] ? true : false;
-/** A record keyed by `K`, or by any string when the entry's field names are unknown. */
-type Keyed<E extends Entry, K extends string, V> = Unnamed<E> extends true ? Readonly<Record<string, V>> : Readonly<Record<K, V>>;
-/** The names `save` keeps, when the entry declares any. */
-type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : never;
-/** A form entry's secret fields, and its plain fields, by name. */
-type Secrets<E extends Entry> = Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>;
-type PlainFields<E extends Entry> = Exclude<Fields<E>, { secret: true }>;
-type Plain<E extends Entry> = Keyed<E, PlainFields<E>['name'], string>;
-/** The plain values a finish takes: a field with a default may be left out. */
-type Entered<E extends Entry> = Unnamed<E> extends true ? Values : Keyed<E, Exclude<PlainFields<E>, { default: string }>['name'], string>
-  & Partial<Keyed<E, Extract<PlainFields<E>, { default: string }>['name'], string>>;
 /** A finished sign-in: the secret to seal, the plain values to keep, and the account; one per entry of a union. */
 export type Connected<E extends Entry = Entry> = E extends Entry ? {
   /** The grant, or a key or token entry's secret fields by name. */
   secret: ByKind<E, Grant, Secrets<E>>;
   /** The plain fields entered, by name, and what `save` kept (present only when the provider answered it). */
-  values: Unnamed<E> extends true ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
+  values: Kept<E>;
   account: E['identify'] extends { id: Value } ? Account : Account | null;
 } : never;
 /** The plain fields an input takes: required unless each has a default, none for an entry that declares none. */
-type ValuesIn<E extends Entry> = E extends Entry ? Unnamed<E> extends true ? { values?: Values } : [PlainFields<E>] extends [never]
-  ? { values?: never } : Partial<Entered<E>> extends Entered<E> ? { values?: Entered<E> } : { values: Entered<E> } : never;
+type ValuesIn<E extends Entry> = E extends Entry ? ValuesOption<Entered<E>> : never;
 type OAuthStart<E extends Entry = Entry> = { clientId: string; redirectUri: string; state: string } & ValuesIn<E>;
 type OAuthFinish<E extends Entry = Entry> = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string | undefined;
   fetch?: typeof fetch; onRevokeFailed: (error: unknown) => void } & ValuesIn<E>;

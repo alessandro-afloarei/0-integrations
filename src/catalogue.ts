@@ -121,6 +121,26 @@ type Declared<Ops, Pagings> = { [K in keyof Ops]: (Ops[K] extends { path: infer 
 export function defineProvider<const D extends Entry>(
   data: D & { operations?: Unreserved<D['operations']> & Declared<D['operations'], D['paging']> }): D { return data; }
 
+/** The entry's declared fields, one union member each; none for an entry that declares none. */
+type Fields<E extends Entry> = E extends { fields?: readonly (infer F)[] } ? F : never;
+/** Whether the types do not know the entry's field names (a widened `Entry`, or fields typed `readonly Field[]`). */
+type Unnamed<E extends Entry> = string extends Fields<E>['name'] ? true : false;
+/** A record keyed by `K`, or by any string when the entry's field names are unknown. */
+type Keyed<E extends Entry, K extends string, V> = Unnamed<E> extends true ? Readonly<Record<string, V>> : Readonly<Record<K, V>>;
+/** The names `save` keeps, when the entry declares any. */
+type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : never;
+/** A form entry's secret fields, and its plain fields, by name. */
+export type Secrets<E extends Entry> = Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>;
+type PlainFields<E extends Entry> = Exclude<Fields<E>, { secret: true }>;
+export type Plain<E extends Entry> = Keyed<E, PlainFields<E>['name'], string>;
+/** The plain values a finish takes: a field with a default may be left out. */
+export type Entered<E extends Entry> = Unnamed<E> extends true ? Values : Keyed<E, Exclude<PlainFields<E>, { default: string }>['name'], string>
+  & Partial<Keyed<E, Extract<PlainFields<E>, { default: string }>['name'], string>>;
+/** A connection's values: its plain fields, and what `save` kept (present only when the provider answered it). */
+export type Kept<E extends Entry> = Unnamed<E> extends true ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
+/** `values` as an input takes them: required when one value is, optional when none is, absent when there are none. */
+export type ValuesOption<V> = [keyof V] extends [never] ? { values?: never } : Partial<V> extends V ? { values?: V } : { values: V };
+
 type Kinds<E extends Entry> = E['auth'][number]['kind'];
 /** An entry narrowed to one sign-in: `scopes` and `revoke` belong to OAuth 2 alone, so a key or token sign-in drops them.
  * A union of kinds gives a union of narrowings, each with what its sign-in has. */

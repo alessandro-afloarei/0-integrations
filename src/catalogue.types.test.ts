@@ -6,7 +6,9 @@ import { azuredevops } from './catalogue/azuredevops.js';
 import { mattermost } from './catalogue/mattermost.js';
 import { client } from './client.js';
 import { finishConnect, startConnect, type Connected } from './connect.js';
-import type { Grant } from './oauth.js';
+import { slack } from './catalogue/slack.js';
+import { zoom } from './catalogue/zoom.js';
+import { authorizeUrl, exchangeCode, refreshGrant, revokeGrant, tokenSource, type Grant, type OAuthClient } from './oauth.js';
 import { fakeProvider } from './testing.js';
 
 test('defineProvider keeps the literal', () => {
@@ -111,7 +113,53 @@ async function typedHost(clientId: string, redirectUri: string, state: string, h
   await startConnect(linear, { clientId, redirectUri, state, values: { host } });
 }
 
+// Never called: the types are the test.
+async function valuesByEntry(own: OAuthClient, refreshToken: string, host: string) {
+  const oauth = signInWith(mattermost, 'oauth2');
+  const start = { clientId: 'c', redirectUri: 'https://app.test/cb', state: 's', scopes: [], codeChallenge: 'c' };
+  const exchange = { code: 'c', redirectUri: 'https://app.test/cb' };
+  // Mattermost's OAuth 2 reads the host typed: every function needs it, and refuses another key.
+  // @ts-expect-error the host is required
+  authorizeUrl(oauth, start);
+  authorizeUrl(oauth, { ...start, values: { host } });
+  // @ts-expect-error the host is required
+  await exchangeCode(oauth, own, exchange);
+  await exchangeCode(oauth, own, { ...exchange, values: { host } });
+  // @ts-expect-error the host is required
+  await refreshGrant(oauth, own, refreshToken, {});
+  // @ts-expect-error the host is required
+  await refreshGrant(oauth, own, refreshToken);
+  await refreshGrant(oauth, own, refreshToken, { values: { host } });
+  // @ts-expect-error a key the entry does not declare
+  await refreshGrant(oauth, own, refreshToken, { values: { host, site: 's' } });
+  // @ts-expect-error the host is required
+  await revokeGrant(oauth, { accessToken: 'a', client: own });
+  await revokeGrant(oauth, { accessToken: 'a', client: own, values: { host } });
+  // Linear declares neither a plain field nor `save`: none.
+  authorizeUrl(linear, start);
+  await exchangeCode(linear, own, exchange);
+  await refreshGrant(linear, own, refreshToken);
+  await revokeGrant(linear, { accessToken: 'a', client: own });
+  // @ts-expect-error Linear has no value
+  await refreshGrant(linear, own, refreshToken, { values: { host } });
+  // @ts-expect-error Linear has no value
+  authorizeUrl(linear, { ...start, values: { host } });
+  // Slack keeps only what `save` read: optional on a connection, none before the exchange.
+  await refreshGrant(slack, own, refreshToken);
+  await revokeGrant(slack, { accessToken: 'a', values: { botUserId: 'U1' } });
+  // @ts-expect-error a key the entry does not declare
+  await revokeGrant(slack, { accessToken: 'a', values: { host } });
+  // @ts-expect-error nothing is saved before the exchange
+  await exchangeCode(slack, own, { ...exchange, values: { botUserId: 'U1' } });
+  // Zoom's token request reads its plain values.
+  // @ts-expect-error the account and client ids are required
+  tokenSource(zoom, { secret: { clientSecret: 's' } });
+  tokenSource(zoom, { secret: { clientSecret: 's' }, values: { accountId: 'a', clientId: 'c' } });
+  // @ts-expect-error a key the entry does not declare
+  tokenSource(zoom, { secret: { clientSecret: 's' }, values: { accountId: 'a', clientId: 'c', host } });
+}
+
 test('the narrowed types compile', () => {
-  expect([narrowed, stored, typedHost].every(item => typeof item === 'function')).toBe(true);
+  expect([narrowed, stored, typedHost, valuesByEntry].every(item => typeof item === 'function')).toBe(true);
   expect(mailed.auth.map(auth => auth.kind)).toEqual(['oauth2', 'key']);
 });

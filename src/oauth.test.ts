@@ -332,7 +332,7 @@ test("refreshUrl: Figma exchanges at its token URL and refreshes at its refresh 
 // The `token` kind: one declared request gives a short-lived token.
 const zoomSecret = { clientSecret: 'zoom-client-secret' };
 const zoomValues = { accountId: 'acc', clientId: 'cid' };
-const zoomInput = (fetch: typeof globalThis.fetch, values: Record<string, string> = zoomValues) => ({ secret: zoomSecret, values, fetch });
+const zoomInput = (fetch: typeof globalThis.fetch, values = zoomValues) => ({ secret: zoomSecret, values, fetch });
 /** A token endpoint answering each request with the next token, `t1`, `t2`, …, valid an hour. */
 function tokens(url = 'https://zoom.us/oauth/token') {
   let n = 0;
@@ -587,7 +587,9 @@ test("an OAuth 2 entry's exchange, refresh and revoke go to the host its values 
 
 test('a refresh or a revoke without the values its URLs take is template_missing, nothing sent', async () => {
   const fake = endpoint(token);
+  // @ts-expect-error the types refuse it too: the host is required
   await expect(refreshGrant(own, client, 'r', { fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: own {host}'));
+  // @ts-expect-error the host is required
   await expect(revokeGrant(own, { refreshToken: 'r', client, fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: own {host}'));
   expect(fake.calls).toEqual([]);
 });
@@ -597,6 +599,7 @@ test('an OAuth 2 URL is filled from plain fields only: a secret field or a saved
   const secretUrl = defineProvider({ ...own, fields: [...own.fields, { name: 'apiKey', title: 'API key', secret: true }],
     auth: [{ ...own.auth[0], authorizeUrl: 'https://{host}/{apiKey}/authorize' }] });
   expect(() => authorizeUrl(secretUrl, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's', codeChallenge: 'c',
+    // @ts-expect-error the types refuse it too: a secret field is no plain value
     values: { ...chat, apiKey: 'private-key' } })).toThrow(new TypeError('template_missing: own {apiKey}'));
   const savedUrl = defineProvider({ ...own, save: { site: 'site' }, auth: [{ ...own.auth[0], tokenUrl: 'https://{host}/{site}/token' }] });
   await expect(refreshGrant(savedUrl, client, 'r', { values: { ...chat, site: 's1' }, fetch: fake.fetch }))

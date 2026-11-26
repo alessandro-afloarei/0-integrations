@@ -748,6 +748,7 @@ test('a request revoke on a templated base, given no values, fails closed with n
   const revoking = defineProvider({ ...regional, fields: [{ name: 'sub', title: 'Subdomain', default: 'us' }, regional.fields[1]],
     revoke: { request: { method: 'POST', path: '/revoke' } } });
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  // @ts-expect-error the types refuse it too: the subdomain is required
   await expect(revokeGrant(revoking, { accessToken: 'a', fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: regional {sub}'));
   expect(fake.calls).toHaveLength(0);
 });
@@ -803,8 +804,9 @@ test.each([['..', 'base_value_invalid: jira {cloudId}'], ['.', 'base_value_inval
   });
 
 test('a request revoke on a second base goes there, the credential with it, needing no values', async () => {
-  // The value in the base's path, as Jira's: a typed host beside a second base is `host_split` (below).
-  const revoking = defineProvider({ ...regional, http: { baseUrl: 'https://example.com/{sub}/v1', bases: { auth: 'https://auth.example.test/v2' } },
+  // The value in the base's path, as Jira's: a typed host beside a second base is `host_split` (below). Widened: the
+  // types ask for every plain field the entry declares, though this revoke reads none.
+  const revoking: Entry = defineProvider({ ...regional, http: { baseUrl: 'https://example.com/{sub}/v1', bases: { auth: 'https://auth.example.test/v2' } },
     revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } } });
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
   await revokeGrant(revoking, { accessToken: 'a', fetch: fake.fetch });
