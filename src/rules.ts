@@ -47,7 +47,7 @@ export function pagedRecords(op: Operation, shape: Paging): boolean {
 export function pagedParam(op: Operation, shape: Paging): string | undefined {
   const sent = 'send' in shape ? shape.send : undefined;
   // A literal query in the path (`/items?offset=2`) would start the walk there too.
-  if (sent && 'query' in sent && 'path' in op && new URL(op.path, 'https://a.test').searchParams.has(sent.query)) return sent.query;
+  if (sent && 'query' in sent && 'path' in op && new URL(`https://a.test${op.path}`).searchParams.has(sent.query)) return sent.query;
   return sent === undefined ? undefined
     : Object.entries(op.params ?? {}).find(([name, param]) => param.in in sent && sent[param.in as keyof typeof sent] === name)?.[0];
 }

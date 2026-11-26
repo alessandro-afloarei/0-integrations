@@ -304,6 +304,9 @@ test("an operation whose path's own query names the key its paging writes is ref
   // Read as the request reads it: a second `?` belongs to the first value, so `offset` is still a key.
   expect(() => client(entry('/things?q=a?b&offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
   expect(() => client(entry('/things?api-version=7.1'), { token: 'k' })).not.toThrow();
+  // Read as the request builds it, the path appended to the base: `//` starts no authority.
+  expect(() => client(entry('//catalog:archive/items?view=recent'), { token: 'k' })).not.toThrow();
+  expect(() => client(entry('//x/items?offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
 });
 
 test("an app's operation on an `offset` shape whose `records` is not the shape's `list` is refused when built", () => {
