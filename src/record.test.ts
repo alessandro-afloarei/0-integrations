@@ -238,6 +238,19 @@ describe('recording an entry with no module, on its derived fake standing in for
       { 'retry-after': '1', 'ratelimit-reset': '3' }]);
   });
 
+  test('hostile: a declared wait header that is not the number the engine reads is dropped, so its text is never written', async () => {
+    const waiting = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test', retry: { wait: { header: 'ratelimit-reset', unit: 's' } } },
+      identify: { request: { path: '/me' }, id: 'id' } });
+    const prose: Wrap = fetch => async (input, init) => {
+      const response = await fetch(input, init);
+      return new Response(response.body, { status: response.status, headers: { 'ratelimit-reset': 'in 3 s, ask ana.lopez@lumen.io' } });
+    };
+    const { text, recording } = await recordOnFake(waiting, { key: 'real-key-1', account: { id: 'u-real-881' }, wrap: prose });
+    expect(recording?.exchanges.map(exchange => exchange.headers)).toEqual([{}, {}]);
+    expect(text).not.toContain('ana.lopez');
+  });
+
   test('a token entry: only the token and its life are kept, the token as kit-token, the body with the kit values; it replays', async () => {
     const { text, recording } = await recordOnFake(zoom, { key: 'real-key-1', values: { accountId: 'real-acct-1', clientId: 'real-cid-1' },
       wrap: answering(body => ({ ...body as object, access_token: 'zoom-issued-7Hk2', refresh_token: 'rt-real-99', scope: 'user:read' })) });

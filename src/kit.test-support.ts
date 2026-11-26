@@ -135,7 +135,8 @@ export function recorder(real: typeof fetch, key: Exchange['key'], waits: readon
     // `link` names GitHub's next page.
     const headers = Object.fromEntries(['retry-after', 'content-type', 'link', ...waits].flatMap(name => {
       const value = response.headers.get(name);
-      return value === null ? [] : [[name, value]];
+      // A declared wait header is kept only as the number the engine reads (`waitOf`): free text never reaches a fixture.
+      return value === null || (waits.includes(name) && !/^\d+(?:\.\d+)?$/u.test(value)) ? [] : [[name, value]];
     }));
     // An answer that is not JSON is written as null: the engine reads nothing from it.
     exchanges.push({ key, method: request.method, url: request.url, ...(body === undefined ? {} : { body }),
