@@ -420,11 +420,13 @@ a shape's `send` writes: the walk sends it.
 - `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
   request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the
   parser skips included, in `send`'s place (a string in the query, a number in the body). The count is one rule for
-  every provider, needs no page size, and never moves the walk backwards: an offset the answer names (`next_offset`,
-  `pagination.offset + limit`) is spelt differently by each provider and is never read. A short page does not end the
-  walk (the walker does not know the page size); the empty page after it does. The offset grows on every page, so a
-  provider that ignores it is `page_repeated`. An operation on an `offset` shape names the shape's `list` as its
-  `records`.
+  every provider and needs no page size, and no answer can move the walk backwards: an offset the answer names
+  (`next_offset`, `pagination.offset + limit`) is spelt differently by each provider and is never read. A typed
+  operation cannot set the offset itself (`param_paged`); a raw `paginate` whose own query or body sets it sends that
+  first, then counts from 0. A short page does not end the walk (the walker does not know the page size); the empty page
+  after it does. The offset grows on every page, so a provider that ignores it is `page_repeated`. An operation on an
+  `offset` shape names the shape's `list` as its `records`. Declare it only for an offset that counts the records
+  skipped from 0, cited (an example of `0`, or a starting record position); one counted from 1 waits.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.
