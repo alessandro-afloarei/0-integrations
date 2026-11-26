@@ -35,6 +35,16 @@ test("nextUrl stays on the provider's origin and under its prefix", () => {
   expect(ownPath({ kind: 'nextUrl', next: 'next', pathPrefix: '' }, 'https://api.acme.test', 'blob:https://api.acme.test/x')).toBeNull();
 });
 
+test("nextUrl without a pathPrefix follows a link to the base's own path; with one, or beside it, it does not", () => {
+  const plain = { kind: 'nextUrl', next: 'next' } as const;
+  expect(ownPath(plain, 'https://api.acme.test/v1/items', 'https://api.acme.test/v1/items?page=2')).toBe('?page=2');
+  expect(ownPath(plain, 'https://api.acme.test/v1', 'https://api.acme.test/v1')).toBe('');
+  expect(ownPath({ ...plain, pathPrefix: '/me/' }, 'https://api.acme.test/v1', 'https://api.acme.test/v1?page=2')).toBeNull();
+  for (const link of ['https://api.acme.test/v1evil', 'https://api.acme.test/v1evil?page=2']) {
+    expect(ownPath(plain, 'https://api.acme.test/v1', link)).toBeNull();
+  }
+});
+
 const acme = defineProvider({ id: 'acme', name: 'Acme', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' } });
 const token = () => Promise.resolve('t');
 test('walk sends the cursor where the shape says, and refuses one that comes back', async () => {
@@ -58,6 +68,15 @@ test("walk follows a next link with its own search on the client's base, and a b
   for await (const page of walk(createClient(acme, { token, fetch: bodies.fetch }),
     { kind: 'cursor', next: 'next', send: { body: 'start' } }, '/search', { method: 'POST', json: { q: 'x' } })) expect(page).toBeTypeOf('object');
   expect(bodies.calls.map(call => call.body)).toEqual(['{"q":"x"}', '{"q":"x","start":"b2"}']);
+});
+
+test('walk follows a next link to the base itself with its query', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'https://api.acme.test/v1/items?page=2' }),
+    () => Response.json({})) }]);
+  const pages: unknown[] = [];
+  for await (const page of walk(createClient(acme, { baseUrl: 'https://api.acme.test/v1/items', token, fetch: fake.fetch }),
+    { kind: 'nextUrl', next: 'next' }, '', { query: { top: '2' } })) pages.push(page);
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.acme.test/v1/items?top=2', 'https://api.acme.test/v1/items?page=2']);
 });
 
 test("a next link that leaves the base's origin or path is an error, never a request", async () => {

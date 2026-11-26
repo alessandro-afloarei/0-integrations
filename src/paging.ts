@@ -18,16 +18,17 @@ export function nextCursor(shape: Cursor, answer: unknown): string | null {
   return cursor;
 }
 
-/** An address on the base's origin, under the base's path as a whole segment and under `pathPrefix`, read as it resolves
- * (dot segments, `%2e%2e`), as the path after the base with its search; null for any other. */
+/** An address on the base's origin, under the base's path as a whole segment and under `pathPrefix` (or, with no
+ * `pathPrefix`, the base's path itself), read as it resolves (dot segments, `%2e%2e`), as the path after the base with
+ * its search; null for any other. */
 export function ownPath(shape: NextUrl, baseUrl: string, address: string): string | null {
   if (!URL.canParse(address)) return null;
   const base = new URL(baseUrl);
   const root = base.pathname.replace(/\/$/u, ''); // an origin-only base's path is `/`
   const url = new URL(address);
   const rest = url.pathname.slice(root.length);
-  return url.origin === base.origin && url.pathname.startsWith(root) && rest.startsWith('/') && rest.startsWith(shape.pathPrefix ?? '/')
-    ? rest + url.search : null;
+  const under = rest.startsWith('/') ? rest.startsWith(shape.pathPrefix ?? '/') : rest === '' && shape.pathPrefix === undefined;
+  return url.origin === base.origin && url.pathname.startsWith(root) && under ? rest + url.search : null;
 }
 
 /** The next page's path after the base, or null when the answer names none; a link that leaves is `next_link_foreign`. */
