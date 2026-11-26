@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { Account } from './account.js';
-import { defineProvider, signInWith, type Entry, type Field } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Field, type SignIn } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
 import { attio as attioEntry } from './catalogue/attio.js';
@@ -18,6 +18,7 @@ import { ProviderHttpError } from './errors.js';
 import { fakeGoogle } from './google/fake.js';
 import * as guard from './guard.js';
 import { tokenSource } from './oauth.js';
+import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
 import { fakeFetch, fakeProvider, type Route } from './testing.js';
 
@@ -338,7 +339,7 @@ describe('connect types', () => {
   const attioFetch = fakeFetch([{ url: 'https://api.attio.com/v2/self', respond: () => Response.json({ workspace_id: 'w1', workspace_name: 'Account' }) }]).fetch;
 
   it('finishes either kind through a widened entry, or a union an app picks by id, with no cast', async () => {
-    const pick = (id: string): typeof slack | typeof attio => (id === 'attio' ? attio : slack);
+    const pick = (id: string): typeof hubspot | typeof attio => (id === 'attio' ? attio : hubspot);
     const widened: Entry = slack;
     const http = fakeFetch(fakeSlack(data));
     expect((await finishConnect(widened, oauth(http.fetch, await authorize(http)))).account).toEqual({ id: 'T1', name: 'Acme' });
@@ -346,7 +347,7 @@ describe('connect types', () => {
     // Either input type-checks for both: the runtime refuses a mismatch (`oauth_options_required`, `connect_field_required`).
     for (const input of [oauth(http.fetch, 'code'), { secret: { apiKey: 'k' }, fetch: attioFetch }]) {
       expectTypeOf(input).toExtend<Parameters<typeof finishConnect<Entry>>[1]>();
-      expectTypeOf(input).toExtend<Parameters<typeof finishConnect<typeof slack | typeof attio>>[1]>();
+      expectTypeOf(input).toExtend<Parameters<typeof finishConnect<typeof hubspot | typeof attio>>[1]>();
     }
     const widenedStart = await startConnect(widened, start);
     expectTypeOf(widenedStart).toEqualTypeOf<ConnectStart>();
@@ -381,6 +382,10 @@ describe('connect types', () => {
     expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<Unnamed>>[1]>();
     type WideAircall = Omit<typeof aircall, 'id'> & { id: string };
     expectTypeOf({ secret: { apiToken: 't' }, fetch }).not.toExtend<Parameters<typeof finishConnect<WideAircall>>[1]>();
+    // A union of key entries takes either member's own secret, not both.
+    type EitherFinish = Parameters<typeof finishConnect<typeof attio | SignIn<typeof hubspot, 'key'>>>[1];
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<EitherFinish>();
+    expectTypeOf({ secret: { accessToken: 't' }, fetch }).toExtend<EitherFinish>();
   });
 });
 
