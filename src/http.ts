@@ -48,7 +48,7 @@ async function retryBody(response: Response, timeoutMs: number): Promise<string>
       if (done) return Buffer.concat(chunks).toString('utf8');
       chunks.push(value);
     }
-  })();
+  })().catch(() => ''); // a body that fails as it is read states no wait, and its error is the provider's, never ours
   try {
     return await Promise.race([body, timeout]);
   } finally {

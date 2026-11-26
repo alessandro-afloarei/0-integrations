@@ -241,6 +241,22 @@ test('a hanging 429 body times out and is cancelled', async () => {
   expect(fake.calls).toHaveLength(1);
 });
 
+test('a body wait that cannot be read states none: the error is sanitized, with no cause and no stream message', async () => {
+  const broken = () => new Response(new ReadableStream<Uint8Array>({ pull(controller) { controller.error(new Error('stream-private reset')); } }),
+    { status: 503 });
+  const entry = defineProvider({ id: 'broken-body', name: 'Broken body', auth: [{ kind: 'key' }],
+    http: { baseUrl: 'https://api.broken-body.test', retry: { wait: { path: 'waitMs', unit: 'ms' } } } });
+  const fake = fakeFetch([{ url: /https:/, respond: broken }]);
+  const result = createClient(entry, { token: () => Promise.resolve('t'), fetch: fake.fetch }).json('/a').catch((e: unknown) => e);
+  await vi.advanceTimersByTimeAsync(60_000);
+  const error = await result;
+  expect(error).toBeInstanceOf(ProviderHttpError);
+  expect(error).toMatchObject({ code: 'unavailable', status: 503 });
+  expect((error as Error).cause).toBeUndefined();
+  expect(JSON.stringify({ error, message: (error as Error).message })).not.toContain('stream-private');
+  expect(fake.calls).toHaveLength(2);
+});
+
 test("a Retry-After of 0 or not a number waits for the body's wait, else the provider's default", async () => {
   const cases = [
     { provider: hubspot, headers: { 'Retry-After': '0' }, body: {}, wait: 1000 },
