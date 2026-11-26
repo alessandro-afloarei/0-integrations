@@ -5,7 +5,7 @@ export const hubspot = defineProvider({
   docs: 'https://developers.hubspot.com/docs/api-reference/legacy/authentication/oauth-tokens/v1/migration-guide',
   categories: ['crm'],
   fields: [{ name: 'accessToken', title: 'Access token', secret: true,
-    help: 'For your own HubSpot account: an app’s static auth access token, or a service key, holding the oauth scope (sign-in reads the account with it) and crm.objects.companies.read, crm.objects.contacts.read, crm.objects.deals.read and crm.objects.owners.read. An app for other accounts connects with the OAuth 2 sign-in, as HubSpot requires.' }],
+    help: 'For your own HubSpot account: the static auth access token of an app installed in it, holding the oauth scope (sign-in reads the account with it) and crm.objects.companies.read, crm.objects.contacts.read, crm.objects.deals.read and crm.objects.owners.read. An app for other accounts connects with the OAuth 2 sign-in, as HubSpot requires.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.hubspot.com/oauth/authorize', tokenUrl: 'https://api.hubapi.com/oauth/2026-03/token',
     pkce: false, reusesGrant: true }, { kind: 'key' }],
   scopes: { default: ['oauth', 'crm.objects.companies.read', 'crm.objects.contacts.read', 'crm.objects.deals.read', 'crm.objects.owners.read'] },
