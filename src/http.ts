@@ -29,6 +29,8 @@ export type HttpClient = {
   /** The base every path is read after: the entry's, or the one the client was built with. */
   readonly baseUrl: string;
   json(path: string, options?: RequestOptions): Promise<unknown>;
+  /** `json`'s answer with the response's headers (a `Link` header). */
+  answer(path: string, options?: RequestOptions): Promise<{ data: unknown; headers: Headers }>;
   request(path: string, options?: RequestOptions): Promise<ProviderResponse>;
 };
 
@@ -308,11 +310,14 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     return renewed === bearer ? response : sendAs(renewed);
   };
 
+  const answer = async (path: string, options?: RequestOptions) => {
+    const response = await request(path, options);
+    return { data: responseJson(entry, response), headers: response.headers };
+  };
   return {
     get baseUrl() { return based().url; },
     request,
-    async json(path, options) {
-      return responseJson(entry, await request(path, options));
-    },
+    answer,
+    async json(path, options) { return (await answer(path, options)).data; },
   };
 }

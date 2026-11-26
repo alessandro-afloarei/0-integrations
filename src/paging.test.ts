@@ -22,10 +22,12 @@ test("nextUrl stays on the provider's origin and under its prefix", () => {
   for (const link of ['https://elsewhere.test/v1.0/me/x', `${BASE}/users/x`, `${BASE}/me/%2e%2e/%2e%2e/users`,
     'http://graph.microsoft.com/v1.0/me/x', 'https://graph.microsoft.com:8443/v1.0/me/x', '//graph.microsoft.com/v1.0/me/x',
     'https://graph.microsoft.com@elsewhere.test/v1.0/me/x', 'https:\\\\elsewhere.test\\v1.0\\me\\x',
-    'https://graph.microsoft.com/v1.0evil/me/x', '/v1.0/me/x', `blob:${BASE}/me/x`]) {
+    'https://graph.microsoft.com/v1.0evil/me/x', '/v1.0/users/x', `blob:${BASE}/me/x`]) {
     expect(() => nextLink(graph, BASE, { '@odata.nextLink': link })).toThrow(expect.objectContaining({ detail: 'next_link_foreign' }));
   }
   expect(ownPath(graph, BASE, `${BASE}/me/../users`)).toBeNull();
+  // A path is read on the base's origin, then by the same rule.
+  expect(ownPath(graph, BASE, '/v1.0/me/x')).toBe('/me/x');
   // A link the parser reads onto the same origin is a path on the base: the userinfo and the default port drop.
   for (const link of ['https://user:pass@graph.microsoft.com/v1.0/me/x', 'https://graph.microsoft.com:443/v1.0/me/x',
     'https://graph.microsoft.com\\v1.0\\me\\x']) expect(ownPath(graph, BASE, link)).toBe('/me/x');
@@ -88,6 +90,73 @@ test("a next link that leaves the base's origin or path is an error, never a req
       .rejects.toMatchObject({ code: 'invalid_response', detail: 'next_link_foreign' });
     expect(fake.calls.map(call => call.url)).toEqual([`${baseUrl}/me/x`]);
   }
+});
+
+const linkBase = 'https://api.k.test/v2';
+const linkHeader = { kind: 'linkHeader' } as const;
+/** Every request's URL and every page a walk on `linkBase` yields, or the error it ends on: each answer a body and its
+ * `Link` header (none when null), or a bare status. */
+async function linkWalk(shape: Paging, answers: readonly (readonly [body: unknown, link: string | null] | number)[]) {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(...answers.map(answer => () => (typeof answer === 'number'
+    ? new Response(null, { status: answer })
+    : Response.json(answer[0], { headers: answer[1] === null ? {} : { link: answer[1] } })))) }]);
+  const pages: unknown[] = [];
+  let error: unknown;
+  try {
+    for await (const page of walk(createClient(acme, { baseUrl: linkBase, token, fetch: fake.fetch }), shape, '/builds', { query: { per_page: '2' } })) pages.push(page);
+  } catch (caught) { error = caught; }
+  return { urls: fake.calls.map(call => call.url), pages, error };
+}
+
+test("linkHeader: walks the rel=\"next\" links to the end, and a page with no header ends it", async () => {
+  const walked = await linkWalk(linkHeader, [
+    [[1], `<${linkBase}/builds?page=2&per_page=2>; rel="next", <${linkBase}/builds?page=3&per_page=2>; rel="last"`],
+    [[2], `<${linkBase}/builds?page=1&per_page=2>; rel="prev",<${linkBase}/builds?page=3&per_page=2>; rel="next last"`],
+    [[3], null]]);
+  expect(walked.urls).toEqual([`${linkBase}/builds?per_page=2`, `${linkBase}/builds?page=2&per_page=2`, `${linkBase}/builds?page=3&per_page=2`]);
+  expect(walked.pages).toEqual([[1], [2], [3]]);
+  expect(walked.error).toBeUndefined();
+  const last = await linkWalk(linkHeader, [[[1], `<${linkBase}/builds?page=1>; rel="first prev"`]]);
+  expect([last.urls.length, last.error]).toEqual([1, undefined]);
+});
+
+test('linkHeader: an error answer throws, as a json call does', async () => {
+  const walked = await linkWalk(linkHeader, [[[1], `<${linkBase}/builds?page=2>; rel="next"`], 404]);
+  expect(walked.error).toMatchObject({ code: 'not_found' });
+  expect(walked.pages).toEqual([[1]]);
+});
+
+test("a next link that leaves the base's origin or path is next_link_foreign, never a request, from a header or a body", async () => {
+  for (const link of ['https://evil.test/v2/builds?page=2', '//evil.test/v2/builds', 'https://api.k.test@evil.test/v2/builds',
+    '/\\evil.test/v2/builds', '/v2/../admin', '/v2/%2e%2e/admin', '/v2/%2E%2E/admin', 'v2/builds?page=2', '/v3/builds',
+    'http://api.k.test/v2/builds', `${linkBase}/x/builds`]) {
+    for (const [shape, answer] of [[{ kind: 'linkHeader', pathPrefix: '/builds/' }, [[1], `<${link}>; rel="next"`]],
+      [{ kind: 'nextUrl', next: '_links.next', pathPrefix: '/builds/' }, [{ _links: { next: link } }, null]]] as const) {
+      const walked = await linkWalk(shape, [answer, answer]);
+      expect(walked.error, link).toMatchObject({ code: 'invalid_response', detail: 'next_link_foreign' });
+      expect(walked.urls).toEqual([`${linkBase}/builds?per_page=2`]);
+    }
+  }
+});
+
+test("a next link that is a path resolves on the base's origin and must sit under the base's path and pathPrefix", async () => {
+  const wiki = 'https://acme.atlassian.test/wiki';
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ _links: { next: '/wiki/api/v2/pages?cursor=c2' } }),
+    () => Response.json({ _links: {} })) }]);
+  for await (const page of walk(createClient(acme, { baseUrl: wiki, token, fetch: fake.fetch }),
+    { kind: 'nextUrl', next: '_links.next', pathPrefix: '/api/v2/' }, '/api/v2/pages', { query: { limit: '2' } })) expect(page).toBeTypeOf('object');
+  expect(fake.calls.map(call => call.url)).toEqual([`${wiki}/api/v2/pages?limit=2`, `${wiki}/api/v2/pages?cursor=c2`]);
+  expect(ownPath({ kind: 'linkHeader' }, linkBase, '/v2/builds?page=2')).toBe('/builds?page=2');
+  for (const link of ['/api/v2/pages?cursor=c2', '/wiki/rest/api/content', '/wikix/api/v2/pages']) {
+    expect(ownPath({ kind: 'nextUrl', next: 'next', pathPrefix: '/api/v2/' }, wiki, link)).toBeNull();
+  }
+});
+
+test('linkHeader: a link that comes back is cursor_repeated', async () => {
+  const again = `<${linkBase}/builds?page=2>; rel="next"`;
+  const walked = await linkWalk(linkHeader, [[[1], again], [[2], again]]);
+  expect(walked.error).toMatchObject({ code: 'invalid_response', detail: 'cursor_repeated' });
+  expect(walked.urls).toEqual([`${linkBase}/builds?per_page=2`, `${linkBase}/builds?page=2`]);
 });
 
 /** Every request's URL and every page a page-number walk yields, or the error it ends on. */

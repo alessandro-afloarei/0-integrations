@@ -61,6 +61,8 @@ const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ b
 /** A page number's first value belongs to a `page` shape alone. */
 const pageOnly = { error: (issue: { code: string; keys?: readonly string[] }) => (issue.code === 'unrecognized_keys' && issue.keys?.includes('zeroBased')
   ? '`zeroBased` belongs to a `page` paging shape: leave it out' : undefined) };
+/** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
+const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
@@ -122,8 +124,8 @@ const entrySchema = z.strictObject({
     z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(), send: where }, pageOnly),
     z.strictObject({ kind: z.literal('page'), send: where, list: z.string().optional(), more: z.string().optional(),
       zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional() }),
-    // A prefix is a whole directory (`/me/`), so `/meetings` is not under `/me`.
-    z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix: z.string().regex(/^\/(?:.*\/)?$/u).optional() }, pageOnly),
+    z.strictObject({ kind: z.literal('linkHeader'), pathPrefix }, pageOnly),
+    z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix }, pageOnly),
   ])).optional(),
   operations: z.record(z.string(), z.union([z.strictObject({ method: method.optional(), path: template, ...operationParts }),
     z.strictObject({ graphql: z.string(), ...operationParts })])).optional(),
@@ -631,6 +633,10 @@ test.each<[Record<string, unknown>, string]>([
   [{ kind: 'cursor', next: 'next', send: { query: 'cursor' }, zeroBased: true }, '`zeroBased` belongs to a `page` paging shape: leave it out'],
   [{ kind: 'nextUrl', next: 'next', zeroBased: true }, '`zeroBased` belongs to a `page` paging shape: leave it out'],
   [{ kind: 'page', send: { query: 'page' }, zeroBased: false }, '`zeroBased` is `true` or left out (the first page is 1)'],
+  [{ kind: 'linkHeader', zeroBased: true }, '`zeroBased` belongs to a `page` paging shape: leave it out'],
+  [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
+  ...['me', '/me', 'me/'].flatMap(pathPrefix => [{ kind: 'linkHeader', pathPrefix }, { kind: 'nextUrl', next: 'next', pathPrefix }]
+    .map((shape): [Record<string, unknown>, string] => [shape, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)'])),
 ])('a paging shape %j fails the schema, with what to fix', (shape, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
@@ -665,7 +671,7 @@ test("a base with a host from a field's choices and a path segment from a saved 
 
 test('an entry whose operations keep every rule passes them all', () => {
   const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
-    paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } } },
+    paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } }, links: { kind: 'linkHeader', pathPrefix: '/pages/' } },
     operations: {
       'pages.list': { docs: 'https://k.test/docs/pages', path: '/pages/{space}', paging: 'cursor', records: 'data.items',
         params: { space: { in: 'path', type: 'string', required: true }, q: { in: 'query', type: 'string' } },

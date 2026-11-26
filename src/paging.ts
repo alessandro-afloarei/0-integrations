@@ -6,6 +6,7 @@ import { readPath } from './rules.js';
 
 type Cursor = Extract<Paging, { kind: 'cursor' }>;
 type NextUrl = Extract<Paging, { kind: 'nextUrl' }>;
+type Linked = Extract<Paging, { kind: 'linkHeader' | 'nextUrl' }>;
 type PageNumber = Extract<Paging, { kind: 'page' }>;
 
 /** The next cursor, or null on the last page: with `more`, a falsy one ends the list and a truthy one needs a cursor;
@@ -21,24 +22,38 @@ export function nextCursor(shape: Cursor, answer: unknown): string | null {
 
 /** An address on the base's origin, under the base's path as a whole segment and under `pathPrefix` (or, with no
  * `pathPrefix`, the base's path itself), read as it resolves (dot segments, `%2e%2e`), as the path after the base with
- * its search; null for any other. */
-export function ownPath(shape: NextUrl, baseUrl: string, address: string): string | null {
-  if (!URL.canParse(address)) return null;
+ * its search; null for any other. A path (one `/`, never `//` or `/\`, which name a host) is read on the base's origin. */
+export function ownPath(shape: Linked, baseUrl: string, address: string): string | null {
   const base = new URL(baseUrl);
+  const absolute = /^\/(?![/\\])/u.test(address) ? base.origin + address : address;
+  if (!URL.canParse(absolute)) return null;
   const root = base.pathname.replace(/\/$/u, ''); // an origin-only base's path is `/`
-  const url = new URL(address);
+  const url = new URL(absolute);
   const rest = url.pathname.slice(root.length);
   const under = rest.startsWith('/') ? rest.startsWith(shape.pathPrefix ?? '/') : rest === '' && shape.pathPrefix === undefined;
   return url.origin === base.origin && url.pathname.startsWith(root) && under ? rest + url.search : null;
 }
 
-/** The next page's path after the base, or null when the answer names none; a link that leaves is `next_link_foreign`. */
-export function nextLink(shape: NextUrl, baseUrl: string, answer: unknown): string | null {
-  const next = readPath(answer, shape.next);
+/** The path after the base a next link names, or null with none; a link that leaves is `next_link_foreign`. */
+function followed(shape: Linked, baseUrl: string, next: unknown): string | null {
   if (next === undefined || next === null) return null;
   const path = typeof next === 'string' ? ownPath(shape, baseUrl, next) : null;
   if (path === null) throw new ProviderHttpError('invalid_response', null, 'next_link_foreign');
   return path;
+}
+
+/** The next page's path after the base, or null when the answer names none. */
+export function nextLink(shape: NextUrl, baseUrl: string, answer: unknown): string | null {
+  return followed(shape, baseUrl, readPath(answer, shape.next));
+}
+
+/** The target of the `Link` header's link-value whose `rel` (split on spaces) holds `next`. */
+function relNext(header: string | null): string | undefined {
+  for (const [, target, params = ''] of (header ?? '').matchAll(/<([^>]*)>([^<]*)/gu)) {
+    const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^\s;,]+))/iu.exec(params);
+    if ((rel?.[1] ?? rel?.[2] ?? '').toLowerCase().split(/\s+/u).includes('next')) return target;
+  }
+  return undefined;
 }
 
 function withCursor(where: Where, options: RequestOptions, cursor: string | number): RequestOptions {
@@ -71,8 +86,10 @@ export async function* walk(http: HttpClient, shape: Paging, path: string, optio
     }
     : shape.kind === 'page' ? numbered(http, shape, path, options)
     : async (link: string | undefined) => {
-      const answer = await http.json(link ?? path, link === undefined ? options : { ...options, query: {} });
-      return { items: [answer], skipped: [], cursor: nextLink(shape, http.baseUrl, answer) };
+      const { data, headers } = await http.answer(link ?? path, link === undefined ? options : { ...options, query: {} });
+      const next = shape.kind === 'linkHeader' ? followed(shape, http.baseUrl, relNext(headers.get('link')))
+        : nextLink(shape, http.baseUrl, data);
+      return { items: [data], skipped: [], cursor: next };
     };
   for await (const page of paginate(load)) yield* page.items;
 }

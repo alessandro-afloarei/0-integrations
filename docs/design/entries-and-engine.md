@@ -206,7 +206,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
 `Operation.base`, placeholders in `identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs`
-reset unit, the paging kinds `offset` and `linkHeader`, `Size`, and `Where.variables`.
+reset unit, the paging kind `offset`, `Size`, and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -363,7 +363,7 @@ type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
   | { kind: 'offset'; send: Where; size: Size }
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
-  | { kind: 'linkHeader'; size?: Size }
+  | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
 type Where = { query: string } | { body: string } | { variables: string };
 type Size = { send: Where; value?: number };
@@ -379,8 +379,15 @@ The engine owns the stop rules, and entries hold no stop expressions:
   `list` (the answer itself when `list` is absent) is empty or not a list, a missing path included. A page whose list
   equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
   number would otherwise never end. `size` arrives later.
-- `linkHeader` follows `rel="next"`. `nextUrl` follows a full URL in the body. Both stay on the provider's origin, and
-  `nextUrl` under `pathPrefix`, counted from the base URL's path. A link that leaves is `invalid_response`.
+- `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
+  answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
+  `nextUrl` follows the link at `next` in the body, and stops when there is none.
+- One rule for a next link, from either: one that starts with a single `/` (`</wiki/api/v2/pages?cursor=…>`) is read on
+  the base's origin; a full URL is read as it is. Either must then stay on the base's origin and under the base's path
+  and `pathPrefix` (a whole directory counted from the base URL's path), read as it resolves; else it is
+  `invalid_response` (`next_link_foreign`) before anything is sent to it. `//host/…`, `/\host/…`, another origin,
+  `/../x` and a percent-encoded dot segment are refused. A link that comes back is `cursor_repeated`, through the one
+  `paginate` guard.
 
 A module keeps its own public cursor and builds its own requests, and reads its next cursor through its entry's shape,
 so its stop rules are the engine's. A module whose cursor is not a provider's cursor (a page number, a restart point,

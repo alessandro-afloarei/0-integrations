@@ -1,7 +1,7 @@
 # Providers
 
-Generated from `src/catalogue/` by `pnpm providers`: do not edit. 30 providers: 30 declared, 0 recorded;
-11 typed operations; webhooks: ed25519 1, hmac 6, standard 1, token 1. What waits is in the [waiting list](waiting-list.md).
+Generated from `src/catalogue/` by `pnpm providers`: do not edit. 32 providers: 32 declared, 0 recorded;
+20 typed operations; webhooks: ed25519 1, hmac 7, standard 1, token 1. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -9,7 +9,9 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 30 providers: 
 | [Apollo](https://docs.apollo.io/reference/authentication) | sales | key | — | — | declared |
 | [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | key | — | — | declared |
 | [Breakcold](https://docs.breakcold.com/api/authentication) | crm | key | — | hmac | declared |
+| [Buildkite](https://buildkite.com/docs/apis/rest-api#authentication) | code | key | builds.list, builds.get, builds.create, pipelines.list | hmac | declared |
 | [ClickUp](https://developer.clickup.com/docs/authentication) | tasks | key | tasks.list, tasks.get, tasks.create, tasks.update, lists.list | hmac | declared |
+| [Confluence](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/) | docs | key | pages.list, pages.get, pages.create, pages.update, spaces.list | — | declared |
 | [Discord](https://docs.discord.com/developers/reference) | chat | key | — | ed25519 | declared |
 | [Exa](https://docs.exa.ai/reference/search) | search | key | — | — | declared |
 | [Fathom](https://developers.fathom.ai/quickstart) | meetings | key | — | — | declared |

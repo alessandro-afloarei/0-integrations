@@ -67,9 +67,12 @@ export type Webhook = (
 ) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 export type Where = { query: string } | { body: string };
 /** `page`: no page number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the
- * answer itself when absent) is empty or no list. */
+ * answer itself when absent) is empty or no list. `linkHeader` and `nextUrl`: the next link is the `Link` header's
+ * `rel="next"`, or the value at `next`; a path is read on the base's origin, and the link must sit under the base's path
+ * and `pathPrefix`. */
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
-  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true } | { kind: 'nextUrl'; next: Path;
+  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true }
+  | { kind: 'linkHeader'; pathPrefix?: string } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
   pathPrefix?: string };
 /** A value's declared type. In an object, a key ending in `?` may be missing or null, and is read as absent. */
