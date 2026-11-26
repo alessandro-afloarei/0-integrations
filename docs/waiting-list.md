@@ -11,7 +11,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 
 | Mechanism | Providers waiting |
 |---|---|
-| An OAuth 2 sign-in that reads a value the person types before the redirect (a host, a subdomain, an organization), with authorize and token URLs built from it when it is a host. **Next to be built.** | Mattermost, Outline, Azure DevOps; Sentry also needs a documented client registration |
+| An OAuth 2 sign-in that reads a plain field: a host its authorize and token URLs are built from, or a value in the base (a host, an organization). **Next to be built.** | Mattermost (the host in the URLs), Azure DevOps (the organization in the base), Outline (the host in the base; its documented URLs are the cloud's), Sentry (the host in the base; its documented URLs are sentry.io's) |
 | A GraphQL cursor sent in the query's variables (Linear's lists are declared one page each, `first` and `after` ordinary variables) | Linear, monday.com |
 | `offset` paging | Outline, PagerDuty |
 | A 429's wait in a header of seconds left (`RateLimit-User-Reset`, `RateLimit-Reset`) | Buildkite, PagerDuty |
@@ -60,7 +60,7 @@ entry's comment, not here.
 | Smartsheet | Gov, Europe and Australia: other domains, with their own tokens | Regional hosts on more than one domain |
 | Smartsheet | Paging: `sheets.list` and `rows.list` answer one page each, `page` and `pageSize` ordinary parameters, `totalPages` and `totalRowCount` in their results | Page numbers where a page past the last answers the last page again |
 | Smartsheet | `errors.detail`: the code, `errorCode`, is a number | An error code that is a number |
-| Smartsheet | OAuth 2: Smartsheet approves or denies each request to register an app, and the authorize request documents no `redirect_uri` or PKCE | — |
+| Smartsheet | OAuth 2: Smartsheet first accepts or denies a request to open Developer Tools for the developer's account, where registering an app is then immediate; the authorize request lists no redirect parameter or PKCE ([OAuth](https://developers.smartsheet.com/api/smartsheet/guides/advanced-topics/oauth)) | — |
 | monday.com | Paging: each list answers one page, `cursor`, `page` and `limit` ordinary variables, `items_page.cursor` in the result | A GraphQL cursor sent in the query's variables |
 | monday.com | The webhook | A webhook signed as a JWT |
 | Guru | Paging: each list answers its first page; the next link is in a header | `Link` paging under another `rel` |
@@ -70,8 +70,8 @@ entry's comment, not here.
 | Honeybadger | The Bearer token a person may set on the Webhook integration: `webhook` checks `Honeybadger-Token` | A `token` webhook whose header carries a prefix |
 | incident.io | The webhook: its page leaves the hash and the secret's form to Svix | — |
 | Outline | Paging: each list answers one page, `offset` and `limit` body parameters, `pagination` in the result | `offset` paging |
-| Outline | OAuth 2: its documented URLs are the cloud's (`app.getoutline.com`), while the entry's base is the host the person types | An OAuth 2 sign-in that reads a value the person types before the redirect |
-| Mattermost | OAuth 2: each server is its own OAuth 2 provider | An OAuth 2 sign-in that reads a value the person types before the redirect |
+| Outline | OAuth 2: its documented URLs are the cloud's (`app.getoutline.com`), while the entry's base is the host the person types | An OAuth 2 sign-in that reads a plain field |
+| Mattermost | OAuth 2: each server is its own OAuth 2 provider | An OAuth 2 sign-in that reads a plain field |
 | Mattermost | Paging and records of `posts.list`: one page, its posts a map keyed by id (`'unknown'`) beside `order`, `page` and `per_page` ordinary parameters, `has_next` in the result | A list whose records are a map keyed by id |
 | Zulip | `messages.create` | A form-encoded body |
 | Zulip | Paging: `messages.list` reads around an `anchor`, which an app moves to the last message's id, `num_before` and `num_after` ordinary parameters, `found_newest` and `found_oldest` in the result | A next cursor read from the last record of a page |
@@ -84,7 +84,7 @@ entry's comment, not here.
 | Vercel | OAuth 2 (Sign in with Vercel): its REST API permissions are in private beta | — |
 | Render | Paging: each list answers one page, `cursor` and `limit` declared, each element keeps its `cursor` | A next cursor read from the last record of a page |
 | Sentry | Paging: each list answers one page, `cursor` an ordinary query parameter (the next cursor is in the `Link` header only) | `Link` paging that ends on `results="false"` |
-| Sentry | OAuth 2 on sentry.io and self-hosted servers (no page says how a client for `/oauth/` is registered) | An OAuth 2 sign-in that reads a value the person types before the redirect, and a documented client registration |
+| Sentry | OAuth 2: its documented authorize and token URLs are sentry.io's ([OAuth2](https://docs.sentry.io/api/auth/#oauth2)), while the entry's base is the host the person types | An OAuth 2 sign-in that reads a plain field |
 | Sentry | OAuth 2 for a public integration (Sentry's integration platform) | An OAuth 2 token URL built from a value the redirect returns |
 | PagerDuty | Paging: each list answers one page, `limit` and `offset` declared, `more` in the result | `offset` paging |
 | PagerDuty | `incidents.create` and `incidents.update`: both need the `From` header | An operation parameter sent as a header |
@@ -101,4 +101,4 @@ cannot be read without signing in, or does not load, is listed here too, with th
 | Confluence | Atlassian's rules forbid apps that collect API tokens, so a key alone would steer an app wrong, and its OAuth 2 (3LO) uses another base | [Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/) |
 | Wrike | Its OAuth 2 base is the host the token answer names, and its permanent token is not meant for multi-user applications | [OAuth 2.0 authorization](https://developers.wrike.com/docs/oauth-20-authorization/), [FAQ](https://developers.wrike.com/docs/faq/) |
 | Netlify | Integrations other people use must use OAuth 2, and the documentation gives only the implicit grant, with no token URL for the code flow | [Get started with the API](https://docs.netlify.com/api-and-cli-guides/api-guides/get-started-with-api/) |
-| Azure DevOps | A personal access token is not for production applications, and its Microsoft Entra OAuth 2 needs the organization in the base before the redirect | [Use personal access tokens](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops) |
+| Azure DevOps | A personal access token is not for production applications. Its Microsoft Entra OAuth 2 signs in through the Microsoft identity platform, apart from the REST calls, whose base holds the organization (`dev.azure.com/{organization}`): it waits for an OAuth 2 sign-in that reads a plain field | [Use personal access tokens](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops), [Entra OAuth apps](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth?view=azure-devops), [REST API](https://learn.microsoft.com/en-us/rest/api/azure/devops/?view=azure-devops-rest-7.1) |
