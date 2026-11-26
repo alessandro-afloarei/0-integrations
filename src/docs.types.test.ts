@@ -19,7 +19,7 @@ import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
 import { accessToken, type WithLock } from './credentials.js';
 import { fakeHubSpot, type HubSpotFakeData } from './hubspot/fake.js';
-import { refreshGrant, tokenSource, type OAuthClient } from './oauth.js';
+import { refreshGrant, revokeGrant, tokenSource, type OAuthClient } from './oauth.js';
 import { fakeFetch, fakeProvider } from './testing.js';
 import type { SecretStore, Vault } from './vault.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook } from './webhooks.js';
@@ -145,6 +145,9 @@ async function connectOwnServer(clients: Map<string, OAuthClient>, pending: Map<
 
   const api = client(mattermost, { token: secret.accessToken, values });
   const renewed = await refreshGrant(mattermost, own, refreshToken, { values }); // through the address guard
+
+  // When the person disconnects, with the same values:
+  await revokeGrant(mattermost, { ...secret, client: own, values });
   expectTypeOf(values.host).toEqualTypeOf<string>();
   return [api, renewed];
 }

@@ -137,12 +137,14 @@ sit on the host the person types (`https://{host}/oauth/authorize`). Its OAuth 2
 to `finishConnect`, `refreshGrant`, `revokeGrant` and `client`. Never read a value from the callback's query: the
 callback is the person's browser, which can carry anything. Every OAuth 2 URL is filled and checked as a base is (a
 host name with no port, never a blocked address), and a token never goes to a host other than the one that issued it.
+The values and the grant are one record: a token is sent to whatever host the `values` name, and the library cannot
+know which host issued it. Keep the host with the sealed grant, never apart.
 
 ```ts
 import { mattermost } from '0-integrations/catalogue/mattermost';
 import { client } from '0-integrations/client';
 import { finishConnect, startConnect } from '0-integrations/connect';
-import { refreshGrant } from '0-integrations/oauth';
+import { refreshGrant, revokeGrant } from '0-integrations/oauth';
 
 // The app's client for the server the person typed: one per server, never another's.
 const registered = clients.get(host);
@@ -160,6 +162,9 @@ const { secret, values } = await finishConnect(mattermost, { client: own, code, 
 
 const api = client(mattermost, { token: secret.accessToken, values });
 const renewed = await refreshGrant(mattermost, own, refreshToken, { values }); // through the address guard
+
+// When the person disconnects, with the same values:
+await revokeGrant(mattermost, { ...secret, client: own, values });
 ```
 
 The client belongs to its server: the server's administrator (or the person) registers the app there, after a System
