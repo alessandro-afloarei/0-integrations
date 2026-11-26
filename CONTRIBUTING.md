@@ -16,17 +16,29 @@ server, database or provider account. Run `pnpm build` for ESM and declarations,
 ## A provider
 
 A provider is one file, its entry: `src/catalogue/<id>.ts`, exporting `defineProvider({ id: '<id>', … })` under the
-name `<id>`: the id is the export's name, lowercase letters and digits starting with a letter. Write it from the provider's own documentation and state only what differs from the defaults
-([catalogue](docs/modules/catalogue.md)); the [design](docs/design/entries-and-engine.md) gives every field. Nothing
-else needs an edit: the `./catalogue/*` export publishes it, the build adds it to `catalogue.json`, and `pnpm check`
-tests it.
+name `<id>`: the id is the export's name, lowercase letters and digits starting with a letter. No other code needs an
+edit: the `./catalogue/*` export publishes it, the build adds it to `catalogue.json`, and `pnpm check` tests it. Adding
+one takes five steps:
+
+1. `pnpm new <id>` writes the entry's skeleton, a key entry whose every unknown is `TODO`. It never overwrites a file.
+2. Fill it from the provider's own documentation, and put the page that states what the entry declares in `docs`.
+   State only what differs from the defaults: [catalogue](docs/modules/catalogue.md) lists every field, and the
+   [design](docs/design/entries-and-engine.md) gives every rule. For an OAuth grant or a token request, replace `auth`
+   and the fields as [oauth](docs/modules/oauth.md) describes.
+3. `pnpm check`. The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake
+   derived from it (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry
+   has an identify request or a token request.
+4. Optional: record it from a test account (below), read the file, and commit it. The entry becomes `recorded`.
+5. Add one line to `CHANGELOG.md` under `Unreleased`, then open a pull request.
 
 `src/catalogue/catalogue.test.ts` runs over every file in the folder, with no test code of yours. It checks that the
 entry:
 
 - matches the entry types with no unknown key (the compiler accepts a misspelled one; this test does not), holds no
-  function, prints to JSON unchanged, and has an id that is unique and equals its file name;
+  function and no `TODO`, prints to JSON unchanged, and has an id that is unique and equals its file name;
 - cites in `docs` the https page of the provider that states what the entry declares;
+- fills `auth.send`'s templates, when it has any, with the secret (`{token}`, or a key entry's secret field) and only
+  the entry's fields;
 - names in each template only what that place allows;
 - is one the engine can run: a key or token entry has exactly one secret field, a key entry reads no token answer, and
   neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
@@ -44,7 +56,9 @@ entry:
   `authorization: Bearer {token}`);
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body), a paged operation names a declared shape and no `notFound`, a records path
-  leads to a list, and no id is a client call or a dotted prefix of another.
+  leads to a list, and no id is a client call or a dotted prefix of another;
+- declares a webhook the checks can run: `{timestamp}` signed exactly when a timestamp is read, no `prefix` beside a
+  `part`, and a challenge recognised by a body path that echoes one top-level key of the body.
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
 the test signs in once with a good key and once with a bad one, each sending a `token` entry's token request and
@@ -55,10 +69,12 @@ matches the method, the whole URL and the body, and fills a plain field with its
 choice, else `kit-<name>`).
 
 To record an entry from a test account, run `RECORD_PROVIDER=<id> RECORD_KEY=<secret>
-RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`
-([testing](docs/modules/testing.md#recording-an-entry-with-no-module)). The recorder swaps the key, the plain values, the
-tokens issued and the account's id and name for the kit's stand-ins, and writes nothing it cannot scrub. Only such a
-capture (`synthetic: false`) makes the entry `recorded`. A recording written by hand from the provider's documented
+[RECORD_VALUES='{"<plain field>":"…"}'] pnpm vitest run src/record.test.ts`
+([testing](docs/modules/testing.md#recording-an-entry-with-no-module)). It signs in once with the key and once with a
+bad one and writes `src/catalogue/<id>.recording.json`. The recorder swaps the key, the plain values, the tokens issued
+and the account's id and name for the kit's stand-ins, and writes nothing it cannot scrub. Anything else of the
+account's in the answers is yours to replace (below). Only such a capture from a real test account (`synthetic: false`)
+makes the entry `recorded`. A recording written by hand from the provider's documented
 examples is marked `synthetic: true`: it tests the entry and leaves its tier `declared`. Every recording must sit beside
 an entry.
 

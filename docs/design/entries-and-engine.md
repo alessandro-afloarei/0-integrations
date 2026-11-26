@@ -206,7 +206,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
 `oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
 `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
-and `Where.variables`. `paging` and `operations` arrive with the walker and the client.
+and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -523,7 +523,8 @@ and writes `dist/catalogue.json`.
 One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the folder:
 
 1. **Shape.** The entry matches the schema. It holds no function. Every URL is https. Every placeholder names a
-   declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip.
+   declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip. No string
+   holds `TODO`, what `pnpm new` leaves for each unknown.
 2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): identify with
    a good and a bad credential. The module kits run the first page, a walk to the end and a 429 on the same
    recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange and revoke, and webhook samples
@@ -569,25 +570,31 @@ removed in the step that replaces it; nothing is kept for 0.12 callers.
 11. Declared operations and the inferred client; `./http` becomes internal.
 12. Release 0.13.0 with a migration list.
 
-**Stage B: expansion.** Four pull requests. Each item arrives with a first provider that needs it, an entry citing
+**Stage B: expansion. Done.** Four pull requests. Each item arrived with a first provider that needs it, an entry citing
 its docs, and engine tests as proof:
 
-1. **Where a call can go.** Keys in the query (SerpApi); field choices and defaults, and a base filled from a value with
-   a host pattern (Intercom); a guarded `fetch` that refuses private addresses, for a host the person types (GitLab);
-   retry of 5xx and network failures on reads, with jitter (Microsoft, Google).
-2. **How a token is obtained.** JSON token bodies, a second base for identify, a path segment and a saved value in the
-   base (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session sign-ins
-   (Zoom, Metabase); a templated token URL (PayPal, Metabase).
-3. **More webhook schemes.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 and a header value
+1. **Where a call can go. Done.** Keys in the query (SerpApi); field choices and defaults, and a base filled from a
+   value with a host pattern (Intercom); a guarded `fetch` that refuses private addresses, for a host the person types
+   (GitLab); retry of 5xx and network failures on reads, with jitter (Microsoft, Google).
+2. **How a token is obtained. Done.** JSON token bodies, a second base for identify, a path segment and a saved value in
+   the base (Jira); a separate refresh URL (Figma); one declared token request for client credentials and session
+   sign-ins (Zoom, Metabase); a templated token URL (PayPal, Metabase).
+3. **More webhook schemes. Done.** Timestamped `t=,v1=` headers (Stripe), SHA-1 (Intercom), Ed25519 and a header value
    template (Discord, Trello), shared tokens (Google), Standard Webhooks (GitLab), and a challenge handshake (Slack,
    Discord).
-4. **The kit.** A fake derived from any entry (in the code: `fakeProvider`), the recorder for an entry with no module, a scaffolder (`pnpm new <id>`)
-   and a five-step guide to adding a provider.
+4. **The kit. Done.** A fake derived from any entry (`fakeProvider`), the recorder for an entry with no module, a
+   scaffolder (`pnpm new <id>`, one key skeleton whose every unknown is `TODO`, which the table test refuses) and a
+   five-step guide to adding a provider (`CONTRIBUTING.md`).
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
 code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
-authorize and token URLs (Shopify); placeholders in `bases`; retry of writes; second challenge shapes; webhook schemes
-that are code (Twilio, HubSpot v3, PayPal, SendGrid).
+authorize and token URLs (Shopify); `Operation.base`; placeholders in `bases`; `{ value, title }` choices;
+`categories`; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+(Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
+
+Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments
+and paging in the derived fake (an operation's function sees the raw request and answers each page itself); a
+skeleton per sign-in kind (one key skeleton; the guide says how to change `auth`).
 
 OAuth 1, JWT and service-account sign-in, and multipart bodies wait for the first provider that needs them.
 
