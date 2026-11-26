@@ -43,7 +43,7 @@ export type FirefliesListItem = {
   is_live?: boolean | null | undefined; meeting_info?: { summary_status?: string | null | undefined } | null | undefined;
 };
 
-export type FirefliesUser = { userId: string; email: string; name: string };
+export type FirefliesUser = { userId: string; email: string | null; name: string | null };
 type TranscriptQuery = { userId: string; fromDate: number; toDate: number; cursor?: string | undefined };
 export type FirefliesClient = {
   user(): Promise<FirefliesUser>;
@@ -86,7 +86,7 @@ export function firefliesClient(input: { apiKey: string; fetch: typeof fetch; si
   return {
     async user() {
       const { user } = (await api.user({}, signal)).data;
-      return { userId: user.user_id, email: user.email, name: user.name };
+      return { userId: user.user_id, email: user.email ?? null, name: user.name ?? null };
     },
     async transcripts(query) {
       if (![query.fromDate, query.toDate].every(date => Number.isFinite(date) && Number.isFinite(new Date(date).getTime()))) {
