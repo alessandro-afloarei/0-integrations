@@ -4,6 +4,7 @@ import { defineProvider } from '../catalogue.js';
  * names the member (`id`, `fullName`, `username`: https://developer.atlassian.com/cloud/trello/rest/api-group-members/). */
 export const trello = defineProvider({
   id: 'trello', name: 'Trello', docs: 'https://developer.atlassian.com/cloud/trello/guides/rest-api/authorization/',
+  categories: ['tasks'],
   fields: [{ name: 'apiKey', title: 'API key' }, { name: 'apiToken', title: 'Token', secret: true }],
   auth: [{ kind: 'key', send: { header: 'authorization',
     value: 'OAuth oauth_consumer_key="{apiKey}", oauth_token="{apiToken}"' } }],

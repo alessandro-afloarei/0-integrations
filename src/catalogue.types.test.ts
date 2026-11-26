@@ -9,4 +9,6 @@ test('defineProvider keeps the literal', () => {
   defineProvider({ id: 'bad', name: 'Bad', auth: [{ kind: 'key' }], http: {} });
   // @ts-expect-error an entry needs at least one sign-in
   defineProvider({ id: 'bad', name: 'Bad', auth: [], http: { baseUrl: 'https://x.test' } });
+  // @ts-expect-error a category is one of the closed list
+  defineProvider({ id: 'bad', name: 'Bad', categories: ['task'], auth: [{ kind: 'key' }], http: { baseUrl: 'https://x.test' } });
 });

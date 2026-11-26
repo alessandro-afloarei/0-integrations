@@ -4,6 +4,7 @@
 
 Nothing here is released yet.
 
+- New: `categories` on an entry (a closed list) and `docs` on an operation; every library entry and operation has them.
 - New: an entry can send its key in the query string (`send: { query }`), first used by SerpApi.
 - A blank plain value (Aircall's `apiId: ''`) is refused with `template_missing` before anything is sent; it was sent as
   `Basic :<token>`.

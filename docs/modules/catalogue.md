@@ -24,6 +24,7 @@ That is a whole provider: the connect form, the credential check, the account, p
 | Field | What it declares |
 |---|---|
 | `docs` | The provider's own page that states what the entry declares, https. Every entry in the library has one. |
+| `categories` | What the provider is for: one or two of a closed list (`tasks`, `docs`, `chat`, `code`, `crm`, `mail`, `calendar`, `meetings`, …), the first the main one. Every entry in the library has them; the [design](../design/entries-and-engine.md#fields-of-an-entry) lists them all. |
 | `fields` | What a person enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A key or token entry has exactly one secret field: the credential. A plain field left blank takes its `default`; `choices` lists every value it accepts; `help` is a line a connect screen shows under it. |
 | `auth` | One sign-in: `{ kind: 'key' }`, a key the person enters; `{ kind: 'oauth2', … }`, a grant from the provider's consent screen; or `{ kind: 'token', request }`, one request that turns the fields into a short-lived token (Zoom, PayPal, Metabase). [oauth](oauth.md) holds the OAuth 2 and token contracts; `send`, how the credential travels (`{ header, value }` fills a template as every credential template is: Discord's `'Bot {token}'`), is in the [design](../design/entries-and-engine.md#auth). |
 | `scopes` | `{ default, requireGranted? }`: the scopes asked for, and whether a grant short of one is refused. |
@@ -34,7 +35,7 @@ That is a whole provider: the connect form, the credential check, the account, p
 | `errors` | Where the provider's own error code is (`detail`), which codes mean a revoked grant, and rules that map answers to error codes. |
 | `webhook` | The signature scheme, `kind` `hmac` (with `hash` and `part`), `ed25519`, `token` or `standard`, plus `deliveryId` and `challenge`. The rules are in [webhooks](webhooks.md). |
 | `paging` | Named paging shapes: `cursor` (a next cursor sent back in the query or the body) and `nextUrl` (a next link in the body). |
-| `operations` | Named reads and writes, with typed parameters and results, called through [`client`](client.md). |
+| `operations` | Named reads and writes, with typed parameters and results, called through [`client`](client.md). Each one's `docs` is the provider's https page that states its method, path, parameters and answer; every operation in the library has one. |
 
 A path is dotted (`data.user.id`), and at each level the whole rest is tried as one key first, so `@odata.nextLink` reads
 the key of that name. A template is a string with `{name}` placeholders, such as `'{apiId}'` in a Basic credential or

@@ -131,7 +131,8 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 | Field | What it declares | Default |
 |---|---|---|
-| `id`, `name`, `categories` | Identity and metadata. | — |
+| `id`, `name` | Identity. | — |
+| `categories` | What the provider is for: one or two of a closed list, the first the main one. Every library entry has them. The list: `tasks`, `docs`, `chat`, `code`, `monitoring`, `crm`, `sales`, `mail`, `calendar`, `meetings`, `support`, `marketing`, `finance`, `hr`, `storage`, `ecommerce`, `phone`, `design`, `analytics`, `search`. A value is added with the batch of entries that first needs it. | — |
 | `docs` | The provider's own page that states what the entry declares, https. Every library entry has one. | — |
 | `fields` | What the user enters to connect: `{ name, title, secret?, default?, help?, choices? }`. A connect screen is drawn from these. A plain field left out or blank takes its `default` in `finishConnect`, the one place a default is applied; `choices` lists every value it accepts, the `default` among them. A secret field has neither. | none |
 | `auth` | A list of sign-in alternatives (below). | — |
@@ -203,10 +204,9 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 
 #### Arriving later
 
-Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
-`oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
-`epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
-and `Where.variables`.
+Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
+`Operation.base`, placeholders in `identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs`
+reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`, and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -439,7 +439,7 @@ provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft 
 ### `operations`
 
 ```ts
-type Operation = ({ method?: Method; path: Template } | { graphql: string }) & {
+type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Record<string, Param>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null'; base?: string };
 type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
@@ -447,6 +447,8 @@ type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; require
 type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
 ```
 
+- `docs` is the provider's page that states the operation's method, path, parameters and answer, https. Every operation
+  of a library entry has one.
 - An operation's key is its id (`'issues.create'`). `kind` defaults from the method: GET is a read, DELETE a delete,
   anything else a write. A GraphQL operation is a POST, so a write unless it says `kind: 'read'`. A search sent as POST
   says `kind: 'read'`: the engine retries only a call marked idempotent, a GET by default and an operation of
@@ -479,6 +481,62 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 There are no hooks, and `defineProvider` takes one argument. What an entry cannot say is a call of the provider's
 module: a hosted sign-in link and a two-request account lookup are calls of that provider's module.
 A hook is added only when a provider's sign-in or identity can be neither data nor a module call.
+
+## Breadth entries
+
+The catalogue grows in batches of entries with no module. Each is written by the same rules, so two people reading the
+same docs write the same entry.
+
+**Every fact from the provider's own page.** Each value an entry declares (the sign-in and how the credential travels,
+the base and its hosts, identify's request and paths, each operation's method, path, parameters and result keys,
+paging, the error code path, rate-limit numbers, the webhook scheme) is read from the provider's own documentation.
+Its URL is in the entry: the entry's `docs` (sign-in and identify), the operation's `docs`, or, for a fact on another
+page (a rate limit, regions, a webhook, an error format), the entry's leading comment. What cannot be cited is left
+out: a smaller true entry beats a larger guessed one. What the engine cannot say is left out too, never forced into a
+wrong shape, and the mechanism it needs goes on the waiting list.
+
+**Sign-in.** The provider's personal key or token when it reaches the category's operations (`key`, its `send` as the
+docs show it); else its self-serve OAuth 2 authorization code grant (`oauth2`); else a documented one-request token
+(`token`).
+
+- `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
+  credential or the base needs. A host the person types is `host` with `http.host: '*'`; a documented list of regional
+  hosts on one domain is `choices` with `http.host: '*.<domain>'`.
+- `scopes`, on an `oauth2` entry only: what the declared operations and identify need, as the docs name them.
+- `identify`: the documented request that answers who the credential is, `id` its id path, `name` its display name,
+  then its email. With none, a credential check with no `id` on the cheapest read the credential can always make.
+- `http`: `headers` only for one the docs require on every request; `retry: {}` when the docs state a 429 or a
+  `Retry-After`, with `maxWaitMs` and `defaultWaitMs` only from stated numbers; `minIntervalMs` only from a stated
+  per-credential limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
+  limit answer.
+- `errors.detail` only for a documented machine code, never a human message.
+- `paging`: one named shape per way the declared lists page. A list the engine cannot page is declared unpaged, its
+  paging parameters ordinary parameters and its paging fields in its `result`.
+- `webhook` only for a scheme the engine has, every part cited.
+
+**Operations: the category's template, no more.** An entry declares each operation of its main category's template
+that the provider documents as one plain request, and nothing else. Its id is `<noun>.<verb>`: the noun the provider's
+own plural in lowerCamelCase (`tasks`, `cards`, `pullRequests`), the verb one of `list`, `get`, `create`, `update` and
+`search` (`search` in place of `list` only when the provider lists that object only by search). No `delete`.
+
+| Category | Template |
+|---|---|
+| `tasks` | `<items>.list`, `<items>.get`, `<items>.create`, `<items>.update`, `<containers>.list` |
+| `docs` | `<pages>.list` (or `.search`), `<pages>.get`, `<pages>.create`, `<pages>.update`, `<spaces>.list` |
+| `chat` | `<channels>.list`, `<messages>.list`, `<messages>.create`, `<users>.list` |
+| `code` | source control: `repositories.list`, `repositories.get`, `pullRequests.list`, `pullRequests.get`, `pullRequests.create`; CI and deploys: `<runs>.list`, `<runs>.get`, `<runs>.create`, `<projects>.list` |
+| `monitoring` | `<issues>.list`, `<issues>.get`, `<issues>.update`, `<projects>.list`; incident tools add `<incidents>.create` |
+
+A category gains its template with the batch that first writes it.
+
+**Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
+its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record
+(JSON:API's `attributes` counts as one). A key is required only where the docs mark it required or never null; every
+other ends in `?`. A type the docs do not state, a polymorphic value (rich text, custom fields) and a map keyed by ids
+are `'unknown'`. A `get`, `create` and `update` declare the same record as the list's element. An answer the docs show
+only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
+it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
+say are writable; `required` and `enum` only where the docs say so.
 
 ## The engine
 
@@ -522,7 +580,8 @@ and writes `dist/catalogue.json`.
 
 One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the folder:
 
-1. **Shape.** The entry matches the schema. It holds no function. Every URL is https. Every placeholder names a
+1. **Shape.** The entry matches the schema. It holds no function. Every URL is https. It has one or two unique
+   `categories` and an https `docs` page, as does each of its operations. Every placeholder names a
    declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip. No string
    holds `TODO`, what `pnpm new` leaves for each unknown.
 2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): a `token`
@@ -597,8 +656,7 @@ its docs, and engine tests as proof:
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
 code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; templated OAuth
-authorize and token URLs (Shopify); `Operation.base`; placeholders in `bases`; `{ value, title }` choices;
-`categories`; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+authorize and token URLs (Shopify); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
 (Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
 
 Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments

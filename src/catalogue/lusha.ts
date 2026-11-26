@@ -4,6 +4,7 @@ import { defineProvider } from '../catalogue.js';
 export const lusha = defineProvider({
   id: 'lusha', name: 'Lusha', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://docs.lusha.com/authentication',
+  categories: ['sales'],
   auth: [{ kind: 'key', send: { header: 'api_key' } }],
   http: { baseUrl: 'https://api.lusha.com', minIntervalMs: 1500, retry: { defaultWaitMs: 60_000 } },
   // An account without v3 access is refused like an inactive one; only the message tells them apart.

@@ -3,6 +3,7 @@ import { defineProvider } from '../catalogue.js';
 export const fireflies = defineProvider({
   id: 'fireflies', name: 'Fireflies', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://docs.fireflies.ai/fundamentals/authorization',
+  categories: ['meetings'],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.fireflies.ai/graphql',
     retry: { limit: 0, waitFromBody: { path: 'errors.0.extensions.metadata.retryAfter', unit: 'epochMs' } } },
@@ -16,6 +17,7 @@ export const fireflies = defineProvider({
   identify: { request: { graphql: 'query FirefliesUser { user { user_id email name } }' }, id: 'data.user.user_id',
     name: 'data.user.name' },
   webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha256=', deliveryId: { body: ['event', 'meeting_id'] } },
-  operations: { user: { kind: 'read', graphql: 'query FirefliesUser { user { user_id email name } }',
+  operations: { user: { docs: 'https://docs.fireflies.ai/graphql-api/query/user',
+    kind: 'read', graphql: 'query FirefliesUser { user { user_id email name } }',
     result: { data: { user: { user_id: 'string', email: 'string', name: 'string' } } } } },
 });

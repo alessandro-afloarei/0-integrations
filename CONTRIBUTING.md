@@ -26,7 +26,10 @@ one takes five steps:
    design's [`auth` section](docs/design/entries-and-engine.md#auth) gives every sign-in rule. Start from the entry
    of the same sign-in kind: a key, `src/catalogue/serpapi.ts`; an OAuth 2 grant, `src/catalogue/figma.ts` (drop the
    skeleton's secret field: the grant is the secret); a token request, `src/catalogue/zoom.ts`. Write every header name
-   in lowercase (`x-api-key`).
+   in lowercase (`x-api-key`). Pick one or two `categories`, the main one first; declare the operations of that
+   category's template, each with its own `docs` page; follow the result-shape rules. A fact you cannot cite from the
+   provider's page stays out. The design's [Breadth entries](docs/design/entries-and-engine.md#breadth-entries) gives
+   the templates and the rules.
 3. `pnpm check`. The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake
    derived from it (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry
    has an identify request or a token request.
@@ -39,7 +42,9 @@ entry:
 
 - matches the entry types with no unknown key (the compiler accepts a misspelled one; this test does not), holds no
   function and no `TODO`, prints to JSON unchanged, and has an id that is unique and equals its file name;
-- cites in `docs` the https page of the provider that states what the entry declares;
+- cites in `docs` the https page of the provider that states what the entry declares, and on each operation the https
+  page that states it;
+- names one or two unique `categories` from the closed list, the first the main one;
 - fills `auth.send`'s templates, when it has any, with the secret (`{token}`, or a key entry's secret field) and only
   the entry's fields; a send's `value` holds no control character and never spells out a default (`'{token}'`, or
   `authorization: Bearer {token}`), and no field is named `token`;

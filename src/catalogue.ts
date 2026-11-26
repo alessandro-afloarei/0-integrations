@@ -75,11 +75,15 @@ export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | re
 export type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
 /** A named read or write. `kind` defaults from the method; `paging` names an entry's shape, `records` the list in a page. */
-export type Operation = ({ method?: Method; path: Template } | { graphql: string }) & {
+export type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Readonly<Record<string, Param>>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null' };
-/** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. */
-export type Entry = { id: string; name: string; docs?: string; fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
+/** What a provider is for: a closed list, a value added with the first entry that needs it. */
+export type Category = 'tasks' | 'docs' | 'chat' | 'code' | 'monitoring' | 'crm' | 'sales' | 'mail' | 'calendar' | 'meetings'
+  | 'support' | 'marketing' | 'finance' | 'hr' | 'storage' | 'ecommerce' | 'phone' | 'design' | 'analytics' | 'search';
+/** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. `categories`: the first is the main one. */
+export type Entry = { id: string; name: string; docs?: string; categories?: readonly Category[];
+  fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
   scopes?: { default: readonly string[]; requireGranted?: true }; identify?: Identify;
   save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook;
   paging?: Readonly<Record<string, Paging>>; operations?: Readonly<Record<string, Operation>> };

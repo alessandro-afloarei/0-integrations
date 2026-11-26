@@ -6,6 +6,7 @@ import { defineProvider } from '../catalogue.js';
  * the user object is at https://docs.discord.com/developers/resources/user. */
 export const discord = defineProvider({
   id: 'discord', name: 'Discord', docs: 'https://docs.discord.com/developers/reference',
+  categories: ['chat'],
   fields: [{ name: 'botToken', title: 'Bot token', secret: true }],
   auth: [{ kind: 'key', send: { header: 'authorization', value: 'Bot {token}' } }],
   http: { baseUrl: 'https://discord.com/api/v10' },

@@ -6,6 +6,7 @@ import { defineProvider } from '../catalogue.js';
 export const google = defineProvider({
   id: 'google', name: 'Google',
   docs: 'https://developers.google.com/identity/protocols/oauth2/web-server',
+  categories: ['mail', 'calendar'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token',
     authorizeParams: { response_type: 'code', access_type: 'offline', prompt: 'consent' } }],
   scopes: { default: ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/calendar.readonly'], requireGranted: true },

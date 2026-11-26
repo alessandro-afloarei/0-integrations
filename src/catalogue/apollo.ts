@@ -5,6 +5,7 @@ import { defineProvider } from '../catalogue.js';
 export const apollo = defineProvider({
   id: 'apollo', name: 'Apollo', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://docs.apollo.io/reference/authentication',
+  categories: ['sales'],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: { baseUrl: 'https://api.apollo.io/api/v1', minIntervalMs: 1200, retry: { defaultWaitMs: 60_000 } },
   // `error_details.code` (`AUTH.AUTHENTICATION.API_KEY_INVALID`), Apollo's only error payload from 2027-02-16.

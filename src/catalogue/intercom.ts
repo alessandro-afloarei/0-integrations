@@ -6,6 +6,7 @@ import { defineProvider } from '../catalogue.js';
 export const intercom = defineProvider({
   id: 'intercom', name: 'Intercom',
   docs: 'https://developers.intercom.com/docs/references/rest-api/api.intercom.io/admins/identifyadmin',
+  categories: ['support'],
   fields: [{ name: 'apiHost', title: 'Region', choices: ['api.intercom.io', 'api.eu.intercom.io', 'api.au.intercom.io'],
     default: 'api.intercom.io', help: 'Where the workspace is hosted: the US, the EU or Australia.' },
   { name: 'accessToken', title: 'Access token', secret: true }],

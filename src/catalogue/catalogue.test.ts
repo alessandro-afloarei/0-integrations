@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
-import { defineProvider, type Entry, type Field, type Shape } from '../catalogue.js';
+import { defineProvider, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, GOOD_KEY, kitValues, replayProblem, signIn, type Recording } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
@@ -58,7 +58,11 @@ const request = z.strictObject({ method: method.optional(), path: template.optio
   query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional(), base: z.string().optional() });
 const shape: z.ZodType<Shape> = z.lazy(() =>
   z.union([z.enum(['string', 'integer', 'number', 'boolean', 'unknown']), z.tuple([shape]), z.record(z.string(), shape)]));
-const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
+/** Every category once: the compiler refuses one missing from `Category` or not in it. */
+const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true, code: true, monitoring: true, crm: true,
+  sales: true, mail: true, calendar: true, meetings: true, support: true, marketing: true, finance: true, hr: true,
+  storage: true, ecommerce: true, phone: true, design: true, analytics: true, search: true };
+const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 'delete']).optional(),
   params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'variables']), type: shape,
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
     description: z.string().optional() })).optional(),
@@ -74,6 +78,7 @@ const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName 
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
   id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1), docs: z.string().optional(),
+  categories: z.array(z.enum(Object.keys(CATEGORIES) as [Category, ...Category[]])).optional(),
   fields: z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
     secret: z.literal(true).optional(), default: z.string().optional(),
     help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
@@ -195,6 +200,10 @@ const runnable = {
     || !sentTemplates(entry).flatMap(placeholders).some(name => name === secretField(entry)),
   // Every claim an entry makes is checked against the provider's own page.
   'a `docs` link to the provider\'s page, https': (entry: Entry) => entry.docs?.startsWith('https://') === true,
+  // A connect screen and the providers page group entries by their first category.
+  '`categories`: one or two unique values, the first the main one': (entry: Entry) => entry.categories !== undefined
+    && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
+  'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
   'an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when the base\'s host has a placeholder': (entry: Entry) => (placeholders(baseHost(entry)).length > 0
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
@@ -396,7 +405,7 @@ test.each([
   ['compares a path to a boolean', { path: 'active', equals: false }],
 ])('a condition that %s matches the schema', (_, good) => { expect(when.safeParse(good).success).toBe(true); });
 
-const key = { id: 'k', name: 'K', docs: 'https://k.test/docs', http: { baseUrl: 'https://api.k.test' } } as const;
+const key = { id: 'k', name: 'K', docs: 'https://k.test/docs', categories: ['tasks'], http: { baseUrl: 'https://api.k.test' } } as const;
 const oauth2 = { ...key, auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token' }] } as const;
 const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
 /** A token entry with Zoom's shape: a plain client id, one secret, Basic client authentication. */
@@ -407,6 +416,12 @@ test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
   [TODO_RULE, defineProvider({ ...key, docs: 'https://TODO', auth: [{ kind: 'key' }], fields: [secret] })],
+  ['`categories`: one or two unique values, the first the main one', defineProvider({ id: 'k', name: 'K', docs: key.docs, http: key.http,
+    auth: [{ kind: 'key' }], fields: [secret] })],
+  ...([[], ['tasks', 'docs', 'chat'], ['tasks', 'tasks']] as const).map((categories): [Rule, Entry] => [
+    '`categories`: one or two unique values, the first the main one', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], categories })]),
+  ...([{ path: '/tasks' }, { path: '/tasks', docs: 'http://k.test/tasks' }] as const).map((op): [Rule, Entry] => [
+    'a `docs` page on every operation, https', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations: { 'tasks.list': op } })]),
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
     auth: [{ kind: 'key', send: { query: { id: '{apiId}' } } }] })],
   ['`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)', defineProvider({ ...key, fields: [secret, { name: 'apiId', title: 'API ID' }],
@@ -655,14 +670,14 @@ test('an entry whose operations keep every rule passes them all', () => {
   const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } } },
     operations: {
-      'pages.list': { path: '/pages/{space}', paging: 'cursor', records: 'data.items',
+      'pages.list': { docs: 'https://k.test/docs/pages', path: '/pages/{space}', paging: 'cursor', records: 'data.items',
         params: { space: { in: 'path', type: 'string', required: true }, q: { in: 'query', type: 'string' } },
         result: { data: { items: [{ id: 'string' }] }, 'next?': 'string' } },
-      'pages.events': { path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
-      'requests.create': { method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
+      'pages.events': { docs: 'https://k.test/docs/events', path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
+      'requests.create': { docs: 'https://k.test/docs/requests', method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
         state: { in: 'query', type: 'string', enum: ['open'] }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
-      'then.later': { path: '/later' },
-      me: { graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
+      'then.later': { docs: 'https://k.test/docs/later', path: '/later' },
+      me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
   expect(entrySchema.safeParse(good).error).toBeUndefined();

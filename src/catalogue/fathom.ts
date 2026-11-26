@@ -4,6 +4,7 @@ import { defineProvider } from '../catalogue.js';
 export const fathom = defineProvider({
   id: 'fathom', name: 'Fathom', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://developers.fathom.ai/quickstart',
+  categories: ['meetings'],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: { baseUrl: 'https://api.fathom.ai/external/v1', minIntervalMs: 1000, retry: { defaultWaitMs: 5000 } },
   identify: { request: { path: '/meetings' } },

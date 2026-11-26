@@ -6,6 +6,7 @@ import { defineProvider } from '../catalogue.js';
  * The account is the email entered, local to that host: an app keys the connection by host and account id. */
 export const metabase = defineProvider({
   id: 'metabase', name: 'Metabase', docs: 'https://www.metabase.com/articles/set-up-metabase-from-code-with-the-api',
+  categories: ['analytics'],
   fields: [{ name: 'host', title: 'Metabase host', help: 'The host name of your Metabase, such as metabase.example.com.' },
     { name: 'username', title: 'Email' }, { name: 'password', title: 'Password', secret: true }],
   auth: [{ kind: 'token', send: { header: 'x-metabase-session' }, request: { url: 'https://{host}/api/session',
