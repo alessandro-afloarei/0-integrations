@@ -17,6 +17,9 @@ Nothing here is released yet.
   whose host is typed.
 - A named base (`http.bases`) with a placeholder is refused where a call chooses it (`base_templated`); it was sent
   to a host spelt with braces.
+- A URL template that is not well formed (`https://`, then letters, digits, `.`, `-` and `{name}`s with an optional
+  literal port, then `/` or the end) is refused, `base_host_refused`, where it is filled or chosen: `https:///{x}` sent a
+  typed value to the host with no `http.host` check.
 - New entry: Azure DevOps (code; Microsoft Entra OAuth 2). Every entry is `declared`.
 - An OAuth 2 token answer that states no `token_type` is read as Bearer; it was `invalid_response`. One that states
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.

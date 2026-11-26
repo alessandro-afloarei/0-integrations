@@ -187,7 +187,13 @@ const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`)
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
 const HOST_SPLIT = 'the base, `http.bases` and the OAuth 2 URLs on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
+const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
+/** Every URL the entry declares: the base, `http.bases`, the OAuth 2 URLs and a token request's URL. */
+const declaredUrls = (entry: Entry) => [entry.http.baseUrl, ...Object.values(entry.http.bases ?? {}), ...oauthUrlList(entry),
+  ...tokenRequest(entry) ? [tokenRequest(entry)?.url ?? ''] : []];
 const runnable = {
+  // The host the URL parser reads is then the host part every other rule reads.
+  [WELL_FORMED_URLS]: (entry: Entry) => declaredUrls(entry).every(url => hostPart(url) !== undefined),
   [TODO_RULE]: (entry: Entry) => !stringsIn(entry).some(text => text.includes('TODO')),
   // A Basic or query send that names no secret would send a credential anyone could make.
   '`auth.send` basic, query or header `value`: name the secret ({token}, or a key entry\'s secret field)': (entry: Entry) => sentTemplates(entry).length === 0
@@ -208,11 +214,11 @@ const runnable = {
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
-  [HOST_PATTERN]: (entry: Entry) => ([entry.http.baseUrl, ...oauthUrlList(entry), tokenRequest(entry)?.url ?? ''].some(url => placeholders(hostPart(url)).length > 0)
+  [HOST_PATTERN]: (entry: Entry) => (declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
-    || /^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl)),
+    || /^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? ''),
   // A URL is filled from plain values, never a secret; the body and Basic from either.
   // What the engine cannot fill is `template_missing` at the first sign-in.
   "a token request names only the entry's fields, a plain one in its `url`": (entry: Entry) => {
@@ -610,6 +616,9 @@ test.each<[Rule, Entry]>([
   // A typed host in the OAuth 2 URLs alone needs the pattern too: they are filled by the base's rule.
   [HOST_PATTERN, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'host', title: 'Host' }],
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }] })],
+  ...(['https:///{region}/api', 'https://{region}@k.test', 'HTTPS://api.k.test'] as const).map((baseUrl): [Rule, Entry] => [WELL_FORMED_URLS,
+    defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region' }], http: { baseUrl, host: '*' } })]),
+  [WELL_FORMED_URLS, defineProvider({ ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], tokenUrl: 'https:///k.test/token' }] })],
   // A key on a typed host beside a fixed second base: the key would go to that other host.
   [HOST_SPLIT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'host', title: 'Host' }],
     http: { baseUrl: 'https://{host}/api', host: '*', bases: { cloud: 'https://cloud.k.test' } } })],

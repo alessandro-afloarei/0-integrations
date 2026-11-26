@@ -69,10 +69,15 @@ export function placeholders(template: Template): string[] {
 /** The entry's fields that are not secret: what a connection keeps, and what fills a URL. */
 export const plainFields = (entry: Entry): Field[] => (entry.fields ?? []).filter(field => !field.secret);
 
-/** A URL's host part, its scheme included: all before the first `/` after `//` (`https://{host}`). */
-export function hostPart(url: string): string {
-  const at = url.indexOf('/', url.indexOf('//') + 2);
-  return at === -1 ? url : url.slice(0, at);
+/** A well-formed URL template: `https://`, an authority of ASCII letters, digits, `.`, `-` and `{name}`s with an optional
+ * literal port, then `/` or the end. The URL parser ends an authority at `/`, `\`, `?` or `#`, reads userinfo before `@`
+ * and drops tabs and newlines: none can occur in it, so the host it parses is this authority, filled. */
+const WELL_FORMED = /^https:\/\/((?:[A-Za-z0-9.-]|\{\w+\})+(?::\d+)?)(?:\/|$)/u;
+
+/** A URL template's host part, its scheme included (`https://{host}`); none when the template is not well formed. */
+export function hostPart(url: string): string | undefined {
+  const authority = WELL_FORMED.exec(url)?.[1];
+  return authority === undefined ? undefined : `https://${authority}`;
 }
 
 /** An OAuth 2 first sign-in's URLs as written: authorize, token, refresh (the token URL unless the entry names one) and
@@ -88,7 +93,7 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
  * takes its host from a value: on a typed host a credential goes only to that host, and a cloud's never reaches it. */
 export function hostSplit(entry: Entry): boolean {
   const hosts = [...Object.values(oauthUrls(entry) ?? {}), entry.http.baseUrl, ...Object.values(entry.http.bases ?? {})]
-    .map(hostPart);
+    .flatMap(url => hostPart(url) ?? []); // one not well formed is refused where it is filled or chosen
   return hosts.some(host => placeholders(host).length > 0) && new Set(hosts).size > 1;
 }
 

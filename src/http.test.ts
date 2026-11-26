@@ -17,9 +17,10 @@ import { trello } from './catalogue/trello.js';
 import { client } from './client.js';
 import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
-import { revokeGrant } from './oauth.js';
 import * as guard from './guard.js';
 import { callRequest, createClient, defaultFetch } from './http.js';
+import { exchangeCode, requestToken, revokeGrant } from './oauth.js';
+import { fill, hostPart } from './rules.js';
 import { walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
 
@@ -820,6 +821,58 @@ test('a named base with a placeholder is refused where a call chooses it: a name
   await expect(revokeGrant(templated, { accessToken: 'a', values: { sub: 'eu' }, fetch: fake.fetch }))
     .rejects.toThrow(new TypeError('base_templated: auth'));
   expect(fake.calls).toEqual([]);
+});
+
+/** Every name the malformed templates below use, filled with a value the base rule accepts. */
+const bentFields = ['host', 'user', 'port'].map(name => ({ name, title: name }));
+const bentValues = { host: 'evil.k.test', user: 'u', port: '8443' };
+test.each(['https:///{host}/api', 'https:\\\\{host}/api', 'https:/{host}/api', 'HTTPS://{host}/api', 'https://\t{host}/api',
+  'https://{host}\n.k.test/api', 'https://{user}@k.test/api', 'https://k.test:{port}/api', 'https://{host}\\@k.test/api',
+  'https://{host}?x/api', 'https://{host}#/api', 'https://k.test@{host}/api', 'https://{host} /api'])(
+  'a URL template that is not well formed (%j) is base_host_refused wherever it is declared, nothing sent', async template => {
+    const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'a', token_type: 'bearer', id: '1' }) }]);
+    const refused = new TypeError('base_host_refused: bent');
+    const base = defineProvider({ id: 'bent', name: 'Bent', fields: [...bentFields, { name: 'apiKey', title: 'Key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: template, host: '*' } });
+    await expect(createClient(base, { token: () => Promise.resolve('t'), values: bentValues, fetch: fake.fetch }).json('/a')).rejects.toThrow(refused);
+    const oauth = defineProvider({ id: 'bent', name: 'Bent', fields: bentFields, http: { baseUrl: 'https://api.k.test' },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://api.k.test/authorize', tokenUrl: template, pkce: false }] });
+    await expect(exchangeCode(oauth, { clientId: 'c', clientSecret: 's' }, { code: 'x', redirectUri: 'https://app.test/cb', values: bentValues,
+      fetch: fake.fetch })).rejects.toThrow(refused);
+    const token = defineProvider({ id: 'bent', name: 'Bent', fields: [...bentFields, { name: 'secret', title: 'Secret', secret: true }],
+      auth: [{ kind: 'token', request: { url: template, body: { s: '{secret}' } } }], http: { baseUrl: 'https://api.k.test' } });
+    await expect(requestToken(token, { secret: { secret: 's' }, values: bentValues, fetch: fake.fetch })).rejects.toThrow(refused);
+    const named = defineProvider({ ...base, http: { baseUrl: 'https://api.k.test', bases: { other: template.replaceAll(/\{\w+\}/gu, 'evil.k.test') } },
+      identify: { request: { base: 'other', path: '/me' } } });
+    await expect(finishConnect(named, { secret: { apiKey: 'k' }, values: bentValues, fetch: fake.fetch })).rejects.toThrow(refused);
+    expect(fake.calls).toEqual([]);
+  });
+
+test('whenever the engine sends, the host is the template\'s host part filled with the values: a probe of generated templates', async () => {
+  let seed = 7;
+  const pick = <T>(items: readonly T[]): T => { seed = (seed * 1103515245 + 12345) % 2147483648; return items[seed % items.length] as T; };
+  // Mostly well formed, so many send; the rest are the shapes the URL parser reads differently.
+  const schemes = ['https://', 'https://', 'https://', 'https://', 'https:///', 'https:\\\\', 'https:/', 'HTTPS://', 'https://\t'];
+  const pieces = ['{a}', '{a}', '{b}', 'k.test', '.k.test', '{a}.k.test', '-', 'x', ':8443', '@', ':', '{a}@', ':{b}', '\\', '?', '#',
+    '%2e', '\n', '[', '/'];
+  const tails = ['', '/', '/api', '/{b}/api', '?q=1', '#f'];
+  const values = ['evil.k.test', 'a', 'b.c', '127.0.0.1', '0x7f.1', '8443', 'x-y', 'a.k.test', '1'];
+  let sent = 0;
+  for (let at = 0; at < 6000; at++) {
+    const template = pick(schemes) + Array.from({ length: 1 + (at % 3) }, () => pick(pieces)).join('') + pick(tails);
+    const filled = { a: pick(values), b: pick(values) };
+    const entry = defineProvider({ id: 'probe', name: 'Probe', fields: [{ name: 'a', title: 'A' }, { name: 'b', title: 'B' }],
+      auth: [{ kind: 'key' }], http: { baseUrl: template, host: '*' } });
+    const hosts: string[] = [];
+    const fetch: typeof globalThis.fetch = input => { hosts.push(new Request(input).url); return Promise.resolve(Response.json({})); };
+    const answered = await createClient(entry, { token: () => Promise.resolve('t'), values: filled, fetch }).json('/x').then(() => true, () => false);
+    if (!answered) { expect(hosts).toEqual([]); continue; }
+    sent++;
+    const part = hostPart(template);
+    expect(part, template).toBeDefined();
+    expect(new URL(hosts[0] ?? '').host, template).toBe(new URL(fill(part ?? '', name => filled[name as 'a' | 'b'], 'probe')).host);
+  }
+  expect(sent).toBeGreaterThan(300);
 });
 
 const addressBlocked = new ProviderHttpError('request_failed', null, 'address_blocked');

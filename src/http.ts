@@ -127,6 +127,7 @@ function sendable(entry: Entry, url: string): URL {
 export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.baseUrl): string {
   const { host = '' } = entry.http;
   const head = hostPart(baseUrl);
+  if (head === undefined) throw new TypeError(`base_host_refused: ${entry.id}`);
   const tail = baseUrl.slice(head.length);
   const invalid = (name: string) => new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
   const filled = fill(head, name => {
@@ -158,6 +159,7 @@ export function callBase(entry: Entry, { base }: Call): { baseUrl?: string } {
   const baseUrl = Object.hasOwn(entry.http.bases ?? {}, base) ? entry.http.bases?.[base] : undefined;
   if (baseUrl === undefined) throw new TypeError(`base_unknown: ${base}`);
   if (placeholders(baseUrl).length > 0) throw new TypeError(`base_templated: ${base}`);
+  if (hostPart(baseUrl) === undefined) throw new TypeError(`base_host_refused: ${entry.id}`);
   return { baseUrl };
 }
 
