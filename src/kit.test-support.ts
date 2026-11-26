@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { identifyAccount, lookupNames } from './account.js';
-import type { Entry } from './catalogue.js';
+import { signInWith, type Entry } from './catalogue.js';
 import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import { paginate, type Page } from './paginate.js';
@@ -70,6 +70,13 @@ export function kitValues(entry: Entry): Record<string, string> {
     .map(({ name, default: given, choices }) => [name, given ?? choices?.[0] ?? `kit-${name}`]));
 }
 
+/** The sign-in a recording is of: the entry's key or token sign-in when it has one (a test account's pasted key),
+ * else its first. The recorder records it, the replay replays it, and the entry is `recorded` when it is. */
+export function recordedSignIn(entry: Entry): Entry {
+  const { kind } = entry.auth.find(auth => auth.kind !== 'oauth2') ?? entry.auth[0];
+  return signInWith(entry, kind);
+}
+
 /** Signs in with a key: a key or token entry through `finishConnect` on its plain values (the kit's unless given), an
  * OAuth entry's token through `identifyAccount`. */
 export function signIn(entry: Entry, key: string, fetch: typeof globalThis.fetch, values = kitValues(entry)) {
@@ -103,7 +110,8 @@ export function replay(recording: Recording, key: Exchange['key']): typeof fetch
  * values alone: that the file holds nothing real is the recorder's swap and last check, not this. Null when it holds,
  * else the sign-in it changes.
  */
-export async function replayProblem(entry: Entry, recording: Recording): Promise<string | null> {
+export async function replayProblem(whole: Entry, recording: Recording): Promise<string | null> {
+  const entry = recordedSignIn(whole);
   const sent = { good: 0, bad: 0 };
   const counted = (key: Exchange['key']): typeof fetch => (input, init) => { sent[key] += 1; return replay(recording, key)(input, init); };
   const held = (key: Exchange['key']) => recording.exchanges.filter(exchange => exchange.key === key).length;

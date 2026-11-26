@@ -101,19 +101,23 @@ async function connectKey(apiToken: string, apiId: string) {
 
 // docs/modules/connect.md › An entry with two sign-ins.
 async function connectTwoSignIns(oauthClient: OAuthClient, redirectUri: string, state: string, code: string,
-  report: (error: unknown) => void, teamId: string) {
-  const oauth = signInWith(linear, 'oauth2');
+  report: (error: unknown) => void, teamId: string, apiKey: string) {
   // Send the browser to `url`; keep `state` and `codeVerifier` on the server.
-  const { url, codeVerifier } = await startConnect(oauth, { clientId: oauthClient.clientId, redirectUri, state });
+  const { url, codeVerifier } = await startConnect(linear, { clientId: oauthClient.clientId, redirectUri, state });
 
   // In the callback, once the state matches:
-  const { secret, account } = await finishConnect(oauth, { client: oauthClient, code, redirectUri, codeVerifier,
+  const { secret, account } = await finishConnect(linear, { client: oauthClient, code, redirectUri, codeVerifier,
     onRevokeFailed: report });
   // secret: the grant to seal, with `kind: 'oauth2'` kept beside it; account: the Linear user
 
-  const api = client(oauth, { token: secret.accessToken });
+  const api = client(linear, { token: secret.accessToken });
   const issues = await api.issues.list({ teamId, first: 50 }); // one page: nodes and pageInfo
+
+  // A person's own key instead: a form, then one call.
+  const key = signInWith(linear, 'key');
+  const own = await finishConnect(key, { secret: { apiKey } }); // own.secret: { apiKey }, with `kind: 'key'` kept beside it
   expectTypeOf(issues.data.issues.pageInfo.hasNextPage).toEqualTypeOf<boolean>();
+  expectTypeOf(own.secret).toEqualTypeOf<Readonly<Record<'apiKey', string>>>();
   return [url, account, issues];
 }
 

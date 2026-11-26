@@ -10,7 +10,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 33 providers: 
 | [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | key | — | — | declared |
 | [Breakcold](https://docs.breakcold.com/api/authentication) | crm | key | — | hmac | declared |
 | [Buildkite](https://buildkite.com/docs/apis/rest-api#authentication) | code | key | builds.list, builds.get, builds.create, pipelines.list | hmac | declared |
-| [ClickUp](https://developer.clickup.com/docs/authentication) | tasks | key, OAuth 2 | tasks.list, tasks.get, tasks.create, tasks.update, lists.list | hmac | declared |
+| [ClickUp](https://developer.clickup.com/docs/authentication) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, lists.list | hmac | declared |
 | [Discord](https://docs.discord.com/developers/reference) | chat | key | — | ed25519 | declared |
 | [Exa](https://docs.exa.ai/reference/search) | search | key | — | — | declared |
 | [Fathom](https://developers.fathom.ai/quickstart) | meetings | key | — | — | declared |
@@ -24,7 +24,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 33 providers: 
 | [HubSpot](https://developers.hubspot.com/docs/api-reference/legacy/authentication/oauth-tokens/v1/migration-guide) | crm | OAuth 2 | — | — | declared |
 | [Intercom](https://developers.intercom.com/docs/references/rest-api/api.intercom.io/admins/identifyadmin) | support | key | — | hmac | declared |
 | [Jira](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/) | tasks | OAuth 2 | — | — | declared |
-| [Linear](https://linear.app/developers/graphql#authentication) | tasks | key, OAuth 2 | issues.list, issues.get, issues.create, issues.update, teams.list | hmac | declared |
+| [Linear](https://linear.app/developers/graphql#authentication) | tasks | OAuth 2, key | issues.list, issues.get, issues.create, issues.update, teams.list | hmac | declared |
 | [Lusha](https://docs.lusha.com/authentication) | sales | key | — | — | declared |
 | [Metabase](https://www.metabase.com/articles/set-up-metabase-from-code-with-the-api) | analytics | token | — | — | declared |
 | [Microsoft](https://learn.microsoft.com/en-us/graph/auth-v2-user) | mail, calendar | OAuth 2 | — | — | declared |

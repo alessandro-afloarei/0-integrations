@@ -87,11 +87,12 @@ The [HubSpot page](hubspot.md) shows a whole OAuth connect against the HubSpot f
 
 ## An entry with two sign-ins
 
-Linear and ClickUp offer a key and OAuth 2. Used whole, such an entry is its first sign-in, the key: a form, as above.
-To connect with OAuth 2, narrow it with `signInWith(entry, 'oauth2')` from `0-integrations/catalogue`. The narrowed
-entry has that sign-in alone, with the entry's `scopes` and `revoke`, and no secret field: the grant is the secret.
-Keep the kind with the connection and narrow again for every later `client`, `refreshGrant` or `revokeGrant`.
-`signInWith` refuses a kind the entry does not declare: `TypeError('sign_in_unknown: <entry id> <kind>')`.
+Linear and ClickUp offer OAuth 2 and a key. Used whole, such an entry is its first sign-in, OAuth 2: the sign-in an app
+that connects other people's accounts uses, as both providers ask. To connect with a person's own key instead, narrow
+it with `signInWith(entry, 'key')` from `0-integrations/catalogue`: the narrowed entry has that sign-in alone, keeps
+the key's field, and has no `scopes` or `revoke`, which belong to OAuth 2. Keep the kind with the connection and narrow
+again for every later `client`, `refreshGrant` or `revokeGrant`. `signInWith` refuses a kind the entry does not
+declare: `TypeError('sign_in_unknown: <entry id> <kind>')`.
 
 ```ts
 import { signInWith } from '0-integrations/catalogue';
@@ -99,22 +100,25 @@ import { linear } from '0-integrations/catalogue/linear';
 import { client } from '0-integrations/client';
 import { finishConnect, startConnect } from '0-integrations/connect';
 
-const oauth = signInWith(linear, 'oauth2');
 // Send the browser to `url`; keep `state` and `codeVerifier` on the server.
-const { url, codeVerifier } = await startConnect(oauth, { clientId: oauthClient.clientId, redirectUri, state });
+const { url, codeVerifier } = await startConnect(linear, { clientId: oauthClient.clientId, redirectUri, state });
 
 // In the callback, once the state matches:
-const { secret, account } = await finishConnect(oauth, { client: oauthClient, code, redirectUri, codeVerifier,
+const { secret, account } = await finishConnect(linear, { client: oauthClient, code, redirectUri, codeVerifier,
   onRevokeFailed: report });
 // secret: the grant to seal, with `kind: 'oauth2'` kept beside it; account: the Linear user
 
-const api = client(oauth, { token: secret.accessToken });
+const api = client(linear, { token: secret.accessToken });
 const issues = await api.issues.list({ teamId, first: 50 }); // one page: nodes and pageInfo
+
+// A person's own key instead: a form, then one call.
+const key = signInWith(linear, 'key');
+const own = await finishConnect(key, { secret: { apiKey } }); // own.secret: { apiKey }, with `kind: 'key'` kept beside it
 ```
 
 Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
 The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and
-refreshes with `refreshGrant(signInWith(linear, 'oauth2'), …)`, through [credentials](credentials.md).
+refreshes with `refreshGrant(linear, …)`, through [credentials](credentials.md).
 
 ## Google and Microsoft
 

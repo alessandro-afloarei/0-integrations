@@ -3,14 +3,14 @@ import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { lookupNames } from './account.js';
-import { defineProvider, signInWith, type Entry, type Value } from './catalogue.js';
+import { defineProvider, type Entry, type Value } from './catalogue.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { trello } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { ProviderHttpError } from './errors.js';
 import { classify } from './http-response.js';
 import { defaultFetch, filledBase } from './http.js';
-import { answerReads, BAD_KEY, GOOD_KEY, kitValues, onlyRead, playScenario, recorder, replay, replayProblem, scrub, signIn, type Exchange,
+import { answerReads, BAD_KEY, GOOD_KEY, kitValues, onlyRead, playScenario, recordedSignIn, recorder, replay, replayProblem, scrub, signIn, type Exchange,
   type KitScenario, type Recording, type Swap } from './kit.test-support.js';
 import { parseJson, readPath } from './rules.js';
 import { fakeFetch, fakeProvider } from './testing.js';
@@ -83,8 +83,7 @@ const identityPaths = (value: Value | undefined) => (value === undefined ? [] : 
  * the account identify names and the saved values are swapped for the kit's stand-ins. The result is replayed as the
  * table test replays it, and written only when both sign-ins end as they did live. */
 async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
-  // The first sign-in: the one an app gets when it does not choose, and the one a pasted key signs in with.
-  const entry: Entry = signInWith(whole, whole.auth[0].kind);
+  const entry = recordedSignIn(whole);
   const [auth] = entry.auth;
   if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
   const kit = kitValues(entry);
@@ -169,11 +168,12 @@ describe('recording an entry with no module, on its derived fake standing in for
   afterAll(() => { rmSync(parent, { recursive: true, force: true }); });
   type Wrap = (fetch: typeof globalThis.fetch) => typeof globalThis.fetch;
 
-  /** Records the entry with a test account's `key` and plain `values` (each beside the kit's), then reads the file back. */
+  /** Records the entry with a test account's `key` and plain `values` (each beside the kit's), then reads the file back.
+   * The fake answers the sign-in a recording is of, as the provider answers the pasted key. */
   async function recordOnFake(entry: Entry, data: { key: string; values?: Record<string, string>; account?: unknown; wrap?: Wrap }) {
     const folder = mkdtempSync(join(parent, 'run-'));
     const { values = {}, wrap = (fetch: typeof globalThis.fetch) => fetch } = data;
-    const { fetch } = fakeFetch(fakeProvider(entry, { key: data.key, values: { ...kitValues(entry), ...values }, account: data.account }));
+    const { fetch } = fakeFetch(fakeProvider(recordedSignIn(entry), { key: data.key, values: { ...kitValues(entry), ...values }, account: data.account }));
     const written = await recordEntry(entry, data.key, values, wrap(fetch)).then(exchanges => write(folder, entry.id, exchanges), (error: unknown) => error);
     if (typeof written !== 'string') return { folder, refused: written instanceof Error ? written.message : 'not an Error', text: '', recording: undefined };
     const text = readFileSync(written, 'utf8');
@@ -530,10 +530,10 @@ describe('recording an entry with no module, on its derived fake standing in for
       .toThrow('lusha has a module: it is recorded through a kit scenario in src/lusha/scenario.test-support.ts, and none is named lusha');
   });
 
-  test('an entry with a key and OAuth 2 records its key: the file replays the key sign-in', async () => {
+  test('an entry with OAuth 2 then a key records its key: the file replays the key sign-in', async () => {
     const both = defineProvider({ id: 'acme', name: 'Acme', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
-      auth: [{ kind: 'key', send: { header: 'authorization' } }, { kind: 'oauth2', authorizeUrl: 'https://acme.test/authorize',
-        tokenUrl: 'https://api.acme.test/token' }], scopes: { default: [] },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://acme.test/authorize', tokenUrl: 'https://api.acme.test/token' },
+        { kind: 'key', send: { header: 'authorization' } }], scopes: { default: [] },
       http: { baseUrl: 'https://api.acme.test' }, identify: { request: { path: '/me' }, id: 'id' } });
     const { recording } = await recordOnFake(both, { key: 'real-key-9', account: { id: 'acct-55' } });
     expect(recording?.exchanges.map(({ key, url, response }) => [key, url, response]))

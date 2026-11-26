@@ -19,10 +19,10 @@ test('defineProvider keeps the literal', () => {
   defineProvider({ id: 'bad', name: 'Bad', categories: ['task'], auth: [{ kind: 'key' }], http: { baseUrl: 'https://x.test' } });
 });
 
-/** Two sign-ins, the key first: Linear's shape. */
+/** Two sign-ins, OAuth 2 first: Linear's shape. */
 const both = defineProvider({ id: 'both', name: 'Both', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
-  auth: [{ kind: 'key', send: { header: 'authorization' } },
-    { kind: 'oauth2', authorizeUrl: 'https://both.test/authorize', tokenUrl: 'https://api.both.test/token', scopeSeparator: ',' }],
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://both.test/authorize', tokenUrl: 'https://api.both.test/token', scopeSeparator: ',' },
+    { kind: 'key', send: { header: 'authorization' } }],
   scopes: { default: ['read'] }, revoke: { url: 'https://api.both.test/revoke', token: ['access'] },
   http: { baseUrl: 'https://api.both.test' }, identify: { request: { path: '/me' }, id: 'id' },
   operations: { 'items.get': { path: '/items/{id}', params: { id: { in: 'path', type: 'string', required: true } }, result: { id: 'string' } } } });
@@ -30,8 +30,8 @@ const both = defineProvider({ id: 'both', name: 'Both', fields: [{ name: 'apiKey
 test('signInWith narrows to one sign-in: OAuth 2 keeps scopes and revoke and drops the secret field, the key the reverse', () => {
   const oauth = signInWith(both, 'oauth2');
   const key = signInWith(both, 'key');
-  expect(oauth).toEqual({ ...both, auth: [both.auth[1]], fields: [] });
-  expect(key).toEqual({ id: both.id, name: both.name, fields: both.fields, auth: [both.auth[0]], http: both.http,
+  expect(oauth).toEqual({ ...both, auth: [both.auth[0]], fields: [] });
+  expect(key).toEqual({ id: both.id, name: both.name, fields: both.fields, auth: [both.auth[1]], http: both.http,
     identify: both.identify, operations: both.operations });
   for (const one of [oauth, key]) expect(JSON.parse(JSON.stringify(one))).toEqual(one);
   // @ts-expect-error a kind the entry does not declare
@@ -53,9 +53,10 @@ async function narrowed(clientId: string, apiKey: string) {
   expectTypeOf(key).not.toHaveProperty('scopes');
   expectTypeOf(key).not.toHaveProperty('revoke');
   expectTypeOf(oauth).toHaveProperty('revoke');
-  // An entry used whole is its first sign-in: a form.
-  expectTypeOf((await startConnect(both)).kind).toEqualTypeOf<'form'>();
-  // Linear and ClickUp, a key then OAuth 2; ClickUp declares no revoke.
+  // An entry used whole is its first sign-in: an OAuth redirect.
+  expectTypeOf((await startConnect(both, { clientId, redirectUri: 'https://app.test/cb', state: 's' })).kind).toEqualTypeOf<'redirect'>();
+  expectTypeOf<Connected<typeof linear>['secret']>().toEqualTypeOf<Grant>();
+  // Linear and ClickUp, OAuth 2 then a key; ClickUp declares no revoke.
   expectTypeOf<Connected<ReturnType<typeof signInWith<typeof linear, 'oauth2'>>>['secret']>().toEqualTypeOf<Grant>();
   expectTypeOf(signInWith(clickup, 'oauth2').scopes.default).toEqualTypeOf<readonly []>();
   expectTypeOf<Connected<ReturnType<typeof signInWith<typeof clickup, 'key'>>>['secret']>()

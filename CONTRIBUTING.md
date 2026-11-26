@@ -24,9 +24,9 @@ one takes five steps:
 2. Fill it from the provider's own documentation, and put the page that states what the entry declares in `docs`.
    State only what differs from the defaults: [catalogue](docs/modules/catalogue.md) lists every field, and the
    design's [`auth` section](docs/design/entries-and-engine.md#auth) gives every sign-in rule. Declare every sign-in
-   the provider documents in one pass: its key first, then its OAuth 2 grant when the grant reaches the same base and
-   the same `identify` ([sign-in alternatives](docs/design/entries-and-engine.md#sign-in-alternatives)). Start from the
-   entry of the same sign-ins: a key, `src/catalogue/serpapi.ts`; a key and OAuth 2, `src/catalogue/linear.ts`; an
+   the provider documents in one pass: its OAuth 2 grant first, when it reaches the same base and the same `identify`,
+   then its key or token ([sign-in alternatives](docs/design/entries-and-engine.md#sign-in-alternatives)). Start from
+   the entry of the same sign-ins: a key, `src/catalogue/serpapi.ts`; OAuth 2 and a key, `src/catalogue/linear.ts`; an
    OAuth 2 grant alone, `src/catalogue/figma.ts` (drop the skeleton's secret field: the grant is the secret); a token
    request, `src/catalogue/zoom.ts`. Write every header name
    in lowercase (`x-api-key`). Pick one or two `categories`, the main one first; declare the operations of that
@@ -58,10 +58,10 @@ entry:
   the entry's fields; a send's `value` holds no control character and never spells out a default (`'{token}'`, or
   `authorization: Bearer {token}`), and no field is named `token`;
 - names in each template only what that place allows;
-- lists one or more sign-ins, at most one of each kind and never a key beside a token, and beside two sign-ins reads
-  no plain field from only one sign-in's `send` or token request;
-- is one the engine can run, each sign-in on its own: a key or token entry has exactly one secret field, a key entry reads no token answer, and
-  neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
+- lists one or more sign-ins, at most one of each kind, never a key beside a token, OAuth 2 first when there is one,
+  and beside two sign-ins reads no plain field from only one sign-in's `send` or token request;
+- is one the engine can run, each sign-in on its own: a key or token entry has exactly one secret field, a key entry
+  reads no token answer, and neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
   the token itself from `tokenAnswer.*`; a value read from identify's answer has a request to read it from; no `save`
   key is a field's name; each placeholder in the base names a plain field or a `save` key, either in its host, with
   `http.host` declared (`'*'` only when the whole host is one placeholder), or as one segment of its path; `http.bases`
@@ -88,7 +88,7 @@ value (its `default`, else its first choice, else `kit-<name>`).
 To record an entry with no module from a test account, read the key at a prompt (bash and zsh) and run the recorder:
 `printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
 For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test account with your app's own OAuth client.
-An entry with a key and OAuth 2 is recorded with its key: the recorder records the first sign-in.
+An entry with OAuth 2 and a key is recorded with its key: a recording is of the key or token sign-in when there is one.
 The recorder refuses a provider with a module but no kit scenario of that name, and an entry that sends no request
 when it signs in. Otherwise it signs in with the key and with a bad key, and writes
 `src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request

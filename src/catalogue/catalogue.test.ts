@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
 import { createClient } from '../http.js';
-import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, replayProblem, signIn } from '../kit.test-support.js';
+import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
 import { clashing, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
@@ -65,6 +65,7 @@ const pageOnly = { error: (issue: { code: string; keys?: readonly string[] }) =>
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
 const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
+const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
 const SHARED_FIELDS = 'a plain field every sign-in reads, beside two sign-ins: one that only one sign-in\'s `send` or token request reads (a Basic email) has no place beside the other';
 /** The plain fields a sign-in fills: its `send`'s templates and a token request's. */
 function signInReads(auth: Entry['auth'][number]): string[] {
@@ -104,7 +105,8 @@ const entrySchema = z.strictObject({
       token: z.string().regex(/\S/u, "a token request's `token` is the token's path in the answer: give it, or leave it out")
         .optional() }) }),
   ])).min(1).refine(auth => new Set(auth.map(item => item.kind)).size === auth.length, ONE_OF_EACH)
-    .refine(auth => !(auth.some(item => item.kind === 'key') && auth.some(item => item.kind === 'token')), KEY_OR_TOKEN),
+    .refine(auth => !(auth.some(item => item.kind === 'key') && auth.some(item => item.kind === 'token')), KEY_OR_TOKEN)
+    .refine(auth => auth[0]?.kind === 'oauth2' || !auth.some(item => item.kind === 'oauth2'), OAUTH_FIRST),
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
   identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
     lowercase: z.literal(true).optional(),
@@ -382,11 +384,11 @@ describe.each(entries)('%s', (id, entry) => {
     for (const name of placeholders(signing(entry)?.signed ?? '')) expect(['body', 'timestamp', 'method', 'url']).toContain(name);
   });
 
-  // With a recording beside it, the first sign-in (the one the recorder records) replays a good and a bad key on its
-  // recordings' exchanges merged, through the check the recorder runs before it writes one: a file the recorder accepts,
+  // With a recording beside it, the sign-in the recorder records (`recordedSignIn`: the key or token one, else the
+  // first) replays a good and a bad key on its recordings' exchanges merged, through the check the recorder runs before it writes one: a file the recorder accepts,
   // the table accepts.
   const [first, ...rest] = recordings.filter(({ file }) => file.startsWith(`${id}.`));
-  if ((entry.identify?.request === undefined && entry.auth[0].kind !== 'token') || first === undefined) return;
+  if ((entry.identify?.request === undefined && recordedSignIn(entry).auth[0].kind !== 'token') || first === undefined) return;
   const recording = { ...first, provider: id, exchanges: [first, ...rest].flatMap(item => item.exchanges) };
   test('replays its sign-ins: the key to an account where the entry names an id, the bad key rejected', async () => {
     expect(await replayProblem(entry, recording)).toBeNull();
@@ -607,18 +609,19 @@ test.each(['', '  '])('a token request whose `token` path is %j fails the schema
 });
 
 test.each<[string, Record<string, unknown>, string]>([
+  ['a key before OAuth 2', { fields: [secret], scopes: { default: [] }, auth: [{ kind: 'key' }, oauth2.auth[0]] }, OAUTH_FIRST],
   ['two key sign-ins', { fields: [secret], auth: [{ kind: 'key' }, { kind: 'key', send: { header: 'x-api-key' } }] }, ONE_OF_EACH],
   ['a key beside a token', { fields: [secret], auth: [{ kind: 'key' },
     { kind: 'token', request: { url: 'https://k.test/token', body: { key: '{apiKey}' } } }] }, KEY_OR_TOKEN],
   ['a Basic email beside OAuth 2', { fields: [secret, { name: 'email', title: 'Email' }], scopes: { default: [] },
-    auth: [{ kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }, oauth2.auth[0]] }, SHARED_FIELDS],
+    auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }, SHARED_FIELDS],
 ])('an entry with %s fails the schema, with what to fix', (_, parts, message) => {
   expect(entrySchema.safeParse({ ...key, ...parts }).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
 
-test('a plain field in the base beside two sign-ins, and a key beside OAuth 2, match the schema', () => {
+test('a plain field in the base beside two sign-ins, and OAuth 2 then a key, match the schema', () => {
   const good = { ...key, fields: [secret, { name: 'site', title: 'Site' }], scopes: { default: [] },
-    http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [{ kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }, oauth2.auth[0]] };
+    http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [oauth2.auth[0], { kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }] };
   expect(entrySchema.safeParse(good).error).toBeUndefined();
 });
 

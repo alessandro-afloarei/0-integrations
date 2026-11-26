@@ -278,16 +278,18 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
 
 #### Sign-in alternatives
 
-`auth` is a list of sign-in alternatives, the first the default. Linear's is its personal key, sent bare in
-`authorization`, then OAuth 2, whose token goes as Bearer to the same GraphQL endpoint and the same `viewer` query.
+`auth` is a list of sign-in alternatives, the first the default. Linear's is OAuth 2, whose token goes as Bearer, then
+its personal key, sent bare in `authorization`, to the same GraphQL endpoint and the same `viewer` query.
 
 1. `signInWith(entry, kind)` (from `0-integrations/catalogue`) returns a new entry whose `auth` is the one sign-in of
    that `kind`, else throws `TypeError('sign_in_unknown: <entry id> <kind>')`. Nothing else in the engine changes: every
    engine function keeps reading `entry.auth[0]`, so a narrowed entry is a one-sign-in entry.
 2. An alternative is chosen by its `kind`. An entry holds at most one sign-in of each kind, and never `key` beside
    `token`.
-3. An entry used whole is its first sign-in. Library entries list the key first, then OAuth 2: an app that does not
-   choose runs as every one-sign-in entry does, and the recorder can record it with a pasted key.
+3. An entry used whole is its first sign-in. Library entries list OAuth 2 first, then the key or token: the library is
+   for apps that connect other people's accounts, which is what providers ask OAuth 2 for (ClickUp: "OAuth 2.0:
+   Required for building apps for other users"). The key is `signInWith(entry, 'key')`. The rule constrains only an
+   entry with two sign-ins.
 4. Narrowed to `oauth2`, the entry drops its secret fields (the grant is the secret); narrowed to `key` or `token`, it
    keeps every field. Plain fields are shared, so beside two sign-ins a plain field that only one sign-in's `send` or
    token request reads (a Basic email) is refused by the table test.
@@ -295,13 +297,15 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
    `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
 6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
    per sign-in, on `signInWith(entry, kind)`, each test named with its kind when there are several. The replay runs on
-   the first sign-in only.
-7. The schema takes `auth` of one or more sign-ins with unique kinds, not `key` with `token`.
+   the recorded sign-in only (rule 9).
+7. The schema takes `auth` of one or more sign-ins with unique kinds, not `key` with `token`, and OAuth 2 first when
+   there is one.
 8. `catalogue.json` holds the entry as declared, every sign-in in its order; the providers page's Sign-in column lists
    their kinds in that order.
-9. The recorder records the first sign-in (`RECORD_KEY` is its key), and an entry is `recorded` when its first sign-in
-   is. An OAuth 2 alternative is proven by its derived fake, and by a recording once the recorder learns the OAuth
-   exchange.
+9. A recording is of the entry's key or token sign-in when it has one, else of its first (`recordedSignIn`, in the
+   test support): the recorder records it with a test account's pasted key (`RECORD_KEY`), the table test replays it,
+   and the entry is `recorded` when that sign-in is. An OAuth 2 alternative is proven by its derived fake, and by a
+   recording once the recorder learns the OAuth exchange.
 10. An app keeps the kind it chose with the connection (the secret's shape already differs: a grant, or the key's
     fields) and narrows again for every later `client`, `refreshGrant` or `revokeGrant`.
 
@@ -538,9 +542,9 @@ page (a rate limit, regions, a webhook, an error format), the entry's leading co
 out: a smaller true entry beats a larger guessed one. What the engine cannot say is left out too, never forced into a
 wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
 
-**Sign-in.** Every sign-in the provider documents, in one pass: its personal key or token (`key`, its `send` as the
-docs show it) first, then its self-serve OAuth 2 authorization code grant (`oauth2`) when it shares the key's base,
-`identify` and plain fields; a documented one-request token (`token`) takes the key's place when there is no key.
+**Sign-in.** Every sign-in the provider documents, in one pass: its self-serve OAuth 2 authorization code grant
+(`oauth2`) first, when it shares the key's base, `identify` and plain fields, then its personal key or token (`key`, its
+`send` as the docs show it); a documented one-request token (`token`) takes the key's place when there is no key.
 [Sign-in alternatives](#sign-in-alternatives) gives the rules.
 
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the

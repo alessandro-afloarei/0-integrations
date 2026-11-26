@@ -14,8 +14,8 @@ export const clickup = defineProvider({
   id: 'clickup', name: 'ClickUp', docs: 'https://developer.clickup.com/docs/authentication',
   categories: ['tasks'],
   fields: [{ name: 'apiToken', title: 'Personal API token', secret: true }],
-  auth: [{ kind: 'key', send: { header: 'authorization' } },
-    { kind: 'oauth2', authorizeUrl: 'https://app.clickup.com/api', tokenUrl: 'https://api.clickup.com/api/v2/oauth/token', pkce: false }],
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.clickup.com/api', tokenUrl: 'https://api.clickup.com/api/v2/oauth/token', pkce: false },
+    { kind: 'key', send: { header: 'authorization' } }],
   // No scopes: the person picks the Workspaces the app may reach on ClickUp's consent screen.
   scopes: { default: [] },
   http: { baseUrl: 'https://api.clickup.com/api/v2', minIntervalMs: 600, retry: {} },
