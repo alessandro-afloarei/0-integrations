@@ -290,6 +290,13 @@ test("an app's operation with a parameter in the place its paging shape's `send`
   expect(() => client(entry({ kind: 'offset', send: { body: 'at' } }, 'query'), { token: 'k' })).not.toThrow();
 });
 
+test('client() refuses an entry checkHosts refuses when it is built, before it reads the token it is given', () => {
+  let reads = 0;
+  const bent = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: 'https:///api.acme.test' } } as Entry;
+  expect(() => client(bent, { get token() { reads++; return 'k'; } })).toThrow(new TypeError('base_host_refused: w'));
+  expect(reads).toBe(0);
+});
+
 test("an operation whose path's own query names the key its paging writes is refused when built; another key is the path's own", () => {
   const entry = (path: string) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
     paging: { offset: { kind: 'offset', send: { query: 'offset' } } }, operations: { 'things.list': { path, paging: 'offset' } } }) as Entry;

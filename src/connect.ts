@@ -3,7 +3,7 @@ import type { Entry, Field, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { defaultFetch, filledBase } from './http.js';
 import { authorizeUrl, exchangeCode, pkcePair, requestToken, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
-import { placeholders, plainFields } from './rules.js';
+import { checkHosts, placeholders, plainFields } from './rules.js';
 
 type Redirect<E extends Entry = Entry> = { kind: 'redirect'; url: string; codeVerifier?: string; values: Plain<E> };
 type Form = { kind: 'form'; fields: readonly Field[] };
@@ -77,6 +77,7 @@ export async function startConnect(entry: Entry, options?: OAuthStart): Promise<
 
 export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish<E>, FormFinish<E>>): Promise<Connected<E>>;
 export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
+  checkHosts(entry); // before a credential is read, for every kind: identify may send nothing to check it later
   const [auth] = entry.auth;
   const fetch = input.fetch ?? defaultFetch(entry);
   if (auth.kind !== 'oauth2') {

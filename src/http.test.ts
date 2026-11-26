@@ -856,6 +856,18 @@ test('a primary base that is not well formed refuses the entry on every path, be
   expect(fake.calls).toEqual([]);
 });
 
+test('finishConnect refuses an entry checkHosts refuses before it reads a credential, even when identify sends nothing', async () => {
+  const fake = fakeFetch([{ url: /./u, respond: ok }]);
+  // A local id and no identify request: the client never sends, so only the finish can refuse the `http://` named base.
+  const local = defineProvider({ id: 'local', name: 'Local', fields: [{ name: 'id', title: 'Id' }, { name: 'apiKey', title: 'Key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.k.test', bases: { other: 'http://other.k.test' } }, identify: { id: 'connection.id' } });
+  let reads = 0;
+  const secret = { get apiKey() { reads++; return 'k'; } };
+  await expect(finishConnect(local, { secret, values: { id: 'u1' }, fetch: fake.fetch })).rejects.toThrow(new TypeError('base_host_refused: local'));
+  expect(reads).toBe(0);
+  expect(fake.calls).toEqual([]);
+});
+
 /** Every name the malformed templates below use, filled with a value the base rule accepts. */
 const bentFields = ['host', 'user', 'port'].map(name => ({ name, title: name }));
 const bentValues = { host: 'evil.k.test', user: 'u', port: '8443' };

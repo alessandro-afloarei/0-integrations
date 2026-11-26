@@ -138,9 +138,10 @@ The client's own calls take some names. An operation id whose first dot-separate
 another (`pages` beside `pages.markdown`) are refused: the reserved names by `defineProvider` at compile time, and all
 of them by `client` as `TypeError('operation_clash: <id>')` for an app's own entry.
 
-A wrong entry throws when its client is built: besides a clashing id, a parameter with no place in the request, such
-as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging shape the entry does not declare
-(`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
+A wrong entry throws when its client is built, before the token is read: a URL that is not a well-formed template or
+hosts that split (`base_host_refused`, `host_split`, which `finishConnect` checks first too), a clashing id, a
+parameter with no place in the request, such as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging
+shape the entry does not declare (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
 to no list in the `result` (`records_unshaped: <id>`), an operation on a `page` or `offset` shape whose `records` is
 not the shape's `list` (`records_unpaged: <id>`), and a parameter (or a literal query in its path) in the place its
 paging shape's `send` writes, which the walk sends itself (`param_paged: <id> <name>`). A wrong value throws when the call is made, before anything is sent.
