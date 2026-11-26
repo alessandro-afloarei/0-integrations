@@ -204,7 +204,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `categories`,
-`Send.value`, `oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
+`oauth2.send`, `Operation.base`, placeholders in `identify`'s request path, the `s` and
 `epochSeconds` body-wait units, the `epochMs` reset unit, the paging kinds `offset`, `page` and `linkHeader`, `Size`,
 and `Where.variables`. `paging` and `operations` arrive with the walker and the client.
 
@@ -386,13 +386,49 @@ repeated-cursor guard.
 ### `webhook`
 
 ```ts
-type Webhook = { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64';
-  timestamp?: { header: string; toleranceSeconds?: number };
-  deliveryId?: { header: string } | { body: readonly Path[] } };
+type Timestamp = { header: string; toleranceSeconds?: number };
+type Webhook = (
+  | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
+      part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+  | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
+  | { kind: 'token'; header: string }
+  | { kind: 'standard' }
+) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 ```
 
-Defaults: SHA-256, hex, the raw body signed, a tolerance of 300 seconds. `deliveryId` is what an app dedupes on;
-several body paths are joined with `:`.
+`verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
+request. Every comparison is constant time over buffers of equal length, a timestamp is plain seconds inside its
+tolerance (300 seconds by default), and a signature header longer than 8 KiB is `false` before it is parsed.
+`deliveryId` is what an app dedupes on; several body paths are joined with `:`.
+
+1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
+   (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`).
+2. `hmac` with `part` (Stripe's `t=…,v1=…,v1=…`): the header is split on `,`, each piece on its first `=`. Every value
+   whose name is `part` is a signature, the other pieces (another scheme, debug entries) are ignored, and the request
+   passes when one of them equals the digest. A part's value is the signature alone, so `prefix` is never beside it.
+3. `timestamp: { part }` reads the timestamp from the same header's piece of that name; `{timestamp}` in `signed` is
+   that value. `timestamp.part` needs `part`, and `{timestamp}` in `signed` needs a `timestamp`.
+4. `ed25519` (Discord): the secret is the provider's public key as 64 hex characters; the header holds a
+   128-hex-character signature over the filled `signed`. A bad key, a bad signature or a wrong length is `false`.
+5. `token` (Google Calendar push): the header must equal the secret, compared over the SHA-256 digests of both, so its
+   length leaks nothing.
+6. `standard` (Standard Webhooks, GitLab): `webhook-id`, `webhook-timestamp`
+   (seconds, 300 seconds of tolerance) and `webhook-signature` (space-separated `v1,<base64>`, other versions ignored)
+   over `<webhook-id>.<webhook-timestamp>.<raw body>`, keyed with the base64 decoding of the secret after an optional
+   `whsec_`.
+7. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
+8. `challengeAnswer(webhook, request)`, called only after `verifyWebhook` accepted the request, answers a handshake: a
+   JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
+   string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
+
+In the code today: `hmac` with `hash` and `part` (Stripe, Intercom, Breakcold, Fireflies). The `ed25519`, `token` and
+`standard` kinds, `Send.value` and `challenge` arrive in the next steps of the same pull request, each with the provider
+named above.
+
+Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
+chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a
+provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft Graph's `validationToken`, Zoom's
+`endpoint.url_validation`, Dropbox's GET, Asana's `X-Hook-Secret`) and a default `deliveryId` for `standard`.
 
 ### `operations`
 
