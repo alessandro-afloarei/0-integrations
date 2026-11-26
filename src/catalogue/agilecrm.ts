@@ -38,6 +38,6 @@ export const agilecrm = defineProvider({
       params: { id: { in: 'body', type: 'string', required: true }, properties }, result: contact },
     'deals.list': { docs: `${ref}#31-listing-deals`, path: '/api/opportunity', params: paged,
       result: [{ id: 'integer', 'name?': 'string', 'milestone?': 'string', 'pipeline_id?': 'unknown', 'owner_id?': 'string',
-        'close_date?': 'integer', 'created_time?': 'integer', 'cursor?': 'string' }] },
+        'close_date?': 'integer', 'created_time?': 'unknown', 'cursor?': 'string' }] },
   },
 });
