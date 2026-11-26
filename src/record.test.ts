@@ -18,8 +18,8 @@ import { tierOf } from './tier.js';
 /**
  * Records a provider from a test account, replacing its recording:
  * `RECORD_PROVIDER=<id> RECORD_KEY=… [RECORD_VALUES='{"<plain field>":"…"}'] pnpm vitest run src/record.test.ts`.
- * A module's kit scenario of that name is recorded first; else the entry `src/catalogue/<id>.ts` signs in, and only what
- * the entry reads from each answer is written. A scenario that names a stand-in also takes the test account's own as
+ * A module's kit scenario of that name is recorded; else an entry with no module, `src/catalogue/<id>.ts`, signs in,
+ * and only what the entry reads from each answer is written. A scenario that names a stand-in also takes the test account's own as
  * `RECORD_ACCOUNT`. Read the file before committing it: a scenario's recording keeps each answer whole.
  */
 const provider = process.env.RECORD_PROVIDER ?? '';
@@ -64,12 +64,15 @@ async function recordScenario(scenario: KitScenario<unknown, unknown>, secret: s
   return scrub([...good.exchanges, ...bad.exchanges], { sent: [[secret, GOOD_KEY], ...standIns.map(([kit, actual]): Swap => [actual, kit])] });
 }
 
-/** What failed, by its code and status alone: a provider's text never reaches the test's output. */
-const failure = (what: string, error: unknown) => (error instanceof ProviderHttpError
-  ? `${what} ${error.code}${error.status === null ? '' : ` (${String(error.status)})`}`
-  : `${what} ${error instanceof TypeError ? error.message : error instanceof Error ? error.name : 'a non-error'}`);
+/** The library's own messages: a code, then maybe an entry id and a `{field}` (`template_missing: zoom {accountId}`). */
+const OWN_MESSAGE = /^[a-z_]+(: [\w.-]+( \{[\w.]+\})?)?$/u;
+/** What failed, by its code and status alone: a provider's text, or a message quoting a value (Node's `Headers.set`
+ * quotes its input), never reaches the test's output. */
+const failure = (what: string, error: unknown) => `${what} ${error instanceof ProviderHttpError
+  ? `${error.code}${error.status === null ? '' : ` (${String(error.status)})`}`
+  : error instanceof Error && OWN_MESSAGE.test(error.message) ? error.message : 'an error whose message is not shown'}`;
 
-/** The paths identify reads a value at, from its answer or from the token answer (`tokenAnswer.` stripped). */
+/** The paths identify or `save` reads a value at, from its answer or from the token answer (`tokenAnswer.` stripped). */
 const identityPaths = (value: Value | undefined) => (value === undefined ? [] : lookupNames({ identify: { id: value } })
   .filter(name => !name.startsWith('connection.')).map(name => name.replace(/^tokenAnswer\./u, '')));
 
@@ -78,6 +81,8 @@ const identityPaths = (value: Value | undefined) => (value === undefined ? [] : 
  * each plain value given, every token issued and the account identify names are swapped for the kit's stand-ins, so the
  * recording replays with the kit's key and values. */
 async function recordEntry(entry: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
+  const [auth] = entry.auth;
+  if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
   const kit = kitValues(entry);
   const good = recorder(real, 'good');
   const bad = recorder(real, 'bad');
@@ -89,22 +94,29 @@ async function recordEntry(entry: Entry, secret: string, given: Readonly<Record<
   if (!(refused instanceof ProviderHttpError && refused.code === 'rejected')) {
     throw new Error(failure('recording stopped: the bad key must be refused as rejected, not', refused));
   }
-  const [auth] = entry.auth;
   /** Each string or number the good answers hold at one of `paths`, for the stand-in `kit`. */
   const found = (paths: readonly string[], stand: string) => good.exchanges.flatMap(({ response }) => paths.map(path => readPath(response, path)))
     .filter(value => typeof value === 'string' || typeof value === 'number').map((value): Swap => [String(value), stand]);
   const reads = answerReads(entry);
-  return scrub([...good.exchanges, ...bad.exchanges].map(exchange => ({ ...exchange, response: onlyRead(exchange.response, reads) ?? null })), {
+  // Sign-in reads no other header: a `link` or `content-type` may name the account.
+  const kept = ({ headers = {}, response, ...exchange }: Exchange): Exchange => ({ ...exchange, response: onlyRead(response, reads) ?? null,
+    headers: Object.fromEntries(Object.entries(headers).filter(([name]) => name === 'location' || name === 'retry-after')) });
+  return scrub([...good.exchanges, ...bad.exchanges].map(kept), {
     sent: [[secret, GOOD_KEY],
       ...Object.entries(kit).flatMap(([name, stand]): Swap[] => (given[name] === undefined || given[name] === stand ? [] : [[given[name], stand]])),
       ...auth.kind === 'token' ? found([auth.request.token ?? 'access_token'], 'kit-token') : []],
-    answered: [...found(identityPaths(entry.identify?.id), 'kit-account'), ...found(identityPaths(entry.identify?.name), 'kit-name')] });
+    answered: [...found(identityPaths(entry.identify?.id), 'kit-account'), ...found(identityPaths(entry.identify?.name), 'kit-name'),
+      ...Object.entries(entry.save ?? {}).flatMap(([name, value]) => found(identityPaths(value), `kit-${name}`))] });
 }
 
-/** A module's kit scenario of that name, else the entry, recorded from a test account. */
+/** A module's kit scenario of that name, else an entry with no module, recorded from a test account. */
 async function record(id: string, secret: string, given: Readonly<Record<string, string>>): Promise<Exchange[]> {
   const scenario = await findScenario(id);
   if (scenario) return recordScenario(scenario, secret);
+  // A module's recording is its kit's: a sign-in alone would replace it.
+  if (/^[a-z][a-z0-9]*$/u.test(id) && existsSync(`src/${id}/${id}.ts`)) {
+    throw new Error(`${id} has a module: it is recorded through a kit scenario in src/${id}/scenario.test-support.ts, and none is named ${id}`);
+  }
   const entry = await findEntry(id);
   if (!entry) throw new Error(`no kit scenario or entry for ${id}`);
   return recordEntry(entry, secret, given, defaultFetch(entry));
@@ -156,14 +168,17 @@ describe('recording an entry with no module, on its derived fake standing in for
     if (response.status >= 400 && !bad) return response;
     return Response.json(edit(await response.json(), request), { status: response.status });
   };
-  /** A provider whose answers carry `link` and `content-type` headers made from what was sent, written by `as`. */
+  /** A provider whose answers carry a `location` header (kept, not followed on a 200) made from what was sent, written
+   * by `as`, and a `link` header naming a profile (dropped). */
   const echoing = (as: (sent: string) => string = sent => sent): Wrap => fetch => async (input, init) => {
     const request = new Request(input, init);
     const [url = '', body = '', authorization = ''] = [request.url, await request.clone().text(), request.headers.get('authorization') ?? ''].map(as);
     const response = await fetch(request);
-    return new Response(response.body, { status: response.status,
-      headers: { link: `<${url}>; rel="self"; auth="${encodeURIComponent(authorization)}"`, 'content-type': `application/json; echo=${encodeURIComponent(body)}` } });
+    return new Response(response.body, { status: response.status, headers: { link: '<https://acme.test/people/ana-lopez>; rel="profile"',
+      location: `/echo?url=${url}&body=${body}&auth=${authorization}&encoded=${encodeURIComponent(authorization)}` } });
   };
+  /** The refusal for a real value still in exchange `at`'s `part`. */
+  const stillIn = (kit: string, at: number, part: string) => `recording refused: the value for ${kit} is still in exchange ${String(at)}'s ${part} after the swap`;
 
   /** Signs in on the recording with the kit's key and values, as the table test does. */
   const replayed = (entry: Entry, recording: Recording | undefined) => recording === undefined ? Promise.reject(new Error('nothing written'))
@@ -181,10 +196,11 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(recording).toMatchObject({ provider: 'serpapi', synthetic: false, source: 'Recorded from a test account by src/record.test.ts.' });
   });
 
-  test('a plain value in a header: echoed as is and percent-encoded, it is written as its kit value', async () => {
+  test('a plain value in a header: echoed as is and percent-encoded in `location`, it is written as its kit value; `link` is dropped', async () => {
     const { text, recording } = await recordOnFake(trello, { key: 'real-key-1', values: { apiKey: 'real a/1' }, wrap: echoing() });
-    expect(recording?.exchanges[0]?.headers?.link).toContain(encodeURIComponent(`oauth_consumer_key="kit-apiKey", oauth_token="${GOOD_KEY}"`));
-    for (const real of ['real a/1', encodeURIComponent('real a/1'), 'real-key-1']) expect(text).not.toContain(real);
+    const sent = `OAuth oauth_consumer_key="kit-apiKey", oauth_token="${GOOD_KEY}"`;
+    expect(recording?.exchanges[0]?.headers).toEqual({ location: expect.stringContaining(`&auth=${sent}&encoded=${encodeURIComponent(sent)}`) as unknown });
+    for (const real of ['real a/1', encodeURIComponent('real a/1'), 'real-key-1', 'ana-lopez']) expect(text).not.toContain(real);
     expect(await replayed(trello, recording)).toMatchObject([{ account: { id: 'kit-account', name: 'kit-name' } }, { code: 'rejected' }]);
   });
 
@@ -205,20 +221,23 @@ describe('recording an entry with no module, on its derived fake standing in for
     http: { baseUrl: 'https://api.acme.test', rateLimit: { when: [{ path: 'limits.left', equals: 0 }] },
       retry: { waitFromBody: { path: 'wait_ms', unit: 'ms' } } },
     identify: { request: { path: '/me' }, id: 'user.id', name: ['user.display', 'user.login'], rejectWhen: [{ path: 'state', equals: 'disabled' }] },
-    save: { plan: 'org.plan' }, errors: { detail: ['error.code'], rules: [{ when: { path: 'gone', equals: true }, code: 'not_found' }] } });
+    save: { plan: 'org.plan' }, errors: { detail: ['error.code'], rules: [{ when: { path: 'owner', equals: 'none' }, code: 'not_found' },
+      { when: { path: 'gone', equals: true }, code: 'not_found' }] } });
 
   test('hostile: only the paths the entry reads are written; tokens, names, a phone, an address and other people are dropped', async () => {
     const { text, recording } = await recordOnFake(reading, { key: 'real-key-1', account: {
       user: { id: 'u-real-881', display: 'Ana Lopez', login: 'alopez', full_name: 'Ana Maria Lopez', phone: '(415) 867-5309' },
       org: { plan: 'team', address: '1 Main St, Springfield', members: [{ name: 'Bob Stone' }] },
       refresh_token: 'rt-real-99', id_token: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1LXJlYWwtODgxIn0.', state: 'active',
-      limits: { left: 5, total: 100 }, wait_ms: 10, gone: false, error: { code: 'none', message: 'Jane Roe was here' } } });
+      limits: { left: 5, total: 100 }, wait_ms: 10, gone: false, error: { code: 'none', message: 'Jane Roe was here' },
+      owner: { name: 'Carl Diaz', email: 'carl@acme.io', phone: '(415) 555-2671' } } });
     expect(recording?.exchanges[0]?.response).toEqual({ user: { id: 'kit-account', display: 'kit-name', login: 'kit-name' },
-      org: { plan: 'team' }, state: 'active', limits: { left: 5 }, wait_ms: 10, gone: false, error: { code: 'none' } });
-    for (const real of ['rt-real-99', 'eyJ', 'Ana', 'alopez', '867-5309', 'Main St', 'Bob Stone', 'Jane Roe', 'total', 'u-real-881']) {
+      org: { plan: 'kit-plan' }, state: 'active', limits: { left: 5 }, wait_ms: 10, gone: false, error: { code: 'none' }, owner: {} });
+    for (const real of ['rt-real-99', 'eyJ', 'Ana', 'alopez', '867-5309', 'Main St', 'Bob Stone', 'Jane Roe', 'total', 'u-real-881', 'team',
+      'Carl', 'carl@', '555-2671']) {
       expect(text).not.toContain(real);
     }
-    expect(answerReads(reading).sort()).toEqual(['error.code', 'gone', 'limits.left', 'org.plan', 'state', 'user.display', 'user.id',
+    expect(answerReads(reading).sort()).toEqual(['error.code', 'gone', 'limits.left', 'org.plan', 'owner', 'state', 'user.display', 'user.id',
       'user.login', 'wait_ms']);
   });
 
@@ -226,6 +245,12 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(onlyRead({ '@odata.nextLink': 'n', '@odata': { nextLink: 'x' }, other: 1 }, ['@odata.nextLink'])).toEqual({ '@odata.nextLink': 'n' });
     expect(onlyRead([{ id: 'a', name: 'n', secret: 's' }, { id: 'b' }], ['0.id', '0.name'])).toEqual([{ id: 'a', name: 'n' }]);
     expect(onlyRead('text', ['id'])).toBeUndefined();
+  });
+
+  test('hostile: a path that reaches an object or a list keeps only its shell, which the paths inside it fill', () => {
+    const answer = { errors: [{ code: 'E1', message: 'Jane Roe', email: 'jane@acme.io' }], owner: { name: 'Carl', id: 'o-1' }, count: 3 };
+    expect(onlyRead(answer, ['errors', 'owner', 'count'])).toEqual({ errors: [], owner: {}, count: 3 });
+    expect(onlyRead(answer, ['errors.0', 'errors.0.code', 'owner', 'owner.id'])).toEqual({ errors: [{ code: 'E1' }], owner: { id: 'o-1' } });
   });
 
   /** A token entry whose identify reads the token answer, PayPal's way. */
@@ -243,12 +268,19 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(await replayed(tokenRead, recording)).toMatchObject([{ account: { id: 'kit-account' } }, { code: 'rejected' }]);
   });
 
+  test('hostile: a saved value (a site, a team) is written as its kit value, not as the provider answered it', async () => {
+    const { text, recording } = await recordOnFake(reading, { key: 'real-key-1',
+      wrap: answering(body => ({ ...body as object, org: { plan: 'https://ana-lopez.atlassian.net' } })) });
+    expect(recording?.exchanges[0]?.response).toMatchObject({ org: { plan: 'kit-plan' } });
+    expect(text).not.toContain('ana-lopez');
+  });
+
   test('a value read whole is swapped, and one holding a real value inside it refuses the recording', async () => {
-    const plan = (value: string) => answering(body => ({ ...body as object, org: { plan: value } }));
-    const swapped = await recordOnFake(reading, { key: 'real-key-1', wrap: plan('real-key-1') });
-    expect(swapped.recording?.exchanges[0]?.response).toMatchObject({ org: { plan: GOOD_KEY } });
-    const inside = await recordOnFake(reading, { key: 'real-key-1', wrap: plan('plan of real-key-1') });
-    expect(inside.refused).toBe('recording refused: the value for kit-good-key is still in it after the swap, in a form the recorder does not know');
+    const code = (value: string) => answering(body => ({ ...body as object, error: { code: value } }));
+    const swapped = await recordOnFake(reading, { key: 'real-key-1', wrap: code('real-key-1') });
+    expect(swapped.recording?.exchanges[0]?.response).toMatchObject({ error: { code: GOOD_KEY } });
+    const inside = await recordOnFake(reading, { key: 'real-key-1', wrap: code('bad real-key-1') });
+    expect(inside.refused).toBe(stillIn('kit-good-key', 1, 'response'));
     expect(readdirSync(inside.folder)).toEqual([]);
   });
 
@@ -256,45 +288,43 @@ describe('recording an entry with no module, on its derived fake standing in for
     const id = (left: number) => answering(body => ({ ...body as object, user: { id: 48213, display: 'Ana Lopez' }, limits: { left } }));
     expect((await recordOnFake(reading, { key: 'real-key-1', wrap: id(5) })).recording?.exchanges[0]?.response)
       .toMatchObject({ user: { id: 'kit-account', display: 'kit-name' }, limits: { left: 5 } });
-    expect((await recordOnFake(reading, { key: 'real-key-1', wrap: id(482130) })).refused)
-      .toBe('recording refused: the value for kit-account is still in it after the swap, in a form the recorder does not know');
+    expect((await recordOnFake(reading, { key: 'real-key-1', wrap: id(482130) })).refused).toBe(stillIn('kit-account', 1, 'response'));
     // In a request body too: a number is never rewritten into a string by part.
     const sent = (n: number): Exchange[] => [{ key: 'good', method: 'POST', url: 'https://api.acme.test/a', body: { n }, status: 200, response: null }];
     expect(scrub(sent(48213), { sent: [['48213', 'kit-account']] })[0]?.body).toEqual({ n: 'kit-account' });
-    expect(() => scrub(sent(482130), { sent: [['48213', 'kit-account']] })).toThrow('the value for kit-account is still in it');
+    expect(() => scrub(sent(482130), { sent: [['48213', 'kit-account']] })).toThrow(stillIn('kit-account', 1, 'body'));
   });
 
+  const based = (sent: string) => Buffer.from(sent).toString('base64');
   test.each<[string, (sent: string) => string]>([
     ['upper-cased', sent => sent.toUpperCase()],
-    ['as base64', sent => Buffer.from(sent).toString('base64')],
+    ['as base64', based],
+    ['as base64 after `state=`', sent => `state=${based(sent)}`],
+    ['as base64 after `a=`', sent => `a=${based(sent)}`],
+    ['as base64 right after letters', sent => `abc${based(sent)}`],
+    ['as base64 after `auth=Basic`', sent => `auth=Basic${based(sent)}`],
     ['inside a JWT\'s payload', sent => `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ sub: sent })).toString('base64url')}.sig`],
-  ])('hostile: the key echoed %s refuses the recording, and nothing is written', async (_, as) => {
+    // A `-` written `%2d`: no form the swap knows, but the last check decodes it.
+    ['with a percent escape the swap does not know', sent => sent.replaceAll('-', '%2d')],
+  ])('hostile: the key echoed %s refuses the recording, naming where, and nothing is written', async (_, as) => {
     const { refused, folder } = await recordOnFake(serpapi, { key: 'real-key-1', wrap: echoing(as) });
-    expect(refused).toBe('recording refused: the value for kit-good-key is still in it after the swap, in a form the recorder does not know');
+    expect(refused).toBe(stillIn('kit-good-key', 1, 'headers'));
     expect(readdirSync(folder)).toEqual([]);
   });
 
   test('hostile: an account id echoed lower-cased in a header refuses the recording', async () => {
     const lowered: Wrap = fetch => async (input, init) => {
       const response = await fetch(input, init);
-      return new Response(response.body, { status: response.status, headers: { link: '</users/acct-7f3a90>; rel="me"' } });
+      return new Response(response.body, { status: response.status, headers: { location: '/users/acct-7f3a90' } });
     };
     const { refused } = await recordOnFake(serpapi, { key: 'real-key-1', wrap: lowered, account: { account_id: 'ACCT-7F3A90', account_email: 'kit-name' } });
-    expect(refused).toBe('recording refused: the value for kit-account is still in it after the swap, in a form the recorder does not know');
+    expect(refused).toBe(stillIn('kit-account', 1, 'headers'));
   });
 
   test('hostile: a value too short to swap safely refuses the recording, and nothing is written', async () => {
     const { refused, folder } = await recordOnFake(trello, { key: 'real-key-1', values: { apiKey: 'q7' } });
     expect(refused).toMatch(/^recording refused: the value for kit-apiKey is under 4 characters/u);
     expect(refused).not.toContain('q7');
-    expect(readdirSync(folder)).toEqual([]);
-  });
-
-  test('hostile: a value echoed in a form the swap does not know refuses the recording, and nothing is written', async () => {
-    // Lowercase percent escapes: `real%2fa1`, where the swap knows `real%2Fa1`; the last check decodes them.
-    const { refused, folder } = await recordOnFake(trello, { key: 'real-key-1', values: { apiKey: 'real/a1' },
-      wrap: echoing(sent => encodeURIComponent(sent).toLowerCase()) });
-    expect(refused).toBe('recording refused: the value for kit-apiKey is still in it after the swap, in a form the recorder does not know');
     expect(readdirSync(folder)).toEqual([]);
   });
 
@@ -341,6 +371,30 @@ describe('recording an entry with no module, on its derived fake standing in for
     };
     expect((await recordOnFake(serpapi, { key: 'real-key-1', wrap: down })).refused)
       .toBe('recording stopped: the bad key must be refused as rejected, not unavailable (500)');
+  });
+
+  test('a provider with a module but no kit scenario of that name is refused before anything is sent', async () => {
+    await expect(record('lusha', 'real-key-1', {})).rejects
+      .toThrow('lusha has a module: it is recorded through a kit scenario in src/lusha/scenario.test-support.ts, and none is named lusha');
+  });
+
+  test('an entry that sends no request when it signs in is refused: nothing to record', async () => {
+    const answerOnly = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs',
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://acme.test/authorize', tokenUrl: 'https://acme.test/token' }], scopes: { default: [] },
+      http: { baseUrl: 'https://api.acme.test' }, identify: { id: 'tokenAnswer.user_id' } });
+    const sent = vi.fn(fetch);
+    await expect(recordEntry(answerOnly, 'real-key-1', {}, sent)).rejects.toThrow('acme sends no request when it signs in: nothing to record');
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  test.each<[string, unknown, string]>([
+    ['a provider error', new ProviderHttpError('rejected', 401, 'invalid_key'), 'rejected (401)'],
+    ['the library\'s own message', new TypeError('template_missing: zoom {accountId}'), 'template_missing: zoom {accountId}'],
+    ['a bare code', new TypeError('url_outside_origin'), 'url_outside_origin'],
+    ['a message quoting a header value', new TypeError('Headers.set: "Bearer real-key-1" is an invalid header value.'), 'an error whose message is not shown'],
+    ['a parse error quoting the answer', new SyntaxError('Unexpected token \'<\', "<html>Jane Roe" is not valid JSON'), 'an error whose message is not shown'],
+  ])('a failure from %s is told without what it quotes', (_, error, told) => {
+    expect(failure('failed with', error)).toBe(`failed with ${told}`);
   });
 
   test('an id with no scenario and no entry fails, naming the id', async () => {

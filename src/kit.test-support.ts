@@ -107,7 +107,8 @@ export function answerReads(entry: Entry): string[] {
 }
 
 /** Only what `paths` read from `value`, found as `readPath` finds it (a whole key first, then a key and the rest), in
- * the answer's own shape; nothing else. Undefined when nothing is an object to read from. */
+ * the answer's own shape; nothing else. A path that reaches an object or a list keeps only its shell (`{}`, `[]`), which
+ * the paths read inside it fill. Undefined when nothing is an object to read from. */
 export function onlyRead(value: unknown, paths: readonly string[]): unknown {
   if (typeof value !== 'object' || value === null) return undefined;
   const record = value as Record<string, unknown>;
@@ -117,10 +118,12 @@ export function onlyRead(value: unknown, paths: readonly string[]): unknown {
     const head = path.slice(0, path.indexOf('.'));
     if (!whole.includes(path) && path.includes('.') && Object.hasOwn(record, head)) nested.set(head, [...nested.get(head) ?? [], path.slice(head.length + 1)]);
   }
-  const kept: Record<string, unknown> = Object.fromEntries([...[...nested].flatMap(([head, rest]): [string, unknown][] => {
-    const inner = onlyRead(record[head], rest);
-    return inner === undefined ? [] : [[head, inner]];
-  }), ...whole.map((path): [string, unknown] => [path, record[path]])]);
+  const shell = (item: unknown) => (Array.isArray(item) ? [] : typeof item === 'object' && item !== null ? {} : item);
+  const kept: Record<string, unknown> = Object.fromEntries([...whole.map((path): [string, unknown] => [path, shell(record[path])]),
+    ...[...nested].flatMap(([head, rest]): [string, unknown][] => {
+      const inner = onlyRead(record[head], rest);
+      return inner === undefined ? [] : [[head, inner]];
+    })]);
   return Array.isArray(value) ? Object.assign([], kept) : kept;
 }
 
@@ -141,15 +144,19 @@ function swapped(value: unknown, text: (text: string) => string, whole: Readonly
 }
 /** Percent and `+` escapes decoded, so no encoding hides a value from the last check. */
 const decoded = (text: string) => text.replaceAll('+', ' ').replace(/%([0-9a-f]{2})/giu, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
-/** Each run that may be base64 or base64url (a Basic pair, a JWT's part), decoded. */
-const unbased = (text: string) => (text.match(/[A-Za-z0-9+/_=-]{8,}/gu) ?? []).map(run => Buffer.from(run, 'base64').toString('utf8'));
+/** Each run that may be base64 or base64url (a Basic pair, a JWT's part), decoded from each of its first four
+ * characters, so one that starts inside a run (`abc<b64>`, `Basic<b64>`) is decoded on its own boundary too. A run ends
+ * at `=`, where Node stops decoding (`state=<b64>`). */
+const unbased = (text: string) => (text.match(/[A-Za-z0-9+/_-]{8,}/gu) ?? [])
+  .flatMap(run => [0, 1, 2, 3].map(at => Buffer.from(run.slice(at), 'base64').toString('utf8')));
 
 /**
  * The exchanges safe to write. Each real value of `sent` (the key, a plain value, a token issued) is replaced by its
  * stand-in inside the URL, the request body's strings and the headers kept; in the answer, a value of `sent` or
- * `answered` (the account's id and name) is replaced only where it is a whole string or number. Then the whole file is
- * searched, ignoring case, percent-decoded and with each base64-like run decoded: a real value still in it, or one too
- * short to swap safely, refuses the recording. Nothing is written partly scrubbed, and no message holds a real value.
+ * `answered` (the account's id and name, a saved value) is replaced only where it is a whole string or number. Then each
+ * part of each exchange is searched, ignoring case, percent-decoded and with each base64-like run decoded: a real value
+ * still in it, or one too short to swap safely, refuses the recording, naming the exchange and the part. Nothing is
+ * written partly scrubbed, and no message holds a real value.
  */
 export function scrub(exchanges: readonly Exchange[], swaps: { sent: readonly Swap[]; answered?: readonly Swap[] }): Exchange[] {
   const all = [...swaps.sent, ...swaps.answered ?? []];
@@ -165,13 +172,18 @@ export function scrub(exchanges: readonly Exchange[], swaps: { sent: readonly Sw
   const out = exchanges.map(({ response, ...exchange }) => ({ ...Object.fromEntries(Object.entries(exchange).map(([part, value]) =>
     [part, ['key', 'method', 'status'].includes(part) ? value : swapped(value, inText, whole)])),
   response: swapped(response, text => whole.get(text) ?? text, whole) }) as Exchange);
-  // What is left once the stand-ins are taken out: as written, decoded and unbased, ignoring case.
-  const written = JSON.stringify(out);
+  // What is left once the stand-ins are taken out, in each part of each exchange: as written, decoded and unbased,
+  // ignoring case. The refusal names where, never what.
   const kits = [...new Set(all.map(([, kit]) => kit.toLowerCase()))];
-  const seen = [written, decoded(written)].flatMap(text => [text, ...unbased(text)])
-    .map(text => kits.reduce((rest, kit) => rest.replaceAll(kit, ''), text.toLowerCase()));
-  const left = all.find(([real]) => forms(real).some(form => seen.some(text => text.includes(form.toLowerCase()))));
-  if (left) throw new Error(`recording refused: the value for ${left[1]} is still in it after the swap, in a form the recorder does not know`);
+  out.forEach((exchange, at) => {
+    for (const part of ['url', 'headers', 'body', 'response'] as const) {
+      const written = JSON.stringify(exchange[part] ?? null);
+      const seen = [written, decoded(written)].flatMap(text => [text, ...unbased(text)])
+        .map(text => kits.reduce((rest, kit) => rest.replaceAll(kit, ''), text.toLowerCase()));
+      const left = all.find(([real]) => forms(real).some(form => seen.some(text => text.includes(form.toLowerCase()))));
+      if (left) throw new Error(`recording refused: the value for ${left[1]} is still in exchange ${String(at + 1)}'s ${part} after the swap`);
+    }
+  });
   return out;
 }
 
