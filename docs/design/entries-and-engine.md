@@ -564,8 +564,10 @@ other people must use OAuth, the key's `help` says the key is for the person's o
   then its email. With none, a credential check with no `id` on the cheapest read the credential can always make.
 - `http`: `headers` for every header the docs say each request needs, `content-type` included, and no other; `retry: {}` when the docs state a 429 or a
   `Retry-After`, with `maxWaitMs` and `defaultWaitMs` only from stated numbers; `minIntervalMs` only from a stated
-  per-credential limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
-  limit answer.
+  limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
+  limit answer. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
+  the credential that signs the calls: a limit that varies by plan, or that the credential shares with its
+  organization, is left out.
 - `errors.detail` only for a documented machine code, never a human message.
 - `paging`: one named shape per way the declared lists page. A list the engine cannot page is declared unpaged, its
   paging parameters ordinary parameters and its paging fields in its `result`.
