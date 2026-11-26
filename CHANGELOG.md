@@ -53,7 +53,8 @@ Every line below breaks 0.12 unless it says otherwise.
   `portalId` is `account.id`, Slack's `botUserId` is `values.botUserId` (absent, not `null`, when Slack names none), and
   Google's and Microsoft's address is `account.name`. A key entry's secret is its secret fields by name (`{ apiKey }`)
   and its values its plain fields: only declared fields are kept, and each must be given, not blank, before anything is
-  sent (`connect_field_required: <name>`). `startConnect` requires an OAuth entry's options.
+  sent (`connect_field_required: <name>`); a key entry that declares no secret field is refused first
+  (`connect_secret_field_missing: <entry id>`). `startConnect` requires an OAuth entry's options.
 - google: a token answer without `scope` passes `requireGranted`, since it granted the scopes requested (RFC 6749
   §5.1); it was refused as `scope_missing`.
 - An id that is only whitespace is `invalid_response` (`missing_fields`) for every provider; only a lowercased one was.

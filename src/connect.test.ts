@@ -32,6 +32,8 @@ const { authorizeUrl, tokenUrl: slackTokenUrl, scopeSeparator, tokenTypes, faile
 const pkceSlack = defineProvider({ ...slack, auth: [{ kind: 'oauth2', authorizeUrl, tokenUrl: slackTokenUrl, scopeSeparator, tokenTypes, failed }] });
 /** Slack whose re-consent may hand back a live connection's grant. */
 const reusingSlack = defineProvider({ ...slack, auth: [{ ...slack.auth[0], reusesGrant: true }] });
+/** Aircall as an entry whose fields are not known in the types: the runtime checks its input. */
+const looseAircall: Entry = aircall;
 /** A token answer whose team has no id: identify refuses it. */
 const noTeam = { ...data, team: { id: '', name: 'Acme' } };
 afterEach(() => vi.useRealTimers());
@@ -107,7 +109,7 @@ describe('connect', () => {
 
   it.each([{}, { apiToken: '' }, { apiToken: '  ' }, { apiId: 'token' }])('refuses a key entry without its secret (%j) before anything is sent', async secret => {
     const http = fakeFetch([]);
-    await expect(finishConnect(aircall, { secret, values: { apiId: '12', apiToken: 'token' }, fetch: http.fetch }))
+    await expect(finishConnect(looseAircall, { secret, values: { apiId: '12', apiToken: 'token' }, fetch: http.fetch }))
       .rejects.toThrow(new TypeError('connect_field_required: apiToken'));
     expect(http.calls).toHaveLength(0);
   });
@@ -119,13 +121,16 @@ describe('connect', () => {
     expect(await startConnect(plain)).toEqual({ kind: 'form', fields: [{ name: 'region', title: 'Region' }] });
     await expect(finishConnect(plain, { secret: {}, values: { region: 'eu' }, fetch: http.fetch }))
       .rejects.toThrow(new TypeError('connect_secret_field_missing: plain'));
+    // The entry's fault is named before the caller's missing input.
+    const loose: Entry = plain;
+    await expect(finishConnect(loose, { secret: {}, fetch: http.fetch })).rejects.toThrow(new TypeError('connect_secret_field_missing: plain'));
     expect(http.calls).toHaveLength(0);
   });
 
   it('keeps and sends only the fields the entry declares, each in its own record', async () => {
     const http = fakeFetch([{ url: 'https://api.aircall.io/v1/company', respond: () => Response.json({ company: { name: 'Lumen' } }) }]);
     const form = { apiId: '12', apiToken: 'plain-copy', note: 'extra' };
-    const result = await finishConnect(aircall, { secret: { apiToken: 'token', apiId: 'secret-copy', other: 'extra' }, values: form, fetch: http.fetch });
+    const result = await finishConnect(looseAircall, { secret: { apiToken: 'token', apiId: 'secret-copy', other: 'extra' }, values: form, fetch: http.fetch });
     expect(result).toEqual({ secret: { apiToken: 'token' }, values: { apiId: '12' }, account: { id: '12', name: 'Lumen' } });
     expect(http.calls).toHaveLength(1);
     expect(JSON.stringify(http.calls)).not.toMatch(/extra|plain-copy|secret-copy/u);
@@ -134,7 +139,7 @@ describe('connect', () => {
 
   it.each([undefined, {}, { apiId: '' }, { apiId: ' ' }])('refuses a key entry without a plain field (%j) before anything is sent', async values => {
     const http = fakeFetch([]);
-    await expect(finishConnect(aircall, { secret: { apiToken: 'token' }, ...(values ? { values } : {}), fetch: http.fetch }))
+    await expect(finishConnect(looseAircall, { secret: { apiToken: 'token' }, ...(values ? { values } : {}), fetch: http.fetch }))
       .rejects.toThrow(new TypeError('connect_field_required: apiId'));
     expect(http.calls).toHaveLength(0);
   });
@@ -170,6 +175,17 @@ describe('connect types', () => {
     // @ts-expect-error -- a misspelt name is no key of Slack's values
     expectTypeOf<Connected<typeof slack>['values']['botUserID']>().toBeUnknown();
     expectTypeOf<Connected['values']>().toEqualTypeOf<Readonly<Record<string, unknown>>>();
+    // A union of entries is a union of results, until the caller narrows.
+    expectTypeOf<Connected<typeof aircall | typeof attio>>().toEqualTypeOf<Connected<typeof aircall> | Connected<typeof attio>>();
+  });
+
+  it("types a key entry's finish from its fields", () => {
+    type AircallFinish = Parameters<typeof finishConnect<typeof aircall>>[1];
+    const fetch = attioFetch;
+    expectTypeOf({ secret: { apiToken: 't' }, values: { apiId: '1' }, fetch }).toExtend<AircallFinish>();
+    expectTypeOf({ secret: { apiKey: 'k' }, values: { apiId: '1' }, fetch }).not.toExtend<AircallFinish>();
+    expectTypeOf({ secret: { apiToken: 't' }, fetch }).not.toExtend<AircallFinish>();
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<typeof attio>>[1]>();
   });
 });
 

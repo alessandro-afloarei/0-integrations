@@ -15,19 +15,23 @@ type Fields<E extends Entry> = NonNullable<E['fields']>[number];
 type Keyed<E extends Entry, K extends string, V> = string extends E['id'] ? Readonly<Record<string, V>> : Readonly<Record<K, V>>;
 /** The names `save` keeps, when the entry declares any. */
 type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : never;
-/** A finished sign-in: the secret to seal, the plain values to keep, and the account. */
-export type Connected<E extends Entry = Entry> = {
+/** A key entry's secret fields, and its plain fields, by name. */
+type Secrets<E extends Entry> = Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>;
+type Plain<E extends Entry> = Keyed<E, Exclude<Fields<E>, { secret: true }>['name'], string>;
+/** A finished sign-in: the secret to seal, the plain values to keep, and the account; one per entry of a union. */
+export type Connected<E extends Entry = Entry> = E extends Entry ? {
   /** The grant, or a key entry's secret fields by name. */
-  secret: ByKind<E, Grant, Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>>;
+  secret: ByKind<E, Grant, Secrets<E>>;
   /** The plain fields entered, by name, and what `save` kept (present only when the provider answered it). */
-  values: string extends E['id'] ? Values
-    : Readonly<Record<Exclude<Fields<E>, { secret: true }>['name'], string>> & { readonly [K in Saved<E>]?: unknown };
+  values: string extends E['id'] ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
   account: E['identify'] extends { id: Value } ? Account : Account | null;
-};
+} : never;
 type OAuthStart = { clientId: string; redirectUri: string; state: string };
 type OAuthFinish = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string; fetch: typeof fetch;
   onRevokeFailed: (error: unknown) => void };
-type FormFinish = { secret: Readonly<Record<string, string>>; values?: Values; fetch: typeof fetch };
+/** A key entry's finish: its secret fields by name, and its plain fields, required when it has any. */
+type FormFinish<E extends Entry = Entry> = E extends Entry ? { secret: Secrets<E>; fetch: typeof fetch } & (string extends E['id']
+  ? { values?: Values } : Partial<Plain<E>> extends Plain<E> ? { values?: Plain<E> } : { values: Plain<E> }) : never;
 
 /** A form of the entry's fields, or the provider's authorization URL (with the PKCE verifier for the app to keep). */
 export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart], []>):
@@ -41,13 +45,16 @@ export async function startConnect(entry: Entry, options?: OAuthStart): Promise<
     ...(pkce ? { codeChallenge: pkce.challenge } : {}) }).toString(), ...(pkce ? { codeVerifier: pkce.verifier } : {}) };
 }
 
-export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish, FormFinish>): Promise<Connected<E>>;
+export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish, FormFinish<E>>): Promise<Connected<E>>;
 export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
   const [auth] = entry.auth;
   if (auth.kind === 'key') {
     const { secret: secrets = {}, values: plain = {} }: Partial<FormFinish> = 'secret' in input ? input : {};
     // Only the declared fields, each filled, all checked before anything is sent: an entry's templates read them.
     const fields = entry.fields ?? [];
+    // The entry's only secret field is the credential; an app's own entry may declare none, its fault before the caller's.
+    const credential = fields.find(field => field.secret);
+    if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const read = (field: Field) => {
       const value = (field.secret ? secrets : plain)[field.name];
       if (typeof value !== 'string' || value.trim() === '') throw new TypeError(`connect_field_required: ${field.name}`);
@@ -55,10 +62,7 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     };
     const secret = Object.fromEntries(fields.filter(field => field.secret).map(read));
     const values = Object.fromEntries(fields.filter(field => !field.secret).map(read));
-    // The entry's only secret field is the credential; an app's own entry may declare none.
-    const [token] = Object.values(secret);
-    if (token === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
-    return { secret, ...await identifyAccount(entry, { fetch: input.fetch, token, values }) };
+    return { secret, ...await identifyAccount(entry, { fetch: input.fetch, token: read(credential)[1], values }) };
   }
   if (!('code' in input)) throw new TypeError('oauth_options_required');
   const { grant, extras } = await exchangeCode(entry, input.client, input);
