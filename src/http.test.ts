@@ -337,7 +337,7 @@ test("a refusal carries the provider's own error code", async () => {
   await expect(usage.client.json('/records')).rejects.toMatchObject({ code: 'request_failed', status: 402, detail: 'usage_limit' });
   const bare = script(breakcold, () => new Response('gateway', { status: 502 }));
   const gateway = bare.client.json('/records').catch((e: unknown) => e);
-  await vi.advanceTimersByTimeAsync(0); // Breakcold's backoff is 0: its one retry
+  await vi.advanceTimersByTimeAsync(1000); // its one retry, within a second's backoff
   expect(await gateway).toMatchObject({ code: 'unavailable', detail: null });
   const elsewhere = script(hubspot, () => Response.json({ error: { code: 'usage_limit' } }, { status: 402 }));
   await expect(elsewhere.client.json('/x')).rejects.toMatchObject({ detail: null });
@@ -774,8 +774,8 @@ describe('a read is retried after a 5xx, a 408 or a network failure, waiting wit
     }
   });
 
-  test('the n-th retry waits a random share of the default wait doubled n times, capped by maxWaitMs', async () => {
-    const fake = script(retrying({ limit: 3, defaultWaitMs: 1000, maxWaitMs: 3000 }), answer(500), answer(500), answer(500), ok);
+  test('the n-th retry waits a random share of one second doubled n times, capped by maxWaitMs', async () => {
+    const fake = script(retrying({ limit: 3, defaultWaitMs: 30_000, maxWaitMs: 3000 }), answer(500), answer(500), answer(500), ok);
     const result = fake.client.json('/a');
     await vi.advanceTimersByTimeAsync(500 + 1000);
     expect(fake.calls).toHaveLength(3);
@@ -784,6 +784,26 @@ describe('a read is retried after a 5xx, a 408 or a network failure, waiting wit
     await vi.advanceTimersByTimeAsync(1);
     expect(await result).toEqual({ ok: true });
     expect(fake.calls).toHaveLength(4);
+  });
+
+  test("the backoff starts from one second, never from the 429's defaultWaitMs", async () => {
+    for (const defaultWaitMs of [30_000, 0]) {
+      const fake = script(retrying({ defaultWaitMs, maxWaitMs: 60_000 }), answer(503), ok);
+      const result = fake.client.json('/a');
+      await vi.advanceTimersByTimeAsync(499);
+      expect(fake.calls).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toEqual({ ok: true });
+    }
+  });
+
+  test('the backoff is capped by maxWaitMs below one second', async () => {
+    const fake = script(retrying({ maxWaitMs: 400 }), answer(503), ok);
+    const result = fake.client.json('/a');
+    await vi.advanceTimersByTimeAsync(199);
+    expect(fake.calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toEqual({ ok: true });
   });
 
   test('a 429 still waits its default with no jitter, and shares the limit', async () => {

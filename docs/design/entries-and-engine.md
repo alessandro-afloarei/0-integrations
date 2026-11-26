@@ -294,7 +294,8 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   of any of these together.
 - A 429 waits `Retry-After`, else `waitFromBody`, else `retry.defaultWaitMs`, capped by `maxWaitMs`, with no jitter. The
   others wait a positive `Retry-After`, capped by `maxWaitMs`; without one, the n-th retry (n from 0) waits a full-jitter
-  backoff: a random share of `min(maxWaitMs, defaultWaitMs × 2^n)`.
+  backoff: a random share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. The
+  backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
 - Never retried: a write, a timeout (the caller has already waited the whole `timeoutMs`; a retry would only multiply
   it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`, the OAuth token endpoint
   and an RFC 7009 revoke. An answer that step 3 reclassifies is reported, not retried. The last answer is classified as

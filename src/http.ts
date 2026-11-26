@@ -176,7 +176,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   async function waitFor(response: Response, retryCount: number): Promise<number> {
     const header = retryAfterMs(response.headers, Date.now());
     if (header !== null && header > 0) return header;
-    if (response.status !== 429) return backoffMs(retry, retryCount);
+    if (response.status !== 429) return backoffMs(retry.maxWaitMs, retryCount);
     // The body is read only for a wait the entry says it names: a slow body must not hold up the retry.
     const fromBody = entry.http.retry?.waitFromBody === undefined ? undefined
       : bodyWaitOf(entry.http.retry, parseJson(await retryBody(response, timeoutMs)), Date.now());
@@ -210,7 +210,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
         ...(options.form ? { body: new URLSearchParams(options.form) } : {}),
         // A status is retried by the hook below; ky retries only a network failure, after the backoff, on the request's
         // own method (`limit` already says whether it is a read). A timeout has spent the time budget: never retried.
-        retry: { limit, methods: [method], statusCodes: [], delay: attempt => backoffMs(retry, attempt - 1),
+        retry: { limit, methods: [method], statusCodes: [], delay: attempt => backoffMs(retry.maxWaitMs, attempt - 1),
           shouldRetry: ({ error }) => isNetworkError(error) },
         hooks: {
           beforeRequest: [pace], beforeRetry: [pace],

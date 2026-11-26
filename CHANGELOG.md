@@ -15,8 +15,9 @@ Nothing here is released yet.
   addresses; an entry whose host is typed (`http.host: '*'`, first GitLab) uses it unless the app passes its own `fetch`.
 - `finishConnect`'s `fetch` is optional.
 - An entry with `retry` now also retries 408, 500, 502, 503 and 504 answers and network failures on reads, with
-  full-jitter backoff (Microsoft, Google, Attio, HubSpot, Notion, Aircall, Breakcold and the other entries that declare
-  `retry`). A timeout is not retried.
+  full-jitter backoff from one second: the n-th retry waits a random share of at most 1, 2, 4 seconds and so on, capped
+  by `maxWaitMs`, or a positive `Retry-After` (Microsoft, Google, Attio, HubSpot, Notion, Aircall, Breakcold and the
+  other entries that declare `retry`). A timeout is not retried.
 - A 5xx on a read is now retried before a module's own fallback runs: Firecrawl's 500 "Action(s) failed" is sent again
   up to three times before the page is read as it loads.
 
