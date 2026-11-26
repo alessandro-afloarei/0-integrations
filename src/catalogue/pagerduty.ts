@@ -17,7 +17,8 @@ export const pagerduty = defineProvider({
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://identity.pagerduty.com/oauth/authorize', tokenUrl: 'https://identity.pagerduty.com/oauth/token',
     authorizeParams: { response_type: 'code' } }, { kind: 'key', send: { header: 'authorization', value: 'Token token={token}' } }],
   scopes: { default: ['read'], requireGranted: true },
-  http: { baseUrl: 'https://api.pagerduty.com', headers: { accept: 'application/vnd.pagerduty+json;version=2' }, minIntervalMs: 63, retry: {} },
+  http: { baseUrl: 'https://api.pagerduty.com', headers: { accept: 'application/vnd.pagerduty+json;version=2' }, minIntervalMs: 63,
+    retry: { defaultWaitMs: 60_000, wait: { header: 'ratelimit-reset', unit: 's' } } },
   identify: { request: { path: '/abilities' } },
   webhook: { kind: 'hmac', header: 'x-pagerduty-signature', part: 'v1', deliveryId: { header: 'x-webhook-id' } },
   // A list pages up to 10,000 records; past them PagerDuty answers 400 and the walk fails: narrow it with a filter.
