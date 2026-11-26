@@ -286,11 +286,12 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     codes (`invalid_client`, …), else none; any other answer is classified as usual. No detail holds a secret field, a
     body value filled from one, or the Basic value sent.
     The request is sent once, never retried: it is no read of the provider's API.
-  - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
+  - `tokenSource(entry, { secret, values, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
     the token until it is passed back as refused or a call comes within 60 seconds of its expiry, or after it (that
     call requests a new one; nothing renews by itself), concurrent calls share one
     request, and a failed request is not kept. It applies no field's `default`, so an app passes it, and `client`, the
-    connection's `values` as `finishConnect` returned them.
+    connection's `values` as `finishConnect` returned them: required for an entry with a plain field, optional with
+    only saved keys, empty with neither.
   - `startConnect` returns the form. `finishConnect(entry, { secret, values?, fetch? })` reads the fields as a key
     entry does (defaults, choices), requests a token (the credential check), identifies with it, with the token
     answer's keys the entry names as `tokenAnswer.*`, and returns the secret fields as `secret`; the token is not
@@ -395,7 +396,7 @@ classified in this order, and the first step that decides wins:
    `Retry-After`, else `retry.wait` (a header's on a 429 only): never a rate limit's.
 3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is
    `Retry-After`, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`, else `retry.wait` (a header's on a
-   429 only).
+   429 only). The rule's `wait` is the error's alone: the retry never reads it.
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -416,11 +417,12 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 - An answer's **stated wait** is a positive `Retry-After`, else `retry.wait`: a wait declared as a header counts only
   on a 429, since a reset header rides on every answer; one declared as a body path counts on any answer that holds
   it, for the retry on every retried status. A declared wait that is not positive (an instant already past, a body
-  `0`) states no wait, as a past `Retry-After` date does. A rate-limit rule's own `wait` is read as it is. A retry
-  never comes before
-  it: an answer whose stated wait is longer than `maxWaitMs` is not retried, whatever its status, and its error carries
-  that wait. With `retry.onlyStated`, an answer that states no wait is not retried either, and neither is a network
-  failure (Jira: "Only retry if the API is idempotent and the response includes a Retry-After header").
+  `0`) states no wait, as a past `Retry-After` date does. The retry reads `Retry-After` and the entry's `retry.wait`;
+  a rate-limit rule's own `wait` is carried by the error and is not read by the retry. A retry never comes before the
+  stated wait: an answer whose stated wait is longer than `maxWaitMs` is not retried, whatever its status, and its
+  error carries that wait. With `retry.onlyStated`, an answer that states no wait is not retried either, and neither
+  is a network failure (Jira: "Only retry if the API is idempotent and the response includes a Retry-After header");
+  so `onlyStated` and `defaultWaitMs` do not go together, and the table refuses the pair.
 - Otherwise a 429 waits its stated wait, else `retry.defaultWaitMs`, with no jitter. The others wait a positive
   `Retry-After`; without one, the n-th retry (n from 0) waits a full-jitter backoff: a random share of
   `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. No wait is longer than `maxWaitMs`.
@@ -689,7 +691,7 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 | `catalogue` (new) | `defineProvider`, the entry types, the template and path helpers. |
 | `http` (internal) | `createClient(entry, options)` reads `auth.send`, `http`, `errors`, `rateLimit` from the entry, and `classify` interprets the declared rules. `./http` is no longer a subpath: `client` is the public client. |
 | `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2; an OAuth 2 start takes and returns the plain `values`, and its finish takes them back. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
-| `oauth`, `credentials` | Driven by the entry. `refreshGrant(entry, client, refreshToken, { values?, fetch? })`. `revokeGrant(entry, { accessToken?, refreshToken?, client?, values?, fetch? })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
+| `oauth`, `credentials` | Driven by the entry. `refreshGrant(entry, client, refreshToken, { values, fetch? })`. `revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke (`client` only for an RFC 7009 revoke); both take the connection's `values`, required for an entry with a plain field, optional with only saved keys, empty with neither: by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
 | `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, then `challengeAnswer(entry.webhook, request)` and `deliveryId(entry.webhook, request)`. |
 | `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |

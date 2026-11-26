@@ -29,7 +29,7 @@ without a `refresh_token` keeps the one sent. With `json: true` (Atlassian) the 
 revoke send their parameters as one JSON object (`content-type: application/json`); Basic client authentication stays a
 header.
 
-`revokeGrant(entry, { accessToken?, refreshToken?, client?, values?, fetch? })` is the one revoke: an RFC 7009 revoke of the
+`revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke: an RFC 7009 revoke of the
 first token the entry's `revoke.token` names (it needs `client`, else `oauth_client_required`), or the entry's
 `revoke.request` sent with the access token, to the `http.bases` entry its `base` names, if any. A 2xx,
 `invalid_grant`, a revoked code and the entry's `goneErrors` are done, and so is an RFC 7009 revoke's 404, an entry
