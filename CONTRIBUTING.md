@@ -16,7 +16,7 @@ server, database or provider account. Run `pnpm build` for ESM and declarations,
 ## A provider
 
 A provider is one file, its entry: `src/catalogue/<id>.ts`, exporting `defineProvider({ id: '<id>', … })` under the
-name `<id>`. Write it from the provider's own documentation and state only what differs from the defaults
+name `<id>`: the id is the export's name, lowercase letters and digits starting with a letter. Write it from the provider's own documentation and state only what differs from the defaults
 ([catalogue](docs/modules/catalogue.md)); the [design](docs/design/entries-and-engine.md) gives every field. Nothing
 else needs an edit: the `./catalogue/*` export publishes it, the build adds it to `catalogue.json`, and `pnpm check`
 tests it.

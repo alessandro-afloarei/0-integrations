@@ -2,7 +2,8 @@
 
 A provider is an entry: plain data that says how to sign in, how to learn the account, how the credential travels, how
 errors read, and which calls the provider offers. `0-integrations/catalogue/<id>` exports one entry under the name
-`<id>`. `0-integrations/catalogue.json` holds every entry, each with its `tier`. `0-integrations/catalogue` exports
+`<id>`, so an id is the export's name: lowercase letters and digits, starting with a letter.
+`0-integrations/catalogue.json` holds every entry, each with its `tier`. `0-integrations/catalogue` exports
 `defineProvider` and the entry types.
 
 ```ts

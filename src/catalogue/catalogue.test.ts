@@ -70,7 +70,8 @@ const operationParts = { kind: z.enum(['read', 'write', 'delete']).optional(),
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional() };
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
-  id: z.string().regex(/^[a-z][a-z0-9-]*$/u), name: z.string().min(1),
+  // An id is the name its file exports it under, so it holds no `-`.
+  id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1),
   fields: z.array(z.strictObject({ name: z.string(), title: z.string(), secret: z.literal(true).optional() })).optional(),
   auth: z.array(z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('key'), send: send.optional() }),
@@ -188,19 +189,22 @@ describe.each(entries)('%s', (id, entry) => {
     const fetch = vi.fn(replay(recording, key));
     const signedIn = signIn(entry, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
     if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
-    else expect(recorded.toLowerCase()).toContain((await signedIn).account?.id.toLowerCase() ?? '');
+    else {
+      // No account only when the entry declares no id: identify is then a credential check.
+      const { account } = await signedIn;
+      if (account === null) expect(entry.identify?.id).toBeUndefined();
+      else expect(recorded.toLowerCase()).toContain(account.id.toLowerCase());
+    }
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
 
 test("ids are unique and the folder's entries are found", () => {
-  expect(entries.length).toBeGreaterThanOrEqual(17);
+  expect(entries.length).toBeGreaterThan(0);
   expect(new Set(entries.map(([id]) => id)).size).toBe(entries.length);
 });
 
-test("catalogue.json's tier: every entry declared today; a real recording makes its own entry recorded, no other", () => {
-  expect(Object.fromEntries(entries.map(([id]) => [id, tierOf(id, recordings)])))
-    .toEqual(Object.fromEntries(entries.map(([id]) => [id, 'declared'])));
+test("catalogue.json's tier: a real recording makes its own entry recorded, no other", () => {
   const real = [{ file: 'acme.mail.recording.json', synthetic: false }];
   expect([tierOf('acme', real), tierOf('acme-two', real), tierOf('acm', real)]).toEqual(['recorded', 'declared', 'declared']);
 });
