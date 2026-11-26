@@ -11,15 +11,21 @@ import { defineProvider } from '0-integrations/catalogue';
 
 export const attio = defineProvider({
   id: 'attio', name: 'Attio', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
-  auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.attio.com/v2', minIntervalMs: 100, retry: { maxWaitMs: 10_000 } },
+  auth: [
+    { kind: 'oauth2', authorizeUrl: 'https://app.attio.com/authorize', tokenUrl: 'https://app.attio.com/oauth/token',
+      authorizeParams: { response_type: 'code' } },
+    { kind: 'key' },
+  ],
+  scopes: { default: [] },
+  revoke: { url: 'https://app.attio.com/oauth/revoke', token: ['access'] },
+  http: { baseUrl: 'https://api.attio.com/v2', retry: { maxWaitMs: 10_000 } },
   identify: { request: { path: '/self' }, id: 'workspace_id', name: 'workspace_name',
     rejectWhen: [{ path: 'active', equals: false, detail: 'token_inactive' }, { status: 400 }] },
 });
 ```
 
-That is a whole provider: the connect form, the credential check, the account, pacing, retry and raw calls. Only `id`,
-`name`, `auth` and `http.baseUrl` are required, and an entry states only what differs from the defaults.
+That is a whole provider: OAuth 2 and a key, the connect form, the credential check, the account, retry and raw calls.
+Only `id`, `name`, `auth` and `http.baseUrl` are required, and an entry states only what differs from the defaults.
 
 | Field | What it declares |
 |---|---|

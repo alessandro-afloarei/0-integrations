@@ -27,8 +27,8 @@ one takes five steps:
    the provider documents in one pass: its OAuth 2 grant first, when it reaches the same base and the same `identify`,
    then its key or token ([sign-in alternatives](docs/design/entries-and-engine.md#sign-in-alternatives)). Start from
    the entry of the same sign-ins: a key, `src/catalogue/serpapi.ts`; OAuth 2 and a key, `src/catalogue/linear.ts`; an
-   OAuth 2 grant alone, `src/catalogue/figma.ts` (drop the skeleton's secret field: the grant is the secret); a token
-   request, `src/catalogue/zoom.ts`. Write every header name
+   OAuth 2 grant alone, `src/catalogue/microsoft.ts` (drop the skeleton's secret field: the grant is the secret);
+   a token request, `src/catalogue/zoom.ts`. Write every header name
    in lowercase (`x-api-key`). Pick one or two `categories`, the main one first; declare the operations of that
    category's template, each with its own `docs` page (`search` beside `list` when the docs give a search endpoint);
    follow the result-shape rules. A fact you cannot cite from the provider's page stays out. In short:

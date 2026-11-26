@@ -10,6 +10,6 @@ page or two; a page edited exactly then is kept. Notion's index lags, a newly sh
 unshared one just disappears, so an app reads back from its last time minus a few minutes and walks every page now and then.
 `text(pageId)` reads a page as Notion-flavored Markdown (`markdown_version=v2`); `cut` says Notion left part out, past about
 20,000 blocks or where child content is not shared with the connection. A child page is a link, read on its own, and a
-meeting note's transcript stays out. The client paces calls 350 ms apart (Notion allows a connection 180 a minute, within a
-budget the workspace's connections share) and waits out one 429. A 401 is a bad token, a 403 a connection without the Read content
+meeting note's transcript stays out. The client waits out one 429 (Notion's limit differs by plan, within a
+budget the workspace's connections share). A 401 is a bad token, a 403 a connection without the Read content
 capability. `notion/fake` exports `fakeNotion({ workspace: token => … })`.

@@ -86,14 +86,21 @@ export const attio = defineProvider({
   id: 'attio',
   name: 'Attio',
   fields: [{ name: 'apiKey', title: 'API key', secret: true }],
-  auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.attio.com/v2', minIntervalMs: 100, retry: { maxWaitMs: 10_000 } },
+  auth: [
+    { kind: 'oauth2', authorizeUrl: 'https://app.attio.com/authorize', tokenUrl: 'https://app.attio.com/oauth/token',
+      authorizeParams: { response_type: 'code' } },
+    { kind: 'key' },
+  ],
+  scopes: { default: [] },
+  revoke: { url: 'https://app.attio.com/oauth/revoke', token: ['access'] },
+  http: { baseUrl: 'https://api.attio.com/v2', retry: { maxWaitMs: 10_000 } },
   identify: { request: { path: '/self' }, id: 'workspace_id', name: 'workspace_name',
     rejectWhen: [{ path: 'active', equals: false, detail: 'token_inactive' }, { status: 400 }] },
 });
 ```
 
-That is a whole provider: sign-in form, credential check, account identity, retry and raw calls.
+That is a whole provider: two sign-ins (OAuth 2, then a key), sign-in form, credential check, account identity, retry
+and raw calls.
 
 ### Two small languages
 
@@ -299,7 +306,9 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
 #### Sign-in alternatives
 
 `auth` is a list of sign-in alternatives, the first the default. Linear's is OAuth 2, whose token goes as Bearer, then
-its personal key, sent bare in `authorization`, to the same GraphQL endpoint and the same `viewer` query.
+its personal key, sent bare in `authorization`, to the same GraphQL endpoint and the same `viewer` query. Two sign-ins
+are one account reached two ways: a credential that acts as another user (a person's token beside an app's bot token)
+is not a second sign-in.
 
 1. `signInWith(entry, kind)` (from `0-integrations/catalogue`) returns a new entry whose `auth` is the one sign-in of
    that `kind`, else throws `TypeError('sign_in_unknown: <entry id> <kind>')`. Nothing else in the engine changes: every
@@ -599,8 +608,7 @@ other people must use OAuth, the key's `help` says the key is for the person's o
   limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
   limit answer. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
   the credential that signs the calls: a limit that varies by plan, or that the credential shares with its
-  organization, is left out. The entries written before this rule (Aircall, Apollo, Attio, Fathom, GitHub, Granola,
-  HubSpot, Lusha, Notion) still declare `minIntervalMs` and are being checked against it.
+  organization, is left out (Fathom keeps one: 60 calls a minute for each key, on every plan).
 - `errors.detail` only for a documented machine code, never a human message.
 - `paging`: one named shape per way the declared lists page. A list the engine cannot page is declared unpaged, its
   paging parameters ordinary parameters and its paging fields in its `result`.
@@ -660,9 +668,10 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 
 ```ts
 import { client } from '0-integrations/client';
+import { signInWith } from '0-integrations/catalogue';
 import { attio } from '0-integrations/catalogue/attio';
 
-const api = client(attio, { token: process.env.ATTIO_KEY });
+const api = client(signInWith(attio, 'key'), { token: process.env.ATTIO_KEY });
 const self = await api.json('/self');                          // raw, authenticated, retried
 // An entry that declares operations adds them, typed:
 // for await (const issue of api.issues.list({ teamId }, { onSkipped: ids => log(ids) })) { … }

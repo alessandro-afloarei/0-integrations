@@ -67,7 +67,7 @@ import { client } from '0-integrations/client';
 
 const api = client(notion, { token: apiKey });
 const page = await api.pages.markdown({ pageId }); // typed: { markdown: string; truncated: boolean }
-const me = await api.json('/users/me'); // raw: authenticated, paced, classified errors
+const me = await api.json('/users/me'); // raw: authenticated, classified errors
 ```
 
 Any entry gives the raw calls `json`, `request` and `paginate`; an entry that declares operations adds them, typed. For

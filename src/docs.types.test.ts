@@ -54,7 +54,7 @@ async function readmeConnectOAuth(oauthClient: OAuthClient, redirectUri: string,
 async function readmeCall(apiKey: string, pageId: string) {
   const api = client(notion, { token: apiKey });
   const page = await api.pages.markdown({ pageId }); // typed: { markdown: string; truncated: boolean }
-  const me = await api.json('/users/me'); // raw: authenticated, paced, classified errors
+  const me = await api.json('/users/me'); // raw: authenticated, classified errors
   expectTypeOf(page).branded.toEqualTypeOf<{ markdown: string; truncated: boolean }>();
   return me;
 }
@@ -63,8 +63,14 @@ async function readmeCall(apiKey: string, pageId: string) {
 function catalogueEntry() {
   const attio = defineProvider({
     id: 'attio', name: 'Attio', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
-    auth: [{ kind: 'key' }],
-    http: { baseUrl: 'https://api.attio.com/v2', minIntervalMs: 100, retry: { maxWaitMs: 10_000 } },
+    auth: [
+      { kind: 'oauth2', authorizeUrl: 'https://app.attio.com/authorize', tokenUrl: 'https://app.attio.com/oauth/token',
+        authorizeParams: { response_type: 'code' } },
+      { kind: 'key' },
+    ],
+    scopes: { default: [] },
+    revoke: { url: 'https://app.attio.com/oauth/revoke', token: ['access'] },
+    http: { baseUrl: 'https://api.attio.com/v2', retry: { maxWaitMs: 10_000 } },
     identify: { request: { path: '/self' }, id: 'workspace_id', name: 'workspace_name',
       rejectWhen: [{ path: 'active', equals: false, detail: 'token_inactive' }, { status: 400 }] },
   });
@@ -210,7 +216,7 @@ function oauthTokenSource(secret: { clientSecret: string }, values: { accountId:
 
 // docs/design/entries-and-engine.md › The engine (its operation line is a comment there).
 async function designClient() {
-  const api = client(attio, { token: process.env.ATTIO_KEY });
+  const api = client(signInWith(attio, 'key'), { token: process.env.ATTIO_KEY });
   const self = await api.json('/self');                          // raw, authenticated, retried
   return self;
 }
