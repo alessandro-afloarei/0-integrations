@@ -67,4 +67,28 @@ async function narrowed(clientId: string, apiKey: string) {
   return secret;
 }
 
-test('the narrowed types compile', () => { expect(narrowed).toBeTypeOf('function'); });
+/** OAuth 2 first, then a key whose Basic pair reads a plain email: the OAuth connect reads no form field. */
+const mailed = defineProvider({ id: 'mailed', name: 'Mailed', fields: [{ name: 'email', title: 'Email' }, { name: 'apiKey', title: 'API key', secret: true }],
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://mailed.test/authorize', tokenUrl: 'https://api.mailed.test/token' },
+    { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }],
+  scopes: { default: [] }, http: { baseUrl: 'https://api.mailed.test' }, identify: { request: { path: '/me' }, id: 'id' } });
+
+// Never called: the types are the test.
+async function stored(kind: 'oauth2' | 'key', clientId: string) {
+  // An app narrows again with the kind it kept: a union of the two narrowings, each with what its sign-in has.
+  const either = signInWith(linear, kind);
+  expectTypeOf(either.auth[0].kind).toEqualTypeOf<'oauth2' | 'key'>();
+  // @ts-expect-error scopes are OAuth 2's: read them only once the kind is known
+  void either.scopes.default;
+  // TypeScript narrows a union by a key, not by the nested `auth[0].kind`: `'scopes' in`, or the kind the app kept.
+  if ('scopes' in either) expectTypeOf(either.scopes.default).toEqualTypeOf<readonly ['read', 'issues:create']>();
+  if (kind === 'oauth2') expectTypeOf(signInWith(linear, kind)).toHaveProperty('scopes');
+  await startConnect(either, { clientId, redirectUri: 'https://app.test/cb', state: 's' });
+  void client(either, { token: 't' }).issues.get({ id: 'ENG-1' });
+  // An OAuth sign-in's values are only what `save` keeps; the key's are its plain fields.
+  expectTypeOf<Connected<typeof mailed>['values']>().not.toHaveProperty('email');
+  expectTypeOf<Connected<ReturnType<typeof signInWith<typeof mailed, 'oauth2'>>>['values']>().not.toHaveProperty('email');
+  expectTypeOf<Connected<ReturnType<typeof signInWith<typeof mailed, 'key'>>>['values']['email']>().toEqualTypeOf<string>();
+}
+
+test('the narrowed types compile', () => { expect([narrowed, stored].every(item => typeof item === 'function')).toBe(true); });

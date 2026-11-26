@@ -114,7 +114,14 @@ const issues = await api.issues.list({ teamId, first: 50 }); // one page: nodes 
 // A person's own key instead: a form, then one call.
 const key = signInWith(linear, 'key');
 const own = await finishConnect(key, { secret: { apiKey } }); // own.secret: { apiKey }, with `kind: 'key'` kept beside it
+
+// Every later call narrows again with the kind kept (`'oauth2' | 'key'`): a union of the two narrowings.
+const later = client(signInWith(linear, kept.kind), { token: kept.token });
 ```
+
+Narrowed with a stored kind, the entry is a union: TypeScript gives `scopes` only once it knows the kind (`'scopes' in
+entry`, or a branch on the kind kept). An OAuth 2 connection's `values` hold only what `save` keeps: its connect reads
+no form field.
 
 Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
 The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and

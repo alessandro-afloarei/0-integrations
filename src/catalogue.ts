@@ -118,9 +118,11 @@ export function defineProvider<const D extends Entry>(
   data: D & { operations?: Unreserved<D['operations']> & Declared<D['operations'], D['paging']> }): D { return data; }
 
 type Kinds<E extends Entry> = E['auth'][number]['kind'];
-/** An entry narrowed to one sign-in: `scopes` and `revoke` belong to OAuth 2 alone, so a key or token sign-in drops them. */
-export type SignIn<E extends Entry, K extends Kinds<E>> = Omit<E, 'auth' | ([K] extends ['key' | 'token'] ? 'scopes' | 'revoke' : never)>
-  & { auth: readonly [Extract<E['auth'][number], { kind: K }>] };
+/** An entry narrowed to one sign-in: `scopes` and `revoke` belong to OAuth 2 alone, so a key or token sign-in drops them.
+ * A union of kinds gives a union of narrowings, each with what its sign-in has. */
+export type SignIn<E extends Entry, K extends Kinds<E>> = K extends unknown
+  ? Omit<E, 'auth' | (K extends 'oauth2' ? never : 'scopes' | 'revoke')> & { auth: readonly [Extract<E['auth'][number], { kind: K }>] }
+  : never;
 
 /** The entry with `auth` narrowed to its sign-in of that kind; every engine function reads the first sign-in. */
 export function signInWith<const E extends Entry, K extends Kinds<E>>(entry: E, kind: K): SignIn<E, K> {

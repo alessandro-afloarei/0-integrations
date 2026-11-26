@@ -30,8 +30,9 @@ type Entered<E extends Entry> = Unnamed<E> extends true ? Values : Keyed<E, Excl
 export type Connected<E extends Entry = Entry> = E extends Entry ? {
   /** The grant, or a key or token entry's secret fields by name. */
   secret: ByKind<E, Grant, Secrets<E>>;
-  /** The plain fields entered, by name, and what `save` kept (present only when the provider answered it). */
-  values: Unnamed<E> extends true ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
+  /** A form sign-in's plain fields entered, by name (an OAuth 2 connect reads none), and what `save` kept (present only
+   * when the provider answered it). */
+  values: Unnamed<E> extends true ? Values : ByKind<E, unknown, Plain<E>> & { readonly [K in Saved<E>]?: unknown };
   account: E['identify'] extends { id: Value } ? Account : Account | null;
 } : never;
 type OAuthStart = { clientId: string; redirectUri: string; state: string };

@@ -101,7 +101,7 @@ async function connectKey(apiToken: string, apiId: string) {
 
 // docs/modules/connect.md › An entry with two sign-ins.
 async function connectTwoSignIns(oauthClient: OAuthClient, redirectUri: string, state: string, code: string,
-  report: (error: unknown) => void, teamId: string, apiKey: string) {
+  report: (error: unknown) => void, teamId: string, apiKey: string, kept: { kind: 'oauth2' | 'key'; token: string }) {
   // Send the browser to `url`; keep `state` and `codeVerifier` on the server.
   const { url, codeVerifier } = await startConnect(linear, { clientId: oauthClient.clientId, redirectUri, state });
 
@@ -116,9 +116,13 @@ async function connectTwoSignIns(oauthClient: OAuthClient, redirectUri: string, 
   // A person's own key instead: a form, then one call.
   const key = signInWith(linear, 'key');
   const own = await finishConnect(key, { secret: { apiKey } }); // own.secret: { apiKey }, with `kind: 'key'` kept beside it
+
+  // Every later call narrows again with the kind kept (`'oauth2' | 'key'`): a union of the two narrowings.
+  const later = client(signInWith(linear, kept.kind), { token: kept.token });
+  expectTypeOf(later.issues.get).toBeFunction();
   expectTypeOf(issues.data.issues.pageInfo.hasNextPage).toEqualTypeOf<boolean>();
   expectTypeOf(own.secret).toEqualTypeOf<Readonly<Record<'apiKey', string>>>();
-  return [url, account, issues];
+  return [url, account, issues, later];
 }
 
 // docs/modules/connect.md: "To ask for other scopes, derive an entry".
