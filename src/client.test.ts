@@ -278,6 +278,13 @@ test("an app's entry that would send a wrong request is refused when its client 
   ] as const) expect(() => client(entry(op), { token: 'k' })).toThrow(new TypeError(message));
 });
 
+test("an app's operation on an `offset` shape whose `records` is not the shape's `list` is refused when built", () => {
+  const entry = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'items' } },
+    operations: { 'things.list': { path: '/things', paging: 'offset', records: 'data', result: { data: ['string'], items: ['string'] } } } } as Entry;
+  expect(() => client(entry, { token: 'k' })).toThrow(new TypeError('records_unpaged: things.list'));
+});
+
 test("an app's operation on a `page` shape reads its records at the shape's `list`, or is refused when built", async () => {
   const entry = (list: string | undefined, op: object) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
     paging: { page: { kind: 'page', send: { query: 'page' }, ...(list === undefined ? {} : { list }) },

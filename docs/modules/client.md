@@ -112,8 +112,8 @@ read, as `TypeError('url_outside_origin')` when it would change the host and `Ty
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
-  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered page that repeats
-  the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
+  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered or offset page that
+  repeats the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
   base's origin (Shortcut's search answers a path and query string); one outside the base's origin, path or
   `pathPrefix` is `invalid_response` (`next_link_foreign`), and nothing is sent to it.
 
@@ -140,8 +140,8 @@ of them by `client` as `TypeError('operation_clash: <id>')` for an app's own ent
 A wrong entry throws when its client is built: besides a clashing id, a parameter with no place in the request, such
 as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging shape the entry does not declare
 (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
-to no list in the `result` (`records_unshaped: <id>`), and an operation on a `page` shape whose `records` is not the
-shape's `list` (`records_unpaged: <id>`). A wrong value throws when the call is made, before anything is sent.
+to no list in the `result` (`records_unshaped: <id>`), and an operation on a `page` or `offset` shape whose `records` is
+not the shape's `list` (`records_unpaged: <id>`). A wrong value throws when the call is made, before anything is sent.
 
 An app's own entry declares operations the same way:
 

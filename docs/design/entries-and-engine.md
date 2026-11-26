@@ -206,7 +206,7 @@ is a blocked address, and a name whose lookup answers none or any blocked addres
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
 `Operation.base`, placeholders in `identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs`
-reset unit, the paging kind `offset`, `Size`, and `Where.variables`.
+reset unit, `Size`, and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -397,7 +397,7 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 ```ts
 type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
-  | { kind: 'offset'; send: Where; size: Size }
+  | { kind: 'offset'; send: Where; list?: Path; more?: Path }
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
@@ -410,7 +410,6 @@ a shape's `send` writes: the walk sends it.
 
 - `cursor`: with `more`, stop when it is falsy; a truthy `more` with a blank cursor is `invalid_response`
   (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`.
-- `offset`: sends 0 first and stops on a page shorter than the size.
 - `page`: sends nothing on the first request, then 2, 3 and so on (with `zeroBased`, 1, 2 and so on), in `send`'s
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
@@ -418,6 +417,14 @@ a shape's `send` writes: the walk sends it.
   equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
   number would otherwise never end. An operation on a `page` shape names the shape's `list` as its `records` (both
   absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
+- `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
+  request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the
+  parser skips included, in `send`'s place (a string in the query, a number in the body). The count is one rule for
+  every provider, needs no page size, and never moves the walk backwards: an offset the answer names (`next_offset`,
+  `pagination.offset + limit`) is spelt differently by each provider and is never read. A short page does not end the
+  walk (the walker does not know the page size); the empty page after it does. The offset grows on every page, so a
+  provider that ignores it is `page_repeated`. An operation on an `offset` shape names the shape's `list` as its
+  `records`.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.

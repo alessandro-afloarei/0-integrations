@@ -224,6 +224,51 @@ test('page: a missing list path, or an answer that is not a list, is invalid_res
   }
 });
 
+test('offset: the first request sends no offset, then the records counted so far; an empty list ends the walk', async () => {
+  const walked = await pageWalk({ kind: 'offset', send: { query: 'offset' }, list: 'items' },
+    [{ items: [1, 2, 3] }, { items: [4, 5] }, { items: [] }], { query: { limit: '3' } });
+  expect(walked.urls).toEqual(['https://api.acme.test/items?limit=3', 'https://api.acme.test/items?limit=3&offset=3',
+    'https://api.acme.test/items?limit=3&offset=5']);
+  expect(walked.pages).toEqual([{ items: [1, 2, 3] }, { items: [4, 5] }, { items: [] }]);
+  expect(walked.error).toBeUndefined();
+});
+
+test('offset: a body offset is a number beside the caller\'s own fields; a list at the top level walks', async () => {
+  const records = Array.from({ length: 25 }, (_, at) => at);
+  const body = await pageWalk({ kind: 'offset', send: { body: 'offset' }, list: 'data' }, [{ data: records }, { data: [] }],
+    { method: 'POST', json: { limit: 25 } });
+  expect(body.bodies).toEqual(['{"limit":25}', '{"limit":25,"offset":25}']);
+  const top = await pageWalk({ kind: 'offset', send: { query: 'offset' } }, [[1, 2], [3], []]);
+  expect(top.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?offset=2', 'https://api.acme.test/items?offset=3']);
+});
+
+test('offset: a falsy more ends the walk before an empty page; a repeat is page_repeated; a missing list is missing_fields', async () => {
+  const more = await pageWalk({ kind: 'offset', send: { query: 'offset' }, list: 'data', more: 'more' },
+    [{ data: [1], more: true }, { data: [2], more: false }, { data: [] }]);
+  expect(more.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?offset=1']);
+  expect(more.error).toBeUndefined();
+  const repeated = await pageWalk({ kind: 'offset', send: { query: 'offset' }, list: 'data' }, [{ data: [1] }]);
+  expect(repeated.error).toMatchObject({ code: 'invalid_response', detail: 'page_repeated' });
+  expect(repeated.pages).toEqual([{ data: [1] }]);
+  const missing = await pageWalk({ kind: 'offset', send: { query: 'offset' }, list: 'result.items' }, [{ result: {} }]);
+  expect(missing.urls).toEqual(['https://api.acme.test/items']);
+  expect(missing.error).toMatchObject({ code: 'invalid_response', detail: 'missing_fields' });
+});
+
+test('offset: a record the parser skips still counts, so the next offset never shifts', async () => {
+  const things = defineProvider({ id: 'things', name: 'Things', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' },
+    paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'data' } },
+    operations: { 'things.list': { path: '/things', paging: 'offset', records: 'data', result: { data: [{ id: 'string' }] } } } });
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ data: [{ id: 'a' }, { id: 7 }, { id: 'c' }] }),
+    () => Response.json({ data: [] })) }]);
+  const seen: unknown[] = [];
+  const skipped: unknown[] = [];
+  for await (const thing of client(things, { token, fetch: fake.fetch }).things.list({}, { onSkipped: ids => skipped.push(ids) })) seen.push(thing);
+  expect(seen).toEqual([{ id: 'a' }, { id: 'c' }]);
+  expect(skipped).toHaveLength(1);
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.acme.test/things', 'https://api.acme.test/things?offset=3']);
+});
+
 test('ClickUp tasks.list, through client() and raw paginate: { tasks: [] } ends cleanly, {} fails loudly', async () => {
   const run = async (last: unknown, read: (api: Client<typeof clickup>) => AsyncGenerator) => {
     const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ tasks: [{ id: 't1' }] }), () => Response.json(last)) }]);

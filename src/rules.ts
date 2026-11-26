@@ -36,10 +36,10 @@ export function placed(op: Operation, name: string, param: Param): boolean {
       && (param.in !== 'body' || (op.method ?? 'GET') !== 'GET');
 }
 
-/** Whether a paged operation reads its records where its shape walks: on a `page` shape, at the shape's `list` (both
- * left out for a list at the answer's top level). Records read elsewhere would end the list after its first page. */
+/** Whether a paged operation reads its records where its shape walks: on a `page` or `offset` shape, at the shape's
+ * `list` (both left out for a list at the answer's top level), else the walk and the records read two lists. */
 export function pagedRecords(op: Operation, shape: Paging): boolean {
-  return shape.kind !== 'page' || op.records === shape.list;
+  return (shape.kind !== 'page' && shape.kind !== 'offset') || op.records === shape.list;
 }
 
 /** The first operation id a client cannot hold: one with an empty segment, a dotted prefix of another (`pages` beside
