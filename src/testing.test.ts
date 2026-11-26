@@ -203,6 +203,16 @@ describe('fakeProvider', () => {
     await expect(finishConnect(root, { secret: { apiKey: 'k' }, fetch })).resolves.toMatchObject({ account: { id: 'kit-account' } });
   });
 
+  test('`/items` and `/items/` are two paths, as the engine sends them', async () => {
+    const slashed = defineProvider({ id: 'slashed', name: 'Slashed', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.slashed.test' },
+      operations: { 'items.bare': { path: '/items' }, 'items.slashed': { path: '/items/' } } });
+    const { fetch } = fakeFetch(fakeProvider(slashed, { key: 'k', operations: { 'items.bare': () => ({ bare: true }) } }));
+    const api = client(slashed, { token: 'k', fetch });
+    await expect(api.items.bare()).resolves.toEqual({ bare: true });
+    await expect(api.items.slashed()).rejects.toThrow('fakeFetch: no route for GET https://api.slashed.test/items/');
+  });
+
   test('an id template that reads several answer paths is filled at each of them; a list of paths at its first', async () => {
     const templated = defineProvider({ id: 'templated', name: 'Templated', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
       auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.templated.test' },

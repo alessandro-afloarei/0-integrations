@@ -85,8 +85,8 @@ export function fakeFetch(routes: readonly Route[]): { fetch: typeof fetch; call
 export type FakeCall = { path: Readonly<Record<string, string>>; query: Readonly<Record<string, string>>; body: unknown };
 type Answer = (call: FakeCall) => unknown;
 
-/** A URL as a route compares it: no query, and no trailing `/` (a bare origin's included). */
-const target = (url: URL) => `${url.origin}${url.pathname.replace(/\/$/u, '')}`;
+/** A URL as a route compares it: no query, and a bare origin without its `/`. */
+const target = (url: URL) => `${url.origin}${url.pathname === '/' ? '' : url.pathname}`;
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&');
 /** A path's literal part as a pattern: percent-encoded as a request's URL is, then escaped. Read after a `_`, so `URL`
  * never takes a part for a dot segment and drops it (`.` in `/files/{name}.{ext}`). */
@@ -129,8 +129,8 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
   /** A route for a path template under a base, each `{name}` one segment, and its specificity; an API route answers
    * 401 to a request without the credential. */
   const route = (method: string, at: string, path: string, answer: (call: FakeCall, sent: Request) => unknown, open = false): [number[], Route] => {
-    // Compared as `target` reads a URL: no trailing `/`, so `/` on an origin is the origin.
-    const template = (path.split('?')[0] ?? '').replace(/\/$/u, '');
+    // Compared as `target` reads a URL: `/` on a bare origin is the origin; any other `/` is the path's own.
+    const template = (path.split('?')[0] ?? '').replace(/^\/$/u, at === new URL(at).origin ? '' : '/');
     const pattern = new RegExp(`^${escaped(at)}${template.split(/\{[^{}]+\}/u).map(literal).join('([^/]+)')}$`, 'u');
     return [specificity(template), { method, url: url => pattern.test(target(url)), async respond(request) {
       const url = new URL(request.url);
