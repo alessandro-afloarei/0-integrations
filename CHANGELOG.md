@@ -25,6 +25,11 @@ Nothing here is released yet.
 - `client()`'s `baseUrl` on an entry whose host is typed must keep the filled base's origin, else `base_host_refused`
   before anything is sent; it was used as given, so a grant from the host typed could go to another origin.
 - New entry: Azure DevOps (code; Microsoft Entra OAuth 2). Every entry is `declared`.
+- New entries: 23 CRM and sales providers (affinity, agilecrm, capsule, clay, close, cognism, folk, freshsales, hunter,
+  insightly, instantly, leadfeeder (formerly Dealfront), leadiq, lemlist, nutshell, outreach, peopledatalabs, replyio,
+  rocketreach, salesflare, salesloft, teamleader, zoominfo), each with the operations of its category's template the
+  engine can say, Clay with none (a search or an enrichment there takes more than one request); what waits is in the
+  waiting list. Every entry is `declared`.
 - An OAuth 2 token answer that states no `token_type` is read as Bearer; it was `invalid_response`. One that states
   another type is still refused unless the entry lists it in `tokenTypes`. First used by ClickUp.
 - New entries: Buildkite (code), ClickUp (tasks; OAuth 2 and a key), Linear (tasks; OAuth 2 and a key), Rollbar
