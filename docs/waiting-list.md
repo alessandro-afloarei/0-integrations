@@ -18,7 +18,7 @@ A mechanism is built once three providers wait for it, with one of them as its f
 | `Link` paging that ends on `results="false"` | Sentry |
 | `Link` paging under another `rel` (`next-page`) | Guru |
 | A continuation token in an answer's header | Azure DevOps |
-| A 429's wait in a header of seconds left (`RateLimit-Reset`) | Buildkite |
+| A 429's wait in a header of seconds left (`RateLimit-User-Reset`, `RateLimit-Reset`) | Buildkite |
 | A form-encoded body on a declared operation | Chatwork, Twilio |
 | An operation parameter sent as a header | PagerDuty |
 | Regional hosts on more than one domain | Smartsheet |
