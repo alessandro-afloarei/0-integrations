@@ -1,6 +1,6 @@
 import type { Call, Entry, Identify, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
-import { createClient, type HttpClient, type ProviderResponse, type RequestOptions } from './http.js';
+import { callRequest, createClient, type HttpClient, type ProviderResponse } from './http.js';
 import { responseJson } from './http-response.js';
 import { fill, holds, placeholders, readPath } from './rules.js';
 
@@ -27,15 +27,6 @@ async function valueOf(value: Value, read: Read, where: string, id?: string): Pr
     if (found !== undefined && found !== null) return found;
   }
   return undefined;
-}
-
-/** The request a declared call makes, with what the caller adds: GraphQL is a POST of the query and its variables to
- * the base. The one rule for every declared call (identify, a request revoke, an operation, a paged operation). */
-export function callRequest(call: Call, extra: RequestOptions & { variables?: Values } = {}): [path: string, options: RequestOptions] {
-  const { variables = {}, ...options } = extra;
-  return call.graphql === undefined
-    ? [call.path ?? '', { method: call.method ?? 'GET', ...(call.query ? { query: call.query } : {}), ...options }]
-    : ['', { method: 'POST', json: { query: call.graphql, variables }, ...options }];
 }
 
 /** Sends a declared call. */

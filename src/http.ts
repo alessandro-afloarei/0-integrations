@@ -1,6 +1,6 @@
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
-import type { Entry, Method, Values } from './catalogue.js';
+import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
@@ -15,6 +15,15 @@ export type RequestOptions = {
   signal?: AbortSignal;
 };
 export type ProviderResponse = { status: number; headers: Headers; data: unknown };
+
+/** The request a declared call makes, with what the caller adds: GraphQL is a POST of the query and its variables to
+ * the base. The one rule for every declared call (identify, a request revoke, an operation, a paged operation). */
+export function callRequest(call: Call, extra: RequestOptions & { variables?: Values } = {}): [path: string, options: RequestOptions] {
+  const { variables = {}, ...options } = extra;
+  return call.graphql === undefined
+    ? [call.path ?? '', { method: call.method ?? 'GET', ...(call.query ? { query: call.query } : {}), ...options }]
+    : ['', { method: 'POST', json: { query: call.graphql, variables }, ...options }];
+}
 export type HttpClient = {
   /** The base every path is read after: the entry's, or the one the client was built with. */
   readonly baseUrl: string;
@@ -97,8 +106,14 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   let cachedToken: Promise<string> | undefined;
   const renewals = new Map<string, Promise<string>>();
 
+  /** A blank token is never sent: it would be an empty credential. */
+  const nonBlank = (value: string) => {
+    if (value.trim() === '') throw new TypeError('token_missing');
+    return value;
+  };
+
   function token(): Promise<string> {
-    cachedToken ??= input.token().catch((error: unknown) => { cachedToken = undefined; throw error; });
+    cachedToken ??= input.token().then(nonBlank).catch((error: unknown) => { cachedToken = undefined; throw error; });
     return cachedToken;
   }
 
@@ -106,7 +121,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   function renew(rejected: string): Promise<string> {
     let renewal = renewals.get(rejected);
     if (!renewal) {
-      renewal = input.token(rejected).catch((error: unknown) => { renewals.delete(rejected); cachedToken = undefined; throw error; });
+      renewal = input.token(rejected).then(nonBlank).catch((error: unknown) => { renewals.delete(rejected); cachedToken = undefined; throw error; });
       renewals.set(rejected, renewal);
       cachedToken = renewal;
     }

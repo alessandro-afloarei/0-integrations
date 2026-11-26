@@ -8,7 +8,7 @@ import { github } from './catalogue/github.js';
 import { granola } from './catalogue/granola.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { notion } from './catalogue/notion.js';
-import { createClient } from './http.js';
+import { callRequest, createClient } from './http.js';
 import { fakeFetch, sequence } from './testing.js';
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-24T12:00:00Z')); });
@@ -442,4 +442,26 @@ test("a 429 is retried after the default wait without reading its body when the 
   await vi.advanceTimersByTimeAsync(1000);
   expect(fake.calls).toHaveLength(2);
   expect(await result).toEqual({ ok: true });
+});
+
+test('callRequest: a path call keeps its method and query and takes what the caller adds', () => {
+  const signal = AbortSignal.timeout(1000);
+  expect(callRequest({ method: 'DELETE', path: '/x', query: { a: '1' } }, { idempotent: true, signal, variables: { v: 1 } }))
+    .toEqual(['/x', { method: 'DELETE', query: { a: '1' }, idempotent: true, signal }]);
+  expect(callRequest({})).toEqual(['', { method: 'GET' }]);
+});
+
+test('callRequest: GraphQL is a POST of the query and its variables, none by default, to the base', () => {
+  expect(callRequest({ graphql: 'query { me }' }, { variables: { first: 2 }, idempotent: true }))
+    .toEqual(['', { method: 'POST', json: { query: 'query { me }', variables: { first: 2 } }, idempotent: true }]);
+  expect(callRequest({ graphql: 'query { me }' })).toEqual(['', { method: 'POST', json: { query: 'query { me }', variables: {} } }]);
+});
+
+test('a token function that answers a blank token, at first or on renewal, sends nothing and is token_missing', async () => {
+  for (const tokens of [[' '], ['t', '']]) {
+    const fake = script(hubspot, () => Response.json({}, { status: 401 }), ok);
+    for (const value of tokens) fake.token.mockResolvedValueOnce(value);
+    await expect(fake.client.json('/x')).rejects.toThrow(new TypeError('token_missing'));
+    expect(fake.calls).toHaveLength(tokens.length - 1);
+  }
 });

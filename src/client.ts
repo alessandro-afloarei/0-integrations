@@ -1,7 +1,6 @@
-import { callRequest } from './account.js';
 import type { Entry, Operation, Param, Shape, TypeOf } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
-import { createClient, type HttpOptions, type ProviderResponse, type RequestOptions } from './http.js';
+import { callRequest, createClient, type HttpOptions, type ProviderResponse, type RequestOptions } from './http.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
 import { fill, placeholders, readPath, shapeAt } from './rules.js';

@@ -10,6 +10,8 @@ Every line below breaks 0.12 unless it says otherwise.
 - New: `0-integrations/client`: `client(entry, options)` takes the options `createClient` took, with `token` also a
   plain string and `fetch` the global one by default; `.json`, `.request`, `.paginate` and the entry's operations.
 - `0-integrations/http` is gone: `client(entry, …).json` and `.request` replace `createClient`.
+- A token function that answers a blank token, at first or on renewal, is refused with `TypeError('token_missing')`
+  before anything is sent, in every module and client (it sent an empty credential).
 - New: the notion, fireflies and aircall entries declare their first operations: `pages.markdown`, `user` and
   `calls.transcript`.
 - notion, fireflies, aircall: `notionClient`, `firefliesClient` and `aircallClient` throw `TypeError('token_missing')`
