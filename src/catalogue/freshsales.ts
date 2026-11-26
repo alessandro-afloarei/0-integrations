@@ -10,15 +10,15 @@ const contact = { id: 'number', 'first_name?': 'string', 'last_name?': 'string',
 const viewId = { view_id: { in: 'path', type: 'number', required: true, description: 'A view id from the matching /filters list.' } } as const;
 const id = { id: { in: 'path', type: 'number', required: true } } as const;
 const written = { type: { 'first_name?': 'string', 'last_name?': 'string', 'email?': 'string', 'mobile_number?': 'string',
-  'twitter?': 'string', 'job_title?': 'string', 'owner_id?': 'number' },
-  description: 'The contact; creating one needs an email, a mobile_number or a twitter.' } as const;
+  'twitter?': 'string', 'external_id?': 'string', 'job_title?': 'string', 'owner_id?': 'number' },
+  description: 'The contact. "Either Email/Mobile/Twitter ID is required to create a contact": email, mobile_number or twitter (the table also marks external_id); none is required alone.' } as const;
 const meta = { 'meta?': { 'total_pages?': 'number', 'total?': 'number' } } as const;
 
 export const freshsales = defineProvider({
   id: 'freshsales', name: 'Freshsales', docs: `${ref}#authentication`,
   categories: ['crm'],
   fields: [{ name: 'host', title: 'Bundle alias host',
-    help: 'The host of the bundle alias shown below your API key under Profile Settings, then API Settings (widgetz.myfreshworks.com).' },
+    help: 'The host of the bundle alias shown below your API key under Profile Settings, then API Settings: widgetz.myfreshworks.com, or widgetz.freshworks.com for an account migrated from Freshsales Classic.' },
   { name: 'apiKey', title: 'API key', secret: true, help: 'Your own API key, under Profile Settings, then API Settings.' }],
   auth: [{ kind: 'key', send: { header: 'authorization', value: 'Token token={token}' } }],
   http: { baseUrl: 'https://{host}/crm/sales/api', host: '*', headers: { 'content-type': 'application/json' }, retry: {} },
