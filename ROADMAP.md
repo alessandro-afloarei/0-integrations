@@ -9,9 +9,9 @@ afternoon, not a week. For each service it covers, the library provides:
 - authenticated reads and writes;
 - incoming webhooks.
 
-**Today** the library is the core (`vault`, `credentials`, `oauth`, `connect`, `client`, `webhooks`, `paginate`,
-`testing`), the declared catalogue (one entry per provider) and the provider modules, each with a fake. The adapters
-and the connect screen are planned; the rest of this page describes where it is going.
+**Today** (0.13.0) the library is the core (`catalogue`, `connect`, `client`, `oauth`, `credentials`, `vault`,
+`webhooks`, `paginate`, `testing`), 17 catalogue entries that one engine runs, and a module with a fake for each of
+those providers. The adapters and the connect screen are planned; the rest of this page describes where it is going.
 
 ## Goals
 
@@ -40,20 +40,20 @@ and the connect screen are planned; the rest of this page describes where it is 
 adapters (separate packages)   postgres · redis · next (route handlers) · react (connect screen)
 deep modules                   <provider>  typed reads/writes, parsed webhooks, fake, recordings
 catalogue                      catalogue/<provider>  one declared entry each, tiered
-core                           connect · oauth · credentials · vault · http · paginate · webhooks · sync · errors · testing
+core                           connect · client · oauth · credentials · vault · paginate · webhooks · sync · errors · testing
 ```
 
 Each layer will use only the ones below it, and each piece will be usable alone: the vault without the catalogue, the
 catalogue without the adapters.
 
-- **Core.** Will run any entry: connect, OAuth, credentials, the vault, HTTP with retries, paging, webhook schemes, a
-  sync helper the app runs in its own job runner, and an SSRF guard for templated URLs. Today there is no SSRF guard:
-  the app passes its own guarded `fetch`.
+- **Core.** Runs any entry: connect, OAuth, credentials, the vault, HTTP with retries, paging, webhook checks and
+  declared operations. A sync helper the app runs in its own job runner, and an SSRF guard for templated URLs, are
+  planned. Today there is no SSRF guard: the app passes its own guarded `fetch`.
 - **Declared catalogue.** Holds one typed entry per provider, written from the provider's own docs and checked by one
-  table test. An entry is pure data: auth alternatives, form fields, identity (which also checks the credential),
-  revoke, HTTP and retry rules, webhook scheme and scopes; paging and named operations follow, with a client whose
-  types are inferred from the entry.
-- **Deep modules.** Will be hand-written clients for the providers that earn them: typed reads and writes, zod-checked
+  table test. An entry is pure data: sign-in, form fields, identity (which also checks the credential), revoke, HTTP,
+  retry and error rules, paging shapes, webhook scheme, scopes and named operations, with a client whose types are
+  inferred from the entry.
+- **Deep modules.** Hand-written clients for the providers that earn them: typed reads and writes, zod-checked
   answers, parsed webhooks, a fake and recordings.
 - **Adapters.** Will be separate packages: a Postgres store, a Redis lock and nonce store, route handlers for OAuth and
   webhooks, and an unstyled React connect screen drawn from the catalogue.
@@ -83,7 +83,7 @@ Each phase ends with a release. Breaking changes are listed in the changelog wit
 | # | Phase | Done when |
 |---|---|---|
 | 0 | Open-source readiness | Apache 2.0 license, contributor docs, security policy and issue templates; the repository public |
-| 1 | Entry format and generic engine | The entry format, its lints, `catalogue.json`, tiers and declared operations with an inferred typed client; today's providers moved onto entries; new auth modes, templated URLs, generic identify and revoke, 5xx retry and more webhook schemes |
+| 1 | Entry format and generic engine | Stage A, done in 0.13.0: the entry format, its table test, `catalogue.json`, tiers, generic identify and revoke, the paging walker, declared operations with an inferred typed client, and the 17 providers moved onto entries. Stage B: keys in the query string, field choices, templated base URLs and a guarded `fetch`; the remaining OAuth 2 variations; client-credentials and session logins; more webhook schemes; 5xx and network retries on reads; a fake derived from an entry and a scaffolder |
 | 2 | Breadth | 300 or more entries, added in category batches with their main operations, 100 or more at `recorded` or above |
 | 3 | Adapters | The Postgres, Redis and route-handler packages |
 | 4 | Connect screen | The React connect screen, drawn from `catalogue.json` |

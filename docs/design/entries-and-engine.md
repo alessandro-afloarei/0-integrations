@@ -175,8 +175,8 @@ type Send = { header: string; value?: Template } | { basic: readonly [Template, 
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today.
-- A sign-in the provider hosts on its own page (Unipile's) is not a kind: the entry is a `key` entry for the app's own
-  key, and the provider's module offers the hosted link and the account lookup as calls.
+- A sign-in the provider hosts on its own page is not a kind: the entry is a `key` entry for the app's own key, and the
+  provider's module offers the hosted link and the account lookup as calls.
 
 ### `identify` and `save`
 
@@ -316,7 +316,7 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 ### What data cannot say
 
 There are no hooks, and `defineProvider` takes one argument. What an entry cannot say is a call of the provider's
-module: Unipile's hosted sign-in link and its two-request account lookup are its module's `authLink` and `account`.
+module: a hosted sign-in link and a two-request account lookup are calls of that provider's module.
 A hook is added only when a provider's sign-in or identity can be neither data nor a module call.
 
 ## The engine
