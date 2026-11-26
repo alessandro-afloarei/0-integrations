@@ -6,7 +6,8 @@ import { defineProvider } from '../catalogue.js';
 export const stripe = defineProvider({
   id: 'stripe', name: 'Stripe', docs: 'https://docs.stripe.com/api/authentication',
   categories: ['finance'],
-  fields: [{ name: 'secretKey', title: 'Secret key', secret: true }],
+  fields: [{ name: 'secretKey', title: 'Secret key', secret: true,
+    help: 'A restricted key (rk_…) with Read on Balance, which sign-in reads, and what your calls need: Stripe recommends it over a secret key (sk_…).' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.stripe.com/v1' },
   errors: { detail: 'error.code' },
