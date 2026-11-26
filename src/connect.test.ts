@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { Account } from './account.js';
-import { defineProvider, type Entry, type Field } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Field } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
-import { attio } from './catalogue/attio.js';
+import { attio as attioEntry } from './catalogue/attio.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
@@ -42,6 +42,7 @@ const pkceSlack = defineProvider({ ...slack, auth: [{ kind: 'oauth2', authorizeU
 const reusingSlack = defineProvider({ ...slack, auth: [{ ...slack.auth[0], reusesGrant: true }] });
 /** Aircall as an entry whose fields are not known in the types: the runtime checks its input. */
 const looseAircall: Entry = aircall;
+const attio = signInWith(attioEntry, 'key');
 /** A token answer whose team has no id: identify refuses it. */
 const noTeam = { ...data, team: { id: '', name: 'Acme' } };
 afterEach(() => vi.useRealTimers());
