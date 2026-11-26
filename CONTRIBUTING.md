@@ -27,8 +27,8 @@ one takes five steps:
    the provider documents in one pass: its OAuth 2 grant first, when it reaches the same base and the same `identify`,
    then its key or token ([sign-in alternatives](docs/design/entries-and-engine.md#sign-in-alternatives)). Start from
    the entry of the same sign-ins: a key, `src/catalogue/serpapi.ts`; OAuth 2 and a key, `src/catalogue/linear.ts`; an
-   OAuth 2 grant alone, `src/catalogue/figma.ts` (drop the skeleton's secret field: the grant is the secret); a token
-   request, `src/catalogue/zoom.ts`. Write every header name
+   OAuth 2 grant alone, `src/catalogue/microsoft.ts` (drop the skeleton's secret field: the grant is the secret);
+   a token request, `src/catalogue/zoom.ts`. Write every header name
    in lowercase (`x-api-key`). Pick one or two `categories`, the main one first; declare the operations of that
    category's template, each with its own `docs` page (`search` beside `list` when the docs give a search endpoint);
    follow the result-shape rules. A fact you cannot cite from the provider's page stays out. In short:
@@ -80,7 +80,8 @@ entry:
 - names in each template only what that place allows;
 - lists one or more sign-ins, at most one of each kind, never a key beside a token, OAuth 2 first when there is one;
 - is one the engine can run, each sign-in on its own: a key or token entry has exactly one secret field, a key entry
-  reads no token answer, and neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
+  reads no token answer (except in an `id` or `name` list ending on a path of identify's requested answer, beside an
+  OAuth 2 or token sign-in), and neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
   the token itself from `tokenAnswer.*`; a value read from identify's answer has a request to read it from; no `save`
   key is a field's name; each placeholder in the base names a plain field or a `save` key, either in its host, with
   `http.host` declared (`'*'` only when the whole host is one placeholder), or as one segment of its path; `http.bases`

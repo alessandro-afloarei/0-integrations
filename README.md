@@ -29,11 +29,13 @@ or an OAuth grant) and plain values to store. Sign-in is `startConnect` and `fin
 ## Connect a key provider
 
 ```ts
+import { signInWith } from '0-integrations/catalogue';
 import { attio } from '0-integrations/catalogue/attio';
 import { finishConnect, startConnect } from '0-integrations/connect';
 
-const { fields } = await startConnect(attio); // the form to draw: one secret field, "API key"
-const { secret, account } = await finishConnect(attio, { secret: { apiKey }, fetch });
+const key = signInWith(attio, 'key'); // Attio lists OAuth 2 first; this is its API key
+const { fields } = await startConnect(key); // the form to draw: one secret field, "API key"
+const { secret, account } = await finishConnect(key, { secret: { apiKey }, fetch });
 // secret: { apiKey }, to seal; account: { id, name } of the workspace. A bad key throws ProviderHttpError `rejected`.
 ```
 
@@ -65,7 +67,7 @@ import { client } from '0-integrations/client';
 
 const api = client(notion, { token: apiKey });
 const page = await api.pages.markdown({ pageId }); // typed: { markdown: string; truncated: boolean }
-const me = await api.json('/users/me'); // raw: authenticated, paced, classified errors
+const me = await api.json('/users/me'); // raw: authenticated, classified errors
 ```
 
 Any entry gives the raw calls `json`, `request` and `paginate`; an entry that declares operations adds them, typed. For

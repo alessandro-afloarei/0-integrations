@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { defineProvider, type Entry, type Retry } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Retry } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { discord } from './catalogue/discord.js';
 import { exa } from './catalogue/exa.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
-import { gitlab } from './catalogue/gitlab.js';
-import { granola } from './catalogue/granola.js';
+import { gitlab as gitlabEntry } from './catalogue/gitlab.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
@@ -23,6 +22,9 @@ import { exchangeCode, requestToken, revokeGrant } from './oauth.js';
 import { fill, hostPart } from './rules.js';
 import { walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
+
+/** GitLab's personal access token sign-in: these tests send `private-token`. */
+const gitlab = signInWith(gitlabEntry, 'key');
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-24T12:00:00Z')); });
 afterEach(() => vi.useRealTimers());
@@ -153,8 +155,10 @@ test("times out at the provider's timeoutMs", async () => {
 });
 
 test('paces requests to minIntervalMs', async () => {
+  const paced = defineProvider({ id: 'paced', name: 'Paced', auth: [{ kind: 'key' }],
+    http: { baseUrl: 'https://api.paced.test/v1', minIntervalMs: 200 } });
   const fake = fakeFetch([{ url: /https:/, respond: ok }]);
-  const client = createClient(granola, { token: () => Promise.resolve('t'), fetch: fake.fetch });
+  const client = createClient(paced, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   const first = client.json('/notes');
   const second = client.json('/notes');
   await vi.advanceTimersByTimeAsync(0);

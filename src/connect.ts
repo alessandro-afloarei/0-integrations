@@ -41,8 +41,10 @@ type ValuesIn<E extends Entry> = E extends Entry ? Unnamed<E> extends true ? { v
 type OAuthStart<E extends Entry = Entry> = { clientId: string; redirectUri: string; state: string } & ValuesIn<E>;
 type OAuthFinish<E extends Entry = Entry> = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string | undefined;
   fetch?: typeof fetch; onRevokeFailed: (error: unknown) => void } & ValuesIn<E>;
-/** A form entry's finish (key or token): its secret fields by name, and its plain fields. */
-type FormFinish<E extends Entry = Entry> = { secret: Secrets<E>; fetch?: typeof fetch } & ValuesIn<E>;
+/** A form entry's finish (key or token): its secret fields by name, and its plain fields; one per form member of a union,
+ * none for an OAuth 2 member. */
+type FormFinish<E extends Entry = Entry> = E extends Entry ? E['auth'][0]['kind'] extends 'oauth2' ? never
+  : { secret: Secrets<E>; fetch?: typeof fetch } & ValuesIn<E> : never;
 
 /** A declared field's value: own values only, a getter's included (an inherited `constructor` is none). Left out or blank
  * takes the default; another type is refused. */

@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { Account } from './account.js';
-import { defineProvider, type Entry, type Field } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Field, type SignIn } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
-import { attio } from './catalogue/attio.js';
+import { attio as attioEntry } from './catalogue/attio.js';
+import { github } from './catalogue/github.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
@@ -20,7 +21,7 @@ import * as guard from './guard.js';
 import { tokenSource } from './oauth.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
-import { fakeFetch, type Route } from './testing.js';
+import { fakeFetch, fakeProvider, type Route } from './testing.js';
 
 const callback = 'https://app.test/api/integrations/slack/callback';
 const start = { clientId: 'client', redirectUri: callback, state: 'state' };
@@ -42,6 +43,7 @@ const pkceSlack = defineProvider({ ...slack, auth: [{ kind: 'oauth2', authorizeU
 const reusingSlack = defineProvider({ ...slack, auth: [{ ...slack.auth[0], reusesGrant: true }] });
 /** Aircall as an entry whose fields are not known in the types: the runtime checks its input. */
 const looseAircall: Entry = aircall;
+const attio = signInWith(attioEntry, 'key');
 /** A token answer whose team has no id: identify refuses it. */
 const noTeam = { ...data, team: { id: '', name: 'Acme' } };
 afterEach(() => vi.useRealTimers());
@@ -116,6 +118,19 @@ describe('connect', () => {
     expect(reads).toBe(1);
     expect(result.secret).toEqual({ apiKey: 'k1' });
     expect(http.calls.map(call => call.headers.authorization)).toEqual(['Bearer k1']);
+  });
+
+  it("reads OAuth 2's id from the token answer and the key's from identify's answer, the absent path skipped", async () => {
+    const both = defineProvider({ id: 'k', name: 'K', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token', pkce: false }, { kind: 'key' }],
+      scopes: { default: [] }, http: { baseUrl: 'https://api.k.test' }, identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } });
+    const key = fakeFetch(fakeProvider(signInWith(both, 'key'), { key: 'k', account: { portalId: 7 } }));
+    expect((await finishConnect(signInWith(both, 'key'), { secret: { apiKey: 'k' }, fetch: key.fetch })).account).toEqual({ id: '7', name: '7' });
+    expect(key.calls.map(call => call.url)).toEqual(['https://api.k.test/me']);
+    const oauth = fakeFetch([{ method: 'POST', url: 'https://k.test/token', respond: () => Response.json({ access_token: 'a', token_type: 'bearer', hub_id: 9 }) }]);
+    expect((await finishConnect(both, { client, code: 'c', redirectUri: callback, fetch: oauth.fetch, onRevokeFailed: vi.fn() })).account)
+      .toEqual({ id: '9', name: '9' });
+    expect(oauth.calls.map(call => call.url)).toEqual(['https://k.test/token']);
   });
 
   it("keeps a key entry's plain values and builds its credential from them", async () => {
@@ -368,6 +383,25 @@ describe('connect types', () => {
     expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<Unnamed>>[1]>();
     type WideAircall = Omit<typeof aircall, 'id'> & { id: string };
     expectTypeOf({ secret: { apiToken: 't' }, fetch }).not.toExtend<Parameters<typeof finishConnect<WideAircall>>[1]>();
+    // A union of key entries takes either member's own secret, not both.
+    type EitherFinish = Parameters<typeof finishConnect<typeof attio | SignIn<typeof hubspot, 'key'>>>[1];
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<EitherFinish>();
+    expectTypeOf({ secret: { accessToken: 't' }, fetch }).toExtend<EitherFinish>();
+  });
+
+  it("takes a form input's secret from its key members alone: an OAuth 2 member adds no form", () => {
+    const fetch = attioFetch;
+    // A key entry, and an entry narrowed to its key: their own secret.
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<typeof attio>>[1]>();
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Parameters<typeof finishConnect<SignIn<typeof github, 'key'>>>[1]>();
+    // Any record for the widened `Entry`.
+    expectTypeOf({ secret: {}, fetch }).toExtend<Parameters<typeof finishConnect<Entry>>[1]>();
+    // A key entry beside an OAuth 2 one: the key's own secret, or the OAuth input, never an empty secret.
+    type Mixed = Parameters<typeof finishConnect<SignIn<typeof github, 'key'> | typeof slack>>[1];
+    expectTypeOf({ secret: { apiKey: 'k' }, fetch }).toExtend<Mixed>();
+    expectTypeOf(oauth(fetch, 'code')).toExtend<Mixed>();
+    // @ts-expect-error -- Slack's OAuth 2 sign-in has no form, so its empty secret is no input
+    expectTypeOf({ secret: {}, fetch }).toExtend<Mixed>();
   });
 });
 

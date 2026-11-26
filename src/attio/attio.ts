@@ -3,6 +3,7 @@ import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import type { Page } from '../paginate.js';
 import { parseAnswer, parseEntries } from '../parse.js';
+import { signInWith } from '../catalogue.js';
 import { attio } from '../catalogue/attio.js';
 import { datetime } from '../shapes.js';
 
@@ -45,7 +46,7 @@ const entryId = (entry: object): unknown => {
 
 /** `pageSize` is for tests: Attio's limits are 500 records and 50 notes a page. */
 export function attioClient(input: { apiKey: string; fetch: typeof fetch; minIntervalMs?: number; pageSize?: number }): AttioClient {
-  const http = createClient(attio, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
+  const http = createClient(signInWith(attio, 'key'), { token: () => Promise.resolve(input.apiKey), fetch: input.fetch,
     ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
   /** Attio pages by offset: a short page is the last. */
   function paged<T>(schema: z.ZodType<T>, data: unknown[], offset: number, limit: number): Page<T> {

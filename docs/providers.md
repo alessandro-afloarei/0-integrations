@@ -11,7 +11,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 
 | [Airtable](https://airtable.com/developers/web/api/authentication.md) | tasks | OAuth 2, key | records.list, records.get, records.create, records.update, bases.list | — | declared |
 | [Apollo](https://docs.apollo.io/reference/authentication) | sales | key | — | — | declared |
 | [Asana](https://developers.asana.com/docs/oauth) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, projects.list | — | declared |
-| [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | key | — | — | declared |
+| [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | OAuth 2, key | — | — | declared |
 | [Azure DevOps](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth?view=azure-devops) | code | OAuth 2 | repositories.list, repositories.get, pullRequests.list, pullRequests.get, pullRequests.create, projects.list | — | declared |
 | [Better Stack](https://betterstack.com/docs/uptime/api/getting-started-with-uptime-api/) | monitoring | key | incidents.list, incidents.get, incidents.create, incidents.update, monitors.list | — | declared |
 | [Bitbucket](https://developer.atlassian.com/cloud/bitbucket/rest/intro/#authentication) | code | OAuth 2, key | repositories.list, repositories.get, pullRequests.list, pullRequests.get, pullRequests.create | hmac | declared |
@@ -26,21 +26,21 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 
 | [Superhuman Docs (formerly Coda)](https://docs.superhuman.com/developers/apis/v1#operation/whoami) | docs | key | pages.list, pages.get, pages.create, pages.update, docs.list | — | declared |
 | [Cognism](https://developers.cognism.com/#authentication) | sales | key | contacts.search, contacts.get, accounts.search, accounts.get | — | declared |
 | [Discord](https://docs.discord.com/developers/reference) | chat | key | — | ed25519 | declared |
-| [Exa](https://docs.exa.ai/reference/search) | search | key | — | — | declared |
+| [Exa](https://exa.ai/docs/reference/search) | search | key | — | — | declared |
 | [Fathom](https://developers.fathom.ai/quickstart) | meetings | key | — | — | declared |
-| [Figma](https://developers.figma.com/docs/rest-api/oauth-apps/) | design | OAuth 2 | — | — | declared |
-| [Firecrawl](https://docs.firecrawl.dev/api-reference/introduction) | search | key | — | — | declared |
+| [Figma](https://developers.figma.com/docs/rest-api/oauth-apps/) | design | OAuth 2, key | — | — | declared |
+| [Firecrawl](https://docs.firecrawl.dev/api-reference/v2-introduction) | search | key | — | — | declared |
 | [Fireflies](https://docs.fireflies.ai/fundamentals/authorization) | meetings | key | user | hmac | declared |
 | [folk](https://developer.folk.app/api-reference/authentication) | crm | key | people.list, people.search, people.get, people.create, people.update, companies.list, deals.list | standard | declared |
 | [Freshsales](https://developers.freshworks.com/crm/api/#authentication) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, accounts.list, deals.list | — | declared |
 | [GitBook](https://gitbook.com/docs/developers/gitbook-api/authentication) | docs | key | pages.list, pages.get, spaces.list | — | declared |
-| [GitHub](https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api) | code | key | — | — | declared |
-| [GitLab](https://docs.gitlab.com/api/rest/authentication/) | code | key | — | standard | declared |
+| [GitHub](https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api) | code | OAuth 2, key | — | — | declared |
+| [GitLab](https://docs.gitlab.com/api/rest/authentication/) | code | OAuth 2, key | — | standard | declared |
 | [Google](https://developers.google.com/identity/protocols/oauth2/web-server) | mail, calendar | OAuth 2 | — | token | declared |
 | [Granola](https://docs.granola.ai/introduction) | meetings | key | — | — | declared |
 | [Guru](https://developer.getguru.com/docs/getting-started) | docs | key | cards.search, cards.get, cards.create, cards.update, collections.list | — | declared |
 | [Honeybadger](https://docs.honeybadger.io/api/v3/authentication/) | monitoring | key | faults.list, faults.get, faults.update, projects.list | token | declared |
-| [HubSpot](https://developers.hubspot.com/docs/api-reference/legacy/authentication/oauth-tokens/v1/migration-guide) | crm | OAuth 2 | — | — | declared |
+| [HubSpot](https://developers.hubspot.com/docs/api-reference/legacy/authentication/oauth-tokens/v1/migration-guide) | crm | OAuth 2, key | — | — | declared |
 | [Hunter](https://hunter.io/api-documentation/v2#authentication) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
 | [incident.io](https://docs.incident.io/api-reference/introduction) | monitoring | key | incidents.list, incidents.get, incidents.create, incidents.update, severities.list | — | declared |
 | [Insightly](https://api.insightly.com/v3.1/Help) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, organisations.list, opportunities.list | — | declared |

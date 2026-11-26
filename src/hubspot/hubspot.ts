@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createClient } from "../http.js";
+import { signInWith } from "../catalogue.js";
 import { hubspot } from "../catalogue/hubspot.js";
 import { parseAnswer, parseEntries } from "../parse.js";
 import { paginate, type Page } from "../paginate.js";
@@ -48,7 +49,7 @@ export function hubspotClient(input: {
   fetch: typeof fetch;
   minIntervalMs?: number;
 }) {
-  const http = createClient(hubspot, { token: input.token, fetch: input.fetch, ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
+  const http = createClient(signInWith(hubspot, "oauth2"), { token: input.token, fetch: input.fetch, ...(input.minIntervalMs === undefined ? {} : { minIntervalMs: input.minIntervalMs }) });
 
   const call = async <T>(path: string, schema: z.ZodType<T>, body?: unknown, query: Record<string, string> = {}): Promise<T> => {
     return parseAnswer(schema, await http.json(path, { query, ...(body === undefined ? {} : { method: "POST", json: body, idempotent: true }) }));

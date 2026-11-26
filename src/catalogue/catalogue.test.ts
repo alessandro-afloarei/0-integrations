@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
-import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape } from '../catalogue.js';
+import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
 import { createClient } from '../http.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
 import { clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
@@ -277,7 +277,19 @@ const runnable = {
     const nested = ['access_token', 'refresh_token', 'id_token'];
     return reads(entry, 'tokenAnswer.').every(name => !own.includes(name.split('.')[1]) && !nested.includes(name.split('.').at(-1) ?? ''));
   },
-  'no `tokenAnswer.*` on a key entry': (entry: Entry) => entry.auth[0].kind !== 'key' || reads(entry, 'tokenAnswer.').length === 0,
+  // A key has no token answer: the engine skips such a path in a list and reads the next (HubSpot's `hub_id`, then
+  // `portalId`), which is worth writing only when another sign-in of the whole entry has a token answer.
+  'no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify\'s requested answer, beside an OAuth 2 or token sign-in':
+  (entry: Entry, whole: Entry = entry) => {
+    // A literal path: inside a list, `{id}` is read as a path, never filled.
+    const answered = (path = '') => /^[^{]+$/.test(path) && !path.startsWith('tokenAnswer.') && !path.startsWith('connection.');
+    const answering = whole.auth.some(auth => auth.kind !== 'key') && entry.identify?.request !== undefined;
+    const strict = (value: Value | undefined) => (answering && value !== undefined && typeof value !== 'string'
+      && answered(value.at(-1)) ? [] : [value]);
+    const values = [...strict(entry.identify?.id), ...strict(entry.identify?.name), ...Object.values(entry.save ?? {})];
+    return entry.auth[0].kind !== 'key' || values.every(value => value === undefined
+      || lookupNames({ identify: { id: value } }).every(name => !name.startsWith('tokenAnswer.')));
+  },
   // A token entry asks no scopes and gives no OAuth grant to revoke.
   'no `scopes` or RFC 7009 `revoke` on a key or token entry': (entry: Entry) => entry.auth[0].kind === 'oauth2'
     || (entry.scopes === undefined && !(entry.revoke !== undefined && 'url' in entry.revoke)),
@@ -361,7 +373,7 @@ const signIns = (entry: Entry): [kind: string, one: Entry][] => entry.auth.map((
   [kind, entry.auth.length > 1 ? signInWith(entry, kind) : entry]);
 /** The rules an entry breaks, each with the sign-in it breaks them in. */
 const broken = (entry: Entry) => signIns(entry).flatMap(([kind, one]) =>
-  (Object.keys(runnable) as Rule[]).filter(rule => !runnable[rule](one)).map(rule => `${rule} (${kind})`));
+  (Object.keys(runnable) as Rule[]).filter(rule => !runnable[rule](one, entry)).map(rule => `${rule} (${kind})`));
 
 describe.each(entries)('%s', (id, entry) => {
   test('matches the entry types', () => { expect(entrySchema.safeParse(entry).error).toBeUndefined(); });
@@ -371,7 +383,7 @@ describe.each(entries)('%s', (id, entry) => {
   // kind when there are several.
   for (const [kind, one] of signIns(entry)) {
     const named = entry.auth.length > 1 ? ` (${kind})` : '';
-    test.each(Object.keys(runnable) as Rule[])(`declares %s${named}`, rule => { expect(runnable[rule](one)).toBe(true); });
+    test.each(Object.keys(runnable) as Rule[])(`declares %s${named}`, rule => { expect(runnable[rule](one, entry)).toBe(true); });
     // Every sign-in that sends identify, and every token sign-in, signs in on the fake derived from it: no recording needed.
     if (one.identify?.request !== undefined || one.auth[0].kind === 'token') {
       test.each(['good', 'bad'] as const)(`signs in on its derived fake with a %s key${named}`, async key => {
@@ -415,6 +427,12 @@ test("ids are unique and the folder's entries are found", () => {
 test("catalogue.json's tier: a real recording makes its own entry recorded, no other", () => {
   const real = [{ file: 'acme.mail.recording.json', synthetic: false }];
   expect([tierOf('acme', real), tierOf('acme-two', real), tierOf('acm', real)]).toEqual(['recorded', 'declared', 'declared']);
+});
+
+test("Discord's User-Agent names the package's own version, which Discord asks of every client", () => {
+  const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+  expect(entries.find(([id]) => id === 'discord')?.[1].http.headers?.['user-agent'])
+    .toBe(`DiscordBot (https://www.npmjs.com/package/0-integrations, ${version})`);
 });
 
 test('every recording sits beside an entry', () => {
@@ -480,8 +498,12 @@ test.each<[Rule, Entry]>([
     identify: { id: 'workspace_id' } })],
   ["an `identify.request` whenever a value reads identify's answer", defineProvider({ ...oauth2, scopes: { default: [] },
     identify: { id: 'tokenAnswer.team.id' }, save: { region: 'Region {region}' } })],
-  ['no `tokenAnswer.*` on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify\'s requested answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { id: 'tokenAnswer.team.id' } })],
+  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify\'s requested answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    identify: { request: { path: '/me' }, id: ['id', 'tokenAnswer.team.id'] } })],
+  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify\'s requested answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } })],
   ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     scopes: { default: ['read'] } })],
   ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
@@ -639,6 +661,14 @@ test.each<[Rule, Entry]>([
     operations: { then: { path: '/then' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
+test.each([
+  ['ends on the token answer', { request: { path: '/me' }, id: ['portalId', 'tokenAnswer.hub_id'] }],
+  ['ends on a template, with no identify request', { id: ['tokenAnswer.hub_id', '{id}'] }],
+] as const)("beside OAuth 2, a key's id list that %s is refused", (_, identify) => {
+  const both = defineProvider({ ...key, fields: [secret], scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key' }], identify });
+  expect(broken(both)).toContain("no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify's requested answer, beside an OAuth 2 or token sign-in (key)");
+});
+
 test.each([[{ title: '' }, "a field's title says what to enter: give it words"],
   [{ help: '' }, "a field's help is a line a person reads: give it words, or leave it out"]])(
   'a field with %j fails the schema, with what to fix', (part, message) => {
@@ -706,6 +736,9 @@ test.each<[string, Entry]>([
   // Azure DevOps' shape: fixed OAuth 2 URLs, a value only in the base's path.
   ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
     http: { baseUrl: 'https://api.k.test/{org}' } })],
+  // HubSpot's shape: OAuth 2's id from the token answer, the key's from identify's answer, which the engine reads next.
+  ['an id list from the token answer, then identify\'s answer, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret],
+    scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key' }], identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } })],
 ])('%s breaks no rule', (_, entry) => { expect(broken(entry)).toEqual([]); });
 
 test('a token request whose body holds an object fails the schema, with what to fix', () => {

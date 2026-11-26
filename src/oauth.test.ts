@@ -312,7 +312,9 @@ test("refreshUrl: Figma exchanges at its token URL and refreshes at its refresh 
     { url: 'https://api.figma.com/v1/oauth/token', respond: () => Response.json({ ...token, user_id_string: '1234567890123456789' }) },
     { url: 'https://api.figma.com/v1/oauth/refresh', respond: () => Response.json({ access_token: 'new', token_type: 'bearer', expires_in: 7_776_000 }) },
   ]);
-  const { grant, extras } = await exchangeCode(figma, client, { ...exchange, codeVerifier: 'v'.repeat(43), fetch: fake.fetch });
+  // An entry that reads the token answer's `user_id_string` gets it in `extras`.
+  const { grant, extras } = await exchangeCode({ ...figma, identify: { id: 'tokenAnswer.user_id_string' } }, client,
+    { ...exchange, codeVerifier: 'v'.repeat(43), fetch: fake.fetch });
   expect(grant.refreshToken).toBe('r');
   expect(extras).toEqual({ user_id_string: '1234567890123456789' });
   expect(await refreshGrant(figma, client, 'r', { fetch: fake.fetch })).toMatchObject({ accessToken: 'new', refreshToken: 'r' });
