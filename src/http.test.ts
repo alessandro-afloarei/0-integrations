@@ -60,14 +60,12 @@ test('retries a 429 after its Retry-After', async () => {
   expect(fake.calls).toHaveLength(2);
 });
 
-test("caps a long Retry-After at the provider's maxWaitMs", async () => {
+test("a Retry-After longer than the provider's maxWaitMs is reported, never retried at the cap", async () => {
   const fake = script(hubspot, () => Response.json({}, { status: 429, headers: { 'Retry-After': '3600' } }), ok);
-  const result = fake.client.json('/items');
-  await vi.advanceTimersByTimeAsync(9999);
+  const result = fake.client.json('/items').catch((e: unknown) => e);
+  await vi.advanceTimersByTimeAsync(3_600_000);
+  expect(await result).toMatchObject({ code: 'rate_limited', status: 429, retryAfterMs: 3_600_000 });
   expect(fake.calls).toHaveLength(1);
-  await vi.advanceTimersByTimeAsync(1);
-  expect(await result).toEqual({ ok: true });
-  expect(fake.calls).toHaveLength(2);
 });
 
 test('waits defaultWaitMs when the 429 names no wait', async () => {
@@ -992,6 +990,24 @@ const retrying = (retry: Retry, extra: Partial<Entry> = {}) => defineProvider({ 
   auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.retrying.test', retry }, ...extra });
 const answer = (status: number, headers: Record<string, string> = {}) => () => Response.json({}, { status, headers });
 const offline = () => { throw new TypeError('fetch failed'); };
+/** `first`, then 200: the retry is sent exactly `wait` milliseconds later. */
+async function retriesAfter(entry: Entry, first: () => Response, wait: number) {
+  const fake = script(entry, first, ok);
+  const result = fake.client.json('/a');
+  await vi.advanceTimersByTimeAsync(wait - 1);
+  expect(fake.calls).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await result).toEqual({ ok: true });
+  expect(fake.calls).toHaveLength(2);
+}
+/** `first` is the only request sent, however long the caller waits: the error it is classified as. */
+async function sentOnce(entry: Entry, first: () => Response) {
+  const fake = script(entry, first, ok);
+  const result = fake.client.json('/a').catch((e: unknown) => e);
+  await vi.advanceTimersByTimeAsync(3_600_000);
+  expect(fake.calls).toHaveLength(1);
+  return result;
+}
 
 describe('a read is retried after a 5xx, a 408 or a network failure, waiting with full jitter', () => {
   beforeEach(() => { vi.spyOn(Math, 'random').mockReturnValue(0.5); });
@@ -1036,15 +1052,8 @@ describe('a read is retried after a 5xx, a 408 or a network failure, waiting wit
     expect(always.calls).toHaveLength(2);
   });
 
-  test('a positive Retry-After is waited, capped by maxWaitMs', async () => {
-    for (const [retry, after, wait] of [[{}, '2', 2000], [{ maxWaitMs: 10_000 }, '120', 10_000]] as const) {
-      const fake = script(retrying(retry), answer(503, { 'retry-after': after }), ok);
-      const result = fake.client.json('/a');
-      await vi.advanceTimersByTimeAsync(wait - 1);
-      expect(fake.calls).toHaveLength(1);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(await result).toEqual({ ok: true });
-    }
+  test('a positive Retry-After is waited', async () => {
+    await retriesAfter(retrying({}), answer(503, { 'retry-after': '2' }), 2000);
   });
 
   test('the n-th retry waits a random share of one second doubled n times, capped by maxWaitMs', async () => {
@@ -1139,5 +1148,70 @@ describe('a read is retried after a 5xx, a 408 or a network failure, waiting wit
     await vi.advanceTimersByTimeAsync(60_000);
     expect(await result).toMatchObject({ code: 'unavailable', status: 500 });
     expect(fake.calls).toHaveLength(1);
+  });
+});
+
+describe("a retry never comes before the provider's stated wait", () => {
+  const reset = (unit: 's' | 'epochSeconds', extra: Retry = {}) => retrying({ ...extra, wait: { header: 'ratelimit-reset', unit } });
+
+  test('a 429 whose Retry-After passes the default cap is sent once, rate_limited with that wait', async () => {
+    expect(await sentOnce(retrying({}), answer(429, { 'retry-after': '120' })))
+      .toMatchObject({ code: 'rate_limited', status: 429, retryAfterMs: 120_000 });
+  });
+
+  test("any retried status whose Retry-After passes the cap is sent once: a 503's 90 s, 30 s past a 10 s maxWaitMs", async () => {
+    expect(await sentOnce(retrying({}), answer(503, { 'retry-after': '90' }))).toMatchObject({ code: 'unavailable', retryAfterMs: 90_000 });
+    expect(await sentOnce(retrying({ maxWaitMs: 10_000 }), answer(429, { 'retry-after': '30' })))
+      .toMatchObject({ code: 'rate_limited', retryAfterMs: 30_000 });
+  });
+
+  test('onlyStated: an answer with no stated wait is sent once; one with a Retry-After waits it', async () => {
+    expect(await sentOnce(retrying({ onlyStated: true }), limited)).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+    await retriesAfter(retrying({ onlyStated: true }), answer(429, { 'retry-after': '2' }), 2000);
+  });
+
+  test('onlyStated: a network failure is tried once', async () => {
+    const fake = script(retrying({ onlyStated: true }), offline, ok);
+    const result = fake.client.json('/a').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await result).toMatchObject({ code: 'unavailable', status: null });
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  test('a declared header in seconds is waited; of several present, the longest', async () => {
+    await retriesAfter(reset('s'), answer(429, { 'ratelimit-reset': '3' }), 3000);
+    const both = retrying({ wait: { header: ['ratelimit-reset', 'ratelimit-user-reset'], unit: 's' } });
+    await retriesAfter(both, answer(429, { 'ratelimit-reset': '2', 'ratelimit-user-reset': '5' }), 5000);
+    await retriesAfter(both, answer(429, { 'ratelimit-user-reset': '2' }), 2000);
+  });
+
+  test('a declared header in epoch seconds waits until that instant', async () => {
+    await retriesAfter(reset('epochSeconds'), answer(429, { 'ratelimit-reset': String(Date.now() / 1000 + 5) }), 5000);
+  });
+
+  test('a declared header past the cap is sent once with its wait; one not a number waits the default', async () => {
+    expect(await sentOnce(reset('s'), answer(429, { 'ratelimit-reset': '61' }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 61_000 });
+    await retriesAfter(reset('s'), answer(429, { 'ratelimit-reset': 'soon' }), 1000);
+  });
+
+  test('a positive Retry-After wins over the declared wait', async () => {
+    await retriesAfter(reset('s'), answer(429, { 'retry-after': '2', 'ratelimit-reset': '5' }), 2000);
+  });
+
+  test('a declared body path in seconds is waited', async () => {
+    const todo = retrying({ wait: { path: 'error_extra.retry_after', unit: 's' } });
+    await retriesAfter(todo, () => Response.json({ error_extra: { retry_after: 1.5 } }, { status: 429 }), 1500);
+  });
+
+  test("the error of a 429 carries the declared header's wait", async () => {
+    expect(await sentOnce(reset('s', { limit: 0 }), answer(429, { 'ratelimit-reset': '3' })))
+      .toMatchObject({ code: 'rate_limited', retryAfterMs: 3000 });
+  });
+
+  test("GitHub's 403 with no requests remaining carries its reset, as before", async () => {
+    const at = String(Date.now() / 1000 + 90);
+    const fake = fakeFetch([{ url: /https:/, respond: answer(403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': at }) }]);
+    await expect(createClient(github, { token: () => Promise.resolve('k'), fetch: fake.fetch, minIntervalMs: 0 }).json('/user'))
+      .rejects.toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 90_000 });
   });
 });

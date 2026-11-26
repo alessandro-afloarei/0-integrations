@@ -1,4 +1,4 @@
-import type { Entry, Errors, Http, Retry } from './catalogue.js';
+import type { Entry, Errors, Http, Retry, Wait } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError, type ProviderErrorCode } from './errors.js';
 import type { ProviderResponse } from './http.js';
 import { retryAfterMs } from './retry-after.js';
@@ -47,21 +47,23 @@ export function codeOf(errors: Errors | undefined, body: unknown): string | unde
   return typeof code === 'string' && (errors?.allow?.includes(code) ?? true) ? code : undefined;
 }
 
-/** The wait the body names, in milliseconds from `now`; `retryAfterMs` validates it as it does today. */
-export function bodyWaitOf(retry: Retry | undefined, body: unknown, now: number): number | undefined {
-  if (retry?.waitFromBody === undefined) return undefined;
-  const value = readPath(body, retry.waitFromBody.path);
-  if (typeof value !== 'number') return undefined;
-  if (retry.waitFromBody.unit === 'ms') return value;
-  return value >= 0 && value <= Number.MAX_SAFE_INTEGER ? Math.max(0, value - now) : undefined;
+/** The wait `wait` reads from an answer, in milliseconds from `now` (an instant already past is 0); `retryAfterMs`
+ * validates it. The one reader of a declared wait, for the retry and for the error. */
+export function waitOf(wait: Wait | undefined, { headers, body }: Pick<Answer, 'headers' | 'body'>, now: number): number | undefined {
+  if (wait === undefined) return undefined;
+  // A header holds a positive decimal number (the longest of those present counts), a body a number from 0.
+  const read = 'path' in wait ? [readPath(body, wait.path)] : [wait.header].flat().map(name => headers.get(name) ?? '')
+    .filter(text => /^\d+(?:\.\d+)?$/u.test(text)).map(Number).filter(value => value > 0);
+  const values = read.filter((value): value is number => typeof value === 'number' && value >= 0 && value <= Number.MAX_SAFE_INTEGER);
+  if (values.length === 0) return undefined;
+  const ms = Math.max(...values) * (wait.unit === 's' || wait.unit === 'epochSeconds' ? 1000 : 1);
+  return wait.unit === 's' || wait.unit === 'ms' ? ms : Math.max(0, ms - now);
 }
 
-/** A rate limit the entry declares beyond a 429: the first rule that holds, waiting its reset, else the default. */
+/** A rate limit the entry declares beyond a 429: the first rule that holds, waiting its `wait`, else the default. */
 function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined } | undefined {
   const rule = http.rateLimit?.when.find(item => holds(item, answer));
-  if (rule === undefined) return undefined;
-  const reset = rule.resetAt === undefined ? Number.NaN : Number(answer.headers.get(rule.resetAt.header));
-  return { waitMs: Number.isSafeInteger(reset) && reset > 0 ? Math.max(0, reset * 1000 - now) : http.rateLimit?.defaultWaitMs };
+  return rule && { waitMs: waitOf(rule.wait, answer, now) ?? http.rateLimit?.defaultWaitMs };
 }
 
 /** No `retry`: none. With one: a single retry, waits up to a minute, a second by default; a `limit` of 0 waits nothing. */
@@ -88,12 +90,12 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   // Never a code holding a credential the request sent.
   const detail = code === undefined ? null : safeDetail(code, credentials.get(response) ?? []);
   if (code !== undefined && errors.revoked?.includes(code)) return new GrantRevoked(detail);
-  const bodyWait = bodyWaitOf(entry.http.retry, body, now);
+  const stated = waitOf(entry.http.retry?.wait, answer, now);
   // An error a rule decides is no declared rate limit, so it never carries that limit's wait.
   const rule = errors.rules?.find(item => holds(item.when, answer));
-  if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, { retryAfterMs: retryAfterMs(headers, now, bodyWait) });
+  if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, { retryAfterMs: retryAfterMs(headers, now, stated) });
   const limit = rateLimitOf(entry.http, answer, now);
-  const metadata = { retryAfterMs: retryAfterMs(headers, now, limit?.waitMs ?? bodyWait) };
+  const metadata = { retryAfterMs: retryAfterMs(headers, now, limit?.waitMs ?? stated) };
   if (limit) return new ProviderHttpError('rate_limited', status, detail, metadata);
   return new ProviderHttpError(ok ? 'request_failed' : statusCode(status), status, detail, metadata);
 }

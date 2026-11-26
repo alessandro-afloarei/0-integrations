@@ -41,10 +41,12 @@ export type Identify = { request?: Call; id?: Value; name?: Value; lowercase?: t
   rejectWhen?: readonly (Omit<When, 'detail'> & { detail?: string })[] };
 export type Revoke = ({ url: string; token: readonly ('refresh' | 'access')[] } | { request: Call })
   & { goneErrors?: readonly string[] };
-export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number;
-  waitFromBody?: { path: Path; unit: 'ms' | 'epochMs' } };
-export type RateLimit = { when: readonly (When & { resetAt?: { header: string; unit: 'epochSeconds' } })[];
-  defaultWaitMs?: number };
+/** A wait an answer states: a header's positive decimal number (of several, the longest present) or a body's number, a
+ * duration (`s`, `ms`) or an instant (`epochSeconds`, `epochMs`). */
+export type Wait = ({ header: string | readonly string[] } | { path: Path }) & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' };
+/** `onlyStated`: an answer that states no wait, and a network failure, are not retried. */
+export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number; onlyStated?: true; wait?: Wait };
+export type RateLimit = { when: readonly (When & { wait?: Wait })[]; defaultWaitMs?: number };
 export type Http = { baseUrl: Template;
   /** The host a base with a placeholder in its host must have once filled: a name, `*.` and a domain, or `*` (any). */
   host?: string; bases?: Readonly<Record<string, string>>; headers?: Readonly<Record<string, string>>;

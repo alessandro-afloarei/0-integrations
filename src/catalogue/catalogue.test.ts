@@ -36,6 +36,10 @@ const selectsOne = (item: Selects) => !(item.header !== undefined && item.path !
 const condition = <T extends Selects>(schema: z.ZodType<T>) =>
   schema.refine(selectsOne, 'a condition compares one header or one path, and a header only to a string');
 const when = condition(whenObject);
+/** A wait an answer states: one header, or several (the longest present counts), or one body path. */
+const wait = z.strictObject({ header: z.union([headerName, z.array(headerName).min(1)]).optional(), path: z.string().optional(),
+  unit: z.enum(['s', 'ms', 'epochSeconds', 'epochMs'], { error: "a wait's `unit` is 's', 'ms', 'epochSeconds' or 'epochMs'" }) })
+  .refine(item => (item.header === undefined) !== (item.path === undefined), 'a `wait` reads one `header` (or a list of headers) or one `path`');
 const send = z.union([z.strictObject({ header: headerName, value: template.regex(/^\P{Cc}*$/u, 'a header `value` holds no control character').optional() }), z.strictObject({ basic: z.tuple([template, template]) }),
   z.strictObject({ query: z.record(z.string(), template) })])
   .refine(item => !('query' in item) || Object.keys(item.query).length > 0, 'a query send names at least one parameter');
@@ -101,10 +105,9 @@ const entrySchema = z.strictObject({
   http: z.strictObject({ baseUrl: https, host: z.string().optional(), bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
     timeoutMs: z.number().int().positive().optional(), minIntervalMs: z.number().int().nonnegative().optional(),
     retry: z.strictObject({ limit: z.number().int().nonnegative().optional(), maxWaitMs: z.number().int().nonnegative().optional(),
-      defaultWaitMs: z.number().int().nonnegative().optional(),
-      waitFromBody: z.strictObject({ path: z.string(), unit: z.enum(['ms', 'epochMs']) }).optional() }).optional(),
+      defaultWaitMs: z.number().int().nonnegative().optional(), onlyStated: z.literal(true).optional(), wait: wait.optional() }).optional(),
     rateLimit: z.strictObject({
-      when: z.array(condition(whenObject.extend({ resetAt: z.strictObject({ header: headerName, unit: z.literal('epochSeconds') }).optional() }))),
+      when: z.array(condition(whenObject.extend({ wait: wait.optional() }))),
       defaultWaitMs: z.number().int().nonnegative().optional() }).optional() }),
   errors: z.strictObject({ detail: value.optional(), allow: z.array(z.string()).optional(), failed: when.optional(),
     revoked: z.array(z.string()).optional(),
@@ -184,6 +187,7 @@ const plainReads = (entry: Entry) => [...placeholders(entry.http.baseUrl), ...re
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 /** An OAuth 2 sign-in's URLs, as the engine reads them. */
 const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
+const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (60 000 when left out): the cap would cut a longer default';
 const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
@@ -211,6 +215,7 @@ const runnable = {
   '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one': (entry: Entry) => entry.categories !== undefined
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
+  [RETRY_DEFAULT]: ({ http: { retry } }: Entry) => (retry?.defaultWaitMs ?? 0) <= (retry?.maxWaitMs ?? 60_000),
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
   [HOST_PATTERN]: (entry: Entry) => (declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
@@ -668,6 +673,8 @@ test.each<[Rule, Entry]>([
     operations: { 'request.create': { method: 'POST', path: '/requests' } } }],
   ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { then: { path: '/then' } } }],
+  ...[{ defaultWaitMs: 30_000, maxWaitMs: 10_000 }, { defaultWaitMs: 90_000 }].map((retry): [Rule, Entry] => [RETRY_DEFAULT,
+    defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, retry } })]),
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
 test.each([
@@ -779,7 +786,9 @@ test.each<[string, Record<string, unknown>]>([
   ['a delivery id header', { webhook: { kind: 'standard', deliveryId: { header: 'Webhook-Id' } } }],
   ["a condition's header", { errors: { rules: [{ when: { header: 'X-Error' }, code: 'rejected' }] } }],
   ['a header the entry sends on every call', { http: { ...key.http, headers: { 'X-Api-Version': '2' } } }],
-  ["a rate limit's reset header", { http: { ...key.http, rateLimit: { when: [{ status: 403, resetAt: { header: 'x reset', unit: 'epochSeconds' } }] } } }],
+  ["a rate limit's wait header", { http: { ...key.http, rateLimit: { when: [{ status: 403, wait: { header: 'x reset', unit: 'epochSeconds' } }] } } }],
+  ["a retry's wait header", { http: { ...key.http, retry: { wait: { header: 'RateLimit-Reset', unit: 's' } } } }],
+  ["one of a retry's wait headers", { http: { ...key.http, retry: { wait: { header: ['ratelimit-reset', 'RateLimit-User-Reset'], unit: 's' } } } }],
 ])('%s that is no lowercase HTTP token fails the schema, with what to fix', (_, parts) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], ...parts };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([headerMessage]);
@@ -792,6 +801,18 @@ test.each<[string, Record<string, unknown>, string]>([
     'a `challenge.when` compares the body value: give `equals` or `in`'],
 ])('%s fails the schema, with what to fix', (_, parts, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], ...parts };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+});
+
+test.each<[string, Record<string, unknown>, string]>([
+  ['`retry.waitFromBody`', { retry: { waitFromBody: { path: 'wait', unit: 'ms' } } }, 'Unrecognized key: "waitFromBody"'],
+  ["a rate-limit rule's `resetAt`", { rateLimit: { when: [{ status: 403, resetAt: { header: 'x-reset', unit: 'epochSeconds' } }] } },
+    'Unrecognized key: "resetAt"'],
+  ['a wait with both a header and a path', { retry: { wait: { header: 'x-reset', path: 'wait', unit: 's' } } },
+    'a `wait` reads one `header` (or a list of headers) or one `path`'],
+  ['a wait in minutes', { retry: { wait: { header: 'x-reset', unit: 'min' } } }, "a wait's `unit` is 's', 'ms', 'epochSeconds' or 'epochMs'"],
+])('%s fails the schema, with what to fix', (_, http, message) => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, ...http } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
 

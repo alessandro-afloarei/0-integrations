@@ -11,7 +11,7 @@ import { ProviderHttpError } from './errors.js';
 import { classify } from './http-response.js';
 import { defaultFetch, filledBase } from './http.js';
 import { answerReads, BAD_KEY, GOOD_KEY, kitValues, onlyRead, playScenario, recordedSignIn, recorder, replay, replayProblem, scrub, signIn, type Exchange,
-  type KitScenario, type Recording, type Swap } from './kit.test-support.js';
+  type KitScenario, type Recording, type Swap, waitHeaders } from './kit.test-support.js';
 import { parseJson, readPath } from './rules.js';
 import { fakeFetch, fakeProvider } from './testing.js';
 import { tierOf } from './tier.js';
@@ -79,16 +79,17 @@ const identityPaths = (value: Value | undefined) => (value === undefined ? [] : 
 
 /** Signs in to an entry with the test account's key and plain values (a token entry's token request, then identify),
  * then with a bad key, which must be refused as `rejected`; a redirected sign-in is refused. Each answer keeps only the
- * paths the entry reads, and `retry-after` alone of its headers; the key, each plain value given, every token issued,
- * the account identify names and the saved values are swapped for the kit's stand-ins. The result is replayed as the
- * table test replays it, and written only when both sign-ins end as they did live. */
+ * paths the entry reads, and of its headers `retry-after` and the declared wait headers; the key, each plain value
+ * given, every token issued, the account identify names and the saved values are swapped for the kit's stand-ins. The
+ * result is replayed as the table test replays it, and written only when both sign-ins end as they did live. */
 async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
   const entry = recordedSignIn(whole);
   const [auth] = entry.auth;
   if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
   const kit = kitValues(entry);
-  const good = recorder(real, 'good');
-  const bad = recorder(real, 'bad');
+  const waits = waitHeaders(entry);
+  const good = recorder(real, 'good', waits);
+  const bad = recorder(real, 'bad', waits);
   await signIn(entry, secret, good.fetch, { ...kit, ...given }).catch((error: unknown) => {
     throw new Error(failure('recording stopped: the sign-in with the key failed with', error));
   });
@@ -109,10 +110,10 @@ async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<
   const tokenUrl = auth.kind === 'token' ? new URL(filledBase(entry, { ...kit, ...given }, auth.request.url)).href : undefined;
   const unaccepted = ({ key: side, method, url, status, headers = {}, response }: Exchange) => side === 'bad' || status < 200 || status >= 300
     || (!(method === 'POST' && url === tokenUrl) && classify(entry, { status, headers: new Headers(headers), data: response }) !== null);
-  // Sign-in reads no other header: a `link` or `content-type` may name the account.
+  // Sign-in reads no other header but a declared wait's: a `link` or `content-type` may name the account.
   const kept = (exchange: Exchange): Exchange => ({ ...exchange,
     response: onlyRead(exchange.response, [...values, ...codes], unaccepted(exchange) ? [...values, ...codes] : codes) ?? null,
-    headers: Object.fromEntries(Object.entries(exchange.headers ?? {}).filter(([name]) => name === 'retry-after')) });
+    headers: Object.fromEntries(Object.entries(exchange.headers ?? {}).filter(([name]) => name === 'retry-after' || waits.includes(name))) });
   const swaps: { sent: Swap[]; answered: Swap[] } = {
     sent: [[secret, GOOD_KEY],
       ...Object.entries(kit).flatMap(([name, stand]): Swap[] => (given[name] === undefined || given[name] === stand ? [] : [[given[name], stand]])),
@@ -223,6 +224,20 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(await replayed(trello, recording)).toMatchObject([{ account: { id: 'kit-account', name: 'kit-name' } }, { code: 'rejected' }]);
   });
 
+  test('a declared wait header is kept beside `retry-after`, and no other header the answer carries', async () => {
+    const waiting = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test', retry: { wait: { header: 'ratelimit-reset', unit: 's' } } },
+      identify: { request: { path: '/me' }, id: 'id' } });
+    const limits: Wrap = fetch => async (input, init) => {
+      const response = await fetch(input, init);
+      return new Response(response.body, { status: response.status,
+        headers: { 'retry-after': '1', 'ratelimit-reset': '3', 'ratelimit-remaining': '7', 'x-request-id': 'req-ana-lopez' } });
+    };
+    const { recording } = await recordOnFake(waiting, { key: 'real-key-1', account: { id: 'u-real-881' }, wrap: limits });
+    expect(recording?.exchanges.map(exchange => exchange.headers)).toEqual([{ 'retry-after': '1', 'ratelimit-reset': '3' },
+      { 'retry-after': '1', 'ratelimit-reset': '3' }]);
+  });
+
   test('a token entry: only the token and its life are kept, the token as kit-token, the body with the kit values; it replays', async () => {
     const { text, recording } = await recordOnFake(zoom, { key: 'real-key-1', values: { accountId: 'real-acct-1', clientId: 'real-cid-1' },
       wrap: answering(body => ({ ...body as object, access_token: 'zoom-issued-7Hk2', refresh_token: 'rt-real-99', scope: 'user:read' })) });
@@ -238,7 +253,7 @@ describe('recording an entry with no module, on its derived fake standing in for
   const reading = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs',
     fields: [{ name: 'apiKey', title: 'API key', secret: true }], auth: [{ kind: 'key' }],
     http: { baseUrl: 'https://api.acme.test', rateLimit: { when: [{ path: 'limits.left', equals: 0 }] },
-      retry: { waitFromBody: { path: 'wait_ms', unit: 'ms' } } },
+      retry: { wait: { path: 'wait_ms', unit: 'ms' } } },
     identify: { request: { path: '/me' }, id: 'user.id', name: ['user.display', 'user.login'], rejectWhen: [{ path: 'state', equals: 'disabled' }] },
     save: { plan: 'org.plan' }, errors: { detail: ['error.message', 'error.code'], rules: [{ when: { path: 'owner', equals: 'none' }, code: 'not_found' },
       { when: { path: 'gone', equals: true }, code: 'not_found' }] } });

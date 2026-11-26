@@ -20,8 +20,8 @@ export const github = defineProvider({
   http: { baseUrl: 'https://api.github.com',
     headers: { accept: 'application/vnd.github+json', 'x-github-api-version': '2026-03-10', 'user-agent': '0-integrations' },
     rateLimit: { defaultWaitMs: 60_000, when: [
-      { status: 403, header: 'x-ratelimit-remaining', equals: '0', resetAt: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } },
-      { status: 429, header: 'x-ratelimit-remaining', equals: '0', resetAt: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } },
+      { status: 403, header: 'x-ratelimit-remaining', equals: '0', wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } },
+      { status: 429, header: 'x-ratelimit-remaining', equals: '0', wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } },
       { status: 429 }, { status: 403, header: 'retry-after' }, { status: 403, path: 'message', contains: 'rate limit' },
     ] } },
   identify: { request: { path: '/user' }, id: 'id', name: 'login' },
