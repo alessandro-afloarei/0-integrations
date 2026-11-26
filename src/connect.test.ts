@@ -101,6 +101,16 @@ describe('connect', () => {
     await expect(finishConnect(attio, { secret: { apiKey: 'bad' }, fetch: http.fetch })).rejects.toMatchObject({ code: 'rejected' });
   });
 
+  it('reads the secret once: identify is sent the very value returned in secret', async () => {
+    const http = fakeFetch([{ url: 'https://api.attio.com/v2/self', respond: () => Response.json({ workspace_id: 'w1', workspace_name: 'Account' }) }]);
+    let reads = 0;
+    const secret = { get apiKey() { reads += 1; return `k${String(reads)}`; } };
+    const result = await finishConnect(attio, { secret, fetch: http.fetch });
+    expect(reads).toBe(1);
+    expect(result.secret).toEqual({ apiKey: 'k1' });
+    expect(http.calls.map(call => call.headers.authorization)).toEqual(['Bearer k1']);
+  });
+
   it("keeps a key entry's plain values and builds its credential from them", async () => {
     const http = fakeFetch([{ url: 'https://api.aircall.io/v1/company', respond: () => Response.json({ company: { name: 'Lumen' } }) }]);
     expect(await finishConnect(aircall, { secret: { apiToken: 'token' }, values: { apiId: '12' }, fetch: http.fetch }))

@@ -61,9 +61,6 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     const { secret: secrets = {}, values: plain = {} }: Partial<FormFinish> = 'secret' in input ? input : {};
     // Only the declared fields, each filled, all checked before anything is sent: an entry's templates read them.
     const fields = entry.fields ?? [];
-    // The entry's only secret field is the credential; an app's own entry may declare none, its fault before the caller's.
-    const credential = fields.find(field => field.secret);
-    if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const read = (field: Field) => {
       // Own values only, a getter's included (an inherited `constructor` is none). Left out or blank takes the default;
       // another type is refused.
@@ -75,9 +72,12 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
       if (field.choices !== undefined && !field.choices.includes(value)) throw new TypeError(`connect_field_invalid: ${field.name}`);
       return [field.name, value] as const;
     };
-    const secret = Object.fromEntries(fields.filter(field => field.secret).map(read));
+    // Each field is read once, so identify is sent the very credential returned. The first secret field is the
+    // credential; an app's own entry may declare none, its fault before the caller's.
+    const [credential, ...others] = fields.filter(field => field.secret).map(read);
+    if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const values = Object.fromEntries(fields.filter(field => !field.secret).map(read));
-    return { secret, ...await identifyAccount(entry, { fetch, token: read(credential)[1], values }) };
+    return { secret: Object.fromEntries([credential, ...others]), ...await identifyAccount(entry, { fetch, token: credential[1], values }) };
   }
   if (!('code' in input)) throw new TypeError('oauth_options_required');
   const { grant, extras } = await exchangeCode(entry, input.client, { ...input, fetch });

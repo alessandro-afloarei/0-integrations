@@ -499,12 +499,14 @@ test('a base that does not parse is refused by entry id alone, its userinfo in n
 });
 
 test('a base is read without URL.parse, which Node 22.0 lacks', async () => {
-  const parse = vi.spyOn(URL, 'parse').mockImplementation(() => { throw new Error('URL.parse is not a function'); });
+  // Replaced whether or not this Node has it, and put back as it was.
+  const parse = Object.getOwnPropertyDescriptor(URL, 'parse');
+  Object.defineProperty(URL, 'parse', { configurable: true, value: () => { throw new Error('URL.parse is not a function'); } });
   try {
     const fake = fakeFetch([{ url: /https:/, respond: ok }]);
     await client(serpapi, { token: 'k', fetch: fake.fetch }).json('/account');
     expect(fake.calls[0]?.url).toBe('https://serpapi.com/account?api_key=k');
-  } finally { parse.mockRestore(); }
+  } finally { if (parse) Object.defineProperty(URL, 'parse', parse); else Reflect.deleteProperty(URL, 'parse'); }
 });
 
 test('a code that is the token sent in the query is no detail', async () => {
