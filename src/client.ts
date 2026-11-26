@@ -29,10 +29,8 @@ type Item<O> = O extends { records: infer P } ? Get<Result<O>, P> extends readon
 /** An operation as a method: a paged one yields its records. */
 type MethodOf<O> = (...call: Record<string, never> extends Args<O> ? Partial<CallArgs<O>> : CallArgs<O>) => O extends { paging: string }
   ? AsyncGenerator<Item<O>, void, undefined> : Promise<Result<O> | (O extends { notFound: 'null' } ? null : never)>;
-/** An operation id's first dot-separated segment: `'issues'` of `'issues.list'`. */
-type Head<K> = K extends `${infer H}.${string}` ? H : K;
-/** Dotted ids as nested objects: `'issues.list'` is `issues.list`. */
-type Nest<T> = { [K in keyof T as Head<K & string>]: K extends `${infer H}.${string}`
+/** Dotted ids as nested objects, by each id's first segment: `'issues.list'` is `issues.list`. */
+type Nest<T> = { [K in keyof T as K extends `${infer H}.${string}` ? H : K]: K extends `${infer H}.${string}`
   ? Nest<{ [J in keyof T as J extends `${H}.${infer R}` ? R : never]: T[J] }> : T[K] };
 
 /** The typed client of an entry: its operations, nested by id, and the raw calls. */

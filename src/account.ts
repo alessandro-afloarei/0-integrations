@@ -1,6 +1,6 @@
-import type { Call, Entry, Identify, Value, Values } from './catalogue.js';
+import type { Entry, Identify, Value, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
-import { callRequest, createClient, type HttpClient, type ProviderResponse } from './http.js';
+import { callRequest, createClient, type HttpClient } from './http.js';
 import { responseJson } from './http-response.js';
 import { fill, holds, placeholders, readPath } from './rules.js';
 
@@ -29,14 +29,9 @@ async function valueOf(value: Value, read: Read, where: string, id?: string): Pr
   return undefined;
 }
 
-/** Sends a declared call. */
-export function sendCall(http: HttpClient, call: Call): Promise<ProviderResponse> {
-  return http.request(...callRequest(call));
-}
-
 /** The identify request's answer. A `rejectWhen` rule that holds is a bad credential. */
 async function ask(entry: Entry, http: HttpClient, identify: Identify): Promise<{ status: number; body: unknown }> {
-  const response = await sendCall(http, identify.request ?? {});
+  const response = await http.request(...callRequest(identify.request ?? {}));
   const answer = { status: response.status, headers: response.headers, body: response.data };
   for (const { detail, ...when } of identify.rejectWhen ?? []) {
     if (holds(when, answer)) throw new ProviderHttpError('rejected', response.status, detail ?? null);
