@@ -77,16 +77,17 @@ const identityPaths = (value: Value | undefined) => (value === undefined ? [] : 
   .filter(name => !name.startsWith('connection.')).map(name => name.replace(/^tokenAnswer\./u, '')));
 
 /** Signs in to an entry with the test account's key and plain values (a token entry's token request, then identify),
- * then with a bad key, which must be refused as `rejected`. Each answer keeps only the paths the entry reads; the key,
- * each plain value given, every token issued and the account identify names are swapped for the kit's stand-ins, so the
- * recording replays with the kit's key and values. */
+ * then with a bad key, which must be refused as `rejected`; a redirected sign-in is refused. Each answer keeps only the
+ * paths the entry reads, and `retry-after` alone of its headers; the key, each plain value given, every token issued,
+ * the account identify names and the saved values are swapped for the kit's stand-ins. The result is replayed as the
+ * table test replays it, and written only when both sign-ins end as they did live. */
 async function recordEntry(entry: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
   const [auth] = entry.auth;
   if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
   const kit = kitValues(entry);
   const good = recorder(real, 'good');
   const bad = recorder(real, 'bad');
-  await signIn(entry, secret, good.fetch, { ...kit, ...given }).catch((error: unknown) => {
+  const { account } = await signIn(entry, secret, good.fetch, { ...kit, ...given }).catch((error: unknown) => {
     throw new Error(failure('recording stopped: the sign-in with the key failed with', error));
   });
   const refused = await signIn(entry, BAD_KEY, bad.fetch, { ...kit, ...given }).then(() => undefined, (error: unknown) => error);
@@ -94,19 +95,37 @@ async function recordEntry(entry: Entry, secret: string, given: Readonly<Record<
   if (!(refused instanceof ProviderHttpError && refused.code === 'rejected')) {
     throw new Error(failure('recording stopped: the bad key must be refused as rejected, not', refused));
   }
+  const exchanges = [...good.exchanges, ...bad.exchanges];
+  // A redirect's target can name the account, and the replay answers each request once.
+  if (exchanges.some(({ status }) => status >= 300 && status < 400)) throw new Error('recording refused: the sign-in was redirected: point the entry at the final URL');
   /** Each string or number the good answers hold at one of `paths`, for the stand-in `kit`. */
   const found = (paths: readonly string[], stand: string) => good.exchanges.flatMap(({ response }) => paths.map(path => readPath(response, path)))
     .filter(value => typeof value === 'string' || typeof value === 'number').map((value): Swap => [String(value), stand]);
-  const reads = answerReads(entry);
+  const { values, codes } = answerReads(entry);
   // Sign-in reads no other header: a `link` or `content-type` may name the account.
-  const kept = ({ headers = {}, response, ...exchange }: Exchange): Exchange => ({ ...exchange, response: onlyRead(response, reads) ?? null,
-    headers: Object.fromEntries(Object.entries(headers).filter(([name]) => name === 'location' || name === 'retry-after')) });
-  return scrub([...good.exchanges, ...bad.exchanges].map(kept), {
+  const kept = ({ headers = {}, response, ...exchange }: Exchange): Exchange => ({ ...exchange,
+    response: onlyRead(response, [...values, ...codes], codes) ?? null,
+    headers: Object.fromEntries(Object.entries(headers).filter(([name]) => name === 'retry-after')) });
+  const swaps = {
     sent: [[secret, GOOD_KEY],
       ...Object.entries(kit).flatMap(([name, stand]): Swap[] => (given[name] === undefined || given[name] === stand ? [] : [[given[name], stand]])),
       ...auth.kind === 'token' ? found([auth.request.token ?? 'access_token'], 'kit-token') : []],
     answered: [...found(identityPaths(entry.identify?.id), 'kit-account'), ...found(identityPaths(entry.identify?.name), 'kit-name'),
-      ...Object.entries(entry.save ?? {}).flatMap(([name, value]) => found(identityPaths(value), `kit-${name}`))] });
+      ...Object.entries(entry.save ?? {}).flatMap(([name, value]) => found(identityPaths(value), `kit-${name}`))] } satisfies Parameters<typeof scrub>[1];
+  const written = scrub(exchanges.map(kept), swaps);
+  // What dropping and swapping may have changed (a rule on a header not written, a message a rule compared): the file
+  // must sign in as the account did, swapped as the file is, and refuse the bad key.
+  const recording: Recording = { provider: entry.id, synthetic: false, source: '', recordedAt: '', exchanges: written };
+  const replayed = await signIn(entry, GOOD_KEY, replay(recording, 'good')).catch(() => undefined);
+  const expected = account === null ? null : [...swaps.sent, ...swaps.answered]
+    .reduce((id, [real, stand]) => id.replace(new RegExp(real.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'giu'), stand), account.id);
+  if (replayed === undefined || (replayed.account?.id ?? null) !== expected) {
+    throw new Error('recording refused: the file does not replay the sign-in with the key as it went live');
+  }
+  const rejected = await signIn(entry, BAD_KEY, replay(recording, 'bad')).then(() => false, (error: unknown) =>
+    error instanceof ProviderHttpError && error.code === 'rejected');
+  if (!rejected) throw new Error('recording refused: the file does not replay the bad key as rejected');
+  return written;
 }
 
 /** A module's kit scenario of that name, else an entry with no module, recorded from a test account. */
@@ -168,14 +187,14 @@ describe('recording an entry with no module, on its derived fake standing in for
     if (response.status >= 400 && !bad) return response;
     return Response.json(edit(await response.json(), request), { status: response.status });
   };
-  /** A provider whose answers carry a `location` header (kept, not followed on a 200) made from what was sent, written
-   * by `as`, and a `link` header naming a profile (dropped). */
+  /** A provider whose answers carry a `retry-after` header (the one kept) made from what was sent, written by `as`, and
+   * `link` and `location` headers naming a profile (dropped). */
   const echoing = (as: (sent: string) => string = sent => sent): Wrap => fetch => async (input, init) => {
     const request = new Request(input, init);
     const [url = '', body = '', authorization = ''] = [request.url, await request.clone().text(), request.headers.get('authorization') ?? ''].map(as);
     const response = await fetch(request);
     return new Response(response.body, { status: response.status, headers: { link: '<https://acme.test/people/ana-lopez>; rel="profile"',
-      location: `/echo?url=${url}&body=${body}&auth=${authorization}&encoded=${encodeURIComponent(authorization)}` } });
+      location: '/people/ana-lopez', 'retry-after': `url=${url}&body=${body}&auth=${authorization}&encoded=${encodeURIComponent(authorization)}` } });
   };
   /** The refusal for a real value still in exchange `at`'s `part`. */
   const stillIn = (kit: string, at: number, part: string) => `recording refused: the value for ${kit} is still in exchange ${String(at)}'s ${part} after the swap`;
@@ -196,10 +215,10 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(recording).toMatchObject({ provider: 'serpapi', synthetic: false, source: 'Recorded from a test account by src/record.test.ts.' });
   });
 
-  test('a plain value in a header: echoed as is and percent-encoded in `location`, it is written as its kit value; `link` is dropped', async () => {
+  test('a plain value in a header: echoed as is and percent-encoded in `retry-after`, it is written as its kit value; no other header is', async () => {
     const { text, recording } = await recordOnFake(trello, { key: 'real-key-1', values: { apiKey: 'real a/1' }, wrap: echoing() });
     const sent = `OAuth oauth_consumer_key="kit-apiKey", oauth_token="${GOOD_KEY}"`;
-    expect(recording?.exchanges[0]?.headers).toEqual({ location: expect.stringContaining(`&auth=${sent}&encoded=${encodeURIComponent(sent)}`) as unknown });
+    expect(recording?.exchanges[0]?.headers).toEqual({ 'retry-after': expect.stringContaining(`&auth=${sent}&encoded=${encodeURIComponent(sent)}`) as unknown });
     for (const real of ['real a/1', encodeURIComponent('real a/1'), 'real-key-1', 'ana-lopez']) expect(text).not.toContain(real);
     expect(await replayed(trello, recording)).toMatchObject([{ account: { id: 'kit-account', name: 'kit-name' } }, { code: 'rejected' }]);
   });
@@ -221,7 +240,7 @@ describe('recording an entry with no module, on its derived fake standing in for
     http: { baseUrl: 'https://api.acme.test', rateLimit: { when: [{ path: 'limits.left', equals: 0 }] },
       retry: { waitFromBody: { path: 'wait_ms', unit: 'ms' } } },
     identify: { request: { path: '/me' }, id: 'user.id', name: ['user.display', 'user.login'], rejectWhen: [{ path: 'state', equals: 'disabled' }] },
-    save: { plan: 'org.plan' }, errors: { detail: ['error.code'], rules: [{ when: { path: 'owner', equals: 'none' }, code: 'not_found' },
+    save: { plan: 'org.plan' }, errors: { detail: ['error.message', 'error.code'], rules: [{ when: { path: 'owner', equals: 'none' }, code: 'not_found' },
       { when: { path: 'gone', equals: true }, code: 'not_found' }] } });
 
   test('hostile: only the paths the entry reads are written; tokens, names, a phone, an address and other people are dropped', async () => {
@@ -237,14 +256,23 @@ describe('recording an entry with no module, on its derived fake standing in for
       'Carl', 'carl@', '555-2671']) {
       expect(text).not.toContain(real);
     }
-    expect(answerReads(reading).sort()).toEqual(['error.code', 'gone', 'limits.left', 'org.plan', 'owner', 'state', 'user.display', 'user.id',
-      'user.login', 'wait_ms']);
+    expect(answerReads(reading)).toEqual({ values: ['user.id', 'user.display', 'user.login', 'org.plan', 'wait_ms'],
+      codes: ['state', 'owner', 'gone', 'limits.left', 'error.message', 'error.code'] });
   });
 
   test('a path read as one whole key, and an array, keep the answer\'s own shape', () => {
     expect(onlyRead({ '@odata.nextLink': 'n', '@odata': { nextLink: 'x' }, other: 1 }, ['@odata.nextLink'])).toEqual({ '@odata.nextLink': 'n' });
     expect(onlyRead([{ id: 'a', name: 'n', secret: 's' }, { id: 'b' }], ['0.id', '0.name'])).toEqual([{ id: 'a', name: 'n' }]);
     expect(onlyRead('text', ['id'])).toBeUndefined();
+  });
+
+  test('hostile: at an error-code or condition path only a provider code is written, never a message', async () => {
+    const { text, recording } = await recordOnFake(reading, { key: 'real-key-1',
+      wrap: answering(body => ({ ...body as object, state: 'active', error: { code: 'invalid_key', message: 'No user Ana Lopez' } })) });
+    expect(recording?.exchanges[0]?.response).toMatchObject({ state: 'active', error: { code: 'invalid_key' } });
+    expect(text).not.toContain('Ana Lopez');
+    expect(onlyRead({ a: 'two words', b: 'x/y', c: 7, d: true, e: 'ok.code-1' }, ['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c', 'd', 'e']))
+      .toEqual({ c: 7, d: true, e: 'ok.code-1' });
   });
 
   test('hostile: a path that reaches an object or a list keeps only its shell, which the paths inside it fill', () => {
@@ -275,13 +303,9 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(text).not.toContain('ana-lopez');
   });
 
-  test('a value read whole is swapped, and one holding a real value inside it refuses the recording', async () => {
-    const code = (value: string) => answering(body => ({ ...body as object, error: { code: value } }));
-    const swapped = await recordOnFake(reading, { key: 'real-key-1', wrap: code('real-key-1') });
+  test('a code that is a real value is swapped whole', async () => {
+    const swapped = await recordOnFake(reading, { key: 'real-key-1', wrap: answering(body => ({ ...body as object, error: { code: 'real-key-1' } })) });
     expect(swapped.recording?.exchanges[0]?.response).toMatchObject({ error: { code: GOOD_KEY } });
-    const inside = await recordOnFake(reading, { key: 'real-key-1', wrap: code('bad real-key-1') });
-    expect(inside.refused).toBe(stillIn('kit-good-key', 1, 'response'));
-    expect(readdirSync(inside.folder)).toEqual([]);
   });
 
   test('a number is replaced only when it is the whole real value; one holding it by part is never rewritten, and refuses', async () => {
@@ -312,10 +336,15 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(readdirSync(folder)).toEqual([]);
   });
 
+  test('hostile: a real value that spells a stand-in inside it, echoed in another case, still refuses the recording', async () => {
+    const { refused } = await recordOnFake(serpapi, { key: 'Kit-Good-Key-9f3', wrap: echoing(sent => sent.toUpperCase()) });
+    expect(refused).toBe(stillIn('kit-good-key', 1, 'headers'));
+  });
+
   test('hostile: an account id echoed lower-cased in a header refuses the recording', async () => {
     const lowered: Wrap = fetch => async (input, init) => {
       const response = await fetch(input, init);
-      return new Response(response.body, { status: response.status, headers: { location: '/users/acct-7f3a90' } });
+      return new Response(response.body, { status: response.status, headers: { 'retry-after': '/users/acct-7f3a90' } });
     };
     const { refused } = await recordOnFake(serpapi, { key: 'real-key-1', wrap: lowered, account: { account_id: 'ACCT-7F3A90', account_email: 'kit-name' } });
     expect(refused).toBe(stillIn('kit-account', 1, 'headers'));
@@ -328,16 +357,40 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(readdirSync(folder)).toEqual([]);
   });
 
-  test('a redirected identify keeps its location and replays', async () => {
+  test('hostile: a redirected sign-in is refused, and nothing is written', async () => {
     const moved: Wrap = fetch => (input, init) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
-      if (url.pathname === '/account') return Promise.resolve(new Response(null, { status: 307, headers: { location: `/v2/account${url.search}` } }));
-      return fetch(new Request(request.url.replace('/v2/account', '/account'), request));
+      if (url.pathname === '/account') return Promise.resolve(new Response(null, { status: 307, headers: { location: `/people/ana-lopez${url.search}` } }));
+      return fetch(new Request(request.url.replace('/people/ana-lopez', '/account'), request));
     };
-    const { recording } = await recordOnFake(serpapi, { key: 'real-key-1', wrap: moved });
-    expect(recording?.exchanges[0]?.headers?.location).toBe(`/v2/account?api_key=${GOOD_KEY}`);
-    expect(await replayed(serpapi, recording)).toMatchObject([{ account: { id: 'kit-account' } }, { code: 'rejected' }]);
+    const { refused, folder } = await recordOnFake(serpapi, { key: 'real-key-1', wrap: moved });
+    expect(refused).toBe('recording refused: the sign-in was redirected: point the entry at the final URL');
+    expect(readdirSync(folder)).toEqual([]);
+  });
+
+  test('hostile: a file that no longer signs in as the account did live is refused', async () => {
+    // A rule on a header refuses the bad key live; the header is not written, so the file would let it pass.
+    const headed = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' },
+      identify: { request: { path: '/me' }, rejectWhen: [{ header: 'x-account-state', equals: 'disabled' }] } });
+    const disabled: Wrap = fetch => async (input, init) => {
+      const response = await fetch(input, init);
+      return response.status === 401 ? Response.json({}, { headers: { 'x-account-state': 'disabled' } }) : response;
+    };
+    const { refused, folder } = await recordOnFake(headed, { key: 'real-key-1', wrap: disabled });
+    expect(refused).toBe('recording refused: the file does not replay the bad key as rejected');
+    expect(readdirSync(folder)).toEqual([]);
+  });
+
+  test('hostile: a swap a condition tests, which changes the sign-in with the key, is refused', async () => {
+    // Swapped, the name equals what the rule refuses: the file would turn the good key away.
+    const named = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' },
+      identify: { request: { path: '/me' }, id: 'id', name: 'name', rejectWhen: [{ path: 'name', equals: 'kit-name' }] } });
+    const { refused, folder } = await recordOnFake(named, { key: 'real-key-1', account: { id: 'u-real-881', name: 'Ana Lopez' } });
+    expect(refused).toBe('recording refused: the file does not replay the sign-in with the key as it went live');
+    expect(readdirSync(folder)).toEqual([]);
   });
 
   test('an answer that is not JSON is written as null, its status kept, and the bad key still reads as rejected', async () => {
