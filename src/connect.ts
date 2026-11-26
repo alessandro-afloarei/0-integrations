@@ -62,7 +62,7 @@ const plainOf = (entry: Entry, given: Values): Record<string, string> =>
 /** A form of the entry's fields, or the provider's authorization URL with the PKCE verifier and the plain values read,
  * every OAuth 2 URL and the base filled and checked with them first. */
 export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart<E>], []>):
-  Promise<ByKind<E, Redirect<E>, Form>>;
+  Promise<E extends Entry ? ByKind<E, Redirect<E>, Form> : never>;
 export async function startConnect(entry: Entry, options?: OAuthStart): Promise<ConnectStart> {
   const [auth] = entry.auth;
   if (auth.kind !== 'oauth2') return { kind: 'form', fields: entry.fields ?? [] };

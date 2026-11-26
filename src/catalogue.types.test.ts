@@ -2,6 +2,7 @@ import { expect, expectTypeOf, test } from 'vitest';
 import { defineProvider, signInWith, type SignIn } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
 import { linear } from './catalogue/linear.js';
+import { azuredevops } from './catalogue/azuredevops.js';
 import { mattermost } from './catalogue/mattermost.js';
 import { client } from './client.js';
 import { finishConnect, startConnect, type Connected } from './connect.js';
@@ -100,6 +101,10 @@ async function typedHost(clientId: string, redirectUri: string, state: string, h
   await startConnect(oauth, { clientId, redirectUri, state });
   const started = await startConnect(oauth, { clientId, redirectUri, state, values: { host } });
   expectTypeOf(started.values.host).toEqualTypeOf<string>();
+  // A union of entries starts with a union of results: each its own plain fields, never both.
+  const either = (id: string) => (id === 'mattermost' ? mattermost : azuredevops);
+  const one = await startConnect(either('mattermost'), { clientId, redirectUri, state, values: { host } });
+  expectTypeOf(one.values).toEqualTypeOf<Readonly<Record<'host', string>> | Readonly<Record<'organization', string>>>();
   // Linear's has no plain field, so it takes none.
   await startConnect(linear, { clientId, redirectUri, state });
   // @ts-expect-error Linear has no plain field
