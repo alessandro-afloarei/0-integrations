@@ -277,10 +277,13 @@ const runnable = {
     const nested = ['access_token', 'refresh_token', 'id_token'];
     return reads(entry, 'tokenAnswer.').every(name => !own.includes(name.split('.')[1]) && !nested.includes(name.split('.').at(-1) ?? ''));
   },
-  // A key has no token answer: the engine skips such a path in a list and reads the next (HubSpot's `hub_id`, then `portalId`).
-  'no `tokenAnswer.*` on a key entry, but before a path of identify\'s answer in an `id` or `name` list': (entry: Entry) => {
+  // A key has no token answer: the engine skips such a path in a list and reads the next (HubSpot's `hub_id`, then
+  // `portalId`), which is worth writing only when another sign-in of the whole entry has a token answer.
+  'no `tokenAnswer.*` on a key entry, except before a path of identify\'s answer in an `id` or `name` list beside an OAuth 2 or token sign-in':
+  (entry: Entry, whole: Entry = entry) => {
     const answered = (path: string) => !path.startsWith('tokenAnswer.') && !path.startsWith('connection.');
-    const strict = (value: Value | undefined) => (value !== undefined && typeof value !== 'string'
+    const answering = whole.auth.some(auth => auth.kind !== 'key');
+    const strict = (value: Value | undefined) => (answering && value !== undefined && typeof value !== 'string'
       && value.every((path, at) => answered(path) || value.slice(at + 1).some(answered)) ? [] : [value]);
     const values = [...strict(entry.identify?.id), ...strict(entry.identify?.name), ...Object.values(entry.save ?? {})];
     return entry.auth[0].kind !== 'key' || values.every(value => value === undefined
@@ -369,7 +372,7 @@ const signIns = (entry: Entry): [kind: string, one: Entry][] => entry.auth.map((
   [kind, entry.auth.length > 1 ? signInWith(entry, kind) : entry]);
 /** The rules an entry breaks, each with the sign-in it breaks them in. */
 const broken = (entry: Entry) => signIns(entry).flatMap(([kind, one]) =>
-  (Object.keys(runnable) as Rule[]).filter(rule => !runnable[rule](one)).map(rule => `${rule} (${kind})`));
+  (Object.keys(runnable) as Rule[]).filter(rule => !runnable[rule](one, entry)).map(rule => `${rule} (${kind})`));
 
 describe.each(entries)('%s', (id, entry) => {
   test('matches the entry types', () => { expect(entrySchema.safeParse(entry).error).toBeUndefined(); });
@@ -379,7 +382,7 @@ describe.each(entries)('%s', (id, entry) => {
   // kind when there are several.
   for (const [kind, one] of signIns(entry)) {
     const named = entry.auth.length > 1 ? ` (${kind})` : '';
-    test.each(Object.keys(runnable) as Rule[])(`declares %s${named}`, rule => { expect(runnable[rule](one)).toBe(true); });
+    test.each(Object.keys(runnable) as Rule[])(`declares %s${named}`, rule => { expect(runnable[rule](one, entry)).toBe(true); });
     // Every sign-in that sends identify, and every token sign-in, signs in on the fake derived from it: no recording needed.
     if (one.identify?.request !== undefined || one.auth[0].kind === 'token') {
       test.each(['good', 'bad'] as const)(`signs in on its derived fake with a %s key${named}`, async key => {
@@ -488,10 +491,12 @@ test.each<[Rule, Entry]>([
     identify: { id: 'workspace_id' } })],
   ["an `identify.request` whenever a value reads identify's answer", defineProvider({ ...oauth2, scopes: { default: [] },
     identify: { id: 'tokenAnswer.team.id' }, save: { region: 'Region {region}' } })],
-  ['no `tokenAnswer.*` on a key entry, but before a path of identify\'s answer in an `id` or `name` list', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*` on a key entry, except before a path of identify\'s answer in an `id` or `name` list beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { id: 'tokenAnswer.team.id' } })],
-  ['no `tokenAnswer.*` on a key entry, but before a path of identify\'s answer in an `id` or `name` list', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*` on a key entry, except before a path of identify\'s answer in an `id` or `name` list beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { request: { path: '/me' }, id: ['id', 'tokenAnswer.team.id'] } })],
+  ['no `tokenAnswer.*` on a key entry, except before a path of identify\'s answer in an `id` or `name` list beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } })],
   ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     scopes: { default: ['read'] } })],
   ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
