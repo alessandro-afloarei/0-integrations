@@ -18,7 +18,7 @@ export const monday = defineProvider({
     tokenUrl: 'https://auth.monday.com/oauth_ms/oauth/token', json: true }, { kind: 'key', send: { header: 'authorization' } }],
   scopes: { default: ['me:read', 'boards:read', 'boards:write'] },
   revoke: { url: 'https://auth.monday.com/oauth_ms/oauth/revoke', token: ['refresh', 'access'] },
-  http: { baseUrl: 'https://api.monday.com/v2', headers: { 'api-version': '2026-10' }, retry: {} },
+  http: { baseUrl: 'https://api.monday.com/v2', headers: { 'api-version': '2026-10' }, retry: { onlyStated: true } },
   identify: { request: { graphql: 'query Me { me { id name email } }' }, id: 'data.me.id', name: ['data.me.name', 'data.me.email'] },
   errors: { detail: 'errors.0.extensions.code', failed: { path: 'errors.0' } },
   operations: {
