@@ -116,20 +116,19 @@ number.
 **What is swapped.** The key becomes `kit-good-key`, each plain value given its kit value, and every token at the
 entry's `token` path `kit-token`: inside the URL, the request body and `retry-after` (as written, JSON-escaped,
 percent- or form-encoded), and in the answers where they are a whole value. In the answers, the account's id and name
-become `kit-account` and `kit-name`, and each `save` value `kit-<name>` (its key's name); a value read from the token
-answer becomes `kit-<path>`, as the derived fake answers it. A number is replaced only when
-it is a whole value. Codes at the error and condition paths are written as answered, apart from the values above, so
+become `kit-account` and `kit-name` (read in identify's answer or the token answer), and each `save` value
+`kit-<name>` (its key's name). A number is replaced only when it is a whole value. Codes at the error and condition paths are written as answered, apart from the values above, so
 the replay reads what the provider sent.
 
 **When it refuses.** Before it writes, the recorder replays the file as the table test does. It writes nothing when:
 
 - a sign-in request was answered with a redirect: point the entry at the final URL (a redirect's target can name the
   account, and the replay answers each request once);
-- the file fails the table test's own replay check (`replayProblem`): the key signs in, sending no request twice, to the
-  account the entry's own rule gives over the kit's stand-ins at the paths the file holds (so a fallback list follows
-  the path the provider answered), and the bad key is `rejected`. Dropping or swapping changed what a
-  rule reads (a `rejectWhen` on a header, which is not
-  written; a message a rule compared; a swapped value a condition tests). The message says which sign-in changed;
+- the file fails the table test's own replay check (`replayProblem`): the key signs in, to an account when the entry
+  names an id, and the bad key is `rejected`, each sending no more requests than the file holds for it. The account is
+  the engine's, from the file and the kit values: that the file holds nothing real is the swap's and the last check's
+  work. Dropping or swapping changed what a rule reads (a `rejectWhen` on a header, which is not written; a message a
+  rule compared; a swapped value a condition tests). The message says which sign-in changed;
 - a value to swap is under 4 characters (an account id `7`, a region `eu`): it would match unrelated text, so record
   from an account whose values are longer;
 - a real value is still in an exchange. Before the stand-ins are put in, each part is searched ignoring case,

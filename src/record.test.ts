@@ -2,14 +2,15 @@ import { existsSync, globSync, mkdtempSync, readdirSync, readFileSync, rmSync, w
 import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
-import { defineProvider, type Entry } from './catalogue.js';
+import { lookupNames } from './account.js';
+import { defineProvider, type Entry, type Value } from './catalogue.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { trello } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { ProviderHttpError } from './errors.js';
 import { classify } from './http-response.js';
 import { defaultFetch, filledBase } from './http.js';
-import { answerReads, BAD_KEY, GOOD_KEY, identityPaths, kitValues, onlyRead, playScenario, recorder, replay, replayProblem, scrub, signIn, type Exchange,
+import { answerReads, BAD_KEY, GOOD_KEY, kitValues, onlyRead, playScenario, recorder, replay, replayProblem, scrub, signIn, type Exchange,
   type KitScenario, type Recording, type Swap } from './kit.test-support.js';
 import { parseJson, readPath } from './rules.js';
 import { fakeFetch, fakeProvider } from './testing.js';
@@ -72,6 +73,10 @@ const failure = (what: string, error: unknown) => `${what} ${error instanceof Pr
   ? `${error.code}${error.status === null ? '' : ` (${String(error.status)})`}`
   : error instanceof Error && OWN_MESSAGE.test(error.message) ? error.message : 'an error whose message is not shown'}`;
 
+/** The paths identify or `save` reads a value at, in its answer or in the token answer (`tokenAnswer.` stripped). */
+const identityPaths = (value: Value | undefined) => (value === undefined ? [] : lookupNames({ identify: { id: value } })
+  .filter(name => !name.startsWith('connection.')).map(name => name.replace(/^tokenAnswer\./u, '')));
+
 /** Signs in to an entry with the test account's key and plain values (a token entry's token request, then identify),
  * then with a bad key, which must be refused as `rejected`; a redirected sign-in is refused. Each answer keeps only the
  * paths the entry reads, and `retry-after` alone of its headers; the key, each plain value given, every token issued,
@@ -94,10 +99,9 @@ async function recordEntry(entry: Entry, secret: string, given: Readonly<Record<
   const exchanges = [...good.exchanges, ...bad.exchanges];
   // A redirect's target can name the account, and the replay answers each request once.
   if (exchanges.some(({ status }) => status >= 300 && status < 400)) throw new Error('recording refused: the sign-in was redirected: point the entry at the final URL');
-  /** Each string or number the good answers hold at one of `paths`, each for its stand-in. */
-  const found = (paths: readonly (readonly [path: string, stand: string])[]) => good.exchanges.flatMap(({ response }) =>
-    paths.map(([path, stand]) => [readPath(response, path), stand] as const))
-    .flatMap(([value, stand]): Swap[] => (typeof value === 'string' || typeof value === 'number' ? [[String(value), stand]] : []));
+  /** Each string or number the good answers hold at one of `paths`, for the stand-in `stand`. */
+  const found = (paths: readonly string[], stand: string) => good.exchanges.flatMap(({ response }) => paths.map(path => readPath(response, path)))
+    .flatMap((value): Swap[] => (typeof value === 'string' || typeof value === 'number' ? [[String(value), stand]] : []));
   const { values, codes } = answerReads(entry);
   // An answer the sign-in did not accept names no account: there every kept string must be a code, whatever its path.
   // A 2xx token answer is accepted as it is, as `requestToken` takes it; identify's is also read by the entry's rules.
@@ -111,13 +115,13 @@ async function recordEntry(entry: Entry, secret: string, given: Readonly<Record<
   const swaps: { sent: Swap[]; answered: Swap[] } = {
     sent: [[secret, GOOD_KEY],
       ...Object.entries(kit).flatMap(([name, stand]): Swap[] => (given[name] === undefined || given[name] === stand ? [] : [[given[name], stand]])),
-      ...auth.kind === 'token' ? found([[auth.request.token ?? 'access_token', 'kit-token']]) : []],
-    answered: [...found(identityPaths(entry.identify?.id, 'kit-account')), ...found(identityPaths(entry.identify?.name, 'kit-name')),
-      ...Object.entries(entry.save ?? {}).flatMap(([name, value]) => found(identityPaths(value, `kit-${name}`)))] };
+      ...auth.kind === 'token' ? found([auth.request.token ?? 'access_token'], 'kit-token') : []],
+    answered: [...found(identityPaths(entry.identify?.id), 'kit-account'), ...found(identityPaths(entry.identify?.name), 'kit-name'),
+      ...Object.entries(entry.save ?? {}).flatMap(([name, value]) => found(identityPaths(value), `kit-${name}`))] };
   const written = scrub(exchanges.map(kept), swaps);
   // What dropping and swapping may have changed (a rule on a header not written, a message a rule compared): the file
   // must pass the table test's own replay check.
-  const problem = await replayProblem(entry, { provider: entry.id, synthetic: false, source: '', recordedAt: '', exchanges: written }, true);
+  const problem = await replayProblem(entry, { provider: entry.id, synthetic: false, source: '', recordedAt: '', exchanges: written });
   if (problem !== null) throw new Error(`recording refused: the file does not replay ${problem}`);
   return written;
 }
@@ -282,12 +286,12 @@ describe('recording an entry with no module, on its derived fake standing in for
       basic: ['{clientId}', '{clientSecret}'] } }],
     http: { baseUrl: 'https://api.acme.test' }, identify: { id: 'tokenAnswer.app_id' } });
 
-  test('an id read from the token answer is written as the fake\'s kit value, and the token answer keeps nothing else', async () => {
+  test('an id read from the token answer is written as the kit account, and the token answer keeps nothing else', async () => {
     const { text, recording } = await recordOnFake(tokenRead, { key: 'real-key-1', values: { clientId: 'real-cid-1' },
       wrap: answering(body => ({ ...body as object, app_id: 'APP-real-77', refresh_token: 'rt-real-99', id_token: 'jwt-real-1' })) });
-    expect(recording?.exchanges[0]?.response).toEqual({ access_token: 'kit-token', expires_in: 3600, app_id: 'kit-app_id' });
+    expect(recording?.exchanges[0]?.response).toEqual({ access_token: 'kit-token', expires_in: 3600, app_id: 'kit-account' });
     for (const real of ['APP-real-77', 'rt-real-99', 'jwt-real-1']) expect(text).not.toContain(real);
-    expect(await replayed(tokenRead, recording)).toMatchObject([{ account: { id: 'kit-app_id' } }, { code: 'rejected' }]);
+    expect(await replayed(tokenRead, recording)).toMatchObject([{ account: { id: 'kit-account' } }, { code: 'rejected' }]);
   });
 
   test('hostile: a saved value (a site, a team) is written as its kit value, not as the provider answered it', async () => {
@@ -388,7 +392,7 @@ describe('recording an entry with no module, on its derived fake standing in for
     const { refused, recording } = await recordOnFake(entry, { key: 'real-key-1', account });
     expect(refused).toBeUndefined();
     if (recording === undefined) return;
-    expect(await replayProblem(entry, recording, true)).toBeNull();
+    expect(await replayProblem(entry, recording)).toBeNull();
   });
 
   /** A token entry whose id falls back from the token answer to the profile. */
@@ -410,16 +414,24 @@ describe('recording an entry with no module, on its derived fake standing in for
     const { refused, recording } = await recordOnFake(fallback, { key: 'real-key-1', values: { clientId: 'real-cid-1' },
       account: { account_id: 'acct-real-55' }, wrap: tokenEdited });
     expect(refused).toBeUndefined();
-    if (recording !== undefined) expect(await replayProblem(fallback, recording, true)).toBeNull();
+    if (recording !== undefined) expect(await replayProblem(fallback, recording)).toBeNull();
   });
 
-  test('hostile: a file from an account whose id is not its stand-in fails the replay check', async () => {
-    const { recording } = await recordOnFake(serpapi, { key: 'real-key-1' });
-    if (recording === undefined) throw new Error('nothing written');
-    expect(await replayProblem(serpapi, recording, true)).toBeNull();
-    const leaked = { ...recording, exchanges: recording.exchanges.map(exchange => (exchange.key === 'good'
-      ? { ...exchange, response: { ...exchange.response as object, account_id: 'acct-real-55' } } : exchange)) };
-    expect(await replayProblem(serpapi, leaked, true)).toBe('the sign-in with the key');
+  /** A token entry whose id falls back from the token answer to a profile field of the same name. */
+  const sameName = defineProvider({ ...fallback, identify: { request: { path: '/account' }, id: ['tokenAnswer.account_id', 'account_id'] } });
+  test.each<[string, (body: Record<string, unknown>) => unknown]>([
+    ['supplies `account_id`', body => ({ ...body, account_id: 'tok-acct-real-9' })],
+    ['omits `account_id`, so the profile\'s is read', body => Object.fromEntries(Object.entries(body).filter(([name]) => name !== 'account_id'))],
+  ])('an id that falls back to a profile field of the same name, when the token answer %s, records and replays', async (_, edit) => {
+    const tokenEdited: Wrap = fetch => async (input, init) => {
+      const request = new Request(input, init);
+      const response = await fetch(request.clone());
+      return request.url.endsWith('/oauth2/token') && response.ok ? Response.json(edit(await response.json() as Record<string, unknown>)) : response;
+    };
+    const { refused, recording } = await recordOnFake(sameName, { key: 'real-key-1', values: { clientId: 'real-cid-1' },
+      account: { account_id: 'acct-real-55' }, wrap: tokenEdited });
+    expect(refused).toBeUndefined();
+    if (recording !== undefined) expect(await replayProblem(sameName, recording)).toBeNull();
   });
 
   test('a 2xx token answer is accepted as `requestToken` accepts it, whatever an error rule reads in it', async () => {
@@ -428,7 +440,7 @@ describe('recording an entry with no module, on its derived fake standing in for
       wrap: answering(body => ({ ...body as object, access_token: 'tok/en+real==', message: 'ok', app_id: 'APP-real-77' })) });
     expect(refused).toBeUndefined();
     expect(recording?.exchanges[0]?.response).toMatchObject({ access_token: 'kit-token' });
-    if (recording !== undefined) expect(await replayProblem(noted, recording, true)).toBeNull();
+    if (recording !== undefined) expect(await replayProblem(noted, recording)).toBeNull();
   });
 
   test('hostile: a redirected sign-in is refused, and nothing is written', async () => {

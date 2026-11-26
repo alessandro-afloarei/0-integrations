@@ -1,4 +1,4 @@
-import { existsSync, globSync, readFileSync } from 'node:fs';
+import { globSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
@@ -362,10 +362,8 @@ describe.each(entries)('%s', (id, entry) => {
   const [first, ...rest] = recordings.filter(({ file }) => file.startsWith(`${id}.`));
   if ((entry.identify?.request === undefined && entry.auth[0].kind !== 'token') || first === undefined) return;
   const recording = { ...first, provider: id, exchanges: [first, ...rest].flatMap(item => item.exchanges) };
-  // Only an entry with no module is recorded from an account by the recorder; a module's real recording is its kit's.
-  const fromAccount = !recording.synthetic && !existsSync(`src/${id}/${id}.ts`);
-  test('replays its sign-ins: the key to its account, the bad key rejected, each request once', async () => {
-    expect(await replayProblem(entry, recording, fromAccount)).toBeNull();
+  test('replays its sign-ins: the key to an account where the entry names an id, the bad key rejected', async () => {
+    expect(await replayProblem(entry, recording)).toBeNull();
   });
 });
 
