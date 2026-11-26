@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Smartsheet (Smartsheet.com; Gov, Europe and Australia are on other hosts): an access token as Bearer. 300 requests a
- * minute per token; after a 429, wait at least 60 seconds
- * (https://developers.smartsheet.com/api/smartsheet/guides/advanced-topics/scalability-options.md). A page past the
- * last answers the last page: page `sheets.list` by its `totalPages`. */
+/** Smartsheet.com (Gov, Europe and Australia are other hosts): an access token as Bearer; 300 requests a minute per
+ * token, after a 429 wait at least 60 seconds (https://developers.smartsheet.com/api/smartsheet/guides/advanced-topics/scalability-options.md).
+ * A page past the last answers the last page again: page `sheets.list` by `totalPages`, `rows.list` (a sheet's rows,
+ * 100 a page once `page` is sent) by `totalRowCount`. */
 const reference = 'https://developers.smartsheet.com/api/smartsheet/openapi';
 const row = { id: 'number', 'sheetId?': 'number', 'parentId?': 'number', 'rowNumber?': 'number', 'permaLink?': 'string',
   'createdAt?': 'unknown', 'modifiedAt?': 'unknown', 'cells?': [{ 'columnId?': 'number', 'value?': 'unknown' }] } as const;
@@ -22,6 +22,9 @@ export const smartsheet = defineProvider({
   http: { baseUrl: 'https://api.smartsheet.com/2.0', minIntervalMs: 200, retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/users/me' }, id: 'id', name: 'email' },
   operations: {
+    'rows.list': { docs: `${reference}/sheets/getsheet.md`, path: '/sheets/{sheetId}',
+      params: { sheetId, page: { in: 'query', type: 'number' }, pageSize: { in: 'query', type: 'number' } },
+      result: { 'totalRowCount?': 'number', rows: [row] } },
     'rows.get': { docs: `${reference}/rows/row-get.md`, path: '/sheets/{sheetId}/rows/{rowId}', notFound: 'null',
       params: { sheetId, rowId: { in: 'path', type: 'number', required: true } }, result: row },
     'rows.create': { docs: `${reference}/rows/rows-addtosheet.md`, method: 'POST', path: '/sheets/{sheetId}/rows',

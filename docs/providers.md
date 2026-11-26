@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 56 providers: 56 declared, 0 recorded;
-121 typed operations; webhooks: ed25519 1, hmac 16, standard 2, token 2. What waits is in the [waiting list](waiting-list.md).
+122 typed operations; webhooks: ed25519 1, hmac 16, standard 2, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -53,7 +53,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 56 providers: 
 | [Shortcut](https://developer.shortcut.com/api/rest/v3#Authentication) | tasks | key | stories.search, stories.get, stories.create, stories.update, workflows.list | hmac | declared |
 | [Slack](https://docs.slack.dev/authentication/installing-with-oauth) | chat | OAuth 2 | — | hmac | declared |
 | [Slite](https://developers.slite.com/docs/getting-started) | docs | key | notes.list, notes.get, notes.create, notes.update | — | declared |
-| [Smartsheet](https://developers.smartsheet.com/api/smartsheet/guides/basics/authentication.md) | tasks | key | rows.get, rows.create, rows.update, sheets.list | — | declared |
+| [Smartsheet](https://developers.smartsheet.com/api/smartsheet/guides/basics/authentication.md) | tasks | key | rows.list, rows.get, rows.create, rows.update, sheets.list | — | declared |
 | [Stripe](https://docs.stripe.com/api/authentication) | finance | key | — | hmac | declared |
 | [Todoist](https://developer.todoist.com/api/v1/authorization.md) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, projects.list | hmac | declared |
 | [Trello](https://developer.atlassian.com/cloud/trello/guides/rest-api/authorization/) | tasks | key | — | — | declared |
