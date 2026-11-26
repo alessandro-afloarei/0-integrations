@@ -67,9 +67,9 @@ export type Webhook = (
 ) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 export type Where = { query: string } | { body: string };
 /** `page`: no page number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the
- * answer itself when absent) is empty or no list. `linkHeader` and `nextUrl`: the next link is the `Link` header's
- * `rel="next"`, or the value at `next`; a path is read on the base's origin, and the link must sit under the base's path
- * and `pathPrefix`. */
+ * answer itself when absent) is empty; a `list` that is missing or no list is `invalid_response`. `linkHeader` and
+ * `nextUrl`: the next link is the `Link` header's `rel="next"`, or the value at `next`; a path is read on the base's
+ * origin, and the link must sit under the base's path and `pathPrefix`. */
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true }
   | { kind: 'linkHeader'; pathPrefix?: string } | { kind: 'nextUrl'; next: Path;

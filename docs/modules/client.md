@@ -112,7 +112,7 @@ read, as `TypeError('url_outside_origin')` when it would change the host and `Ty
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
   A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered page that repeats
-  the one before (`page_repeated`). A next link, from a `Link` header or the body, may be a full URL or a path on the
+  the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
   base's origin (Shortcut's search answers a path and query string); one outside the base's origin, path or
   `pathPrefix` is `invalid_response` (`next_link_foreign`), and nothing is sent to it.
 
