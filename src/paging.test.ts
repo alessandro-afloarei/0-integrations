@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { defineProvider, type Paging } from './catalogue.js';
 import { createClient, type RequestOptions } from './http.js';
-import { nextCursor, nextLink, ownPath, walk } from './paging.js';
+import { followed, nextCursor, ownPath, walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
 
 const cursor = { kind: 'cursor', next: 'pagination.cursor', more: 'pagination.hasMore', send: { query: 'cursor' } } as const;
@@ -17,13 +17,13 @@ test('cursor: more decides, and a blank cursor with more is cursor_missing', () 
 const graph = { kind: 'nextUrl', next: '@odata.nextLink', pathPrefix: '/me/' } as const;
 const BASE = 'https://graph.microsoft.com/v1.0';
 test("nextUrl stays on the provider's origin and under its prefix", () => {
-  expect(nextLink(graph, BASE, { '@odata.nextLink': `${BASE}/me/messages?$skip=10` })).toBe('/me/messages?$skip=10');
-  expect(nextLink(graph, BASE, {})).toBeNull();
+  expect(followed(graph, BASE, `${BASE}/me/messages?$skip=10`)).toBe('/me/messages?$skip=10');
+  expect(followed(graph, BASE, undefined)).toBeNull();
   for (const link of ['https://elsewhere.test/v1.0/me/x', `${BASE}/users/x`, `${BASE}/me/%2e%2e/%2e%2e/users`,
     'http://graph.microsoft.com/v1.0/me/x', 'https://graph.microsoft.com:8443/v1.0/me/x', '//graph.microsoft.com/v1.0/me/x',
     'https://graph.microsoft.com@elsewhere.test/v1.0/me/x', 'https:\\\\elsewhere.test\\v1.0\\me\\x',
     'https://graph.microsoft.com/v1.0evil/me/x', '/v1.0/users/x', `blob:${BASE}/me/x`]) {
-    expect(() => nextLink(graph, BASE, { '@odata.nextLink': link })).toThrow(expect.objectContaining({ detail: 'next_link_foreign' }));
+    expect(() => followed(graph, BASE, link)).toThrow(expect.objectContaining({ detail: 'next_link_foreign' }));
   }
   expect(ownPath(graph, BASE, `${BASE}/me/../users`)).toBeNull();
   // A path is read on the base's origin, then by the same rule.

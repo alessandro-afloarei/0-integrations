@@ -62,9 +62,6 @@ const partName = z.string().regex(/^[^\s,=]+$/u, 'a `part` names one `name=value
 const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional(),
   challenge: z.strictObject({ when: when.refine(item => item.equals !== undefined || item.in !== undefined, 'a `challenge.when` compares the body value: give `equals` or `in`'), echo: z.string().min(1) }).optional() };
 const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]);
-/** A page number's first value belongs to a `page` shape alone. */
-const pageOnly = { error: (issue: { code: string; keys?: readonly string[] }) => (issue.code === 'unrecognized_keys' && issue.keys?.includes('zeroBased')
-  ? '`zeroBased` belongs to a `page` paging shape: leave it out' : undefined) };
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
@@ -130,11 +127,11 @@ const entrySchema = z.strictObject({
       ? 'a `standard` webhook takes no `header`, `signed`, `timestamp` or `prefix`: Standard Webhooks fixes them' : undefined) }),
   ]).optional(),
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(), send: where }, pageOnly),
+    z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(), send: where }),
     z.strictObject({ kind: z.literal('page'), send: where, list: z.string().optional(), more: z.string().optional(),
       zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional() }),
-    z.strictObject({ kind: z.literal('linkHeader'), pathPrefix }, pageOnly),
-    z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix }, pageOnly),
+    z.strictObject({ kind: z.literal('linkHeader'), pathPrefix }),
+    z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix }),
   ])).optional(),
   operations: z.record(z.string(), z.union([z.strictObject({ method: method.optional(), path: template, ...operationParts }),
     z.strictObject({ graphql: z.string(), ...operationParts })])).optional(),
@@ -720,10 +717,10 @@ test('an `ed25519` webhook with an unknown key such as `signd` gets the ordinary
 });
 
 test.each<[Record<string, unknown>, string]>([
-  [{ kind: 'cursor', next: 'next', send: { query: 'cursor' }, zeroBased: true }, '`zeroBased` belongs to a `page` paging shape: leave it out'],
-  [{ kind: 'nextUrl', next: 'next', zeroBased: true }, '`zeroBased` belongs to a `page` paging shape: leave it out'],
+  [{ kind: 'cursor', next: 'next', send: { query: 'cursor' }, zeroBased: true }, 'Unrecognized key: "zeroBased"'],
+  [{ kind: 'nextUrl', next: 'next', zeroBased: true }, 'Unrecognized key: "zeroBased"'],
   [{ kind: 'page', send: { query: 'page' }, zeroBased: false }, '`zeroBased` is `true` or left out (the first page is 1)'],
-  [{ kind: 'linkHeader', zeroBased: true }, '`zeroBased` belongs to a `page` paging shape: leave it out'],
+  [{ kind: 'linkHeader', zeroBased: true }, 'Unrecognized key: "zeroBased"'],
   [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
   ...['me', '/me', 'me/'].flatMap(pathPrefix => [{ kind: 'linkHeader', pathPrefix }, { kind: 'nextUrl', next: 'next', pathPrefix }]
     .map((shape): [Record<string, unknown>, string] => [shape, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)'])),

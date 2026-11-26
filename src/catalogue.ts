@@ -118,19 +118,14 @@ export function defineProvider<const D extends Entry>(
   data: D & { operations?: Unreserved<D['operations']> & Declared<D['operations'], D['paging']> }): D { return data; }
 
 type Kinds<E extends Entry> = E['auth'][number]['kind'];
-/** An entry narrowed to one sign-in: a key's or token's secret field goes with an OAuth 2 choice, and `scopes` and
- * `revoke` belong to OAuth 2 alone. */
-export type SignIn<E extends Entry, K extends Kinds<E>> = Omit<E, 'auth' | 'fields' | 'scopes' | 'revoke'>
-  & { auth: readonly [Extract<E['auth'][number], { kind: K }>] }
-  & (E extends { fields: readonly (infer F)[] } ? { fields: readonly (K extends 'oauth2' ? Exclude<F, { secret: true }> : F)[] } : unknown)
-  & (K extends 'oauth2' ? Pick<E, Extract<keyof E, 'scopes' | 'revoke'>> : unknown);
+/** An entry narrowed to one sign-in: `scopes` and `revoke` belong to OAuth 2 alone, so a key or token sign-in drops them. */
+export type SignIn<E extends Entry, K extends Kinds<E>> = Omit<E, 'auth' | ([K] extends ['key' | 'token'] ? 'scopes' | 'revoke' : never)>
+  & { auth: readonly [Extract<E['auth'][number], { kind: K }>] };
 
 /** The entry with `auth` narrowed to its sign-in of that kind; every engine function reads the first sign-in. */
 export function signInWith<const E extends Entry, K extends Kinds<E>>(entry: E, kind: K): SignIn<E, K> {
   const auth = entry.auth.find(item => item.kind === kind);
   if (auth === undefined) throw new TypeError(`sign_in_unknown: ${entry.id} ${kind}`);
-  const { fields, scopes, revoke, ...rest } = entry;
-  const oauth = kind === 'oauth2';
-  return { ...rest, auth: [auth], ...fields && { fields: oauth ? fields.filter(field => field.secret !== true) : fields },
-    ...oauth && scopes && { scopes }, ...oauth && revoke && { revoke } } as unknown as SignIn<E, K>;
+  const kept = Object.entries(entry).filter(([name]) => kind === 'oauth2' || (name !== 'scopes' && name !== 'revoke'));
+  return { ...Object.fromEntries(kept), auth: [auth] } as unknown as SignIn<E, K>;
 }

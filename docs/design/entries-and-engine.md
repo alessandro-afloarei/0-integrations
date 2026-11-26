@@ -290,15 +290,15 @@ its personal key, sent bare in `authorization`, to the same GraphQL endpoint and
    for apps that connect other people's accounts, which is what providers ask OAuth 2 for (ClickUp: "OAuth 2.0:
    Required for building apps for other users"). The key is `signInWith(entry, 'key')`. The rule constrains only an
    entry with two sign-ins.
-4. Narrowed to `oauth2`, the entry drops its secret fields (the grant is the secret); narrowed to `key` or `token`, it
-   keeps every field. An `oauth2` sign-in reads no plain field, in its base or its lookups: its `finishConnect` takes no
+4. A narrowed entry keeps every field: an OAuth 2 connect reads none (the grant is the secret, and its `finishConnect`
+   takes no form). An `oauth2` sign-in reads no plain field, in its base or its lookups: its `finishConnect` takes no
    `values`, so the grant would be issued and the first call would fail. A provider whose OAuth needs one (a subdomain or
    region chosen before the redirect) waits. A plain field only the key reads (a Basic email) is the key's alone.
 5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `identify`, `save`,
    `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
 6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
-   per sign-in, on `signInWith(entry, kind)` for an entry with several (one sign-in is checked as it is), each test named with its kind when there are several. The replay runs on
-   the recorded sign-in only (rule 9).
+   per sign-in: an entry with several on `signInWith(entry, kind)`, each test named with its kind, and an entry with
+   one as it is. The replay runs on the recorded sign-in only (rule 9).
 7. The schema takes `auth` of one or more sign-ins with unique kinds, not `key` with `token`, and OAuth 2 first when
    there is one.
 8. `catalogue.json` holds the entry as declared, every sign-in in its order; the providers page's Sign-in column lists

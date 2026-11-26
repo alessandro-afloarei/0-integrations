@@ -1,15 +1,12 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 import { defineProvider, type Auth, type Entry } from './catalogue.js';
 import { catalogueEntries, catalogueRecordings } from './kit.test-support.js';
 import { tierOf } from './tier.js';
 
 /**
- * `docs/providers.md`, rendered from the entries alone: `pnpm providers` (this test with `UPDATE_PROVIDERS` set) writes
- * it, and without it this test fails until the committed page is the one the entries give.
+ * `docs/providers.md`, rendered from the entries alone, as this test's file snapshot: `pnpm providers` (this test with
+ * `-u`) writes it, and without it this test fails until the committed page is the one the entries give.
  */
-const PAGE = fileURLToPath(new URL('../docs/providers.md', import.meta.url));
 
 type Recorded = readonly { file: string; synthetic: boolean }[];
 const SIGN_IN: Record<Auth['kind'], string> = { key: 'key', oauth2: 'OAuth 2', token: 'token' };
@@ -40,8 +37,7 @@ function providersPage(entries: readonly Entry[], recordings: Recorded): string 
 
 test('docs/providers.md is the page the entries give', async () => {
   const page = providersPage((await catalogueEntries()).map(([, entry]) => entry), catalogueRecordings());
-  if (process.env.UPDATE_PROVIDERS !== undefined) writeFileSync(PAGE, page);
-  expect(existsSync(PAGE) ? readFileSync(PAGE, 'utf8') : '', 'docs/providers.md is out of date: run pnpm providers').toBe(page);
+  await expect(page, 'docs/providers.md is out of date: run pnpm providers').toMatchFileSnapshot('../docs/providers.md');
 });
 
 const zeta = defineProvider({ id: 'zeta', name: 'Zeta', docs: 'https://zeta.test/docs', categories: ['chat'],

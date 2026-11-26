@@ -5,7 +5,6 @@ import { paginate } from './paginate.js';
 import { readPath } from './rules.js';
 
 type Cursor = Extract<Paging, { kind: 'cursor' }>;
-type NextUrl = Extract<Paging, { kind: 'nextUrl' }>;
 type Linked = Extract<Paging, { kind: 'linkHeader' | 'nextUrl' }>;
 type PageNumber = Extract<Paging, { kind: 'page' }>;
 
@@ -35,16 +34,11 @@ export function ownPath(shape: Linked, baseUrl: string, address: string): string
 }
 
 /** The path after the base a next link names, or null with none; a link that leaves is `next_link_foreign`. */
-function followed(shape: Linked, baseUrl: string, next: unknown): string | null {
+export function followed(shape: Linked, baseUrl: string, next: unknown): string | null {
   if (next === undefined || next === null) return null;
   const path = typeof next === 'string' ? ownPath(shape, baseUrl, next) : null;
   if (path === null) throw new ProviderHttpError('invalid_response', null, 'next_link_foreign');
   return path;
-}
-
-/** The next page's path after the base, or null when the answer names none. */
-export function nextLink(shape: NextUrl, baseUrl: string, answer: unknown): string | null {
-  return followed(shape, baseUrl, readPath(answer, shape.next));
 }
 
 /** A link-value's parameters: each `;`, its name, and a value quoted (RFC 8288 quoted-string) or bare. */
@@ -90,9 +84,8 @@ export async function* walk(http: HttpClient, shape: Paging, path: string, optio
     : shape.kind === 'page' ? numbered(http, shape, path, options)
     : async (link: string | undefined) => {
       const { data, headers } = await http.answer(link ?? path, link === undefined ? options : { ...options, query: {} });
-      const next = shape.kind === 'linkHeader' ? followed(shape, http.baseUrl, relNext(headers.get('link')))
-        : nextLink(shape, http.baseUrl, data);
-      return { items: [data], skipped: [], cursor: next };
+      const next = shape.kind === 'linkHeader' ? relNext(headers.get('link')) : readPath(data, shape.next);
+      return { items: [data], skipped: [], cursor: followed(shape, http.baseUrl, next) };
     };
   for await (const page of paginate(load)) yield* page.items;
 }

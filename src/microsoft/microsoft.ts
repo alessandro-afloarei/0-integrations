@@ -4,7 +4,7 @@ import { createClient, type HttpClient } from '../http.js';
 import { headerValue, keptHeaders, type MailboxEmail, type MailboxEmailAddress, type MailboxEvent, type MailboxEventTime,
   type MailboxReader } from '../mailbox/mailbox.js';
 import type { Page } from '../paginate.js';
-import { nextLink, ownPath } from '../paging.js';
+import { followed, ownPath } from '../paging.js';
 import { parseAnswer, parseEntries } from '../parse.js';
 import { microsoft } from '../catalogue/microsoft.js';
 import { datetime, pageSize, utc } from '../shapes.js';
@@ -121,7 +121,7 @@ export function graphMailbox(input: { token: (rejected?: string) => Promise<stri
   async function list(path: string, query: Record<string, string>, cursor: string | undefined): Promise<{ value: unknown[]; cursor: string | null }> {
     if (cursor !== undefined && ownPath(microsoft.paging.nextLink, http.baseUrl, http.baseUrl + cursor) === null) throw new TypeError('cursor_invalid');
     const answer = parseAnswer(listSchema, await http.json(cursor ?? path, cursor === undefined ? { query } : {}));
-    return { value: answer.value, cursor: nextLink(microsoft.paging.nextLink, http.baseUrl, answer) };
+    return { value: answer.value, cursor: followed(microsoft.paging.nextLink, http.baseUrl, answer['@odata.nextLink']) };
   }
 
   async function emails(path: string, query: Record<string, string>, cursor: string | undefined): Promise<Page<MailboxEmail>> {

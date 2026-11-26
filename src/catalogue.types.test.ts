@@ -27,10 +27,10 @@ const both = defineProvider({ id: 'both', name: 'Both', fields: [{ name: 'apiKey
   http: { baseUrl: 'https://api.both.test' }, identify: { request: { path: '/me' }, id: 'id' },
   operations: { 'items.get': { path: '/items/{id}', params: { id: { in: 'path', type: 'string', required: true } }, result: { id: 'string' } } } });
 
-test('signInWith narrows to one sign-in: OAuth 2 keeps scopes and revoke and drops the secret field, the key the reverse', () => {
+test('signInWith narrows to one sign-in: OAuth 2 keeps scopes and revoke, the key drops them; both keep the fields', () => {
   const oauth = signInWith(both, 'oauth2');
   const key = signInWith(both, 'key');
-  expect(oauth).toEqual({ ...both, auth: [both.auth[0]], fields: [] });
+  expect(oauth).toEqual({ ...both, auth: [both.auth[0]] });
   expect(key).toEqual({ id: both.id, name: both.name, fields: both.fields, auth: [both.auth[1]], http: both.http,
     identify: both.identify, operations: both.operations });
   for (const one of [oauth, key]) expect(JSON.parse(JSON.stringify(one))).toEqual(one);
