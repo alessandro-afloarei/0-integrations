@@ -2,7 +2,7 @@ import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
-import { blockedHost, guardedFetch } from './guard.js';
+import { blockedHost, guardedFetch, refusal } from './guard.js';
 import { backoffMs, bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
 import { fill, parseJson, placeholders, plainValue } from './rules.js';
@@ -114,7 +114,7 @@ function filledBase(entry: Entry, values: Values): string {
   if (!hosted || url.protocol !== 'https:' || url.username !== '' || url.password !== '') throw new TypeError(`base_host_refused: ${entry.id}`);
   // A typed host that is an address is checked here too, since an app's own fetch cannot be seen to dial; a name is
   // only checked by guardedFetch.
-  if (host === '*' && blockedHost(url.hostname)) throw new ProviderHttpError('request_failed', null, 'address_blocked');
+  if (host === '*' && blockedHost(url.hostname)) throw refusal();
   return filled;
 }
 

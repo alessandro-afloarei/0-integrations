@@ -1,8 +1,11 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { ProviderHttpError } from '../errors.js';
 import { fakeFetch, sequence } from '../testing.js';
 import { fakeFirecrawl } from './fake.js';
 import { firecrawlClient, type FirecrawlAction } from './firecrawl.js';
+
+// A failed assertion must not leave Math.random stubbed for the next test.
+afterEach(() => { vi.restoreAllMocks(); });
 
 const pages = [
   { url: 'https://lumen.test/', title: 'Home', markdown: '# Home', links: ['https://lumen.test/pricing'] },
@@ -81,7 +84,6 @@ test('reads a page as it loads when its render could not finish, never after a 4
   const down = fakeFetch([{ url: SCRAPE, respond: () => new Response(null, { status: 503 }) }]);
   await expect(client(down).scrape('https://x.test/faq', WAIT)).rejects.toMatchObject({ code: 'unavailable' });
   expect(down.calls).toHaveLength(8);
-  vi.restoreAllMocks();
 });
 
 test("waits out a scrape's 429 and resends the same body", async () => {

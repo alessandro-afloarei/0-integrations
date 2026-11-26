@@ -27,7 +27,8 @@ export function blockedHost(hostname: string): boolean {
   return isIP(host) !== 0 && blockedAddress(host);
 }
 
-const refusal = () => new ProviderHttpError('request_failed', null, 'address_blocked');
+/** The one refusal for an address the guard blocks: `request_failed`, detail `address_blocked`, never retried. */
+export const refusal = () => new ProviderHttpError('request_failed', null, 'address_blocked');
 /** The guard's own sockets: the global agent may follow `HTTPS_PROXY` (`NODE_USE_ENV_PROXY`), dialling past the lookup. */
 const agent = new Agent({ keepAlive: true });
 
@@ -44,9 +45,9 @@ async function* bodyOf(incoming: AsyncIterable<Uint8Array>, signal: AbortSignal)
 export function guardedLookup(host: string, options: LookupOptions,
   callback: (error: Error | null, address?: string | LookupAddress[], family?: number) => void): void {
   lookup(host, { ...options, all: true }, (error, addresses) => {
-    const first = error ? undefined : addresses[0];
-    if (error) callback(error);
-    else if (first === undefined || addresses.some(({ address }) => blockedAddress(address))) callback(refusal());
+    if (error) { callback(error); return; }
+    const [first] = addresses;
+    if (first === undefined || addresses.some(({ address }) => blockedAddress(address))) callback(refusal());
     else if (options.all === true) callback(null, addresses);
     else callback(null, first.address, first.family);
   });

@@ -32,7 +32,8 @@ entry:
   revoke; an OAuth entry declares scopes; a value read from identify's answer has a request to read it from; no `save`
   key is a field's name; each placeholder in the base names a plain field and sits in its host, never its path, and
   `http.host` is declared exactly when the base holds one, `'*'` only when the whole host is one placeholder; a
-  field's `choices` are a non-empty list of unique values holding its `default`, and a secret field has neither;
+  field's `choices` are a non-empty list of unique values holding its `default`, each of them and the `default` fills
+  the base to a host `http.host` takes, and a secret field has neither;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body), a paged operation names a declared shape and no `notFound`, a records path
   leads to a list, and no id is a client call or a dotted prefix of another.

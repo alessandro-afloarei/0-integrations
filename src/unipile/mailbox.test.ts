@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { paginate } from '../paginate.js';
 import { fakeFetch, sequence } from '../testing.js';
@@ -7,6 +7,9 @@ import calendarRecording from '../catalogue/unipile.calendar.recording.json' wit
 import mailRecording from '../catalogue/unipile.mail.recording.json' with { type: 'json' };
 import { KIT_ACCOUNT, unipileCalendarScenario, unipileMailScenario } from './scenario.test-support.js';
 import { unipileClient, unipileMailbox, type UnipileCalendar, type UnipileEmail, type UnipileEvent } from './unipile.js';
+
+// A failed assertion must not leave Math.random stubbed for the next test.
+afterEach(() => { vi.restoreAllMocks(); });
 
 const API = 'https://api.unipile.com/v2';
 const ON = `${API}/${KIT_ACCOUNT}`;
@@ -106,7 +109,6 @@ test("says where a message sits by its folders' roles, read once per account and
       ['AAMk-sent', 'sent'], ['AAMk-junk', 'spam'], ['AAMk-bin', 'trash'], ['AAMk-in', 'inbox'], ['AAMk-mine', 'inbox']]);
   }
   expect(unipile.calls.filter(call => call.url.includes('/folders'))).toHaveLength(6);
-  vi.restoreAllMocks();
 });
 
 test('reads a thread whole by its own route, and a thread gone as not found', async () => {
@@ -304,7 +306,6 @@ test('deletes an account, which the fake then does not know anywhere; one alread
   vi.spyOn(Math, 'random').mockReturnValue(0);
   await expect(client(failing.fetch).deleteAccount(KIT_ACCOUNT)).rejects.toMatchObject({ code: 'unavailable' });
   expect(failing.calls).toHaveLength(4);
-  vi.restoreAllMocks();
 });
 
 test('reads one account as a mailbox: its address, mail by metadata without drafts, a thread whole, the primary calendar', async () => {
