@@ -8,7 +8,7 @@ const prospect = { id: 'integer', 'attributes?': { 'name?': 'string', 'emails?':
   'company?': 'string', 'createdAt?': 'string', 'updatedAt?': 'string' } } as const;
 const written = { 'firstName?': 'string', 'lastName?': 'string', 'emails?': ['string'], 'title?': 'string', 'company?': 'string' } as const;
 const id = { in: 'path', type: 'integer', required: true } as const;
-const size = { 'page[size]': { in: 'query', type: 'integer', description: 'Records per page.' } } as const;
+const size = { 'page[size]': { in: 'query', type: 'integer', required: true, description: 'Records per page; it selects the cursor paging.' } } as const;
 const link = { data: { type: 'string', id: 'integer' } } as const;
 const ref = 'https://developers.outreach.io/api/reference';
 
