@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, signInWith, type SignIn } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type SignIn } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
 import { linear } from './catalogue/linear.js';
 import { azuredevops } from './catalogue/azuredevops.js';
@@ -159,7 +159,30 @@ async function valuesByEntry(own: OAuthClient, refreshToken: string, host: strin
   tokenSource(zoom, { secret: { clientSecret: 's' }, values: { accountId: 'a', clientId: 'c', host } });
 }
 
+// Never called: the types are the test.
+async function valuesWide(wide: Entry, own: OAuthClient, refreshToken: string, connected: Connected<typeof linear>, id: string) {
+  const start = { clientId: 'c', redirectUri: 'https://app.test/cb', state: 's', scopes: [], codeChallenge: 'c' };
+  // A wide entry: its values are not known, so each function takes them as optional, as `startConnect` does.
+  authorizeUrl(wide, start);
+  await exchangeCode(wide, own, { code: 'c', redirectUri: 'https://app.test/cb' });
+  await refreshGrant(wide, own, refreshToken);
+  await revokeGrant(wide, { accessToken: 'a' });
+  tokenSource(wide, { secret: {} });
+  await startConnect(wide, { clientId: 'c', redirectUri: 'https://app.test/cb', state: 's' });
+  // A connection's own values may be handed back, empty ones included; a value Linear does not declare may not.
+  await refreshGrant(linear, own, refreshToken, { values: connected.values });
+  await revokeGrant(linear, { accessToken: 'a', client: own, values: connected.values });
+  // @ts-expect-error Linear has no value
+  await revokeGrant(linear, { accessToken: 'a', client: own, values: { host: 'x' } });
+  // A union of two entries: one input per entry (either entry's values alone), never their names merged.
+  const either = id === 'mattermost' ? signInWith(mattermost, 'oauth2') : azuredevops;
+  authorizeUrl(either, { ...start, values: { host: 'h' } });
+  await refreshGrant(either, own, refreshToken, { values: { organization: 'o' } });
+  // @ts-expect-error a value neither entry declares
+  authorizeUrl(either, { ...start, values: { site: 's' } });
+}
+
 test('the narrowed types compile', () => {
-  expect([narrowed, stored, typedHost, valuesByEntry].every(item => typeof item === 'function')).toBe(true);
+  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide].every(item => typeof item === 'function')).toBe(true);
   expect(mailed.auth.map(auth => auth.kind)).toEqual(['oauth2', 'key']);
 });

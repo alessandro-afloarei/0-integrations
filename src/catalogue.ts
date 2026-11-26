@@ -132,14 +132,14 @@ type Saved<E extends Entry> = E extends { save: infer S } ? keyof S & string : n
 /** A form entry's secret fields, and its plain fields, by name. */
 export type Secrets<E extends Entry> = Keyed<E, Extract<Fields<E>, { secret: true }>['name'], string>;
 type PlainFields<E extends Entry> = Exclude<Fields<E>, { secret: true }>;
-export type Plain<E extends Entry> = Keyed<E, PlainFields<E>['name'], string>;
+export type Plain<E extends Entry> = E extends Entry ? Keyed<E, PlainFields<E>['name'], string> : never;
 /** The plain values a finish takes: a field with a default may be left out. */
 export type Entered<E extends Entry> = Unnamed<E> extends true ? Values : Keyed<E, Exclude<PlainFields<E>, { default: string }>['name'], string>
   & Partial<Keyed<E, Extract<PlainFields<E>, { default: string }>['name'], string>>;
-/** A connection's values: its plain fields, and what `save` kept (present only when the provider answered it). */
-export type Kept<E extends Entry> = Unnamed<E> extends true ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown };
-/** `values` as an input takes them: required when one value is, optional when none is, absent when there are none. */
-export type ValuesOption<V> = [keyof V] extends [never] ? { values?: never } : Partial<V> extends V ? { values?: V } : { values: V };
+export type Kept<E extends Entry> = E extends Entry ? Unnamed<E> extends true ? Values : Plain<E> & { readonly [K in Saved<E>]?: unknown } : never;
+/** `values` as an input takes them: required when one is, optional when none is or the names are unknown, else empty. */
+export type ValuesOption<V> = V extends unknown ? [keyof V] extends [never] ? { values?: Readonly<Record<string, never>> }
+  : string extends keyof V ? { values?: V } : Partial<V> extends V ? { values?: V } : { values: V } : never;
 
 type Kinds<E extends Entry> = E['auth'][number]['kind'];
 /** An entry narrowed to one sign-in: `scopes` and `revoke` belong to OAuth 2 alone, so a key or token sign-in drops them.

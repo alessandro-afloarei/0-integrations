@@ -8,11 +8,8 @@ import { checkHosts, fill, holds, oauthUrls, parseJson, placeholders, plainField
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
-/** `values` by the entry: its plain fields before a connection exists, the connection's values after. */
-type PlainIn<E extends Entry> = E extends Entry ? ValuesOption<Plain<E>> : never;
-type KeptIn<E extends Entry> = E extends Entry ? ValuesOption<Kept<E>> : never;
 /** A refresh's input, which may be left out only when its values may. */
-type RefreshInput<E extends Entry, I = { fetch?: typeof globalThis.fetch } & KeptIn<E>> = Partial<I> extends I ? [input?: I] : [input: I];
+type RefreshInput<E extends Entry, I = { fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>> = Partial<I> extends I ? [input?: I] : [input: I];
 
 /** The entry's OAuth 2 URLs, each filled and checked by the base's rule from the plain fields alone: a secret is never
  * in a URL, and a saved value does not exist before the exchange. */
@@ -46,7 +43,7 @@ function tokenAnswerOf(entry: Entry, answer: unknown): Record<string, unknown> {
 /** The consent URL. Every OAuth 2 URL of the entry is filled from `values` and checked first, so a value its token,
  * refresh or revoke URL would refuse is refused before the person is sent anywhere. */
 export function authorizeUrl<const E extends Entry>(entry: E, input: {
-  clientId: string; redirectUri: string; scopes: readonly string[]; state: string; codeChallenge?: string } & PlainIn<E>): URL {
+  clientId: string; redirectUri: string; scopes: readonly string[]; state: string; codeChallenge?: string } & ValuesOption<Plain<E>>): URL {
   const { config, authorize: url } = endpoints(entry, input.values);
   if (!input.state.trim()) throw new TypeError('state_required');
   if (config.pkce !== false && !input.codeChallenge) throw new TypeError('code_challenge_required');
@@ -153,7 +150,7 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
 }
 
 export async function exchangeCode<const E extends Entry>(entry: E, client: OAuthClient, input: { code: string; redirectUri: string;
-  codeVerifier?: string | undefined; fetch?: typeof globalThis.fetch } & PlainIn<E>): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
+  codeVerifier?: string | undefined; fetch?: typeof globalThis.fetch } & ValuesOption<Plain<E>>): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
   const c = context(entry, client, input);
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
   const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });
@@ -198,7 +195,7 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
  * revoke's 404 (a request revoke's 404 is a missing route, not a gone token).
  * `client` is the OAuth app, sent only by an RFC 7009 revoke, which refuses to start without it. */
 export async function revokeGrant<const E extends Entry>(entry: E, input: { accessToken?: string; refreshToken?: string | null;
-  client?: OAuthClient; fetch?: typeof globalThis.fetch } & KeptIn<E>): Promise<void> {
+  client?: OAuthClient; fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>): Promise<void> {
   const { revoke } = entry;
   checkHosts(entry);
   if (revoke === undefined) return;
@@ -276,7 +273,7 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
 
 /** The token function `client()` takes, for a `token` entry: requests a token, keeps it until it expires (60 s early) or
  * is refused, and shares one request among concurrent callers. A failed request is not kept. */
-export function tokenSource<const E extends Entry>(entry: E, input: Omit<TokenInput, 'values'> & KeptIn<E>): (rejected?: string) => Promise<string> {
+export function tokenSource<const E extends Entry>(entry: E, input: Omit<TokenInput, 'values'> & ValuesOption<Kept<E>>): (rejected?: string) => Promise<string> {
   let kept: Promise<{ token: string; expiresAt: number | null }> | undefined;
   let settled = false;
   const request = () => {
