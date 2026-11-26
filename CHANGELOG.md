@@ -118,7 +118,8 @@ Every line below breaks 0.12 unless it says otherwise.
 - hubspot: a portal id is any non-empty string or positive integer (a string had to match `^[1-9]\d*$`), and a `null`
   `hub_id` reads account-info (it was refused).
 - hubspot: `owners()` answers `{ items, skipped }`: a malformed owner is skipped and its id reported (it failed the
-  whole list).
+  whole list), and an owner whose email is null is left out of both, as one with no email was (a null email failed
+  the list).
 - lusha: an account without v3 access carries the answer's status (it was always 403) and its `Retry-After` in
   `retryAfterMs` (it was always `null`).
 - microsoft: the account id is Graph's `id` lowercased (Graph ids are lowercase GUIDs). A user with no address (neither

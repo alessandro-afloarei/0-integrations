@@ -51,8 +51,8 @@ than `retry.maxWaitMs`. A GET is a read unless `idempotent` says otherwise. An e
 ## Raw calls
 
 Each takes a path after the base URL and `RequestOptions`: `method`, `query`, `json`, `form`, `idempotent`, `signal`. A
-path starts with `/` (or `?`, or is empty for the base itself); any other is `TypeError('url_path_relative')`, before the
-token is read or anything is sent.
+path must start with `/` (or `?`, or be empty for the base itself); one that does not is refused before the token is
+read, as `TypeError('url_outside_origin')` when it would change the host and `TypeError('url_path_relative')` otherwise.
 
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
