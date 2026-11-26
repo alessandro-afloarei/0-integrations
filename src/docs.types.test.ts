@@ -29,8 +29,9 @@ import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook } from './we
 // parameters are what an example leaves to the app; a `return` keeps what it only shows. Never called: the types are the test.
 
 async function readmeConnectKey(apiKey: string) {
-  const { fields } = await startConnect(attio); // the form to draw: one secret field, "API key"
-  const { secret, account } = await finishConnect(attio, { secret: { apiKey }, fetch });
+  const key = signInWith(attio, 'key'); // Attio lists OAuth 2 first; this is its API key
+  const { fields } = await startConnect(key); // the form to draw: one secret field, "API key"
+  const { secret, account } = await finishConnect(key, { secret: { apiKey }, fetch });
   expectTypeOf(account).toEqualTypeOf<{ id: string; name: string }>();
   return [fields, secret];
 }

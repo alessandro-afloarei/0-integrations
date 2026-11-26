@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { Account } from './account.js';
-import { defineProvider, type Entry, type Field } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Field } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
-import { attio } from './catalogue/attio.js';
+import { attio as attioEntry } from './catalogue/attio.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
@@ -18,9 +18,8 @@ import { ProviderHttpError } from './errors.js';
 import { fakeGoogle } from './google/fake.js';
 import * as guard from './guard.js';
 import { tokenSource } from './oauth.js';
-import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
-import { fakeFetch, type Route } from './testing.js';
+import { fakeFetch, fakeProvider, type Route } from './testing.js';
 
 const callback = 'https://app.test/api/integrations/slack/callback';
 const start = { clientId: 'client', redirectUri: callback, state: 'state' };
@@ -42,6 +41,7 @@ const pkceSlack = defineProvider({ ...slack, auth: [{ kind: 'oauth2', authorizeU
 const reusingSlack = defineProvider({ ...slack, auth: [{ ...slack.auth[0], reusesGrant: true }] });
 /** Aircall as an entry whose fields are not known in the types: the runtime checks its input. */
 const looseAircall: Entry = aircall;
+const attio = signInWith(attioEntry, 'key');
 /** A token answer whose team has no id: identify refuses it. */
 const noTeam = { ...data, team: { id: '', name: 'Acme' } };
 afterEach(() => vi.useRealTimers());
@@ -116,6 +116,19 @@ describe('connect', () => {
     expect(reads).toBe(1);
     expect(result.secret).toEqual({ apiKey: 'k1' });
     expect(http.calls.map(call => call.headers.authorization)).toEqual(['Bearer k1']);
+  });
+
+  it("reads OAuth 2's id from the token answer and the key's from identify's answer, the absent path skipped", async () => {
+    const both = defineProvider({ id: 'k', name: 'K', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://k.test/authorize', tokenUrl: 'https://k.test/token', pkce: false }, { kind: 'key' }],
+      scopes: { default: [] }, http: { baseUrl: 'https://api.k.test' }, identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } });
+    const key = fakeFetch(fakeProvider(signInWith(both, 'key'), { key: 'k', account: { portalId: 7 } }));
+    expect((await finishConnect(signInWith(both, 'key'), { secret: { apiKey: 'k' }, fetch: key.fetch })).account).toEqual({ id: '7', name: '7' });
+    expect(key.calls.map(call => call.url)).toEqual(['https://api.k.test/me']);
+    const oauth = fakeFetch([{ method: 'POST', url: 'https://k.test/token', respond: () => Response.json({ access_token: 'a', token_type: 'bearer', hub_id: 9 }) }]);
+    expect((await finishConnect(both, { client, code: 'c', redirectUri: callback, fetch: oauth.fetch, onRevokeFailed: vi.fn() })).account)
+      .toEqual({ id: '9', name: '9' });
+    expect(oauth.calls.map(call => call.url)).toEqual(['https://k.test/token']);
   });
 
   it("keeps a key entry's plain values and builds its credential from them", async () => {
@@ -325,7 +338,7 @@ describe('connect types', () => {
   const attioFetch = fakeFetch([{ url: 'https://api.attio.com/v2/self', respond: () => Response.json({ workspace_id: 'w1', workspace_name: 'Account' }) }]).fetch;
 
   it('finishes either kind through a widened entry, or a union an app picks by id, with no cast', async () => {
-    const pick = (id: string): typeof hubspot | typeof attio => (id === 'attio' ? attio : hubspot);
+    const pick = (id: string): typeof slack | typeof attio => (id === 'attio' ? attio : slack);
     const widened: Entry = slack;
     const http = fakeFetch(fakeSlack(data));
     expect((await finishConnect(widened, oauth(http.fetch, await authorize(http)))).account).toEqual({ id: 'T1', name: 'Acme' });
@@ -333,7 +346,7 @@ describe('connect types', () => {
     // Either input type-checks for both: the runtime refuses a mismatch (`oauth_options_required`, `connect_field_required`).
     for (const input of [oauth(http.fetch, 'code'), { secret: { apiKey: 'k' }, fetch: attioFetch }]) {
       expectTypeOf(input).toExtend<Parameters<typeof finishConnect<Entry>>[1]>();
-      expectTypeOf(input).toExtend<Parameters<typeof finishConnect<typeof hubspot | typeof attio>>[1]>();
+      expectTypeOf(input).toExtend<Parameters<typeof finishConnect<typeof slack | typeof attio>>[1]>();
     }
     const widenedStart = await startConnect(widened, start);
     expectTypeOf(widenedStart).toEqualTypeOf<ConnectStart>();
