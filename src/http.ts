@@ -85,6 +85,7 @@ export function createClient(entry: Entry, input: {
   beforeRequest?: (url: URL) => void | Promise<void>;
 }): HttpClient {
   const baseUrl = input.baseUrl ?? entry.http.baseUrl;
+  const origin = new URL(baseUrl).origin;
   const retry = retryPolicy(entry.http.retry);
   const timeoutMs = entry.http.timeoutMs ?? 30_000;
   const minIntervalMs = input.minIntervalMs ?? entry.http.minIntervalMs ?? 0;
@@ -112,7 +113,9 @@ export function createClient(entry: Entry, input: {
   async function waitFor(response: Response): Promise<number> {
     const header = retryAfterMs(response.headers, Date.now());
     if (header !== null && header > 0) return header;
-    const fromBody = bodyWaitOf(entry.http.retry, parseJson(await retryBody(response, timeoutMs)), Date.now());
+    // The body is read only for a wait the entry says it names: a slow body must not hold up the retry.
+    const fromBody = entry.http.retry?.waitFromBody === undefined ? undefined
+      : bodyWaitOf(entry.http.retry, parseJson(await retryBody(response, timeoutMs)), Date.now());
     return fromBody !== undefined && Number.isFinite(fromBody) && fromBody >= 0 ? fromBody : retry.defaultWaitMs;
   }
 
@@ -175,6 +178,8 @@ export function createClient(entry: Entry, input: {
 
   const request = async (path: string, options: RequestOptions = {}): Promise<ProviderResponse> => {
     const url = new URL(baseUrl + path);
+    // The credential never leaves the base's origin, the first request included (`https://api.x.test` + `@evil.test`).
+    if (url.origin !== origin) throw new TypeError('url_outside_origin');
     for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value);
     await input.beforeRequest?.(new URL(url));
     const sendAs = (bearer: string) => follow(url, bearer, credentialOf(entry, bearer, input.values ?? {}), options);

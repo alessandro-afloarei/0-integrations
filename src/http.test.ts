@@ -421,3 +421,25 @@ test("GitHub's declared rate limits classify a 403", async () => {
   await expect(createClient(github, { token: () => Promise.resolve('k'), fetch: fake.fetch, minIntervalMs: 0 }).json('/user'))
     .rejects.toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 60_000 });
 });
+
+test('a request whose URL leaves the base\'s origin is refused before the token is read or anything is sent', async () => {
+  for (const path of ['@evil.test/y', '.evil.test/y', 'https://evil.test/y']) {
+    const fake = script(github, ok);
+    await expect(fake.client.json(path)).rejects.toThrow(new TypeError('url_outside_origin'));
+    expect(fake.calls).toHaveLength(0);
+    expect(fake.token).not.toHaveBeenCalled();
+  }
+  const fake = fakeFetch([{ url: /https:/, respond: ok }]);
+  const client = createClient(headerKey, { token: () => Promise.resolve('k'), fetch: fake.fetch, baseUrl: 'https://other.test' });
+  await expect(client.json('@evil.test/y')).rejects.toThrow(new TypeError('url_outside_origin'));
+  expect(fake.calls).toHaveLength(0);
+});
+
+test("a 429 is retried after the default wait without reading its body when the entry names no body wait", async () => {
+  const endless = () => new Response(new ReadableStream({ pull: () => new Promise(() => undefined) }), { status: 429 });
+  const fake = script(hubspot, endless, ok);
+  const result = fake.client.json('/items');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(fake.calls).toHaveLength(2);
+  expect(await result).toEqual({ ok: true });
+});

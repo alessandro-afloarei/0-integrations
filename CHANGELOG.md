@@ -19,6 +19,8 @@ Every line below breaks 0.12 unless it says otherwise.
   and a path also reads an own dotted key (`{ "error.code": … }`, `{ "error.retryAfterMs": … }`) and an object keyed
   `0` (`{ "errors": { "0": … } }`): apollo, breakcold, fireflies, google and microsoft read such bodies differently than
   before.
+- A request whose URL leaves its base's origin (`https://api.x.test` + `@evil.test/y`) is refused with
+  `TypeError('url_outside_origin')` before the token is read or anything is sent.
 - `createClient(entry, { token, fetch, values?, … })` takes a catalogue entry first, and an entry always has a base URL
   (`base_url_required` is gone); Aircall's credential is built from `values: { apiId }` and the API token.
 - slack: a code outside 2xx is read too: a 401 `invalid_auth` (or another revoked code) is `GrantRevoked`, and a 429
