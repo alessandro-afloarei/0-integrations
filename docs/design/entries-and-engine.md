@@ -587,7 +587,8 @@ way to list it). No `delete`.
 | `code` | source control: `repositories.list`, `repositories.get`, `pullRequests.list`, `pullRequests.get`, `pullRequests.create`; CI and deploys: `<runs>.list`, `<runs>.get`, `<runs>.create`, `<projects>.list` |
 | `monitoring` | `<issues>.list`, `<issues>.get`, `<issues>.update`, `<projects>.list`; incident tools add `<incidents>.create` |
 
-A category gains its template with the batch that first writes it.
+A category gains its template with the batch that first writes it. `<containers>.list` may instead be the list a
+create's required parameter is chosen from (incident.io's severities, Shortcut's workflows).
 
 **Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
 its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record
