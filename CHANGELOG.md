@@ -27,8 +27,9 @@ Nothing here is released yet.
   app must pass `values`, and an undeclared key does not compile; a connection's own `values` may be passed back for
   every entry, and an entry read as a wide `Entry` takes them as optional. The value types (`Plain`, `Kept`, `Entered`,
   `Secrets`, `ValuesOption`) are exported from `0-integrations/catalogue`.
-- `fakeProvider` answers an OAuth 2 entry's token, refresh and revoke URLs (with `client` and `code` options), and of
-  two operations that share a route, the one whose required parameters the request carries. A token answer holds the
+- `fakeProvider` answers an OAuth 2 entry's token, refresh and revoke URLs (with `client` and `code` options) and a
+  revoke sent as a request, and of two operations that share a route, the one whose required parameters the request
+  carries. A token answer holds the
   value `values` gives a `save` key that reads it.
 - The 28 entries written before every value had to be cited from the provider's documentation are checked against
   their providers' pages.

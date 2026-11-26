@@ -20,16 +20,20 @@ password); for an OAuth 2 entry, the access token its token URL gives.
   over the token or `expires_in`). One whose Basic or body differs
   from the request the engine sends for `key` is 400 `{ "error": "invalid_client" }`. Its calls then carry `kit-token`.
 - An OAuth 2 entry's token, refresh and RFC 7009 revoke URLs, filled from `values`, take a form body, or a JSON one
-  with `json`, and check the client authentication `clientAuth` declares (a Basic header, else `client_id` and
-  `client_secret` in the body) against `client`, by default `{ clientId: 'kit-client', clientSecret: 'kit-secret' }`:
-  another is 401 `{ "error": "invalid_client" }`.
+  with `json`, and check the client authentication `clientAuth` declares (a Basic header and no `client_secret` in the
+  body, else `client_id` and `client_secret` in the body and no Basic header) against `client`, by default
+  `{ clientId: 'kit-client', clientSecret: 'kit-secret' }`: another is 401 `{ "error": "invalid_client" }`.
   - The token URL answers an `authorization_code` grant of `code` (by default `kit-code`) with a `redirect_uri`, and a
     `code_verifier` unless `pkce: false`. The refresh URL (the token URL unless the entry names one) answers a
-    `refresh_token` grant of `kit-refresh`. Any other grant is 400 `{ "error": "invalid_grant" }`.
+    `refresh_token` grant of `kit-refresh`. Any other grant is 400 `{ "error": "invalid_grant" }`. The fake checks only
+    that a `redirect_uri` and a `code_verifier` are there: it never sees the authorize request, so it cannot compare
+    either with what that request sent.
   - Both answer `{ access_token: key, token_type: 'bearer', refresh_token: 'kit-refresh', expires_in: 3600 }`, with
     every `tokenAnswer.<path>` the entry reads, as a `token` entry's answer holds them, and, with `requireGranted`, the
     default scopes as `scope`.
-  - The revoke URL answers 200.
+  - The revoke URL answers 200 to a request naming a `token`, and 400 `{ "error": "invalid_request" }` to one naming
+    none; on a revoke URL that is also the token or refresh URL, a request with a `grant_type` is that grant. A revoke
+    the entry sends as a request (Slack's) carries the credential, as identify does, and is answered `{}`.
 - Each operation the app answers is routed by its method and path (each `{name}` one segment, decoded into
   `call.path`), or for GraphQL by its query. When two paths match a request, the one whose first differing segment is
   literal answers: `/items/recent` before `/items/{id}`, and `/a/b/{y}` before `/a/{x}/c`. Of two operations on the
@@ -37,6 +41,8 @@ password); for an OAuth 2 entry, the access token its token URL gives.
   the request all carries answers, the most such first, the first declared on a tie; when none carries its own, the
   first declared answers. Its function gets `{ path, query, body }` and returns the JSON answered with 200,
   `undefined` for a 404, or a `Response` answered as it is. Paging is the function's: it answers each page as it likes.
+  On a route two operations share, every request is routed afresh: a next page whose request drops the filter is
+  answered by the other operation.
 - The fake owns a GraphQL URL: a query it has no answer for throws
   `fakeProvider: no answer for this GraphQL query at POST <url>`. An app's own route for another query on that URL goes
   before the fake's routes, or into `operations`.
