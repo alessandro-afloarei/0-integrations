@@ -176,6 +176,9 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     if (identify.graphql === undefined) routes.push(route(identify.method ?? 'GET', at, identify.path ?? '', answer));
     else graphql.push([at, identify.graphql, answer]);
   }
+  // A revoke the entry sends as a request carries the credential, as identify does, and is answered `{}`.
+  const revoke = entry.revoke !== undefined && 'request' in entry.revoke ? entry.revoke.request : undefined;
+  if (revoke !== undefined) routes.push(route(revoke.method ?? 'GET', base(callBase(entry, revoke).baseUrl), revoke.path ?? '', () => ({})));
   for (const at of new Set(graphql.map(([at]) => at))) {
     routes.push(route('POST', at, '', call => {
       const found = graphql.find(([where, text]) => where === at && text === readPath(call.body, 'query'));

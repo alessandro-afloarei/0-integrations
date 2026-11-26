@@ -366,6 +366,12 @@ describe('fakeProvider', () => {
       .resolves.toMatchObject({ values: { botUserId: 'U1' }, account: { id: 'kit-team.id', name: 'kit-team.name' } });
   });
 
+  test("Slack's revoke, a request, is answered to the connection's token and refused to another", async () => {
+    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k' }));
+    await expect(revokeGrant(slack, { accessToken: 'k', fetch })).resolves.toBeUndefined();
+    await expect(revokeGrant(slack, { accessToken: 'x', fetch })).rejects.toMatchObject({ code: 'rejected' });
+  });
+
   test("a `tokenAnswer.*` kit value never replaces the token or `expires_in`", async () => {
     const reads = defineProvider({ ...zoom, identify: { id: 'tokenAnswer.expires_in' } });
     const values = { accountId: 'acc', clientId: 'c' };

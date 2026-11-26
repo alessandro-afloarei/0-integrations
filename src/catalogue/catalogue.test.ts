@@ -9,6 +9,7 @@ import { defineProvider, signInWith, type Category, type Entry, type Field, type
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked } from '../errors.js';
 import { createClient } from '../http.js';
+import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
 import { argumentShape, clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
@@ -406,17 +407,27 @@ describe.each(entries)('%s', (id, entry) => {
         else expect((await signedIn).account === null).toBe(one.identify?.id === undefined);
       });
     }
-    // Every OAuth 2 sign-in connects on its derived fake: the kit's client, the consent's code and verifier.
+    // Every OAuth 2 sign-in connects on its derived fake (the kit's client, the consent's code and verifier), keeps the
+    // grant and each `save` value the fake answered, then refreshes, and revokes where the entry declares a revoke.
     if (one.auth[0].kind === 'oauth2') {
       test.each(['good', 'bad'] as const)(`connects on its derived fake with a %s code${named}`, async code => {
         const { fetch } = fakeFetch(fakeProvider(one, { key: GOOD_KEY, values: kitValues(one) }));
+        const client = { clientId: 'kit-client', clientSecret: 'kit-secret' };
         const redirectUri = 'https://app.example.test/callback';
         const start = await startConnect(one, { clientId: 'kit-client', redirectUri, state: 'kit-state', values: kitValues(one) });
         if (start.kind !== 'redirect') throw new Error('an OAuth 2 sign-in starts with a redirect');
-        const connected = finishConnect(one, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, code: code === 'good' ? 'kit-code' : 'kit-bad-code',
+        const connected = finishConnect(one, { client, code: code === 'good' ? 'kit-code' : 'kit-bad-code',
           redirectUri, codeVerifier: start.codeVerifier, values: start.values, fetch, onRevokeFailed: error => { throw error; } });
-        if (code === 'bad') await expect(connected).rejects.toBeInstanceOf(GrantRevoked);
-        else expect((await connected).account === null).toBe(one.identify?.id === undefined);
+        if (code === 'bad') return expect(connected).rejects.toBeInstanceOf(GrantRevoked);
+        const { secret, values, account } = await connected;
+        expect(account === null).toBe(one.identify?.id === undefined);
+        const grant = { accessToken: GOOD_KEY, refreshToken: 'kit-refresh' };
+        expect(secret).toMatchObject(grant);
+        // A token answer's value is `kit-<path>`; a value read from identify's answer is the kit's.
+        expect(values).toMatchObject(Object.fromEntries(Object.entries(one.save ?? {}).map(([name, read]) => [name,
+          typeof read === 'string' && read.startsWith('tokenAnswer.') ? `kit-${read.slice('tokenAnswer.'.length)}` : expect.anything()])));
+        await expect(refreshGrant(one, client, 'kit-refresh', { fetch, values })).resolves.toMatchObject(grant);
+        if (one.revoke !== undefined) await expect(revokeGrant(one, { ...grant, client, values, fetch })).resolves.toBeUndefined();
       });
     }
   }
