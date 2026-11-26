@@ -11,32 +11,38 @@ A mechanism is built once three providers wait for it, with one of them as its f
 
 | Mechanism | Providers waiting |
 |---|---|
-| A GraphQL cursor sent in the query's variables (Linear's lists are declared one page each, `first` and `after` ordinary variables) | Linear, Monday |
+| OAuth 2 authorize and token URLs on a host the person types (a self-hosted server), so the OAuth 2 sign-in reads that plain value. **Next to be built.** | Mattermost, Outline, Sentry |
+| A GraphQL cursor sent in the query's variables (Linear's lists are declared one page each, `first` and `after` ordinary variables) | Linear, monday.com |
 | `offset` paging | Outline, PagerDuty |
+| A 429's wait in a header of seconds left (`RateLimit-User-Reset`, `RateLimit-Reset`) | Buildkite, PagerDuty |
+| A form-encoded body on a declared operation | Chatwork, Zulip |
+| An error code that is a number (`errorCode`, `error.code`), which `errors.detail` cannot read | PagerDuty, Smartsheet |
+| A webhook secret decoded from base64 before it signs | Airtable, Chatwork |
 | A next cursor that is a number | Vercel |
 | A next cursor read from the last record of a page | Render |
 | `Link` paging that ends on `results="false"` | Sentry |
 | `Link` paging under another `rel` (`next-page`) | Guru |
-| A continuation token in an answer's header | Azure DevOps |
-| OAuth 2 (3LO) on `api.atlassian.com/ex/confluence/{cloudId}` with next links relative to the site (`/wiki/api/v2/…`); a key sign-in breaks Atlassian's rules for apps, which must not collect API tokens ([Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/)) | Confluence |
-| A 429's wait in a header of seconds left (`RateLimit-User-Reset`, `RateLimit-Reset`) | Buildkite |
-| A form-encoded body on a declared operation | Chatwork, Twilio |
+| Page numbers where a page past the last answers the last page again, so the walk stops at the answer's page count | Smartsheet |
+| A list that answers 204 with no body when it is empty | Chatwork |
+| A 429's wait in the error body, in seconds, possibly fractional | Zulip |
 | An operation parameter sent as a header | PagerDuty |
 | Regional hosts on more than one domain | Smartsheet |
-| The credential in the URL path | Telegram |
-| A placeholder in identify's request path | Twilio |
-| A `User-Agent` the app names, sent when it signs in | Basecamp |
-| A webhook signed as a JWT | Monday, Netlify |
+| OAuth 2 (3LO) on `api.atlassian.com/ex/confluence/{cloudId}` with next links relative to the site (`/wiki/api/v2/…`); a key sign-in breaks Atlassian's rules for apps, which must not collect API tokens ([Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/)) | Confluence |
+| OAuth 2 whose base, and refresh, is the host the token answer names (`host`) | Wrike |
+| A plain value for an OAuth 2 sign-in (a subdomain, region or organization the person enters before the redirect) | Azure DevOps |
+| An OAuth 2 token URL built from a value the redirect returns (`/sentry-app-installations/{installationId}/authorizations/`), with a JSON body and the token at `token` | Sentry |
+| OAuth 2 for a public client from Dynamic Client Registration (no client secret, a loopback redirect only, no refresh token) | CircleCI |
+| An RFC 7009 revoke that authenticates the client by Basic, beside a token request that posts the secret in the body | Todoist |
 | Error codes read per sign-in (codes meaning a revoked OAuth grant, beside a key whose bad value must read as refused) | ClickUp |
-| A webhook timestamp in milliseconds (the signed body's `webhookTimestamp`; the `Linear-Timestamp` header is not signed) | Linear |
-| A plain value for an OAuth 2 sign-in (a subdomain or region chosen before the redirect) | — |
 | An OAuth 2 token answer whose `scope` is a list of strings, which the engine's OAuth library refuses (Linear's apps created before 1 December 2023, [OAuth 2.0 authentication](https://linear.app/developers/oauth-2-0-authentication)) | Linear |
+| A webhook signed as a JWT | monday.com |
 | A webhook handshake answered in a header (`X-Hook-Secret`) | Asana |
-| A webhook secret decoded from base64 before it signs | Airtable |
+| A webhook timestamp in milliseconds (the signed body's `webhookTimestamp`; the `Linear-Timestamp` header is not signed) | Linear |
 
 ## Declared in part
 
-An entry declared in part is listed here with what it leaves out and the mechanism that part waits for.
+An entry declared in part is listed here with what it leaves out and the mechanism that part waits for. "—" means the
+part waits for the provider, not for the engine.
 
 | Provider | Left out | Waits for |
 |---|---|---|
@@ -45,8 +51,46 @@ An entry declared in part is listed here with what it leaves out and the mechani
 | Linear | The webhook timestamp check: the app refuses a delivery over a minute old itself | A webhook timestamp in milliseconds |
 | Buildkite | A 429's wait: it is in `RateLimit-User-Reset`, which the retry does not read | A 429's wait in a header of seconds left |
 | ClickUp | The codes that mean a revoked authorization (`OAUTH_019`, `OAUTH_021`, `OAUTH_025`, `OAUTH_077`): `errors` is shared by both sign-ins, and a personal token would read them as a revoked grant | Error codes read per sign-in |
+| Airtable | The webhook | A webhook secret decoded from base64 |
+| Asana | The webhook | A webhook handshake answered in a header |
+| Todoist | `revoke` | An RFC 7009 revoke that authenticates the client by Basic |
+| Smartsheet | Gov, Europe and Australia: other domains, with their own tokens | Regional hosts on more than one domain |
+| Smartsheet | Paging: `sheets.list` answers one page, `page` and `pageSize` ordinary parameters, `pageNumber` and `totalPages` in the result | Page numbers where a page past the last answers the last page again |
+| Smartsheet | `errors.detail`: the code, `errorCode`, is a number | An error code that is a number |
+| Smartsheet | OAuth 2: Smartsheet approves or denies each request to register an app, and the authorize request documents no `redirect_uri` or PKCE | — |
+| monday.com | Paging: each list answers one page, `cursor`, `page` and `limit` ordinary variables, `items_page.cursor` in the result | A GraphQL cursor sent in the query's variables |
+| monday.com | The webhook | A webhook signed as a JWT |
+| Guru | Paging: each list answers its first page; the next link is in a header | `Link` paging under another `rel` |
+| Guru | OAuth 2: a client is enabled by Guru's support and belongs to one workspace | — |
+| GitBook | OAuth 2: no page says how a developer registers a client | — |
+| Outline | Paging: each list answers one page, `offset` and `limit` body parameters, `pagination` in the result | `offset` paging |
+| Outline | OAuth 2: each server has its own OAuth URLs | OAuth 2 URLs on a host the person types |
+| Mattermost | OAuth 2: each server is its own OAuth 2 provider | OAuth 2 URLs on a host the person types |
+| Zulip | `messages.create` | A form-encoded body |
+| Zulip | `retry`: the wait is in the error body, in seconds | A 429's wait in the error body |
+| Chatwork | `messages.create` | A form-encoded body |
+| Chatwork | `result` on `messages.list` and `contacts.list` | A list that answers 204 when it is empty |
+| Chatwork | The webhook | A webhook secret decoded from base64 |
+| CircleCI | OAuth 2: a public client from Dynamic Client Registration | OAuth 2 for a public client |
+| Vercel | Paging: each list answers one page, `limit`, `until` and `pagination` declared | A next cursor that is a number |
+| Vercel | OAuth 2 (Sign in with Vercel): its REST API permissions are in private beta | — |
+| Render | Paging: each list answers one page, `cursor` and `limit` declared, each element keeps its `cursor` | A next cursor read from the last record of a page |
+| Sentry | Paging: each list answers one page, `cursor` an ordinary query parameter (the next cursor is in the `Link` header only) | `Link` paging that ends on `results="false"` |
+| Sentry | OAuth 2 on sentry.io and self-hosted servers (no page says how a client for `/oauth/` is registered) | OAuth 2 URLs on a host the person types |
+| Sentry | OAuth 2 for a public integration (Sentry's integration platform) | An OAuth 2 token URL built from a value the redirect returns |
+| PagerDuty | Paging: each list answers one page, `limit` and `offset` declared, `more` in the result | `offset` paging |
+| PagerDuty | `incidents.create` and `incidents.update`: both need the `From` header | An operation parameter sent as a header |
+| PagerDuty | `errors.detail`: the code, `error.code`, is a number | An error code that is a number |
+| PagerDuty | A 429's wait: it is in `ratelimit-reset`, which the retry does not read | A 429's wait in a header of seconds left |
 
-## Skipped
+## Not declared
 
-None yet. A provider whose documentation cannot be read without signing in, or does not load, is listed here with the
-page tried.
+A provider with no entry, with the reason and the provider's own page that shows it. A provider whose documentation
+cannot be read without signing in, or does not load, is listed here too, with the page tried.
+
+| Provider | Why | Page |
+|---|---|---|
+| Confluence | Atlassian's rules forbid apps that collect API tokens, so a key alone would steer an app wrong, and its OAuth 2 (3LO) uses another base | [Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/) |
+| Wrike | Its OAuth 2 base is the host the token answer names, and its permanent token is not meant for multi-user applications | [OAuth 2.0 authorization](https://developers.wrike.com/docs/oauth-20-authorization/), [FAQ](https://developers.wrike.com/docs/faq/) |
+| Netlify | Integrations other people use must use OAuth 2, and the documentation gives only the implicit grant, with no token URL for the code flow | [Get started with the API](https://docs.netlify.com/api-and-cli-guides/api-guides/get-started-with-api/) |
+| Azure DevOps | A personal access token is not for production applications, and its Microsoft Entra OAuth 2 needs the organization in the base before the redirect | [Use personal access tokens](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops) |
