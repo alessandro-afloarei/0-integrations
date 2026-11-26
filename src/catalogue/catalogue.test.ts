@@ -150,6 +150,11 @@ const runnable = {
   // A path segment and a query value are one string each: never null, a list or an object.
   'only a scalar, non-nullable parameter in a path or a query': (entry: Entry) => params(entry).every(param =>
     (param.in !== 'path' && param.in !== 'query') || (param.nullable === undefined && typeof param.type === 'string')),
+  // A paged operation yields its records: a 404 is no record to answer null for.
+  'notFound only on an unpaged operation': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
+  // A saved value would replace the field the person entered, which `Connected` types as a string.
+  "save keys apart from the fields' names": (entry: Entry) =>
+    Object.keys(entry.save ?? {}).every(name => !(entry.fields ?? []).some(field => field.name === name)),
   // Otherwise the records are typed `unknown`.
   "a records path to a list in the operation's result": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
@@ -248,6 +253,8 @@ test.each<[Rule, Entry]>([
   ['no token answer, scopes or RFC 7009 revoke on a key entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     revoke: { url: 'https://k.test/revoke', token: ['access'] } })],
   ['scopes on an oauth2 entry', defineProvider(oauth2)],
+  ["save keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([
     ['operation ids a client can hold', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
     ['operation ids a client can hold', { '': { path: '/a' } }],
@@ -256,6 +263,7 @@ test.each<[Rule, Entry]>([
     ['a place in the request for every parameter', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
     ['a place in the request for every parameter', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
     ['a place in the request for every parameter', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
+    ['notFound only on an unpaged operation', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
     ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
     ["a records path to a list in the operation's result", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
     ['an enum only on a string parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],

@@ -132,7 +132,7 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
         }
       };
     }
-    const shape = pagingOf(paging);
+    const shape = op.notFound === undefined ? pagingOf(paging) : refuse(`not_found_paged: ${id}`);
     const list = records === undefined || result === undefined ? ['unknown'] as const : shapeAt(result, records);
     const item = Array.isArray(list) ? (list as readonly [Shape])[0] : refuse(`records_unshaped: ${id}`);
     // Each page's records, a bad one skipped and reported; without `records`, each page's whole answer.

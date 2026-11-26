@@ -28,10 +28,11 @@ entry:
   function, prints to JSON unchanged, and has an id that is unique and equals its file name;
 - names in each template only what that place allows;
 - is one the engine can run: a key entry has exactly one secret field and reads no token answer, scopes or RFC 7009
-  revoke; an OAuth entry declares scopes; a value read from identify's answer has a request to read it from;
+  revoke; an OAuth entry declares scopes; a value read from identify's answer has a request to read it from; no `save`
+  key is a field's name;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
-  place in the request, a paged operation names a declared shape, a records path leads to a list, and no id is a client
-  call or a dotted prefix of another.
+  place in the request (a GET has no body), a paged operation names a declared shape and no `notFound`, a records path
+  leads to a list, and no id is a client call or a dotted prefix of another.
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
 the test signs in once with a good key and once with a bad one, each sending identify once. The bad key must be

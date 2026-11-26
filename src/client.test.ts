@@ -249,6 +249,7 @@ test("an app's entry that would send a wrong request is refused when its client 
     [{ path: '/c', paging: 'none' }, 'paging_unknown: none'],
     [{ path: '/e', paging: 'cursor', records: 'items', result: { items: 'string' } }, 'records_unshaped: op'],
     [{ path: '/f', params: { q: { in: 'body', type: 'string' } } }, 'param_unplaced: op q'],
+    [{ path: '/g', paging: 'cursor', notFound: 'null' }, 'not_found_paged: op'],
     [{ method: 'GET', path: '/f', params: { q: { in: 'body', type: 'string' } } }, 'param_unplaced: op q'],
   ] as const) expect(() => client(entry(op), { token: 'k' })).toThrow(new TypeError(message));
 });
