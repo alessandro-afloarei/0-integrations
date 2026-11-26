@@ -222,8 +222,12 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
         if (url === urls.revoke && !body.has('grant_type')) {
           return body.has('token') ? new Response(null, { status: 200 }) : Response.json({ error: 'invalid_request' }, { status: 400 });
         }
+        // A grant comes in the encoding the entry declares, as the engine sends it.
+        const type = sent.headers.get('content-type')?.split(';')[0];
+        if (type !== (auth.json ? 'application/json' : 'application/x-www-form-urlencoded')) return Response.json({ error: 'invalid_request' }, { status: 400 });
         const granted = body.get('grant_type') === 'refresh_token' ? url === urls.refresh && body.get('refresh_token') === 'kit-refresh' : url === urls.token
-          && body.get('grant_type') === 'authorization_code' && body.get('code') === code && body.has('redirect_uri') && (auth.pkce === false || body.has('code_verifier'));
+          && body.get('grant_type') === 'authorization_code' && body.get('code') === code && body.has('redirect_uri')
+          && (auth.pkce === false || body.get('code_verifier')?.trim());
         if (!granted) return Response.json({ error: 'invalid_grant' }, { status: 400 });
         const scope = entry.scopes?.requireGranted ? { scope: entry.scopes.default.join(auth.scopeSeparator ?? ' ') } : {};
         return tokenAnswer({ access_token: key, token_type: 'bearer', refresh_token: 'kit-refresh', expires_in: 3600, ...scope });

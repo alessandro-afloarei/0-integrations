@@ -316,9 +316,28 @@ describe('fakeProvider', () => {
     const form = (parts: Record<string, string>) => fetch('https://basicjson.test/token', { method: 'POST',
       body: new URLSearchParams({ grant_type: 'authorization_code', code: 'c1', redirect_uri: redirectUri, client_id: 'app', client_secret: 'secret', ...parts }) });
     expect(await answer(await form({}))).toEqual({ status: 400, body: { error: 'invalid_grant' } });
+    for (const blank of ['', '  ']) expect(await answer(await form({ code_verifier: blank }))).toEqual({ status: 400, body: { error: 'invalid_grant' } });
     expect((await form({ code_verifier: 'v' })).status).toBe(200);
     await expect(exchangeCode(pkce, client, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).resolves.toMatchObject({ grant: { accessToken: 'k' } });
     await expect(exchangeCode(pkce, kitClient, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).rejects.toMatchObject({ status: 401 });
+  });
+
+  test("a token or refresh request in another encoding than the entry's is 400 invalid_request", async () => {
+    const basic = `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}`;
+    const code = { grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri };
+    const refresh = { grant_type: 'refresh_token', refresh_token: 'kit-refresh' };
+    const form = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize',
+      tokenUrl: 'https://basicjson.test/token', refreshUrl: 'https://basicjson.test/refresh', clientAuth: 'basic', pkce: false }] });
+    for (const [entry, right, wrong] of [[basicJson, 'application/json', 'application/x-www-form-urlencoded'],
+      [form, 'application/x-www-form-urlencoded;charset=UTF-8', 'application/json']] as const) {
+      const { fetch } = fakeFetch(fakeProvider(entry, { key: 'k' }));
+      for (const [url, grant] of [['https://basicjson.test/token', code], ['https://basicjson.test/refresh', refresh]] as const) {
+        const body = entry === basicJson ? JSON.stringify(grant) : new URLSearchParams(grant).toString();
+        const sent = (type?: string) => fetch(url, { method: 'POST', headers: { authorization: basic, ...type ? { 'content-type': type } : {} }, body });
+        expect((await sent(right)).status).toBe(200);
+        for (const type of [wrong, 'text/plain', undefined]) expect(await answer(await sent(type))).toEqual({ status: 400, body: { error: 'invalid_request' } });
+      }
+    }
   });
 
   test('a revoke with no token is 400 invalid_request', async () => {
@@ -341,7 +360,7 @@ describe('fakeProvider', () => {
   test('with Basic client authentication, a client secret in the body as well is refused', async () => {
     const { fetch } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
     const sent = (body: Record<string, string>) => fetch('https://basicjson.test/token', { method: 'POST',
-      headers: { authorization: `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}` },
+      headers: { authorization: `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}`, 'content-type': 'application/json' },
       body: JSON.stringify({ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri, ...body }) });
     expect((await sent({})).status).toBe(200);
     expect(await answer(await sent({ client_id: 'kit-client', client_secret: 'kit-secret' }))).toEqual({ status: 401, body: { error: 'invalid_client' } });

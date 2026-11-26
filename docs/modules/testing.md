@@ -23,11 +23,13 @@ password); for an OAuth 2 entry, the access token its token URL gives.
   with `json`, and check the client authentication `clientAuth` declares (a Basic header and no `client_secret` in the
   body, else `client_id` and `client_secret` in the body and no Basic header) against `client`, by default
   `{ clientId: 'kit-client', clientSecret: 'kit-secret' }`: another is 401 `{ "error": "invalid_client" }`.
+  - A grant whose `content-type` is not the entry's encoding (`application/x-www-form-urlencoded`, or
+    `application/json` with `json`) is 400 `{ "error": "invalid_request" }`.
   - The token URL answers an `authorization_code` grant of `code` (by default `kit-code`) with a `redirect_uri`, and a
-    `code_verifier` unless `pkce: false`. The refresh URL (the token URL unless the entry names one) answers a
-    `refresh_token` grant of `kit-refresh`. Any other grant is 400 `{ "error": "invalid_grant" }`. The fake checks only
-    that a `redirect_uri` and a `code_verifier` are there: it never sees the authorize request, so it cannot compare
-    either with what that request sent.
+    `code_verifier` that is not blank unless `pkce: false`. The refresh URL (the token URL unless the entry names one)
+    answers a `refresh_token` grant of `kit-refresh`. Any other grant is 400 `{ "error": "invalid_grant" }`. The fake
+    checks only that a `redirect_uri` and a `code_verifier` are there: it never sees the authorize request, so it cannot
+    compare either with what that request sent.
   - Both answer `{ access_token: key, token_type: 'bearer', refresh_token: 'kit-refresh', expires_in: 3600 }`, with
     every `tokenAnswer.<path>` the entry reads, as a `token` entry's answer holds them, and, with `requireGranted`, the
     default scopes as `scope`.
