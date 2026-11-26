@@ -5,6 +5,6 @@ export const granola = defineProvider({
   docs: 'https://docs.granola.ai/introduction',
   categories: ['meetings'],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://public-api.granola.ai/v1' },
+  http: { baseUrl: 'https://public-api.granola.ai/v1', retry: {} },
   paging: { cursor: { kind: 'cursor', next: 'cursor', more: 'hasMore', send: { query: 'cursor' } } },
 });
