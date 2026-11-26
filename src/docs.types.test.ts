@@ -197,22 +197,43 @@ function webhooksReceiveCalls(request: Request, signingSecret: string, publicKey
   return [webhooksReceive(slack.webhook, request, signingSecret, handle), webhooksReceive(discord.webhook, request, publicKey, handle)];
 }
 
-// docs/modules/testing.md › A fake derived from an entry.
+// docs/modules/testing.md › A fake derived from an entry (its three examples).
 async function testingDerivedFake() {
   // An app's test, for an entry with no module:
   const { fetch } = fakeFetch(fakeProvider(trello, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
   const { account } = await finishConnect(trello, { secret: { apiToken: 'kit-token' }, values: { apiKey: 'kit-key' }, fetch });
   return account;
 }
+async function testingDerivedOperation() {
+  // An operation the app answers:
+  const { fetch } = fakeFetch(fakeProvider(notion, { key: 'kit-token', operations: {
+    'pages.markdown': call => ({ markdown: `# Page ${call.path.pageId ?? ''}`, truncated: false }) } }));
+  const page = await client(notion, { token: 'kit-token', fetch }).pages.markdown({ pageId: 'p1' });
+  return page;
+}
+async function testingDerivedToken() {
+  // A token entry: `key` is its secret field's value, and its calls carry `kit-token`.
+  const values = { accountId: 'kit-account', clientId: 'kit-client' };
+  const { fetch } = fakeFetch(fakeProvider(zoom, { key: 'kit-secret', values }));
+  const { account } = await finishConnect(zoom, { secret: { clientSecret: 'kit-secret' }, values, fetch });
+  return account;
+}
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
     connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
-    webhooksReceiveCalls, webhooksDeclared, testingDerivedFake].every(example => typeof example === 'function')).toBe(true);
+    webhooksReceiveCalls, webhooksDeclared, testingDerivedFake, testingDerivedOperation,
+    testingDerivedToken].every(example => typeof example === 'function')).toBe(true);
 });
 
 test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {
   // `toEqual` reads a property set to undefined as missing.
   expect(webhooksDeclared()).toEqual([breakcold.webhook, stripe.webhook, { ...discord.webhook, challenge: undefined }, google.webhook,
     gitlab.webhook, slack.webhook]);
+});
+
+test("testing.md's derived-fake examples run", async () => {
+  await expect(testingDerivedFake()).resolves.toEqual({ id: 'kit-account', name: 'kit-name' });
+  await expect(testingDerivedOperation()).resolves.toEqual({ markdown: '# Page p1', truncated: false });
+  await expect(testingDerivedToken()).resolves.toEqual({ id: 'kit-account', name: 'kit-account' });
 });

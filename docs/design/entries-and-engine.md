@@ -526,20 +526,26 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
    declared field or saved value. Ids are unique and equal their file name. It survives a JSON round trip. No string
    holds `TODO`, what `pnpm new` leaves for each unknown.
 2. **Replay**, when a recording sits beside it (`<id>.recording.json`, or `<id>.<part>.recording.json`): a `token`
-   entry's token request and identify, with a good and a bad credential. The module kits run the first page, a walk to the end and a 429 on the same
-   recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange and revoke, and webhook samples
-   join the table's replay with the first entry that has them and no module.
+   entry's token request and identify, with a good and a bad credential. The module kits run the first page, a walk to
+   the end and a 429 on the same recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange
+   and revoke, and webhook samples join the table's replay with the first entry that has them and no module.
 3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
    `./testing`) answers identify, a `token` entry's token request and each operation the app answers, filling the base
    and the credential with the engine's own functions, and comparing a token request with the one the engine sends for
-   the good key. Every entry with an identify request, and every `token` entry,
+   the good key. Every entry that sends a request to sign in (an identify request, or a `token` entry's token request)
    signs in on it with a good key and is `rejected` with a bad one, with no recording.
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.
 
-A recording is a real capture from a real account. An entry's recorder keeps only the paths the entry reads, swaps
-the credential, the plain values and the account for the kit's stand-ins, and refuses to write what it cannot scrub. A made-up one tests the code but
-leaves the entry `declared`. The module kits stay for what an entry cannot know, such as incremental reads.
+A recording is a real capture from a real account; a made-up one tests the code but leaves the entry `declared`. The
+recorder (`src/record.test.ts`) records an entry with no module that sends a request to sign in, and refuses any other
+that has no kit scenario. Each exchange keeps its method, URL, request body, status, `location` and `retry-after`, and
+from the answer only the paths the entry reads (an object or a list reached by one keeps only its shell). The key, the
+plain values and the tokens issued are swapped for the kit's stand-ins in the URL, the body and those headers; in the
+answers, they and the account's id, name and saved values are swapped where they are a whole value. It refuses to
+write when a value is under 4 characters, or when a real value is still in an exchange, searched ignoring case,
+percent-decoded and with base64 runs decoded. The module kits stay for what an entry cannot know, such as incremental
+reads.
 
 `pnpm check` remains the one gate, with no network.
 

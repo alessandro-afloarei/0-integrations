@@ -23,12 +23,15 @@ one takes five steps:
 1. `pnpm new <id>` writes the entry's skeleton, a key entry whose every unknown is `TODO`. It never overwrites a file.
 2. Fill it from the provider's own documentation, and put the page that states what the entry declares in `docs`.
    State only what differs from the defaults: [catalogue](docs/modules/catalogue.md) lists every field, and the
-   [design](docs/design/entries-and-engine.md) gives every rule. For an OAuth grant or a token request, replace `auth`
-   and the fields as [oauth](docs/modules/oauth.md) describes.
+   design's [`auth` section](docs/design/entries-and-engine.md#auth) gives every sign-in rule. Start from the entry
+   of the same sign-in kind: a key, `src/catalogue/serpapi.ts`; an OAuth 2 grant, `src/catalogue/figma.ts` (drop the
+   skeleton's secret field: the grant is the secret); a token request, `src/catalogue/zoom.ts`. Write every header name
+   in lowercase (`x-api-key`).
 3. `pnpm check`. The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake
    derived from it (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry
    has an identify request or a token request.
-4. Optional: record it from a test account (below), read the file, and commit it. The entry becomes `recorded`.
+4. Optional: record it from a test account (below), read the file, and commit it. An entry the recorder can record (one
+   with no module that sends a request when it signs in) becomes `recorded`.
 5. Add one line to `CHANGELOG.md` under `Unreleased`, then open a pull request.
 
 `src/catalogue/catalogue.test.ts` runs over every file in the folder, with no test code of yours. It checks that the
@@ -66,14 +69,17 @@ the recorded answers. A recording is `{ provider, synthetic, source, recordedAt,
 matches the method, the whole URL and the body, and fills a plain field with its kit value (its `default`, else its first
 choice, else `kit-<name>`).
 
-To record an entry from a test account, read the key at a prompt and run the recorder:
-`read -rsp 'Key: ' RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
+To record an entry with no module from a test account, read the key at a prompt (bash and zsh) and run the recorder:
+`printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
 For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test account with your app's own OAuth client.
-The recorder signs in with the key and with a bad key, and writes `src/catalogue/<id>.recording.json`, replacing any
-recording of that name. From each answer it keeps only the paths the entry reads. It swaps the key, the plain values,
-the tokens issued and the account's id and name for the kit's stand-ins, and refuses to write when a value is too
-short to swap or a real value is still in the file ([testing](docs/modules/testing.md#recording-an-entry-with-no-module)
-says exactly what is written, swapped and refused). Only such a capture from a real test account (`synthetic: false`)
+The recorder refuses a provider with a module but no kit scenario of that name, and an entry that sends no request
+when it signs in. Otherwise it signs in with the key and with a bad key, and writes
+`src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request
+body, status, `location` and `retry-after`, and from the answer only the paths the entry reads. It swaps the key, the
+plain values, the tokens issued, the account's id and name and the saved values for the kit's stand-ins, and refuses to
+write when a value is too short to swap or a real value is still in an exchange
+([testing](docs/modules/testing.md#recording-an-entry-with-no-module) says exactly what is written, swapped and
+refused). Only such a capture from a real test account (`synthetic: false`)
 makes the entry `recorded`; never copy a file from a `.record-test-*` folder, which the recorder's own tests write on a
 fake. A recording written by hand from the provider's documented examples is marked `synthetic: true`: it tests the
 entry and leaves its tier `declared`. Every recording must sit beside an entry.
@@ -96,7 +102,7 @@ Every recording must pass `src/fixtures-privacy.test.ts`, which `pnpm check` run
 the reserved domains (`example.com`, `.test`) and any phone number written with a leading `+` outside the fictional
 555-0100 to 555-0199 range. It does not catch names, street addresses, ids or numbers in other formats, so read every
 recording before you commit it and replace each real one with a synthetic one. A recording of an entry keeps only the
-paths the entry reads, with the account's id and name already swapped for `kit-account` and `kit-name`; a module
+paths the entry reads, with the account's id and name and the saved values already swapped for kit values; a module
 scenario's recording keeps each answer whole.
 
 ## Code you did not write
