@@ -53,6 +53,19 @@ In the app, consume and validate that state once; keep the returned secret on th
 In an app you redirect the browser to `url`, read `code` and `state` in your callback, check the state, and pass
 your real (guarded) `fetch` to `finishConnect`.
 
+## Example: call a provider
+
+Any entry gives an authenticated client: the token travels as the entry says, answers are classified into the library's
+errors, and reads are retried after a 429.
+
+```ts
+import { client } from '0-integrations/client';
+import { attio } from '0-integrations/catalogue/attio';
+
+const api = client(attio, { token: process.env.ATTIO_KEY }); // a missing or blank token throws `token_missing` here
+const self = await api.json('/self');
+```
+
 ## Modules
 
 | Module | What it does |
@@ -63,7 +76,7 @@ your real (guarded) `fetch` to `finishConnect`.
 | [`oauth`](docs/modules/oauth.md) | Consent URLs, code exchange, refresh and revoke, with PKCE |
 | [`connect`](docs/modules/connect.md) | `startConnect` and `finishConnect`: one flow for OAuth and key forms, run from a catalogue entry |
 | [`credentials`](docs/modules/credentials.md) | Reads API keys and refreshes OAuth tokens under a lock |
-| [`http`](docs/modules/http.md) | An authenticated client with timeouts, pacing and capped 429 waits |
+| [`client`](docs/design/entries-and-engine.md#the-engine) | `client(entry, { token })`: an entry's operations, and `json`, `request` and `paginate` for raw calls, with timeouts, pacing and capped 429 waits |
 | [`webhooks`](docs/modules/webhooks.md) | HMAC signature checks over the raw body bytes |
 | [`paginate`](docs/modules/paginate.md) | Walks a client's pages and refuses a repeated cursor |
 | [`testing`](docs/modules/testing.md) | Scripted fetch, in-memory stores and locks, and a check for your own credential store |

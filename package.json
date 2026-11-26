@@ -37,9 +37,9 @@
       "types": "./dist/credentials.d.ts",
       "default": "./dist/credentials.js"
     },
-    "./http": {
-      "types": "./dist/http.d.ts",
-      "default": "./dist/http.js"
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
     },
     "./webhooks": {
       "types": "./dist/webhooks.d.ts",

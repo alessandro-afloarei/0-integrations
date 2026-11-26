@@ -78,14 +78,16 @@ function credentialOf(entry: Entry, token: string, values: Values): [header: str
   return ['authorization', `Basic ${Buffer.from(pair).toString('base64')}`];
 }
 
-export function createClient(entry: Entry, input: {
+export type HttpOptions = {
   token: (rejected?: string) => Promise<string>; fetch: typeof fetch;
   /** The connection's plain values, for a credential built from them (Aircall's `{apiId}`). */
   values?: Values;
   baseUrl?: string; headers?: Readonly<Record<string, string>>; minIntervalMs?: number;
   /** Runs once per call, before anything is sent (an app's metering); what it throws reaches the caller unchanged. */
   beforeRequest?: (url: URL) => void | Promise<void>;
-}): HttpClient {
+};
+
+export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   const baseUrl = input.baseUrl ?? entry.http.baseUrl;
   const origin = new URL(baseUrl).origin;
   const retry = retryPolicy(entry.http.retry);
@@ -129,7 +131,8 @@ export function createClient(entry: Entry, input: {
 
   async function send(url: URL, [name, value]: [string, string], options: RequestOptions): Promise<ProviderResponse> {
     const method = options.method ?? 'GET';
-    const limit = (method === 'GET' || options.idempotent) && !options.signal ? retry.limit : 0;
+    // A GET is a read unless the caller says otherwise (an operation declared a write).
+    const limit = (options.idempotent ?? method === 'GET') && !options.signal ? retry.limit : 0;
     let headers: Headers;
     try {
       headers = new Headers(entry.http.headers);

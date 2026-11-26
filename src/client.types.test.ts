@@ -1,6 +1,7 @@
 import { expect, expectTypeOf, test } from 'vitest';
 import { defineProvider, type Entry } from './catalogue.js';
-import type { Client } from './client.js';
+import { attio } from './catalogue/attio.js';
+import { client, type Client } from './client.js';
 
 // A fake provider, pure data: its client's types are inferred from this literal.
 const acme = defineProvider({
@@ -61,6 +62,8 @@ function typed() {
   expectTypeOf(api.json('/self')).toEqualTypeOf<Promise<unknown>>();
   expectTypeOf<Parameters<typeof api.paginate>[0]>().toEqualTypeOf<'cursor'>();
   expectTypeOf<Parameters<Client<Entry>['paginate']>[0]>().toEqualTypeOf<string>();
+  // The README's example: an environment variable is a token as it is (a missing one is refused when the client is built).
+  expectTypeOf(client(attio, { token: process.env.ATTIO_KEY }).json('/self')).toEqualTypeOf<Promise<unknown>>();
 
   // No required parameter, no argument needed; an empty one, options and a nullable argument still work.
   void api.user({});

@@ -7,7 +7,7 @@ import { identifyAccount, lookupNames } from '../account.js';
 import { defineProvider, type Entry, type Shape } from '../catalogue.js';
 import { finishConnect } from '../connect.js';
 import { BAD_KEY, GOOD_KEY, replay, type Recording } from '../kit.test-support.js';
-import { placeholders } from '../rules.js';
+import { placeholders, shapeAt } from '../rules.js';
 import { tierOf } from '../tier.js';
 
 /** Every entry in this folder: no list to edit when one is added. */
@@ -125,14 +125,6 @@ const clientCall = (id: string) => ['json', 'request', 'paginate'].includes(id.s
 const reads = (entry: Entry, prefix: string) => lookupNames(entry).filter(name => name.startsWith(prefix));
 const operations = (entry: Entry) => Object.values(entry.operations ?? {});
 const operationIds = (entry: Entry) => Object.keys(entry.operations ?? {});
-/** The shape at a dotted path through keys that are always there, the whole rest tried as one key first, as the records
- * reader reads it. */
-function shapeAt(shape: Shape | undefined, path: string): Shape | undefined {
-  if (typeof shape !== 'object' || Array.isArray(shape)) return undefined;
-  const keys = shape as { readonly [key: string]: Shape }; // `isArray` does not narrow a readonly tuple away
-  const dot = path.indexOf('.');
-  return Object.hasOwn(keys, path) ? keys[path] : dot === -1 ? undefined : shapeAt(keys[path.slice(0, dot)], path.slice(dot + 1));
-}
 const runnable = {
   // The engine sends only that field as `{token}`.
   'one secret field, the only one a key entry has': (entry: Entry) => {

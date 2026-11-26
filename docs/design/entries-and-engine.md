@@ -294,6 +294,17 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 - A shape key ending in `?` may be missing or null, and is read as absent.
 - `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`.
 - A path's `{name}` must be a declared `path` parameter; the compiler refuses the entry otherwise.
+- An operation id's first dot-separated segment is never `json`, `request` or `paginate` (compared for equality, so
+  `requests.list` is fine): those are the client's own calls.
+- At run time each argument is checked by its declared type (and `enum`) before anything is sent; one that does not fit
+  is a `TypeError` naming it (`param_missing: <name>`, `param_invalid: <name>`). An argument that is not declared, or is
+  `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
+  out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
+  strings, numbers or booleans. `body` parameters are sent as one JSON object, `variables` as GraphQL's variables (`{}`
+  when none), posted with the query to the base.
+- A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
+  a record that does not fit is skipped and its `id` (or `null`) is in the list the generator returns. Without
+  `records` it yields each page's whole answer.
 - There are no sync concepts here: no parent and child streams, no incremental cursors, no transforms. An app calls an
   operation with the parent's id.
 
@@ -316,7 +327,7 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 | `oauth`, `credentials` | Driven by the entry. `revokeGrant(entry, { accessToken?, refreshToken?, client?, fetch })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
 | `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, plus `deliveryId(entry.webhook, request)`. |
-| `client` (new) | `client(entry, { token, values?, headers?, fetch? })` returns the typed operations, plus `json`, `request` and `pages` for raw calls. `token` is a string or a function that renews it. |
+| `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when the client is built (`token_missing`). `fetch` is the global one by default. |
 | `vault` | Unchanged. A connection's plain values are the app's to keep. |
 
 ```ts
@@ -325,7 +336,7 @@ import { attio } from '0-integrations/catalogue/attio';
 
 const api = client(attio, { token: process.env.ATTIO_KEY });
 const self = await api.json('/self');                          // raw, authenticated, retried
-for await (const record of api.records.list({ object: 'people' })) { /* typed */ }
+// An entry that declares operations adds them, typed: `for await (const issue of api.issues.list({ teamId })) {}`
 ```
 
 **Types.** `defineProvider` takes a `const` type parameter, so the client's methods, arguments, results and paging are

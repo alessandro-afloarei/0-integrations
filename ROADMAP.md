@@ -9,7 +9,7 @@ afternoon, not a week. For each service it covers, the library provides:
 - authenticated reads and writes;
 - incoming webhooks.
 
-**Today** the library is the core (`vault`, `credentials`, `oauth`, `connect`, `http`, `webhooks`, `paginate`,
+**Today** the library is the core (`vault`, `credentials`, `oauth`, `connect`, `client`, `webhooks`, `paginate`,
 `testing`), the declared catalogue (one entry per provider) and the provider modules, each with a fake. The adapters
 and the connect screen are planned; the rest of this page describes where it is going.
 

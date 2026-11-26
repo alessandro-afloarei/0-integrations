@@ -4,8 +4,8 @@
 an app stores what they read, and answer a list one `Page` at a time: `{ items, skipped, cursor }`, where `skipped`
 holds the ids of entries the client could not read and `cursor` is null on the last page. `paginate(load)` walks the
 pages and refuses a repeated cursor; the app stops when its own budget says so. Broken paging is `invalid_response` with
-no status and the library's own `detail` (`cursor_repeated`, `cursor_missing`), so it never reads as a provider's code. `createClient`'s `beforeRequest(url)`
-runs once per call before anything is sent, for an app's metering, and a refusal's `ProviderHttpError.detail` carries
+no status and the library's own `detail` (`cursor_repeated`, `cursor_missing`), so it never reads as a provider's code. `breakcoldClient`'s own `beforeRequest(url)`
+option runs once per call before anything is sent, for an app's metering, and a refusal's `ProviderHttpError.detail` carries
 the provider's own code where the catalogue reads one (Breakcold's `usage_limit`).
 
 `deliveryId(breakcold.webhook, request)` from `0-integrations/webhooks` reads Breakcold's `x-webhook-delivery-id`, once

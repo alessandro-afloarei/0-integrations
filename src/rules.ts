@@ -1,4 +1,4 @@
-import type { Path, Template, When } from './catalogue.js';
+import type { Path, Shape, Template, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -18,6 +18,14 @@ export function readPath(value: unknown, path: Path): unknown {
   if (dot === -1) return undefined;
   const head = path.slice(0, dot);
   return Object.hasOwn(record, head) ? readPath(record[head], path.slice(dot + 1)) : undefined;
+}
+
+/** The shape at a dotted path through an object shape's keys, the whole rest tried as one key first, as `readPath` reads. */
+export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined {
+  if (typeof shape !== 'object' || Array.isArray(shape)) return undefined;
+  const keys = shape as { readonly [key: string]: Shape }; // `isArray` does not narrow a readonly tuple away
+  const dot = path.indexOf('.');
+  return Object.hasOwn(keys, path) ? keys[path] : dot === -1 ? undefined : shapeAt(keys[path.slice(0, dot)], path.slice(dot + 1));
 }
 
 /** A `{name}`: no braces inside, never empty. */

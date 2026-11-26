@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { identifyAccount } from './account.js';
+import { callRequest, identifyAccount } from './account.js';
 import { aircall } from './catalogue/aircall.js';
 import { apollo } from './catalogue/apollo.js';
 import { attio } from './catalogue/attio.js';
@@ -82,4 +82,17 @@ test("Fireflies' GraphQL identify is one POST of its query to the base", async (
   expect(await identifyAccount(fireflies, { fetch: fake.fetch, token: 't' })).toEqual({ account: { id: 'u1', name: 'Lee' }, values: {} });
   expect(fake.calls).toHaveLength(1);
   expect(JSON.parse(fake.calls[0]?.body ?? '')).toEqual({ query: fireflies.identify.request.graphql, variables: {} });
+});
+
+test('callRequest: a path call keeps its method and query and takes what the caller adds', () => {
+  const signal = AbortSignal.timeout(1000);
+  expect(callRequest({ method: 'DELETE', path: '/x', query: { a: '1' } }, { idempotent: true, signal, variables: { v: 1 } }))
+    .toEqual(['/x', { method: 'DELETE', query: { a: '1' }, idempotent: true, signal }]);
+  expect(callRequest({})).toEqual(['', { method: 'GET' }]);
+});
+
+test('callRequest: GraphQL is a POST of the query and its variables, none by default, to the base', () => {
+  expect(callRequest({ graphql: 'query { me }' }, { variables: { first: 2 }, idempotent: true }))
+    .toEqual(['', { method: 'POST', json: { query: 'query { me }', variables: { first: 2 } }, idempotent: true }]);
+  expect(callRequest({ graphql: 'query { me }' })).toEqual(['', { method: 'POST', json: { query: 'query { me }', variables: {} } }]);
 });
