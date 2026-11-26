@@ -152,7 +152,7 @@ const decoded = (text: string) => text.replaceAll('+', ' ').replace(/%([0-9a-f]{
 /** Each run that may be base64 or base64url (a Basic pair, a JWT's part), decoded from each of its first four
  * characters, so one that starts inside a run (`abc<b64>`, `Basic<b64>`) is decoded on its own boundary too. A run ends
  * at `=`, where Node stops decoding (`state=<b64>`). */
-const unbased = (text: string) => (text.match(/[A-Za-z0-9+/_-]{8,}/gu) ?? [])
+const unbased = (text: string) => (text.match(/[A-Za-z0-9+/_-]{6,}/gu) ?? [])
   .flatMap(run => [0, 1, 2, 3].map(at => Buffer.from(run.slice(at), 'base64').toString('utf8')));
 
 /**

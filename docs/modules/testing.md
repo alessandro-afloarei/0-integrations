@@ -127,7 +127,7 @@ the replay reads what the provider sent.
 - a value to swap is under 4 characters (an account id `7`, a region `eu`): it would match unrelated text, so record
   from an account whose values are longer;
 - a real value is still in an exchange. Before the stand-ins are put in, each part is searched ignoring case,
-  percent-decoded, and with every run of 8 or more base64 or base64url characters decoded from each of its first four
+  percent-decoded, and with every run of 6 or more base64 or base64url characters decoded from each of its first four
   characters (a Basic pair, a JWT's payload, a value after `state=`). The message names the stand-in, the exchange and
   the part (`url`, `headers`, `body`, `response`), never the value: for example an account named like a word of the
   API's host. Only what the recorder put in is exempt, so a real value that spells a stand-in inside it is still found;

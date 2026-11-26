@@ -341,6 +341,16 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(refused).toBe(stillIn('kit-good-key', 1, 'headers'));
   });
 
+  test.each([['alone', (b64: string) => b64], ['after `state=`', (b64: string) => `state=${b64}`]])(
+    'hostile: a 5-character account id echoed as padded base64 %s refuses the recording', async (_, as) => {
+      const echoed: Wrap = fetch => async (input, init) => {
+        const response = await fetch(input, init);
+        return new Response(response.body, { status: response.status, headers: { 'retry-after': as(Buffer.from('48213').toString('base64')) } });
+      };
+      const { refused } = await recordOnFake(serpapi, { key: 'real-key-1', wrap: echoed, account: { account_id: 48213, account_email: 'kit-name' } });
+      expect(refused).toBe(stillIn('kit-account', 1, 'headers'));
+    });
+
   test('hostile: an account id echoed lower-cased in a header refuses the recording', async () => {
     const lowered: Wrap = fetch => async (input, init) => {
       const response = await fetch(input, init);
