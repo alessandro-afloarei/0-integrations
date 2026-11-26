@@ -40,8 +40,8 @@ Nothing here is released yet.
   member's at once (HubSpot's `accessToken` beside Attio's `apiKey`). An OAuth 2 member adds no form input.
 - `FirefliesUser`'s `email` and `name` are `string | null` (they were `string`): a Fireflies user without one no longer
   fails `user()` with `invalid_response`. The entry's `client(fireflies).user()` leaves out a null `email` or `name`.
-- For contributors: a key sign-in may name a `tokenAnswer.*` path in an identify `id` or `name` list ending on
-  identify's answer, beside an OAuth 2 or token sign-in (HubSpot's `['tokenAnswer.hub_id', 'portalId']`); any other
+- For contributors: a key sign-in may name a `tokenAnswer.*` path in an identify `id` or `name` list ending on a path
+  of identify's requested answer, beside an OAuth 2 or token sign-in (HubSpot's `['tokenAnswer.hub_id', 'portalId']`); any other
   `tokenAnswer.*` on a key sign-in is still refused.
 - New: an entry may list several sign-ins (OAuth 2, then a key); `signInWith(entry, kind)` from
   `0-integrations/catalogue` narrows it to one, and every call takes the narrowed entry. First used by Linear and

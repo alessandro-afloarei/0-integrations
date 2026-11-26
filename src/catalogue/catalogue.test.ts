@@ -279,12 +279,13 @@ const runnable = {
   },
   // A key has no token answer: the engine skips such a path in a list and reads the next (HubSpot's `hub_id`, then
   // `portalId`), which is worth writing only when another sign-in of the whole entry has a token answer.
-  'no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on identify\'s answer, beside an OAuth 2 or token sign-in':
+  'no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify\'s requested answer, beside an OAuth 2 or token sign-in':
   (entry: Entry, whole: Entry = entry) => {
-    const answered = (path: string) => !path.startsWith('tokenAnswer.') && !path.startsWith('connection.');
-    const answering = whole.auth.some(auth => auth.kind !== 'key');
+    // A literal path: inside a list, `{id}` is read as a path, never filled.
+    const answered = (path = '') => /^[^{]+$/.test(path) && !path.startsWith('tokenAnswer.') && !path.startsWith('connection.');
+    const answering = whole.auth.some(auth => auth.kind !== 'key') && entry.identify?.request !== undefined;
     const strict = (value: Value | undefined) => (answering && value !== undefined && typeof value !== 'string'
-      && answered(value.at(-1) ?? '') ? [] : [value]);
+      && answered(value.at(-1)) ? [] : [value]);
     const values = [...strict(entry.identify?.id), ...strict(entry.identify?.name), ...Object.values(entry.save ?? {})];
     return entry.auth[0].kind !== 'key' || values.every(value => value === undefined
       || lookupNames({ identify: { id: value } }).every(name => !name.startsWith('tokenAnswer.')));
@@ -497,11 +498,11 @@ test.each<[Rule, Entry]>([
     identify: { id: 'workspace_id' } })],
   ["an `identify.request` whenever a value reads identify's answer", defineProvider({ ...oauth2, scopes: { default: [] },
     identify: { id: 'tokenAnswer.team.id' }, save: { region: 'Region {region}' } })],
-  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on identify\'s answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify\'s requested answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { id: 'tokenAnswer.team.id' } })],
-  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on identify\'s answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify\'s requested answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { request: { path: '/me' }, id: ['id', 'tokenAnswer.team.id'] } })],
-  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on identify\'s answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+  ['no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify\'s requested answer, beside an OAuth 2 or token sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } })],
   ['no `scopes` or RFC 7009 `revoke` on a key or token entry', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     scopes: { default: ['read'] } })],
@@ -660,10 +661,12 @@ test.each<[Rule, Entry]>([
     operations: { then: { path: '/then' } } }],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
-test("beside OAuth 2, a key's id list that ends on the token answer is refused", () => {
-  const both = defineProvider({ ...key, fields: [secret], scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key' }],
-    identify: { request: { path: '/me' }, id: ['portalId', 'tokenAnswer.hub_id'] } });
-  expect(broken(both)).toEqual(["no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on identify's answer, beside an OAuth 2 or token sign-in (key)"]);
+test.each([
+  ['ends on the token answer', { request: { path: '/me' }, id: ['portalId', 'tokenAnswer.hub_id'] }],
+  ['ends on a template, with no identify request', { id: ['tokenAnswer.hub_id', '{id}'] }],
+] as const)("beside OAuth 2, a key's id list that %s is refused", (_, identify) => {
+  const both = defineProvider({ ...key, fields: [secret], scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key' }], identify });
+  expect(broken(both)).toContain("no `tokenAnswer.*` on a key entry, except in an `id` or `name` list ending on a path of identify's requested answer, beside an OAuth 2 or token sign-in (key)");
 });
 
 test.each([[{ title: '' }, "a field's title says what to enter: give it words"],
