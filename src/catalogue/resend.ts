@@ -22,8 +22,9 @@ export const resend = defineProvider({
   http: { baseUrl: 'https://api.resend.com', headers: { 'user-agent': '0-integrations' }, retry: {} },
   errors: { detail: 'name' },
   // Svix's `svix-*` headers and the webhook's `whsec_` signing secret; the 300-second tolerance is the library's own:
-  // https://resend.com/docs/webhooks/verify-webhooks-requests. Signed as Svix signs, `svix-id` the same on a resend:
-  // https://docs.svix.com/receiving/verifying-payloads/how-manual
+  // https://resend.com/docs/webhooks/verify-webhooks-requests. Signed as Svix signs:
+  // https://docs.svix.com/receiving/verifying-payloads/how-manual. Deduped on `svix-id`:
+  // https://resend.com/docs/webhooks/create-webhook
   webhook: { kind: 'standard', deliveryId: { header: 'svix-id' } },
   identify: { request: { path: '/domains' }, rejectWhen: [{ status: 400 }] },
   operations: {

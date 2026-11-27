@@ -22,8 +22,9 @@ export const recallai = defineProvider({
   http: { baseUrl: 'https://{apiHost}', host: hosts, retry: {} },
   errors: { detail: 'code' },
   identify: { request: { path: '/api/v1/recording/' } },
-  // `webhook-*` and the workspace verification secret, on every request once that secret exists (read first); before
-  // it, an account made before 15 December 2025 signs its Svix webhooks under `svix-*` with each endpoint's own secret.
+  // An account made before 15 December 2025 signs its Svix webhooks under `svix-*` with each endpoint's own secret;
+  // every other request is `webhook-*` with the workspace verification secret. A request carrying `webhook-signature`
+  // is read as `webhook-*` (pass the workspace secret), any other as `svix-*` (pass the endpoint's).
   // The 300-second timestamp tolerance is the library's own: Recall.ai's page states none.
   webhook: { kind: 'standard' },
   paging: { next: { kind: 'nextUrl', next: 'next' } },
