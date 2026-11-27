@@ -1,6 +1,6 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Azure DevOps Services on a Microsoft Entra grant alone; a personal access token cannot call identify's Profiles API:
+/** Azure DevOps Services on a Microsoft Entra grant, or a personal access token (it cannot call the Profiles API):
  * https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate
  * Register the app for "Multiple Entra ID tenants" with Azure DevOps' delegated permissions; work or school accounts
  * only, as Entra serves no Microsoft account users for Azure DevOps. */
@@ -11,19 +11,26 @@ const repository = { id: 'string', 'name?': 'string', 'project?': { 'id?': 'stri
 const pullRequest = { pullRequestId: 'integer', 'title?': 'string', 'status?': 'string', 'repository?': { 'id?': 'string' },
   'sourceRefName?': 'string', 'targetRefName?': 'string', 'creationDate?': 'string', 'closedDate?': 'string' } as const;
 const ref = 'https://learn.microsoft.com/en-us/rest/api/azure/devops';
+const organization = { name: 'organization', title: 'Organization',
+  help: 'The name of your Azure DevOps organization, as in https://dev.azure.com/<organization>.' } as const;
 const view = '?view=azure-devops-rest-7.1';
 
 export const azuredevops = defineProvider({
   id: 'azuredevops', name: 'Azure DevOps',
   docs: 'https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth?view=azure-devops',
   categories: ['code'],
-  fields: [{ name: 'organization', title: 'Organization',
-    help: 'The name of your Azure DevOps organization, as in https://dev.azure.com/<organization>.' }],
+  fields: [organization],
   // The tenant is fixed to `organizations`; a guest from another tenant needs that tenant's identifier in its place:
   // https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize',
     tokenUrl: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token',
-    authorizeParams: { response_type: 'code', response_mode: 'query' } }],
+    authorizeParams: { response_type: 'code', response_mode: 'query' } },
+  // The token as Basic with an empty user; it lists the organization's projects as its credential check:
+  // https://learn.microsoft.com/en-us/rest/api/azure/devops/?view=azure-devops-rest-7.1
+  { kind: 'key', send: { basic: ['', '{personalAccessToken}'] }, fields: [organization, { name: 'personalAccessToken',
+    title: 'Personal access token', secret: true,
+    help: 'For your own scripts and tools: a token scoped to this organization, with the Code (read and write) and Project and team (read) scopes. Microsoft says not to use personal access tokens as long-term credentials for production applications or services.' }],
+  identify: { request: { path: '/_apis/projects', query: { 'api-version': '7.1' } } } }],
   // https://learn.microsoft.com/en-us/entra/identity-platform/scopes-oidc: the app's permissions, and a refresh token.
   scopes: { default: ['499b84ac-1321-427f-aa17-267ca6975798/.default', 'offline_access'] },
   // A 429 may send Retry-After: https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rate-limits
