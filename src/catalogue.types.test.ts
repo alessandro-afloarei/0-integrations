@@ -291,6 +291,16 @@ function literals() {
   void api.messages.create({ drafts: { send: false } });
   // @ts-expect-error each element's `actor_type` is the literal 'agent'
   void api.messages.create({ drafts: { send: true }, messages: [{ actor_type: 'user' }] });
+  // A shape constant written without `as const` widens to `string` or `boolean`, which would type the call wrongly.
+  const item = { id: 'string', count: 'integer' };
+  const sent = { send: true };
+  const base = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: 'https://w.test' } } as const;
+  // @ts-expect-error a result whose `count` is `string`, not 'integer'
+  defineProvider({ ...base, operations: { 'items.get': { path: '/items', result: item } } });
+  // @ts-expect-error a parameter whose `send` is `boolean`, not `true`
+  defineProvider({ ...base, operations: { 'drafts.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', type: sent } } } } });
+  defineProvider({ ...base, operations: { 'items.get': { path: '/items', result: { id: 'string', count: 'integer' } },
+    'drafts.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', type: { send: true } } } } } });
 }
 
 test('the narrowed types compile', () => {
