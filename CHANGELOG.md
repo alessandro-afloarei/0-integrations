@@ -6,12 +6,16 @@ Nothing here is released yet.
 
 - A `page`, `offset` or `last` walk whose page equals its first page is `page_repeated`, as one equal to the page before
   is: a provider that answers its first page again past the end no longer yields it a second time, or walks on forever.
-- Breaking: a `page` walk may stop at the answer's count (`total: { pages }` or `{ entries }`); Smartsheet's
-  `sheets.list` and `rows.list` page to their end and lose their `page` parameter.
-- Breaking: GraphQL lists page through their variables (`send: { variables }`); Linear's `issues.list` and
-  `teams.list` page to their end and lose their `after` variable.
-- Breaking: a body paging value may sit at a path (`send: { body: 'pagination.cursor' }`); Fellow's
-  `recordings.list` pages to its end and its `pagination` lost `cursor`.
+- Breaking: a `page` walk may stop at the answer's count (`total: { pages }` or `{ entries }`, read from each answer;
+  one missing or not a non-negative whole number is `invalid_response`). Smartsheet's `sheets.list` and `rows.list`
+  return an async iterator of records, not one page (`for await (const sheet of api.sheets.list())`), walked to
+  `totalPages` and `totalRowCount`. Their `page` argument is gone: an app that paged by hand drops its loop.
+- Breaking: GraphQL lists page through their variables (`send: { variables }`). Linear's `issues.list` and
+  `teams.list` return an async iterator of records, not one page (`for await (const issue of api.issues.list({ teamId
+  }))`). Their `after` variable is gone, and `first` is the page size.
+- Breaking: a body paging value may sit at a path in the body (`send: { body: 'pagination.cursor' }`). Fellow's
+  `recordings.list` returns an async iterator of recordings, not one page (`for await (const recording of
+  api.recordings.list())`). Its `pagination` keeps only `page_size`: `cursor` is gone.
 - Breaking: a raw `paginate` on a body or `variables` place is `request_failed` before the first request in three
   cases: a form, a JSON body that is no object, or a value on the body path that is no object. A form failed at the
   second request; a body that was no object was replaced from the second page.
