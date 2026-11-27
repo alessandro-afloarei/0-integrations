@@ -34,7 +34,7 @@ export const dixa = defineProvider({
         emailIntegrationId: { in: 'body', type: 'string', description: 'Required for Email and ContactForm.' },
         subject: { in: 'body', type: 'string', description: 'Required for Email and ContactForm.' },
         contactEndpointId: { in: 'body', type: 'string', description: 'Required for Sms and Whatsapp: the provisioned phone number.' },
-        message: { in: 'body', type: 'unknown',
+        message: { in: 'body', type: 'unknown', required: true,
           description: 'Required: Inbound (content) from the end user, or Outbound (content, agentId) to the customer; for Whatsapp, agentId and a template.' },
         language: { in: 'body', type: 'string' } },
       result: { data: { id: 'integer' } } },
