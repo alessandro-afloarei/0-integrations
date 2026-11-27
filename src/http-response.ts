@@ -52,13 +52,26 @@ export function codeOf(errors: Errors | undefined, body: unknown): string | unde
   return typeof code === 'string' && (errors?.allow?.includes(code) ?? true) ? code : undefined;
 }
 
+/** An ISO 8601 instant with its zone (Teamleader's `2021-06-15T10:51:23.035+0100`) in epoch milliseconds, read by its
+ * own pattern, never `Date.parse`'s wider grammar; a time the calendar lacks (30 February, 24:00) is none. */
+function instantMs(value: unknown): number | undefined {
+  const [, time = '', fraction = '', sign, hours = '', minutes = ''] = typeof value === 'string'
+    ? /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(?:Z|([+-])(\d{2}):?(\d{2}))$/u.exec(value) ?? [] : [];
+  const local = Date.parse(`${time}Z`);
+  if (Number.isNaN(local) || new Date(local).toISOString().slice(0, 19) !== time) return undefined;
+  return local + Number(`0.${fraction}`) * 1000 - (sign === '-' ? -1 : 1) * (Number(hours) * 60 + Number(minutes)) * 60_000;
+}
+
 /** The wait `wait` reads from an answer, in milliseconds from `now` (an instant already past is 0); `retryAfterMs`
  * checks its range, in milliseconds. The one reader of a declared wait, for the retry and for the error. */
 export function waitOf(wait: Wait | undefined, { headers, body }: Pick<Answer, 'headers' | 'body'>, now: number): number | undefined {
   if (wait === undefined) return undefined;
-  // A header holds a positive decimal number (the longest of those present counts), a body a number from 0.
-  const read = 'path' in wait ? [readPath(body, wait.path)] : [wait.header].flat().map(name => headers.get(name) ?? '')
-    .filter(text => /^\d+(?:\.\d+)?$/u.test(text)).map(Number).filter(value => value > 0);
+  const iso = wait.unit === 'iso8601';
+  // A header holds a positive decimal number (the longest of those present counts), a body a number from 0; an
+  // `iso8601` wait either's string, an instant.
+  const read = 'path' in wait ? [readPath(body, wait.path)].map(value => (iso ? instantMs(value) : value))
+    : [wait.header].flat().map(name => headers.get(name) ?? '')
+      .map(text => (iso ? instantMs(text) : /^\d+(?:\.\d+)?$/u.test(text) && Number(text) > 0 ? Number(text) : undefined));
   const values = read.filter((value): value is number => typeof value === 'number' && value >= 0);
   if (values.length === 0) return undefined;
   const ms = Math.max(...values) * (wait.unit === 's' || wait.unit === 'epochSeconds' ? 1000 : 1);

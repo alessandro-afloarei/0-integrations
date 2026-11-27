@@ -42,8 +42,8 @@ export type Identify = { request?: Call; id?: Value; name?: Value; lowercase?: t
 export type Revoke = ({ url: string; token: readonly ('refresh' | 'access')[] } | { request: Call })
   & { goneErrors?: readonly string[] };
 /** A wait an answer states: a header's positive decimal number (of several, the longest present) or a body's number, a
- * duration (`s`, `ms`) or an instant (`epochSeconds`, `epochMs`). */
-export type Wait = ({ header: string | readonly string[] } | { path: Path }) & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' };
+ * duration (`s`, `ms`) or an instant (`epochSeconds`, `epochMs`); or an ISO 8601 instant with its zone (`iso8601`). */
+export type Wait = ({ header: string | readonly string[] } | { path: Path }) & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' | 'iso8601' };
 /** `onlyStated`: an answer that states no wait, and a network failure, are not retried. */
 export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number; onlyStated?: true; wait?: Wait };
 export type RateLimit = { when: readonly (When & { wait?: Wait })[]; defaultWaitMs?: number };

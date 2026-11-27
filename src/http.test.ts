@@ -1321,6 +1321,15 @@ describe("a retry never comes before the provider's stated wait", () => {
     await retriesAfter(reset('s'), answer(429, { 'ratelimit-reset': 'soon' }), 1000);
   });
 
+  test('a declared ISO 8601 header waits until that instant; one past the cap, or in the year 9999, is sent once with its wait', async () => {
+    const iso = retrying({ defaultWaitMs: 60_000, wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } });
+    const at = (ms: number) => new Date(Date.now() + ms).toISOString().replace('Z', '+0000');
+    await retriesAfter(iso, answer(429, { 'x-ratelimit-reset': at(5000) }), 5000);
+    expect(await sentOnce(iso, answer(429, { 'x-ratelimit-reset': at(90_000) }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
+    const far = Date.UTC(9999, 11, 31, 23, 59, 59) - Date.now();
+    expect(await sentOnce(iso, answer(429, { 'x-ratelimit-reset': '9999-12-31T23:59:59Z' }))).toMatchObject({ code: 'rate_limited', retryAfterMs: far });
+  });
+
   test('a positive Retry-After wins over the declared wait', async () => {
     await retriesAfter(reset('s'), answer(429, { 'retry-after': '2', 'ratelimit-reset': '5' }), 2000);
   });

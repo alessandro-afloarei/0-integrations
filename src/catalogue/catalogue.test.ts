@@ -42,7 +42,7 @@ const condition = <T extends Selects>(schema: z.ZodType<T>) =>
 const when = condition(whenObject);
 /** A wait an answer states: one header, or several (the longest present counts), or one body path. */
 const wait = z.strictObject({ header: z.union([headerName, z.array(headerName).min(1)]).optional(), path: z.string().optional(),
-  unit: z.enum(['s', 'ms', 'epochSeconds', 'epochMs'], { error: "a wait's `unit` is 's', 'ms', 'epochSeconds' or 'epochMs'" }) })
+  unit: z.enum(['s', 'ms', 'epochSeconds', 'epochMs', 'iso8601'], { error: "a wait's `unit` is 's', 'ms', 'epochSeconds', 'epochMs' or 'iso8601'" }) })
   .refine(item => (item.header === undefined) !== (item.path === undefined), 'a `wait` reads one `header` (or a list of headers) or one `path`');
 const send = z.union([z.strictObject({ header: headerName, value: template.regex(/^\P{Cc}*$/u, 'a header `value` holds no control character').optional() }), z.strictObject({ basic: z.tuple([template, template]) }),
   z.strictObject({ query: z.record(z.string(), template) })])
@@ -997,7 +997,7 @@ test.each<[string, Record<string, unknown>, string]>([
     'Unrecognized key: "resetAt"'],
   ['a wait with both a header and a path', { retry: { wait: { header: 'x-reset', path: 'wait', unit: 's' } } },
     'a `wait` reads one `header` (or a list of headers) or one `path`'],
-  ['a wait in minutes', { retry: { wait: { header: 'x-reset', unit: 'min' } } }, "a wait's `unit` is 's', 'ms', 'epochSeconds' or 'epochMs'"],
+  ['a wait in minutes', { retry: { wait: { header: 'x-reset', unit: 'min' } } }, "a wait's `unit` is 's', 'ms', 'epochSeconds', 'epochMs' or 'iso8601'"],
 ])('%s fails the schema, with what to fix', (_, http, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, ...http } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);

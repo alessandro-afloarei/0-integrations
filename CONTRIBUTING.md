@@ -103,8 +103,8 @@ entry:
   `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, a wait's, `http.headers`
   keys) is one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
 - retries as the engine can: a `retry.wait` or a rate-limit rule's `wait` reads one header (or a list) or one body
-  path, in `s`, `ms`, `epochSeconds` or `epochMs`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000 when left
-  out) and never beside `onlyStated`;
+  path, in `s`, `ms`, `epochSeconds`, `epochMs` or `iso8601`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000
+  when left out) and never beside `onlyStated`;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
   names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's

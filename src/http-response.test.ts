@@ -296,6 +296,33 @@ test('codeOf: an earlier code that `allow` refuses hides a later allowed one', (
   expect(codeOf({ detail: ['a', 'b'], allow: ['KNOWN'] }, { b: 'KNOWN' })).toBe('KNOWN');
 });
 
+test('an ISO 8601 instant with its zone waits until then, at least 0; any other form states no wait', () => {
+  const header = (text: string) => waitOf({ header: 'x-ratelimit-reset', unit: 'iso8601' },
+    { headers: new Headers({ 'x-ratelimit-reset': text }), body: {} }, NOW);
+  // NOW is 2026-11-01T12:00:00Z: Teamleader's form, an offset without a colon, then the same instants otherwise written.
+  for (const [text, ms] of [['2026-11-01T12:59:55.035+0100', 0], ['2026-11-01T13:00:05.035+0100', 5035],
+    ['2026-11-01T13:00:05.035+01:00', 5035], ['2026-11-01T11:59:55Z', 0], ['2026-11-01T12:00:05Z', 5000],
+    ['2026-11-01T12:00:05.5Z', 5500], ['2026-11-01T07:00:05-0500', 5000], ['9999-12-31T23:59:59Z', Date.UTC(9999, 11, 31, 23, 59, 59) - NOW]] as const) {
+    expect(header(text)).toBe(ms);
+  }
+  for (const text of ['2026-11-01', 'Sun, 01 Nov 2026 12:00:05 GMT', '1793534405', '2026-11-01T12:00:05', '2026-11-01 12:00:05Z',
+    '2026-11-01T12:00:05+1', '2026-11-01T12:00:05.Z', '2026-02-30T12:00:05Z', '2026-11-01T24:00:00Z', `2026-11-01T12:00:05.${'1'.repeat(180)}Z`, 'x'.repeat(200)]) {
+    expect(header(text)).toBeUndefined();
+  }
+  const body = (value: unknown) => waitOf({ path: 'reset', unit: 'iso8601' }, { headers: new Headers(), body: { reset: value } }, NOW);
+  expect(body('2026-11-01T12:00:05Z')).toBe(5000);
+  expect(body(Date.UTC(2026, 10, 1, 12, 0, 5))).toBeUndefined();
+});
+
+test("an ISO 8601 header wait is a 429's alone; one past the safe range is still measured", () => {
+  const reset: Rules = { http: { ...BASE, retry: { wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } } } };
+  expect(fail(reset, 429, {}, { 'x-ratelimit-reset': '2026-11-01T13:00:05+0100' })).toMatchObject({ retryAfterMs: 5000 });
+  expect(fail(reset, 429, {}, { 'x-ratelimit-reset': '2026-11-01T13:00:05.0001+0100' })).toMatchObject({ retryAfterMs: 5001 });
+  expect(fail(reset, 429, {}, { 'x-ratelimit-reset': '2026-11-01T12:59:55+0100' })).toMatchObject({ retryAfterMs: null });
+  expect(fail(reset, 404, {}, { 'x-ratelimit-reset': '2026-11-01T13:00:05+0100' })).toMatchObject({ retryAfterMs: null });
+  expect(fail(reset, 429, {}, { 'x-ratelimit-reset': '9999-12-31T23:59:59Z' })).toMatchObject({ retryAfterMs: Date.UTC(9999, 11, 31, 23, 59, 59) - NOW });
+});
+
 test("a declared header wait is a 429's alone, Retry-After first", () => {
   const reset: Rules = { http: { ...BASE, retry: { wait: { header: 'ratelimit-reset', unit: 's' } } } };
   expect(fail(reset, 429, {}, { 'ratelimit-reset': '3' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 3000 });
