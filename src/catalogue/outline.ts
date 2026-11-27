@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Outline: OAuth 2 on app.getoutline.com, its app registered under Settings, then Applications, and published to
- * sign in other workspaces (https://app.getoutline.com/.well-known/oauth-authorization-server); or the key, on the
- * cloud or the person's own server, behind the address guard. Each method is a POST with a JSON body; a 429 waits
- * `Retry-After`; lists page by a body `offset` (https://www.getoutline.com/developers; types: openapi.json there). */
+/** Outline: OAuth 2 on app.getoutline.com, its app registered under Settings, then Applications, and `published` to
+ * sign in other workspaces (https://www.getoutline.com/openapi.json, with the types); or the key, on the cloud or the
+ * person's own server, behind the address guard. Each method is a POST with a JSON body; a 429 waits `Retry-After`;
+ * lists page by a body `offset`; revoke: https://app.getoutline.com/.well-known/oauth-authorization-server */
 const document = { id: 'string', 'title?': 'string', 'collectionId?': 'string', 'parentDocumentId?': 'string',
   'path?': 'string', 'createdAt?': 'string', 'updatedAt?': 'string' } as const;
 const limit = { limit: { in: 'body', type: 'number' } } as const;
@@ -13,7 +13,7 @@ const fields = { title: { in: 'body', type: 'string' }, text: { in: 'body', type
 const ref = 'https://www.getoutline.com/developers#tag';
 
 export const outline = defineProvider({
-  id: 'outline', name: 'Outline', docs: 'https://www.getoutline.com/developers#description/api-key',
+  id: 'outline', name: 'Outline', docs: 'https://www.getoutline.com/developers#description/oauth-20',
   categories: ['docs'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.getoutline.com/oauth/authorize', tokenUrl: 'https://app.getoutline.com/oauth/token',
     authorizeParams: { response_type: 'code' } },

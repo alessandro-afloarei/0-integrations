@@ -59,7 +59,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 81 providers: 
 | [monday.com](https://developer.monday.com/api-reference/docs/authentication) | tasks | OAuth 2, key | items.list, items.get, items.create, items.update, boards.list | — | declared |
 | [Notion](https://developers.notion.com/reference/authentication) | docs | key | pages.markdown | — | declared |
 | [Nutshell](https://developers.nutshell.com/docs/api-authentication) | crm | key | contacts.list, contacts.get, contacts.create, accounts.list, leads.list | — | declared |
-| [Outline](https://www.getoutline.com/developers#description/api-key) | docs | OAuth 2, key | documents.list, documents.get, documents.create, documents.update, collections.list | — | declared |
+| [Outline](https://www.getoutline.com/developers#description/oauth-20) | docs | OAuth 2, key | documents.list, documents.get, documents.create, documents.update, collections.list | — | declared |
 | [Outreach](https://developers.outreach.io/api/getting-started) | sales | OAuth 2 | sequences.list, prospects.list, prospects.get, prospects.create, prospects.update, sequenceStates.create | hmac | declared |
 | [PagerDuty](https://docs.pagerduty.com/developer/authentication) | monitoring | OAuth 2, key | incidents.list, incidents.get, services.list | hmac | declared |
 | [PayPal](https://developer.paypal.com/api/rest/authentication/) | finance | token | — | — | declared |
