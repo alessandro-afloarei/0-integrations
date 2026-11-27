@@ -122,8 +122,8 @@ function sendable(entry: Entry, url: string): URL {
 
 /** The entry's base (or another URL of it: a token request's), its placeholders filled from plain or saved values: one
  * in the host a host name, one in the path one encoded segment; a URL with none is used as written. A `sendable` URL,
- * its host, when templated, matching `http.host` (equal, `*.d` a name ending in `.d`, `*` any). Throws before anything
- * is read or sent. */
+ * its host, when templated, matching `http.host` or one of its list (equal, `*.d` a name ending in `.d`; `*` alone any,
+ * in a list none). Throws before anything is read or sent. */
 export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.baseUrl): string {
   const { host = '' } = entry.http;
   const head = hostPart(baseUrl);
@@ -142,8 +142,8 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
     return encodeURIComponent(value);
   }, entry.id);
   const url = sendable(entry, filled);
-  const hosted = placeholders(head).length === 0 || host === '*' || url.hostname === host
-    || (host.startsWith('*.') && url.hostname.endsWith(host.slice(1)));
+  const hosted = placeholders(head).length === 0 || host === '*' || [host].flat().some(pattern => url.hostname === pattern
+    || (pattern.startsWith('*.') && url.hostname.endsWith(pattern.slice(1))));
   if (!hosted) throw new TypeError(`base_host_refused: ${entry.id}`);
   // A typed host that is an address is checked here too, since an app's own fetch cannot be seen to dial; a name is
   // only checked by guardedFetch.

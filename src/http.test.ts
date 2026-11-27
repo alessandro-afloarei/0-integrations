@@ -12,6 +12,7 @@ import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
+import { smartsheet } from './catalogue/smartsheet.js';
 import { trello } from './catalogue/trello.js';
 import { client } from './client.js';
 import { finishConnect } from './connect.js';
@@ -713,10 +714,11 @@ test.each([['a.example.com@evil.test', 'base_value_invalid: regional {sub}'], ['
     expect(fake.calls).toHaveLength(0);
   });
 
-test.each([['*.example.com', 'api.example.com', true], ['*.example.com', 'a.b.example.com', true], ['*.example.com', 'example.com', false],
+const hostCases = [['*.example.com', 'api.example.com', true], ['*.example.com', 'a.b.example.com', true], ['*.example.com', 'example.com', false],
   ['*.example.com', 'xexample.com', false], ['*.example.com', 'example.com.evil.test', false], ['*.example.com', 'evil.test', false],
   ['api.example.com', 'api.example.com', true], ['api.example.com', 'other.example.com', false], ['*', 'any.where.test', true],
-  ['*.example.com', 'API.EXAMPLE.COM', true]])(
+  ['*.example.com', 'API.EXAMPLE.COM', true]] as const;
+test.each(hostCases)(
   'host %s takes %s: %s', async (host, h, accepted) => {
     const entry = defineProvider({ id: 'hosted', name: 'Hosted', fields: [{ name: 'h', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
       auth: [{ kind: 'key' }], http: { baseUrl: 'https://{h}', host } });
@@ -730,6 +732,46 @@ test.each([['*.example.com', 'api.example.com', true], ['*.example.com', 'a.b.ex
       expect(fake.calls).toHaveLength(0);
     }
   });
+
+/** Where a key on `https://{h}` goes under `host`: the host sent to or the refusal, and how often the token was read
+ * and a request sent. */
+async function hostTaken(host: string | readonly string[], h: string) {
+  const entry = defineProvider({ id: 'hosted', name: 'Hosted', fields: [{ name: 'h', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://{h}', host } });
+  const fake = filled(entry, { h });
+  const sent = await fake.client.json('/a').then(() => new URL(fake.calls[0]?.url ?? '').hostname, (error: unknown) => error);
+  return { sent, tokenRead: fake.token.mock.calls.length, requests: fake.calls.length };
+}
+const taken = (h: string) => ({ sent: h.toLowerCase(), tokenRead: 1, requests: 1 });
+const hostRefused = { sent: new TypeError('base_host_refused: hosted'), tokenRead: 0, requests: 0 };
+
+test.each(hostCases.filter(([host]) => host !== '*'))('a list of the one pattern %s takes %s as the pattern alone does: %s', async (host, h, accepted) => {
+  expect(await hostTaken([host], h)).toEqual(accepted ? taken(h) : hostRefused);
+});
+
+test.each([['api.smartsheet.com', true], ['api.smartsheet.eu', true], ['API.SMARTSHEET.EU', true], ['evil.test', false],
+  ['api.smartsheet.eu.evil.test', false], ['api.smartsheet.com.evil.test', false], ['evilsmartsheet.com', false],
+  ['api.smartsheet.au', false], ['app.smartsheet.com', false], ['x.api.smartsheet.com', false], ['smartsheet.eu', false]] as const)(
+  'a host list of two names takes %s: %s (a refusal before the token is read or anything is sent)', async (h, accepted) => {
+    expect(await hostTaken(['api.smartsheet.com', 'api.smartsheet.eu'], h)).toEqual(accepted ? taken(h) : hostRefused);
+  });
+
+test.each([['a.d.test', true], ['a.b.d.test', true], ['x.test', true], ['d.test', false], ['evild.test', false],
+  ['d.test.evil.test', false], ['a.x.test', false]] as const)(
+  'a host list of `*.d.test` and `x.test` takes %s: %s (a refusal before the token is read or anything is sent)', async (h, accepted) => {
+    expect(await hostTaken(['*.d.test', 'x.test'], h)).toEqual(accepted ? taken(h) : hostRefused);
+  });
+
+// The table refuses `'*'` in a list; an app's entry built without it reaches the engine, where `'*'` is no name.
+test.each([['any.where.test', false], ['127.0.0.1', false], ['x.test', true]] as const)(
+  "`'*'` in a host list matches no host: %s %s (a refusal before the token is read or anything is sent)", async (h, accepted) => {
+    expect(await hostTaken(['*', 'x.test'], h)).toEqual(accepted ? taken(h) : hostRefused);
+  });
+
+test('a host list keeps the global fetch: every name in it is one the entry declares', () => {
+  expect(defaultFetch(smartsheet)).toBe(globalThis.fetch);
+  expect(defaultFetch({ ...regional, http: { baseUrl: 'https://{sub}', host: ['*', 'x.test'] } })).toBe(globalThis.fetch);
+});
 
 test.each(['api.intercom.io:8443', 'api.intercom.\u212Aio', 'api.intercom.io\u017F'])(
   "Intercom's client refuses %j before the token is read or anything is sent", async apiHost => {

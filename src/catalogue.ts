@@ -48,8 +48,9 @@ export type Wait = ({ header: string | readonly string[] } | { path: Path }) & {
 export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number; onlyStated?: true; wait?: Wait };
 export type RateLimit = { when: readonly (When & { wait?: Wait })[]; defaultWaitMs?: number };
 export type Http = { baseUrl: Template;
-  /** The host a base with a placeholder in its host must have once filled: a name, `*.` and a domain, or `*` (any). */
-  host?: string; bases?: Readonly<Record<string, string>>; headers?: Readonly<Record<string, string>>;
+  /** The host a base with a placeholder in its host must have once filled: a name, `*.` and a domain, a list of those
+   * (one must match), or `*` (any) alone. */
+  host?: string | readonly string[]; bases?: Readonly<Record<string, string>>; headers?: Readonly<Record<string, string>>;
   timeoutMs?: number; minIntervalMs?: number; retry?: Retry; rateLimit?: RateLimit };
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };

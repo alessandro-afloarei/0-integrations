@@ -112,7 +112,7 @@ const entrySchema = z.strictObject({
   save: z.record(z.string(), value).optional(),
   revoke: z.union([z.strictObject({ url: https, token: z.array(z.enum(['refresh', 'access'])), goneErrors: z.array(z.string()).optional() }),
     z.strictObject({ request, goneErrors: z.array(z.string()).optional() })]).optional(),
-  http: z.strictObject({ baseUrl: https, host: z.string().optional(), bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
+  http: z.strictObject({ baseUrl: https, host: z.union([z.string(), z.array(z.string())]).optional(), bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
     timeoutMs: z.number().int().positive().optional(), minIntervalMs: z.number().int().nonnegative().optional(),
     retry: z.strictObject({ limit: z.number().int().nonnegative().optional(), maxWaitMs: z.number().int().nonnegative().optional(),
       defaultWaitMs: z.number().int().nonnegative().optional(), onlyStated: z.literal(true).optional(), wait: wait.optional() }).optional(),
@@ -199,7 +199,7 @@ const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.s
 const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
 const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (1 000 and 60 000 when left out): the cap would cut a longer default';
 const RETRY_ONLY_STATED = "no `http.retry.defaultWaitMs` beside `onlyStated`: an answer that states no wait is not retried, so the default is never read";
-const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
+const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, a non-empty list of those, or `*` alone) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
@@ -229,8 +229,13 @@ const runnable = {
   [RETRY_DEFAULT]: ({ http: { retry } }: Entry) => { const { defaultWaitMs, maxWaitMs } = retryPolicy(retry); return defaultWaitMs <= maxWaitMs; },
   [RETRY_ONLY_STATED]: ({ http: { retry } }: Entry) => retry?.onlyStated !== true || retry.defaultWaitMs === undefined,
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
-  [HOST_PATTERN]: (entry: Entry) => (declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
-    ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
+  // `*` stays alone: in a list it would take any host without the address guard.
+  [HOST_PATTERN]: (entry: Entry) => {
+    const patterns = [entry.http.host ?? []].flat();
+    return declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
+      ? entry.http.host === '*' || (patterns.length > 0 && patterns.every(host => /^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/u.test(host)))
+      : entry.http.host === undefined;
+  },
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
     || /^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? ''),
@@ -604,6 +609,12 @@ test.each<[Rule, Entry]>([
     [HOST_PATTERN, { baseUrl: 'https://{region}', host: 'example.com/x' }],
     [HOST_PATTERN, { baseUrl: 'https://{region}', host: '*.com' }],
     [HOST_PATTERN, { baseUrl: 'https://api.k.test/{region}', host: 'api.k.test' }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['*', 'api.k.test'] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['*'] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: [] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['api.k.test', '*.com'] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['api.k.test', 'API.K.EU'] }],
+    [HOST_PATTERN, { baseUrl: 'https://api.k.test', host: ['api.k.test'] }],
     ["`http.host: '*'` only on a base whose whole host is one placeholder", { baseUrl: 'https://{region}.example.com', host: '*' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://api.k.test/{zone}' }],
@@ -620,6 +631,7 @@ test.each<[Rule, Entry]>([
     [{ choices: ['api.mailgun.net'] }, 'mailgun.net'],
     [{ choices: ['api.mailgun.net', 'api.eu.mailgun.com'] }, '*.mailgun.net'],
     [{ default: 'api.mailgun.net' }, '*.mailgun.com'],
+    [{ choices: ['api.mailgun.net', 'api.eu.mailgun.net'] }, ['api.mailgun.net', 'api.eu.mailgun.com']],
   ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill the base to a host `http.host` takes",
     defineProvider({ ...key, http: { baseUrl: 'https://{region}', host }, auth: [{ kind: 'key' }],
       fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
