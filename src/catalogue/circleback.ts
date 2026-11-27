@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Circleback: an account's API key, Bearer; no endpoint names the account. Limits are per account and plan; a 429
- * carries `Retry-After` in seconds. Webhooks (automations): `X-Signature`, the hex HMAC-SHA256 of the raw body keyed
- * with the step's signing secret, no timestamp:
+/** Circleback: an account's API key, Bearer; identify only checks it on the tags list (no endpoint names the account):
+ * https://circleback.ai/docs/api/tags/list-tags. A 429 carries `Retry-After` in seconds. Webhooks (automations):
+ * `X-Signature`, the hex HMAC-SHA256 of the raw body keyed with the step's secret, no timestamp; dedupe on `id`:
  * https://circleback.ai/docs/support/automations/export-meeting-data-with-webhooks */
 const meeting = { id: 'string', 'name?': 'string', createdAt: 'string', updatedAt: 'string', 'duration?': 'number', 'url?': 'string',
   'recordingUrl?': 'string', 'notes?': 'unknown' } as const;
@@ -17,7 +17,7 @@ export const circleback = defineProvider({
   http: { baseUrl: 'https://circleback.ai/api', retry: {} },
   errors: { detail: 'code' },
   identify: { request: { path: '/tag' } },
-  webhook: { kind: 'hmac', header: 'x-signature' },
+  webhook: { kind: 'hmac', header: 'x-signature', deliveryId: { body: ['id'] } },
   paging: { link: { kind: 'linkHeader' } },
   operations: {
     'meetings.list': { docs: `${ref}/list-meetings`, path: '/meetings', paging: 'link',
