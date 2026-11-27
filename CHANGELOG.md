@@ -5,8 +5,30 @@
 Nothing here is released yet.
 
 - New: a parameter's type may be a literal (`true`, `'agent'`), at the top level, inside an object or in each list
-  element; an argument fits only that value. Missive sends mail (`messages.create`, `drafts.send: true`).
-- An entry fixes a value with a literal type; the library's one-value enums became literals, requests unchanged.
+  element; an argument fits only that value. Missive sends mail (`messages.create`, `drafts.send: true`), naming its
+  sender by address only (`from_field: { address }`). A boolean literal goes wherever `boolean` goes (a path, a
+  query, a form or a header), and the derived fake answers a call on a shared route with the operation whose literals
+  the call holds (Missive's send before its draft). An empty slot of a sparse list is checked as an element: it is
+  `param_invalid`, nothing sent, where it was sent as `null`. A shape constant is written `as const`: `defineProvider`
+  refuses a widened `string` or `boolean` at compile time, as the `Shape` type did before.
+- An entry fixes a value with a literal type; the library's one-value enums became literals, requests unchanged. An
+  app's calls do not change at all: each argument's type is the same value as before. An app's own entry may still
+  declare a one-value `enum`, which the engine reads as before.
+- For contributors: the table test refuses a one-value `enum`, an empty literal, a string literal one edit or a case
+  change from a type name (`'strng'`, `'Integer'`), a literal in a `result`, and a `{placeholder}` in an
+  `http.headers` value. It runs over this library's entries only. The engine checks none of these in an app's own
+  entry: an answer holding another value than a `result` literal is `invalid_response` (a paged list skips that
+  record), and a header's braces are sent as written.
+- Help Scout creates drafts (`drafts.create`), Freshchat conversations as an agent (`conversations.create`, whose first
+  message is always the agent's normal message, which reaches the user), Gist a teammate's reply or note
+  (`messages.create`).
+- Freshchat lists its channels (`channels.list`), the ids a new conversation's `channel_id` takes.
+- Breaking: Groove's, eDesk's and LiveAgent's ticket creates no longer offer a spam or deleted status (Groove's
+  `state: 'spam'`, eDesk's `status: 'Spam'`, LiveAgent's `status: 'X'` and `'B'`). A call that passes one is a type
+  error, and at run time `param_invalid` with nothing sent: an app passes another status (eDesk's is required) or,
+  for Groove and LiveAgent, none.
+- Re:amaze's conversation create describes its statuses without the spam ones (3 and 9); the entry does not check the
+  number.
 - New entries: 25 support providers (atlas, chatwoot, crisp, customerly, devrev, dixa, edesk, freshchat, freshdesk,
   freshservice, gist, groove, happyfox, helpcrunch, helpwise, hiver, liveagent, plain, pylon, reamaze, thena, trengo,
   unthread, zammad, zendesk), each with its category's operations (Plain its reads only). Every entry is `declared`.

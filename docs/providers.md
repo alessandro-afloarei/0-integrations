@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers: 132 declared, 0 recorded;
-558 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
+562 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -48,12 +48,12 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers:
 | [Firecrawl](https://docs.firecrawl.dev/api-reference/v2-introduction) | search | OAuth 2, key | — | — | declared |
 | [Fireflies](https://docs.fireflies.ai/fundamentals/authorization) | meetings | key | user | hmac | declared |
 | [folk](https://developer.folk.app/api-reference/authentication) | crm | key | people.list, people.search, people.get, people.create, people.update, companies.list, deals.list | standard | declared |
-| [Freshchat](https://developers.freshchat.com/api/#authentication) | support | key | conversations.list, conversations.get, conversations.update, messages.list, messages.create, users.list | — | declared |
+| [Freshchat](https://developers.freshchat.com/api/#authentication) | support | key | conversations.list, conversations.get, conversations.create, conversations.update, messages.list, messages.create, users.list, channels.list | — | declared |
 | [Freshdesk](https://developers.freshdesk.com/api/#authentication) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, conversations.list, conversations.create, notes.create, contacts.list, contacts.search | — | declared |
 | [Freshsales](https://developers.freshworks.com/crm/api/#authentication) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, accounts.list, deals.list | — | declared |
 | [Freshservice](https://api.freshservice.com/#authentication) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, conversations.list, conversations.create, notes.create, requesters.list | — | declared |
 | [Front](https://dev.frontapp.com/docs/oauth) | support, mail | OAuth 2, key | conversations.list, conversations.search, conversations.get, inboxes.list, drafts.create, messages.create, conversations.update, messages.list, replies.create, comments.create, contacts.list | — | declared |
-| [Gist](https://developers.getgist.com/docs/working-with-oauth) | support | OAuth 2, key | conversations.list, conversations.search, conversations.get, conversations.update, messages.list, contacts.list | — | declared |
+| [Gist](https://developers.getgist.com/docs/working-with-oauth) | support | OAuth 2, key | conversations.list, conversations.search, conversations.get, conversations.update, messages.list, messages.create, contacts.list | — | declared |
 | [GitBook](https://gitbook.com/docs/developers/gitbook-api/authentication) | docs | key | pages.list, pages.get, spaces.list | — | declared |
 | [GitHub](https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api) | code | OAuth 2, key | — | — | declared |
 | [GitLab](https://docs.gitlab.com/api/rest/authentication/) | code | OAuth 2, key | — | standard | declared |
@@ -64,7 +64,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers:
 | [Guru](https://developer.getguru.com/docs/getting-started) | docs | key | cards.search, cards.get, cards.create, cards.update, collections.list | — | declared |
 | [HappyFox](https://support.happyfox.com/kb/article/1039-happyfox-api-documentation/) | support | key | tickets.list, tickets.get, tickets.create, tickets.update, notes.create, users.list | — | declared |
 | [HelpCrunch](https://docs.helpcrunch.com/en/rest-api-v1/api-setup-v1) | support | key | chats.list, chats.search, chats.get, chats.create, chats.update, messages.list, messages.create, applications.list, customers.list, customers.search | hmac | declared |
-| [Help Scout](https://developer.helpscout.com/mailbox-api/overview/authentication/) | support, mail | OAuth 2 | conversations.list, conversations.get, inboxes.list, conversations.create, conversations.update, threads.list, threads.create, notes.create, customers.list | hmac | declared |
+| [Help Scout](https://developer.helpscout.com/mailbox-api/overview/authentication/) | support, mail | OAuth 2 | conversations.list, conversations.get, inboxes.list, conversations.create, drafts.create, conversations.update, threads.list, threads.create, notes.create, customers.list | hmac | declared |
 | [Helpwise](https://helpwise.io/developers/) | support | key | conversations.list, conversations.get, contacts.list, contacts.search | — | declared |
 | [Hiver](https://developer.hiverhq.com/hiver-api) | support | key | inboxes.list, conversations.list, conversations.get, conversations.update | — | declared |
 | [Honeybadger](https://docs.honeybadger.io/api/v3/authentication/) | monitoring | key | faults.list, faults.get, faults.update, projects.list | token | declared |
