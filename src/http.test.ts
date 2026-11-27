@@ -1463,6 +1463,7 @@ describe('an answer a rate-limit rule marks is retried as a 429 is', () => {
       rateLimit: { when: [{ status: 429, wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } }] } } });
     const at = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
     expect(await sentOnce(jira, answer(429, { 'x-ratelimit-reset': at(1800) }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 1_800_000 });
+    expect(await sentOnce(jira, answer(429, { 'x-ratelimit-reset': at(3) }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 3000 });
     expect(await sentOnce(jira, answer(429, { 'x-ratelimit-reset': at(1800), 'retry-after': '5' })))
       .toMatchObject({ code: 'rate_limited', retryAfterMs: 1_800_000 });
     await retriesAfter(jira, answer(429, { 'x-ratelimit-reset': at(3), 'retry-after': '5' }), 5000);

@@ -318,6 +318,7 @@ test('a cursor that is a non-negative whole number is sent as its digits; any ot
   const numeric = { kind: 'cursor', next: 'pagination.next', send: { query: 'until' } } as const;
   expect(nextCursor(numeric, { pagination: { next: 42 } })).toBe('42');
   expect(nextCursor(numeric, { pagination: { next: 0 } })).toBe('0');
+  expect(nextCursor({ ...numeric, more: 'more' }, { more: true, pagination: { next: 42 } })).toBe('42');
   for (const next of [-1, 1.5, true, Number.MAX_SAFE_INTEGER + 1]) expect(nextCursor(numeric, { pagination: { next } })).toBeNull();
   const walked = await pageWalk(numeric, [{ pagination: { next: 1700000000000 } }, { pagination: { next: null } }]);
   expect(walked.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?until=1700000000000']);
