@@ -11,7 +11,7 @@ const user = { id: 'integer', 'name?': 'string', 'email?': 'string', 'role?': 's
 const comment = { 'body?': 'string', 'html_body?': 'string', 'public?': 'boolean', 'author_id?': 'integer' } as const;
 const written = { 'subject?': 'string', 'status?': 'string', 'priority?': 'string', 'type?': 'string', 'requester_id?': 'integer',
   'requester?': 'unknown', 'assignee_id?': 'integer', 'group_id?': 'integer', 'tags?': ['string'], 'external_id?': 'string' } as const;
-const fields = 'The comment is the reply: `comment.public: false` keeps it an internal note. `status` is new, open, pending, hold, solved or closed; `priority` urgent, high, normal or low; `tags` replaces the ticket\'s tags.';
+const fields = 'The comment is the reply: `comment.public: false` keeps it an internal note, and the first comment\'s `public` holds for later ones unless changed. `status` is new, open, pending, hold, solved or closed; `priority` urgent, high, normal or low; `tags` replaces the ticket\'s tags.';
 const size = { 'page[size]': { in: 'query', type: 'integer', required: true,
   description: 'Records per page, at most 100. Sending it pages by cursor.' } } as const;
 const ticketId = { ticket_id: { in: 'path', type: 'integer', required: true } } as const;
@@ -28,7 +28,7 @@ export const zendesk = defineProvider({
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://{subdomain}.zendesk.com/oauth/authorizations/new',
     tokenUrl: 'https://{subdomain}.zendesk.com/oauth/tokens', json: true, authorizeParams: { response_type: 'code' } },
   { kind: 'key', send: { basic: ['{email}/token', '{token}'] }, fields: [subdomain,
-    { name: 'email', title: 'Email address', help: 'The email address you sign in to Zendesk with.' },
+    { name: 'email', title: 'Email address', help: 'The email address of the agent or admin you sign in as: the token acts with that user\'s role.' },
     { name: 'apiToken', title: 'API token', secret: true,
       help: 'For your own Zendesk instance: an app for other Zendesk customers connects with the OAuth 2 sign-in, as Zendesk requires. An admin makes it in Admin Center under Apps and integrations, APIs, Zendesk API. Zendesk has deprecated API tokens.' }] }],
   scopes: { default: ['tickets:read', 'tickets:write', 'users:read'] },
@@ -39,6 +39,8 @@ export const zendesk = defineProvider({
   errors: { detail: 'error' },
   // Cursor paging, turned on by `page[size]`: https://developer.zendesk.com/api-reference/introduction/pagination/
   paging: { cursor: { kind: 'cursor', next: 'meta.after_cursor', more: 'meta.has_more', send: { query: 'page[after]' } },
+    // List Users states `has_more` only with `include_boundary_indicators`: its walk ends on a blank cursor.
+    users: { kind: 'cursor', next: 'meta.after_cursor', send: { query: 'page[after]' } },
     nextPage: { kind: 'nextUrl', next: 'next_page' } },
   // No comment create or note endpoint: a reply, or with `public: false` an internal note, is the `comment` of a
   // ticket's create or update, which email the requester and CCs as the triggers say:
@@ -58,7 +60,7 @@ export const zendesk = defineProvider({
       records: 'comments', params: { ...ticketId, ...size },
       result: { comments: [{ id: 'integer', 'type?': 'string', 'author_id?': 'integer', 'body?': 'unknown', 'public?': 'boolean',
         'created_at?': 'string' }] } },
-    'users.list': { docs: `${ref}/users/users/#list-users`, path: '/users', paging: 'cursor', records: 'users',
+    'users.list': { docs: `${ref}/users/users/#list-users`, path: '/users', paging: 'users', records: 'users',
       params: { ...size, role: { in: 'query', type: 'string', description: 'end-user, agent, admin or a custom role name.' } },
       result: { users: [user] } },
     // Offset pages, at most 10,000 records a query.
