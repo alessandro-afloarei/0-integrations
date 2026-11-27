@@ -50,8 +50,14 @@ Nothing here is released yet.
 - An entry's `authorizeParams` no longer replace a parameter the engine sends (`client_id`, `scope`, `redirect_uri`,
   `state`, `code_challenge`, `code_challenge_method`): an app's own entry that named one sent its value in place of the
   engine's, and now sends the engine's. No catalogue entry names one, and the table refuses it.
-- Breaking: a refused code exchange (a bad, expired or replayed code, a wrong `redirect_uri` or code verifier) throws
-  `ProviderHttpError` `rejected` with the RFC 6749 code as its detail, no longer `GrantRevoked`.
+- Breaking: a code exchange the server refuses is classified as a `token` sign-in's first request is. A 400, 401 or
+  403, and a 200 the entry's `failed` marks, throw `ProviderHttpError` `rejected`, its detail the answer's `error` only
+  when that is one of RFC 6749's codes, else null. So a bad, expired or replayed code, or a wrong `redirect_uri` or code
+  verifier (`invalid_grant`), is no longer `GrantRevoked`; a wrong client (`invalid_client`), any other OAuth code and an
+  answer with no OAuth body at those statuses are no longer `request_failed`; Slack's `ok: false` is `rejected` with no
+  detail (its own codes, such as `invalid_code`, are none of RFC 6749's). Any other refusal of the exchange is
+  classified as a call's answer is: a 404 is `not_found`, a 429 `rate_limited` with its wait, a 408 `unavailable`, each
+  `request_failed` before. A refresh and a revoke are classified as before.
 - Webhooks:
   - New: a webhook timestamp may be epoch milliseconds or an ISO 8601 instant (`timestamp.unit`); Zendesk verifies its
     webhooks.

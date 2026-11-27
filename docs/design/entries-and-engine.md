@@ -324,9 +324,11 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   `OAuthClient<typeof entry>` has no `clientSecret` (Firecrawl, Brevo).
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
-- A code exchange the server refuses (an error answer with an OAuth code, or a 200 its `failed` marks) is `rejected`, its
-  detail the RFC 6749 code as `safeDetail` keeps it, as a `token` sign-in's first request is: no grant existed.
-  `GrantRevoked` means a grant that existed (a refresh, a call).
+- A code exchange the server refuses is classified as a `token` sign-in's first request is (no grant existed): a 400,
+  401 or 403, and a 200 the entry's `failed` marks, are `rejected`, their detail the answer's `error` only when that is
+  one of RFC 6749's codes (`invalid_grant`, `invalid_client`, …) and holds nothing sent; any other answer is classified
+  as a call's is (a 404 `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`, the rest
+  `request_failed`). `GrantRevoked` means a grant that existed (a refresh, a call).
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
   (Atlassian) with `content-type: application/json`, the client's parameters in it as `clientAuth` says (Basic stays a
   header). The answer is read as a form-bodied one is.
@@ -932,7 +934,7 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
    comparing a token request with the one the engine sends for the good key. Every sign-in of an entry that sends a
    request to sign in (an identify request, or a `token` sign-in's token request) signs in on it with a good key and is
    `rejected` with a bad one, and every OAuth 2 sign-in connects with a good code and is refused with a bad one
-   (`GrantRevoked`), with no recording.
+   (`rejected`, `invalid_grant`), with no recording.
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.
 

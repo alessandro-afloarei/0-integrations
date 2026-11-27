@@ -118,7 +118,7 @@ type Context = ReturnType<typeof context>;
  * grant; the detail never holds what the request sent. */
 function refusal(code: string, entry: Entry, status: number, secrets: readonly string[], exchange: boolean): Error {
   const detail = safeDetail(code, secrets);
-  if (exchange) return new ProviderHttpError('rejected', status, detail);
+  if (exchange) return new ProviderHttpError('rejected', status, rfcDetail(code, secrets));
   if (code === 'invalid_grant' || entry.errors?.revoked?.includes(code)) return new GrantRevoked(detail);
   return new ProviderHttpError('request_failed', status, detail);
 }
@@ -148,8 +148,8 @@ async function send(c: Context, entry: Entry, secrets: readonly string[], work: 
   return response;
 }
 
-function processingError(error: unknown, entry: Entry, status: number, secrets: readonly string[], exchange = false): Error {
-  if (error instanceof oauth.ResponseBodyError) return refusal(error.error, entry, status, secrets, exchange);
+function processingError(error: unknown, entry: Entry, status: number, secrets: readonly string[]): Error {
+  if (error instanceof oauth.ResponseBodyError) return refusal(error.error, entry, status, secrets, false);
   return new ProviderHttpError(status >= 200 && status < 300 ? 'invalid_response' : 'request_failed', status);
 }
 
@@ -167,11 +167,15 @@ export async function exchangeCode<const E extends Entry>(entry: E, client: OAut
   if (codeVerifier) params.set('code_verifier', codeVerifier);
   const secrets = [...c.secrets, code, codeVerifier ?? ''];
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options), true);
+  // Refused as a `token` sign-in's first request is: no grant existed.
+  const refused = response.ok ? null : firstTokenError(entry, sentWith({ status: response.status, headers: response.headers,
+    data: parseJson(await response.text()) }, secrets), secrets);
+  if (refused) throw refused;
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
     return { grant: grant(answer, null), extras: tokenAnswerOf(entry, answer) };
-  } catch (error) {
-    throw processingError(error, entry, response.status, secrets, true);
+  } catch {
+    throw new ProviderHttpError('invalid_response', response.status);
   }
 }
 
@@ -231,6 +235,16 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
 }
 
 const RFC6749_ERRORS = ['invalid_request', 'invalid_client', 'invalid_grant', 'unauthorized_client', 'unsupported_grant_type', 'invalid_scope'];
+/** A refusal's detail: the answer's `error` only when that is one of RFC 6749's codes, and holds nothing sent. */
+const rfcDetail = (code: unknown, secrets: readonly string[]) => (typeof code === 'string' && RFC6749_ERRORS.includes(code) ? safeDetail(code, secrets) : null);
+
+/** A first token request's answer (a code exchange, a `token` sign-in) as its error, or null: RFC 6749 §5.2's 400, 401
+ * and 403 are a refused client or grant, `rejected`; any other is classified as a call's answer is. */
+function firstTokenError(entry: Entry, response: ProviderResponse, secrets: readonly string[]): Error | null {
+  const { status } = response;
+  if (status === 400 || status === 401 || status === 403) return new ProviderHttpError('rejected', status, rfcDetail(readPath(response.data, 'error'), secrets));
+  return status >= 200 && status < 300 ? null : classify(entry, response);
+}
 type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; fetch?: typeof fetch };
 
 /** @internal Requests a token entry's token: the token, its expiry (ms since epoch) or null, and the answer's keys the
@@ -267,12 +281,7 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
     throw new ProviderHttpError('unavailable', null);
   }
   const { status, data } = response;
-  // RFC 6749 §5.2: a refused client or grant; its detail is the answer's `error` only when that is one of the RFC's codes.
-  if (status === 400 || status === 401 || status === 403) {
-    const code = readPath(data, 'error');
-    throw new ProviderHttpError('rejected', status, typeof code === 'string' && RFC6749_ERRORS.includes(code) ? safeDetail(code, secrets) : null);
-  }
-  const error = status >= 200 && status < 300 ? null : classify(entry, response);
+  const error = firstTokenError(entry, response, secrets);
   if (error) throw error;
   const token = readPath(data, request.token ?? 'access_token');
   if (typeof token !== 'string' || token.trim() === '') throw new ProviderHttpError('invalid_response', status, 'missing_fields');

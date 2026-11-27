@@ -5,10 +5,11 @@ on `oauth4webapi`, each driven by a catalogue entry whose sign-in is OAuth 2. `p
 uses it. The app owns the state nonce. The scopes asked are joined by the entry's `scopeSeparator` (a space by
 default); none asked sends no `scope` parameter. `exchangeCode` returns only the token-answer fields the entry reads
 (`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
-condition marks is refused with the entry's own code. A code exchange the server refuses (an error answer with an
-OAuth code, or a 200 its `failed` marks) is `rejected`, its detail the RFC 6749 code as `safeDetail` keeps it, as a
-`token` sign-in's first request is: no grant existed. `GrantRevoked` means a grant that existed (a refresh, a call). An
-entry's `authorizeParams` never replace a parameter the engine sends (`client_id`, `scope`, `redirect_uri`, `state`,
+condition marks is refused. A code exchange the server refuses is classified as a `token` sign-in's first request
+is (no grant existed): a 400, 401 or 403, and a 200 the entry's `failed` marks, are `rejected`, their detail the
+answer's `error` only when that is one of RFC 6749's codes; any other answer is classified as a call's is (a 404
+`not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`, the rest `request_failed`).
+`GrantRevoked` means a grant that existed (a refresh, a call). An entry's `authorizeParams` never replace a parameter the engine sends (`client_id`, `scope`, `redirect_uri`, `state`,
 `code_challenge`, `code_challenge_method`). The client's
 secret, the code and the verifier are each read once, so the value checked is the value sent and redacted.
 
