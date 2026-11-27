@@ -15,6 +15,7 @@ import { intercom } from './catalogue/intercom.js';
 import { mailjet } from './catalogue/mailjet.js';
 import { recallai } from './catalogue/recallai.js';
 import { nylas } from './catalogue/nylas.js';
+import { pipedrive } from './catalogue/pipedrive.js';
 import { slack } from './catalogue/slack.js';
 import { stripe } from './catalogue/stripe.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook, type WebhookRequest } from './webhooks.js';
@@ -583,6 +584,21 @@ test('deliveryId reads the declared header or the body paths', () => {
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('not json')))).toBeNull();
+});
+
+test("Pipedrive dedupes a webhooks v2 delivery on its event's id, and gives a v1 delivery, whose `meta.id` is the object's, none", () => {
+  // The guides' examples: v2's `meta` names its `version` and the event's `id`; v1's `meta.id` is the deal's.
+  const v2 = (id: string) => request({}, Buffer.from(JSON.stringify({ meta: { action: 'change', entity: 'deal', entity_id: '42', id,
+    version: '2.0', attempt: 1 }, data: { id: 42 } })));
+  const v1 = (title: string) => request({}, Buffer.from(JSON.stringify({ v: 1, meta: { v: 1, action: 'updated', object: 'deal', id: 42,
+    webhook_id: 7 }, current: { id: 42, title }, event: 'updated.deal' })));
+  expect([deliveryId(pipedrive.webhook, v1('first')), deliveryId(pipedrive.webhook, v1('second'))]).toEqual([null, null]);
+  const [one, two] = [deliveryId(pipedrive.webhook, v2('a3f1c2d4-0000-4000-8000-000000000001')),
+    deliveryId(pipedrive.webhook, v2('a3f1c2d4-0000-4000-8000-000000000002'))];
+  expect(one).not.toBeNull();
+  expect(two).not.toBeNull();
+  expect(one).not.toBe(two);
+  expect(deliveryId(pipedrive.webhook, v2('a3f1c2d4-0000-4000-8000-000000000001'))).toBe(one);
 });
 
 /** A delivery carrying this `authorization` header, as Mailjet sends the user and password of the URL it calls. */

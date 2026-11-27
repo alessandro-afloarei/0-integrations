@@ -25,10 +25,10 @@ export const pipedrive = defineProvider({
   errors: { detail: 'code' },
   paging: { cursor: { kind: 'cursor', next: 'additional_data.next_cursor', send: { query: 'cursor' } } },
   // Nothing is signed: the app sets `http_auth_user` and `http_auth_password` on the webhook it creates and passes
-  // `user:password` as the secret. Webhooks v2 (the default `version`): `meta.id` is the event's id,
-  // https://pipedrive.readme.io/docs/guide-for-webhooks-v2, where a v1 webhook's is the object's,
-  // https://pipedrive.readme.io/docs/guide-for-webhooks
-  webhook: { kind: 'basic', deliveryId: { body: ['meta.id'] } },
+  // `user:password` as the secret. Webhooks v2 (the default): `meta.id` is the event's id, beside `meta.version`,
+  // https://pipedrive.readme.io/docs/guide-for-webhooks-v2. A v1 webhook's `meta.id` is the object's and its meta has
+  // no `version` (https://pipedrive.readme.io/docs/guide-for-webhooks), so a v1 delivery has no delivery id (null).
+  webhook: { kind: 'basic', deliveryId: { body: ['meta.version', 'meta.id'] } },
   operations: {
     'persons.list': { docs: `${ref}/Persons#getPersons`, path: '/v2/persons', paging: 'cursor', records: 'data',
       params: { org_id: { in: 'query', type: 'integer' }, ...limit }, result: { data: [person] } },

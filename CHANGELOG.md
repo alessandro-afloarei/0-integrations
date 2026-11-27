@@ -16,8 +16,8 @@ Nothing here is released yet.
   - New: `basic` webhooks, checked by HTTP Basic credentials (`authorization: Basic <base64 of user:password>`, the
     secret `user:password`; one with no `:` or an empty password accepts nothing). Mailjet, Pipedrive and Postmark
     declare theirs: the app sets the user and password on the webhook (in the URL it registers; Pipedrive's
-    `http_auth_user` and `http_auth_password`). Pipedrive dedupes on the body's `meta.id` (webhooks v2), Postmark on
-    `X-PM-Webhook-Trace-Id`.
+    `http_auth_user` and `http_auth_password`). Pipedrive dedupes on the body's `meta.version` and `meta.id` (webhooks
+    v2; a v1 delivery, whose `meta.id` is the object's, has none), Postmark on `X-PM-Webhook-Trace-Id`.
   - New: a `standard` request with no `webhook-signature` is read under Svix's names, `svix-id`, `svix-timestamp` and
     `svix-signature` (it was `false`); an entry that dedupes on a header reads only that header's set. AgentMail,
     Resend and Fellow declare theirs (AgentMail deduped on the body's `event_id`, Resend and Fellow on `svix-id`), and
