@@ -4,6 +4,23 @@
 
 Nothing here is released yet.
 
+- New entries: 25 support providers (atlas, chatwoot, crisp, customerly, devrev, dixa, edesk, freshchat, freshdesk,
+  freshservice, gist, groove, happyfox, helpcrunch, helpwise, hiver, liveagent, plain, pylon, reamaze, thena, trengo,
+  unthread, zammad, zendesk), each with its category's operations (Plain its reads only). Every entry is `declared`.
+- Front, Help Scout, Missive and Intercom list `support` again, with its operations: Front and Help Scout list it first
+  (their home pages lead with support), Missive second (its leads with email). Front gains `conversations.update`,
+  `messages.list`, `replies.create`, `comments.create` and `contacts.list`; Help Scout `conversations.update`,
+  `threads.list`, `threads.create`, `notes.create` and `customers.list`; Missive `conversations.update`,
+  `messages.list` and `contacts.list`; Intercom `conversations.list`, `.search`, `.get`, `.update`, `replies.create`
+  and `contacts.list`. A reply (`replies.create`, `threads.create`, Intercom's with `message_type: 'comment'`) reaches
+  the customer.
+- Breaking: Intercom's requests carry `Intercom-Version: 2.18`, the version its declared operations are read from; it
+  overrides the version selected on the app, so an app's raw `json` and `request` calls answer in 2.18's shapes too.
+- Breaking: Help Scout's base is `https://api.helpscout.net`, each path naming its version (`customers.list` is
+  `/v3/customers`); its operations send the same URLs as before. An app's raw `json`, `request` and `paginate` paths
+  name the version now (`api.json('/v2/users/me')`, where `/users/me` was), and `baseUrl` lost its `/v2`. No sign-in,
+  field or host changed, so a stored connection keeps working.
+
 - New: `clientAuth: 'none'`, a public client: the code exchange, the refresh and an RFC 7009 revoke send its
   `client_id` in the body and no secret, even one an untyped caller passes; PKCE is required (an app's entry that
   declares `'none'` beside `pkce: false` throws `pkce_required: <entry id>` before anything is sent); and
