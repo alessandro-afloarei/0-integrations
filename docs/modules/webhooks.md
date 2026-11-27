@@ -50,6 +50,12 @@ only the older secret token (`X-Gitlab-Token`) sends no signature, and this entr
 holding a `.` is `false`: the specification says the message id must "not be allowed to include any `.`", since the
 signed content joins id, timestamp and body with dots (GitLab's ids are UUIDs).
 
+A request with no `webhook-signature` is read under Svix's names instead, `svix-id`, `svix-timestamp` and
+`svix-signature`: Svix, the reference implementation, sends these, as AgentMail's webhooks do. One set is read whole,
+so a request is never checked with an id or timestamp of one set and a signature of the other; a `webhook-signature`
+beside `svix-*` headers means the `webhook-*` set. AgentMail's entry declares the body's `event_id` as its delivery id:
+its `svix-id` differs between webhooks registered for the organization, a pod and an inbox, and `event_id` does not.
+
 `kind: 'basic'` (Mailjet) signs nothing either: the provider calls the URL the app registered with a user and password
 in it (`https://user:password@…`) and sends them as HTTP Basic. Pass `user:password` as the secret. The request passes
 when `authorization` is `Basic` (in any case), one space and exactly the base64 of the secret's UTF-8 bytes, compared as

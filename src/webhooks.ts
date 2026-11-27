@@ -9,14 +9,16 @@ export type WebhookRequest = { method: string; url: string; headers: Headers; ra
 const MAX_HEADER_BYTES = 8 * 1024;
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest();
-/** Standard Webhooks read as the HMAC it is: `webhook-signature` lists `v1,<base64>` pieces with spaces between, over
- * `<webhook-id>.<webhook-timestamp>.<body>`, keyed with the secret's base64. */
-const STANDARD: Extract<Webhook, { kind: 'hmac' }> = { kind: 'hmac', header: 'webhook-signature', signed: '{timestamp}.{body}',
-  encoding: 'base64', secret: 'base64', part: 'v1', timestamp: { header: 'webhook-timestamp' } };
+/** Standard Webhooks read as the HMAC it is: `<set>-signature` lists `v1,<base64>` pieces with spaces between, over
+ * `<set>-id.<set>-timestamp.<body>`, keyed with the secret's base64. */
+const STANDARD = (set: string): Extract<Webhook, { kind: 'hmac' }> => ({ kind: 'hmac', header: `${set}-signature`,
+  signed: '{timestamp}.{body}', encoding: 'base64', secret: 'base64', part: 'v1', timestamp: { header: `${set}-timestamp` } });
 
 export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret: string): boolean {
   const standard = webhook.kind === 'standard';
-  const scheme = standard ? STANDARD : webhook;
+  // Svix, the reference implementation, names them `svix-*`: one set is read whole, the `webhook-*` one when it signs.
+  const set = request.headers.has('webhook-signature') ? 'webhook' : 'svix';
+  const scheme = standard ? STANDARD(set) : webhook;
   const received = request.headers.get(scheme.kind === 'basic' ? 'authorization' : scheme.header);
   if (!received || received.length > MAX_HEADER_BYTES) return false;
   // Compared as digests of equal length, so the token's length leaks nothing.
@@ -35,7 +37,7 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   // A declaration that does not sign the body, or the timestamp it checks, can verify nothing safely.
   const signed = scheme.signed ?? '{body}';
   if (!signed.includes('{body}') || (stamp !== undefined && !signed.includes('{timestamp}'))) return false;
-  const id = standard ? request.headers.get('webhook-id') || null : '';
+  const id = standard ? request.headers.get(`${set}-id`) || null : '';
   // The specification bars a `.` from the id: `a.<t>` and a body starting `<digits>.` would sign the same bytes.
   if (id === null || id.includes('.')) return false;
   // A Map: a name that is no placeholder (`constructor`) is signed as written, never read from a prototype.

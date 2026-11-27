@@ -1,6 +1,7 @@
 import { createHmac, generateKeyPairSync, sign, timingSafeEqual, type KeyObject } from 'node:crypto';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Webhook } from './catalogue.js';
+import { agentmail } from './catalogue/agentmail.js';
 import { airtable } from './catalogue/airtable.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { chatwork } from './catalogue/chatwork.js';
@@ -417,7 +418,51 @@ test('a Standard Webhooks id holding a `.` is false: the signed content cannot b
   expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg.1', t), t, 'msg.1'), standardSecret)).toBe(false);
 });
 
+/** The same scheme under Svix's names (AgentMail): `svix-id`, `svix-timestamp`, `svix-signature`. */
+function svixSigned(signature: string, timestamp = t, id = 'msg_1'): WebhookRequest {
+  return request({ 'svix-id': id, 'svix-timestamp': timestamp, 'svix-signature': signature });
+}
+
+test("verifies AgentMail's webhook under Svix's header names, and the same request under `webhook-*` names", () => {
+  const good = standardSignature('msg_1', t);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(good), standardSecret)).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(`v1,${Buffer.alloc(32).toString('base64')} ${good}`), standardSecret)).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, standardSigned(good), standardSecret)).toBe(true);
+  expect(verifyWebhook(gitlab.webhook, svixSigned(good), standardSecret)).toBe(true);
+  // Svix's published example, signed at its own timestamp.
+  vi.setSystemTime(1731705121 * 1000);
+  const example = request({ 'svix-id': 'msg_loFOjxBNrRLzqYUf', 'svix-timestamp': '1731705121',
+    'svix-signature': 'v1,rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=' }, Buffer.from('{"event_type":"ping","data":{"success":true}}'));
+  expect(verifyWebhook(agentmail.webhook, example, 'whsec_plJ3nmyCDGBKInavdOK15jsl')).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, example, 'whsec_plJ3nmyCDGBKInavdOK15jsm')).toBe(false);
+});
+
+test('a request is checked with one set of Standard Webhooks headers whole, never an id or timestamp of the other', () => {
+  const good = standardSignature('msg_1', t);
+  // No `webhook-signature`: the `svix-*` set is read, and its id or timestamp is missing.
+  expect(verifyWebhook(agentmail.webhook, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'svix-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, request({ 'svix-id': 'msg_1', 'webhook-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
+  // A `webhook-signature` chooses the `webhook-*` set, whatever `svix-*` headers stand beside it.
+  expect(verifyWebhook(agentmail.webhook, request({ 'svix-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good }), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, { ...svixSigned(good), headers: new Headers({ 'svix-id': 'msg_1', 'svix-timestamp': t,
+    'svix-signature': good, 'webhook-signature': 'v1,x' }) }, standardSecret)).toBe(false);
+});
+
+test('refuses a Svix-named request that is stale, altered or signed for another id', () => {
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', String(now - 301)), String(now - 301)), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', String(now - 300)), String(now - 300)), standardSecret)).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', t), t, 'msg_2'), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg.1', t), t, 'msg.1'), standardSecret)).toBe(false);
+  const changed = Buffer.from(body);
+  changed[0] = 1;
+  expect(verifyWebhook(agentmail.webhook, { ...svixSigned(standardSignature('msg_1', t)), rawBody: changed }, standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', t)), `whsec_${Buffer.from('another-key').toString('base64')}`)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(`${'v1a,x '.repeat(1400)}${standardSignature('msg_1', t)}`), standardSecret)).toBe(false);
+});
+
 test('deliveryId reads the declared header or the body paths', () => {
+  expect(deliveryId(agentmail.webhook, request({ 'svix-id': 'msg_1' }, Buffer.from('{"event_type":"message.received","event_id":"e1"}')))).toBe('e1');
   expect(deliveryId(gitlab.webhook, standardSigned(standardSignature('msg_1', t)))).toBe('msg_1');
   expect(deliveryId(stripe.webhook, request({}, Buffer.from('{"id":"evt_1","type":"balance.available"}')))).toBe('evt_1');
   expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }))).toBe('d1');

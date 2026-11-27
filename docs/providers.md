@@ -1,13 +1,13 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers: 106 declared, 0 recorded;
-356 typed operations; webhooks: basic 1, ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
+356 typed operations; webhooks: basic 1, ed25519 1, hmac 35, standard 5, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
 | [Acuity Scheduling](https://developers.acuityscheduling.com/docs/oauth2) | calendar | OAuth 2, key | appointmentTypes.list, appointments.list, appointments.get, appointments.create | hmac | declared |
 | [Affinity](https://developer.affinity.co/pages/external-api-v2/authentication) | crm | key | persons.list, persons.get, persons.create, persons.update, companies.list, opportunities.list | — | declared |
-| [AgentMail](https://agentmail.to/docs/api-reference/auth/me) | mail | key | messages.list, messages.get, inboxes.list, drafts.create, messages.create | — | declared |
+| [AgentMail](https://agentmail.to/docs/api-reference/auth/me) | mail | key | messages.list, messages.get, inboxes.list, drafts.create, messages.create | standard | declared |
 | [Agile CRM](https://github.com/agilecrm/rest-api#authentication-) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, companies.list, deals.list | — | declared |
 | [Aircall](https://developers.aircall.io/api-references) | phone | key | calls.transcript | — | declared |
 | [Airtable](https://airtable.com/developers/web/api/authentication.md) | tasks | OAuth 2, key | records.list, records.get, records.create, records.update, bases.list | hmac | declared |
