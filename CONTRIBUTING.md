@@ -60,6 +60,8 @@ one takes five steps:
      a status cannot be an enum (Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer inside an
      object), the description names the values the template covers; where the page lists a spam or removed value among
      them, it says the entry does not check the value;
+   - a `page` or `offset` list is paged once its page states where its numbering starts, even when no page says what a
+     request past the end answers: the walk ends on an empty list, and a provider that answers otherwise fails loudly;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
