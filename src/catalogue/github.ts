@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** GitHub: 5,000 requests an hour per person, shared with their other tokens and apps, and calling on while limited can get
- * an integration banned: no retry. A limit answers 403 or 429. The hourly one has `x-ratelimit-remaining: 0` and lasts until
- * `x-ratelimit-reset` (epoch seconds); a secondary one says so in its message and asks for a minute when no Retry-After
- * names its wait. */
+ * an integration banned: a read is retried only after the Retry-After it names. A limit answers 403 or 429. The
+ * hourly one has `x-ratelimit-remaining: 0` and lasts until `x-ratelimit-reset` (epoch seconds); a secondary one says
+ * so in its message and asks for a minute when no Retry-After names its wait. */
 export const github = defineProvider({
   id: 'github', name: 'GitHub', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   docs: 'https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api',
@@ -19,7 +19,7 @@ export const github = defineProvider({
   // request without a User-Agent.
   http: { baseUrl: 'https://api.github.com',
     headers: { accept: 'application/vnd.github+json', 'x-github-api-version': '2026-03-10', 'user-agent': '0-integrations' },
-    rateLimit: { defaultWaitMs: 60_000, when: [
+    retry: { onlyStated: true }, rateLimit: { defaultWaitMs: 60_000, when: [
       { status: 403, header: 'x-ratelimit-remaining', equals: '0', wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } },
       { status: 429, header: 'x-ratelimit-remaining', equals: '0', wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } },
       { status: 429 }, { status: 403, header: 'retry-after' }, { status: 403, path: 'message', contains: 'rate limit' },

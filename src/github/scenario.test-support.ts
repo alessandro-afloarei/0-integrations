@@ -10,5 +10,5 @@ export const githubScenario: KitScenario<GitHubClient, GitHubIssue> = {
   id: issue => String(issue.id),
   changedAt: issue => issue.updated_at,
   since: '2026-11-03T00:00:00Z',
-  retriesRateLimit: false,
+  retriesRateLimit: true,
 };
