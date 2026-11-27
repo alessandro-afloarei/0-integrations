@@ -1,7 +1,7 @@
 # Providers
 
-Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 80 declared, 0 recorded;
-247 typed operations; webhooks: ed25519 1, hmac 20, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
+Generated from `src/catalogue/` by `pnpm providers`: do not edit. 81 providers: 81 declared, 0 recorded;
+252 typed operations; webhooks: ed25519 1, hmac 20, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -82,6 +82,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 
 | [Trello](https://developer.atlassian.com/cloud/trello/guides/rest-api/authorization/) | tasks | key | — | — | declared |
 | [Unipile](https://developer.unipile.com/v2.0/docs/api-keys) | mail, calendar | key | — | — | declared |
 | [Vercel](https://vercel.com/docs/rest-api#authentication) | code | key | deployments.list, deployments.get, deployments.create, projects.list | hmac | declared |
+| [Wrike](https://developers.wrike.com/docs/oauth-20-authorization) | tasks | OAuth 2 | tasks.list, tasks.get, tasks.create, tasks.update, folders.list | — | declared |
 | [Zoom](https://developers.zoom.us/docs/internal-apps/s2s-oauth/) | meetings | token | — | — | declared |
 | [ZoomInfo](https://docs.gtm.ai/docs/client-credentials-flow) | sales | token | contacts.search, contacts.get, companies.search, companies.get | — | declared |
 | [Zulip](https://zulip.com/api/http-headers) | chat | key | channels.list, messages.list, users.list | — | declared |
