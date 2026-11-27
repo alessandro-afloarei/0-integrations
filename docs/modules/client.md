@@ -112,8 +112,9 @@ What the guard does not cover:
 ## Raw calls
 
 Each takes a path after the base URL and `RequestOptions`: `method`, `query`, `json`, `form`, `idempotent`, `signal`. A
-`form` is sent form-encoded under the form's `content-type`, which wins over the entry's and the app's (given a `json`
-as well, the JSON is sent, under its own type). A path must start with `/` (or `?`, or be empty for the base itself);
+`form` is sent form-encoded under the form's `content-type`, which wins over the entry's and the app's. A call holds one
+body: the types refuse a `json` beside a `form`, and a call that passes both anyway, or a `paginate` of a form on a
+shape whose cursor goes in the body, is `request_failed` before that request is sent. A path must start with `/` (or `?`, or be empty for the base itself);
 one that does not is refused before the token is read, as `TypeError('url_outside_origin')` when it would change the
 host and `TypeError('url_path_relative')` otherwise.
 

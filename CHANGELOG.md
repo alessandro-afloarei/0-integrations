@@ -9,8 +9,10 @@ Nothing here is released yet.
   theirs. A path that holds the HTTP status as a number now reads as the code and hides a later path: an app's own
   entry leaves it out, as Google's no longer lists `error.code`.
 - New: `in: 'form'` parameters, sent as a form body; Chatwork and Zulip post messages, Agile CRM lists companies. A
-  form's `content-type` wins over the entry's and the app's, on a raw `request`, `json` or `paginate` call that passes
-  a `form` too; a form operation paged by a body cursor is refused (`param_paged`). The derived fake hands such an
+  form's `content-type` wins over the entry's and the app's, on a raw `request`, `json` or `paginate` call too. A call
+  holds one body: a `json` beside a `form` is refused by the types, and at run time as `request_failed` before it is
+  sent, as is a raw `paginate` of a form on a body cursor; a form operation paged by a body cursor is refused
+  (`param_paged`). The derived fake hands such an
   operation's function its form body as its fields, each a string.
 - Chatwork's OAuth 2 sign-in asks `rooms.messages:write` as well: a client registered with the earlier scopes is
   registered again with the declared ones, or its authorize fails with 5003. A connection made before this change has
