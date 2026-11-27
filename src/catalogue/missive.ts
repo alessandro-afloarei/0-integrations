@@ -45,7 +45,7 @@ export const missive = defineProvider({
       params: { drafts: { in: 'body', type: draft, required: true,
         description: 'An email draft: from_field must be one of your aliases; conversation appends it to that conversation.' } } },
     'messages.create': { docs: `${ref}#send-a-message`, method: 'POST', path: '/drafts', kind: 'write',
-      params: { drafts: { in: 'body', type: { send: true, ...draft }, required: true,
+      params: { drafts: { in: 'body', type: { send: true, ...draft, 'from_field?': { address: 'string' } }, required: true,
         description: 'An email sent at once: from_field must be one of your aliases; conversation sends it as a reply in that conversation.' } } },
     'conversations.update': { docs: `${ref}#update-conversations`, method: 'PATCH', path: '/conversations/{id}',
       params: { id: { in: 'path', type: 'string', required: true }, conversations: { in: 'body', required: true,
