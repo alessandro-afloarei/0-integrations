@@ -11,8 +11,8 @@ Nothing here is released yet.
     1 to 512 printable ASCII characters with no space, `<` or `>` (or a finite number as JSON). `Webhook.challenge`'s
     type changed: `echo` may be `{ query }`, and `when` is optional for it.
   - New: a challenge may be answered as text (`text/plain`, `nosniff`, its `content-length`), and read from a query,
-    then answered only as text. Nylas declares its `GET ?challenge=` and Fellow its URL verification, both
-    unsigned.
+    then answered only as text and only on a request with an empty body. Nylas declares its `GET ?challenge=` and
+    Fellow its URL verification, both unsigned.
   - New: `basic` webhooks, checked by HTTP Basic credentials (`authorization: Basic <base64 of user:password>`, the
     secret `user:password`; one with no `:` or an empty password accepts nothing). Mailjet, Pipedrive and Postmark
     declare theirs: the app sets the user and password on the webhook (in the URL it registers; Pipedrive's

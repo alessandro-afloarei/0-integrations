@@ -601,12 +601,12 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 9. `challengeAnswer(webhook, request, secret)` answers a handshake, or is null. It checks the request first with
    `verifyWebhook`, unless the challenge is `unsigned` (Fellow's and Nylas' verification requests carry no signature).
    The value is read at `echo`: a body path (Slack, Discord, Fellow) or a query parameter (Nylas' `challenge`, on a GET
-   with no body). It answers when `when` holds (a body path needs one; a query may leave it out, the value's presence
-   then deciding) and the value is a string of 1 to 512 printable ASCII characters without a space, `<` or `>`, or for
-   a JSON answer also a finite number: as JSON `{ [echo]: value }` (a query is answered only as `text`), or with
-   `text` as the value alone, `content-type: text/plain; charset=utf-8`, its `content-length` (Nylas refuses a chunked
-   answer) and `x-content-type-options: nosniff`. A challenge answer changes nothing and holds nothing secret; an app
-   calls it first, and verifies every other request.
+   with no body; a request with a body is no query handshake). It answers when `when` holds (a body path needs one; a
+   query may leave it out, the value's presence then deciding) and the value is a string of 1 to 512 printable ASCII
+   characters without a space, `<` or `>`, or for a JSON answer also a finite number: as JSON `{ [echo]: value }` (a
+   query is answered only as `text`), or with `text` as the value alone, `content-type: text/plain; charset=utf-8`, its
+   `content-length` (Nylas refuses a chunked answer) and `x-content-type-options: nosniff`. A challenge answer changes
+   nothing and holds nothing secret; an app calls it first, and verifies every other request.
 
 In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
 Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google; on `authorization`: Krisp),

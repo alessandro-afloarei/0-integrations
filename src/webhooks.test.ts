@@ -432,6 +432,11 @@ test("answers Nylas' GET `?challenge=` with the value alone, as text, unsigned",
   }
   // A notification is no handshake: its body is never read for a value.
   expect(challengeAnswer(nylas.webhook, posted('{"challenge":"abc"}'), '')).toBeNull();
+  // A query challenge comes with no body: a delivery to a URL carrying `?challenge=` is an event, verified as one.
+  const relayed = { ...posted('{"trigger":"message.created"}'), url: 'https://app.test/webhook?challenge=abc' };
+  expect(challengeAnswer(nylas.webhook, relayed, '')).toBeNull();
+  expect(await answered(challengeAnswer(nylas.webhook, { ...relayed, rawBody: Buffer.alloc(0) }, ''))).toEqual(asText('abc'));
+  expect(challengeAnswer(nylas.webhook, { ...nylasGet('?challenge=abc'), rawBody: Buffer.from(' ') }, '')).toBeNull();
 });
 
 test('a challenge value is 1 to 512 printable ASCII characters with no space, `<` or `>`, or it is not answered', async () => {
@@ -457,7 +462,7 @@ test("answers Fellow's `url_verification` on its page's body with the challenge 
 
 test('a query challenge echoes the query alone, after the request is verified unless it is unsigned', async () => {
   const signed: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: { query: 'challenge' }, text: true } };
-  const sent = (headers: Record<string, string>) => ({ ...request(headers, Buffer.from('{"challenge":"from-body"}')), url: 'https://app.test/webhook?challenge=abc' });
+  const sent = (headers: Record<string, string>) => ({ ...request(headers, Buffer.alloc(0)), url: 'https://app.test/webhook?challenge=abc' });
   expect(await answered(challengeAnswer(signed, sent({ 'x-token': secret }), secret))).toEqual(asText('abc'));
   expect(challengeAnswer(signed, sent({ 'x-token': 'wrong' }), secret)).toBeNull();
   expect(challengeAnswer(signed, sent({}), secret)).toBeNull();
