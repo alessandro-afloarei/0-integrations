@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Nylas: Hosted OAuth on the region's host (https://developer.nylas.com/docs/dev-guide/platform/data-residency/), the
- * app made in the Dashboard, its client secret the app's API key. `messages.create` emails people. A 429 waits
- * `Retry-After`, else the one-second window: https://developer.nylas.com/docs/dev-guide/platform/rate-limits/
+ * app made in the Dashboard, its client secret the app's API key. A send, and an event with participants, email people.
+ * A 429 waits `Retry-After`, else one second: https://developer.nylas.com/docs/dev-guide/platform/rate-limits/
  * Webhooks: https://developer.nylas.com/docs/cookbook/use-cases/build/verify-webhook-signatures/ */
 const hosts = ['api.us.nylas.com', 'api.eu.nylas.com'] as const;
 const person = [{ 'name?': 'string', 'email?': 'string' }] as const;
@@ -10,6 +10,20 @@ const message = { id: 'string', 'thread_id?': 'string', 'subject?': 'string', 's
   'unread?': 'boolean', 'folders?': ['string'], 'from?': person } as const;
 const limit = { limit: { in: 'query', type: 'integer', description: '50 by default, at most 200.' } } as const;
 const ref = 'https://developer.nylas.com/docs/reference/api';
+const when = { 'object?': 'string', 'start_time?': 'integer', 'end_time?': 'integer', 'start_timezone?': 'string',
+  'end_timezone?': 'string', 'date?': 'string', 'start_date?': 'string', 'end_date?': 'string' } as const;
+const event = { id: 'string', 'calendar_id?': 'string', 'title?': 'string', 'when?': when, 'participants?': 'unknown',
+  'description?': 'unknown', 'recurrence?': 'unknown', 'conferencing?': 'unknown' } as const;
+const calendarId = { calendar_id: { in: 'query', type: 'string', required: true, description: 'A calendar id, or `primary`.' } } as const;
+const notify = { notify_participants: { in: 'query', type: 'boolean',
+  description: 'True by default; false makes the change without emailing participants (Microsoft refuses false).' } } as const;
+const eventFields = { title: { in: 'body', type: 'string' }, description: { in: 'body', type: 'string' },
+  location: { in: 'body', type: 'string' }, busy: { in: 'body', type: 'boolean' },
+  participants: { in: 'body', type: [{ email: 'string', 'name?': 'string' }] },
+  recurrence: { in: 'body', type: ['string'], description: 'RRULE and EXDATE strings.' } } as const;
+const whenParam = { in: 'body', type: { 'time?': 'integer', 'timezone?': 'string', 'start_time?': 'integer', 'end_time?': 'integer',
+  'start_timezone?': 'string', 'end_timezone?': 'string', 'date?': 'string', 'start_date?': 'string', 'end_date?': 'string' },
+  description: 'One of: `time`; `start_time` and `end_time` (Unix seconds, zones optional); `date`; `start_date` and `end_date`.' } as const;
 
 export const nylas = defineProvider({
   id: 'nylas', name: 'Nylas', docs: 'https://developer.nylas.com/docs/v3/auth/hosted-oauth-accesstoken/',
@@ -44,5 +58,19 @@ export const nylas = defineProvider({
         subject: { in: 'body', type: 'string' }, body: { in: 'body', type: 'string', description: 'HTML.' },
         reply_to_message_id: { in: 'body', type: 'string' }, send_at: { in: 'body', type: 'integer', description: 'Unix seconds.' } },
       anyOf: [['to'], ['cc'], ['bcc']], result: { data: message } },
+    'calendars.list': { docs: `${ref}/calendar/get-all-calendars/`, path: '/calendars', paging: 'cursor', records: 'data', params: limit,
+      result: { data: [{ id: 'string', 'name?': 'string', 'description?': 'string', 'is_primary?': 'boolean', 'read_only?': 'boolean',
+        'timezone?': 'string' }] } },
+    'events.list': { docs: `${ref}/events/get-all-events/`, path: '/events', paging: 'cursor', records: 'data',
+      params: { ...calendarId, start: { in: 'query', type: 'integer', description: 'Unix seconds; now by default.' },
+        end: { in: 'query', type: 'integer', description: 'Unix seconds; a month from now by default.' }, ...limit },
+      result: { data: [event] } },
+    'events.get': { docs: `${ref}/events/get-events-id/`, path: '/events/{event_id}', notFound: 'null',
+      params: { event_id: { in: 'path', type: 'string', required: true }, ...calendarId }, result: { data: event } },
+    'events.create': { docs: `${ref}/events/create-event/`, method: 'POST', path: '/events', kind: 'write',
+      params: { ...calendarId, ...notify, when: { ...whenParam, required: true }, ...eventFields }, result: { data: event } },
+    'events.update': { docs: `${ref}/events/put-events-id/`, method: 'PUT', path: '/events/{event_id}', kind: 'write',
+      params: { event_id: { in: 'path', type: 'string', required: true }, ...calendarId, ...notify, when: whenParam, ...eventFields },
+      result: { data: event } },
   },
 });
