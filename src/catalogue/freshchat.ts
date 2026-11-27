@@ -45,7 +45,6 @@ export const freshchat = defineProvider({
     'messages.create': { docs: `${ref}/#send_message_to_conversation`, method: 'POST', path: '/conversations/{conversation_id}/messages',
       params: { ...conversationId, ...agent,
         message_parts: { in: 'body', type: [{ text: { content: 'string' } }], description: 'The text of the message.' },
-        user_id: { in: 'body', type: 'string' },
         message_type: { in: 'body', type: 'string', enum: ['normal', 'private'],
           description: 'normal by default; private keeps the message internal, not visible to the user.' } },
       result: message },
