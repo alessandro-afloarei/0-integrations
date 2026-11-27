@@ -470,10 +470,11 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   `timeoutMs`. The limit counts per request sent: a redirect hop and the resend after a 401 each get their own.
 - A **wait** (`Wait`) is read from a header, or several (the longest of those present counts), holding a positive
   decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
-  instants, whose wait is the instant minus now, at least 0. An `iso8601` wait is the header's or the path's string
-  read as an instant: `YYYY-MM-DDTHH:MM:SS`, an optional fraction, then `Z` or an offset `±HH:MM` or `±HHMM`
-  (Teamleader's `2021-06-15T10:51:23.035+0100`), by its own pattern, never `Date.parse`'s wider grammar; a time the
-  calendar lacks (30 February) is none. Anything else states no wait. One reader serves the retry and the error.
+  instants, whose wait is the instant minus now, at least 0. An `iso8601` wait is the header's or the path's string read
+  as an instant: `YYYY-MM-DDTHH:MM:SS`, an optional fraction, then `Z` or an offset `±HH:MM` or `±HHMM` (hours 00 to 23,
+  minutes 00 to 59; Teamleader's `2021-06-15T10:51:23.035+0100`), a fraction rounded up to a whole millisecond, by its
+  own pattern, never `Date.parse`'s wider grammar; a time the calendar lacks (30 February) is none. Anything else states
+  no wait. One reader serves the retry and the error.
 - An answer's **stated wait** is a positive `Retry-After`, else `retry.wait`: a wait declared as a header counts only on
   a 429 (or an answer step 3 decides), since a reset header rides on every answer; one declared as a body path counts on
   any answer that holds it, for the retry on every retried status. A declared wait that is not positive (an instant
