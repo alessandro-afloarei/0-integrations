@@ -9,18 +9,27 @@ export type WebhookRequest = { method: string; url: string; headers: Headers; ra
 const MAX_HEADER_BYTES = 8 * 1024;
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest();
-/** Standard Webhooks read as the HMAC it is: `webhook-signature` lists `v1,<base64>` pieces with spaces between, over
- * `<webhook-id>.<webhook-timestamp>.<body>`, keyed with the secret's base64. */
-const STANDARD: Extract<Webhook, { kind: 'hmac' }> = { kind: 'hmac', header: 'webhook-signature', signed: '{timestamp}.{body}',
-  encoding: 'base64', secret: 'base64', part: 'v1', timestamp: { header: 'webhook-timestamp' } };
+/** Standard Webhooks read as the HMAC it is: `<set>-signature` lists `v1,<base64>` pieces with spaces between, over
+ * `<set>-id.<set>-timestamp.<body>`, keyed with the secret's base64. */
+const STANDARD = (set: string): Extract<Webhook, { kind: 'hmac' }> => ({ kind: 'hmac', header: `${set}-signature`,
+  signed: '{timestamp}.{body}', encoding: 'base64', secret: 'base64', part: 'v1', timestamp: { header: `${set}-timestamp` } });
 
 export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret: string): boolean {
   const standard = webhook.kind === 'standard';
-  const scheme = standard ? STANDARD : webhook;
-  const received = request.headers.get(scheme.header);
+  // Svix, the reference implementation, names them `svix-*`: the `webhook-*` set is read when it signs, else Svix's. An
+  // entry that dedupes on a header reads only that header's set, so the id it dedupes on is the one signed.
+  const set = standard && request.headers.has('webhook-signature') ? 'webhook' : 'svix';
+  const dedupe = webhook.deliveryId;
+  if (standard && dedupe && 'header' in dedupe && dedupe.header !== `${set}-id`) return false;
+  const scheme = standard ? STANDARD(set) : webhook;
+  const received = request.headers.get(scheme.kind === 'basic' ? 'authorization' : scheme.header);
   if (!received || received.length > MAX_HEADER_BYTES) return false;
   // Compared as digests of equal length, so the token's length leaks nothing.
   if (scheme.kind === 'token') return timingSafeEqual(sha256(received), sha256(secret));
+  // `Basic` (any case) and one space, as providers send it, then the base64 of `user:password` (RFC 7617); a secret
+  // with no password keys nothing.
+  if (scheme.kind === 'basic') return /^[^:]*:./su.test(secret) && /^basic /iu.test(received)
+    && timingSafeEqual(sha256(received.slice(6)), sha256(Buffer.from(secret).toString('base64')));
   // With `part`, the header is `name=value` pieces split on `,` (Standard Webhooks: `name,value` on spaces). A name holds
   // neither separator (the table's rule), so a piece is that name's exactly when it starts with the name and `assign`.
   const [between, assign] = standard ? [' ', ','] : [',', '='];
@@ -32,7 +41,7 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   // A declaration that does not sign the body, or the timestamp it checks, can verify nothing safely.
   const signed = scheme.signed ?? '{body}';
   if (!signed.includes('{body}') || (stamp !== undefined && !signed.includes('{timestamp}'))) return false;
-  const id = standard ? request.headers.get('webhook-id') || null : '';
+  const id = standard ? request.headers.get(`${set}-id`) || null : '';
   // The specification bars a `.` from the id: `a.<t>` and a body starting `<digits>.` would sign the same bytes.
   if (id === null || id.includes('.')) return false;
   // A Map: a name that is no placeholder (`constructor`) is signed as written, never read from a prototype.
@@ -78,16 +87,27 @@ export function deliveryId(webhook: Webhook, request: WebhookRequest): string | 
     ? parts.join(':') : null;
 }
 
-/** The answer to a challenge the entry declares (`{ [echo]: <the body's value> }` as JSON), or null. Call it only after
- * `verifyWebhook` accepted the request. */
-export function challengeAnswer(webhook: Webhook, request: WebhookRequest): Response | null {
+/** The answer to a handshake the entry declares, or null. The request is verified first unless the challenge is
+ * `unsigned`, so call it before `verifyWebhook`, and verify every request it does not answer. The value is answered
+ * only as 1 to 512 printable ASCII characters with no space, `<` or `>` (or, as JSON, a finite number): it comes from
+ * whoever sent the request, so it can be no markup and no header. */
+export function challengeAnswer(webhook: Webhook, request: WebhookRequest, secret: string): Response | null {
   const challenge = webhook.challenge;
   if (challenge === undefined) return null;
+  const { when, echo, text } = challenge;
   const body = parseJson(Buffer.from(request.rawBody).toString('utf8'));
-  const value = readPath(body, challenge.echo);
-  return holds(challenge.when, { status: 200, headers: request.headers, body })
-    && (typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)))
-    ? Response.json({ [challenge.echo]: value }) : null;
+  const name = typeof echo === 'string' ? echo : echo.query;
+  // A query handshake carries no body: a delivery to a URL that holds the parameter is an event, verified as one.
+  const value = typeof echo === 'string' ? readPath(body, echo) : request.rawBody.byteLength > 0 ? null
+    : new URLSearchParams(/^[^#?]*\?([^#]*)/u.exec(request.url)?.[1]).get(name);
+  // A body path answers only where `when` holds; a query parameter, wherever it is present.
+  const asked = when === undefined ? typeof echo !== 'string' : holds(when, { status: 200, headers: request.headers, body });
+  const safe = typeof value === 'string' ? /^[!-;=?-~]{1,512}$/u.test(value) : !text && typeof value === 'number' && Number.isFinite(value);
+  // Verified last, so a delivery that is no handshake is verified once, by the app's own `verifyWebhook`.
+  if (!asked || !safe || !(challenge.unsigned ?? verifyWebhook(webhook, request, secret))) return null;
+  // ASCII, so its length is its byte count: stated, an adapter that streams the answer sends no chunks (Nylas refuses them).
+  return text ? new Response(String(value), { headers: { 'content-type': 'text/plain; charset=utf-8',
+    'content-length': String(String(value).length), 'x-content-type-options': 'nosniff' } }) : Response.json({ [name]: value });
 }
 
 export async function readCappedBody(request: Request, maxBytes: number): Promise<Buffer | null> {

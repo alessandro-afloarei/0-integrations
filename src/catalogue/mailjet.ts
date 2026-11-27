@@ -25,6 +25,9 @@ export const mailjet = defineProvider({
   errors: { detail: ['ErrorCode', 'Messages.0.Errors.0.ErrorCode'] },
   identify: { request: { path: '/v3/REST/user' }, id: 'Data.0.ID', name: ['Data.0.Username', 'Data.0.Email'] },
   paging: { offset: { kind: 'offset', send: { query: 'Offset' }, list: 'Data' } },
+  // Nothing is signed: the app puts a user and password in the URL it registers (`https://user:password@…`) and passes
+  // `user:password` as the secret: https://dev.mailjet.com/docs/email-api/webhooks/webhooks-overview
+  webhook: { kind: 'basic' },
   operations: {
     'messages.list': { docs: `${ref}/messages/get_v3_message`, path: '/v3/REST/message', paging: 'offset', records: 'Data',
       params: { ...limit, ShowSubject: { in: 'query', type: 'boolean', description: 'True to read each message\'s Subject.' },
