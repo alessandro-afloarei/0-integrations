@@ -151,7 +151,8 @@ type Kinds<E extends Entry> = E['auth'][number]['kind'];
 export type SignIn<E extends Entry, K extends Kinds<E>> = K extends unknown ? Extract<E['auth'][number], { kind: K }> extends infer S
   ? Omit<E, 'auth' | 'http' | (keyof S & ('fields' | 'identify')) | (K extends 'oauth2' ? never : 'scopes' | 'revoke')>
     & Pick<S, keyof S & ('fields' | 'identify')>
-    & { http: S extends { http: infer H } ? Omit<E['http'], keyof H> & H : E['http']; auth: readonly [Omit<S, keyof Own>] }
+    & { http: S extends { http: infer H } ? Omit<E['http'], 'baseUrl' | 'host'> & Pick<H, keyof H & ('baseUrl' | 'host')> : E['http'];
+      auth: readonly [Omit<S, keyof Own>] }
   : never : never;
 
 /** The entry with `auth` narrowed to its sign-in of that kind; every engine function reads the first sign-in. A later
@@ -161,7 +162,9 @@ export function signInWith<const E extends Entry, K extends Kinds<E>>(entry: E, 
   if (auth === undefined) throw new TypeError(`sign_in_unknown: ${entry.id} ${kind}`);
   const kept = Object.entries(entry).filter(([name]) => kind === 'oauth2' || (name !== 'scopes' && name !== 'revoke'));
   const { fields, http, identify, ...bare } = auth;
-  const own = auth === entry.auth[0] ? { auth: [auth] }
-    : { ...fields && { fields }, ...identify && { identify }, http: { ...entry.http, ...http }, auth: [bare] };
+  // An own `http` gives only a base and its host pattern; the entry's headers, bases and retry stay.
+  const shared = Object.fromEntries(Object.entries(entry.http).filter(([name]) => name !== 'host'));
+  const based = http && { http: { ...shared, baseUrl: http.baseUrl, ...http.host && { host: http.host } } };
+  const own = auth === entry.auth[0] ? { auth: [auth] } : { ...fields && { fields }, ...identify && { identify }, ...based, auth: [bare] };
   return { ...Object.fromEntries(kept), ...own } as unknown as SignIn<E, K>;
 }

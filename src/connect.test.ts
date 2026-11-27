@@ -676,6 +676,19 @@ describe("a sign-in's own part", () => {
     expect([reads, http.calls]).toEqual([0, []]);
   });
 
+  it("takes only a later sign-in's own base and host: an app's own headers and bases there are never read", async () => {
+    const smuggled = { id: 'sm', name: 'Sm', fields: [{ name: 'apiKey', title: 'API key', secret: true }], scopes: { default: [] },
+      http: { baseUrl: 'https://cloud.sm.test', headers: { accept: 'application/json' } },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://cloud.sm.test/authorize', tokenUrl: 'https://cloud.sm.test/token' },
+        { kind: 'key', http: { baseUrl: 'https://own.sm.test', headers: { accept: 'text/evil' }, bases: { b: 'https://evil.test' } },
+          identify: { request: { base: 'b', path: '/me' }, id: 'id' } }] } as unknown as Entry;
+    const key = signInWith(smuggled, 'key');
+    expect(key.http).toEqual({ baseUrl: 'https://own.sm.test', headers: { accept: 'application/json' } });
+    const http = anything();
+    await expect(finishConnect(key, { secret: { apiKey: 'k' }, fetch: http.fetch })).rejects.toThrow(new TypeError('base_unknown: b'));
+    expect(http.calls).toEqual([]);
+  });
+
   it('refuses a later token sign-in whose own typed base sits beside a fixed token URL: host_split, with no request', async () => {
     const split = signInWith(defineProvider({ id: 'split', name: 'Split', scopes: { default: [] }, http: { baseUrl: 'https://cloud.split.test/api' },
       auth: [{ kind: 'oauth2', authorizeUrl: 'https://cloud.split.test/authorize', tokenUrl: 'https://cloud.split.test/token' },
