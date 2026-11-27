@@ -8,7 +8,7 @@ const hosts = ['us-east-1.recall.ai', 'us-west-2.recall.ai', 'eu-central-1.recal
  * headers, the workspace verification secret (accounts made from 15 December 2025; older Svix headers fail):
  * https://docs.recall.ai/docs/authenticating-requests-from-recallai */
 const status = { code: 'string', 'sub_code?': 'string', updated_at: 'string' } as const;
-const recording = { id: 'string', created_at: 'string', 'started_at?': 'string', 'completed_at?': 'string', expires_at: 'string',
+const recording = { id: 'string', created_at: 'string', 'started_at?': 'string', 'completed_at?': 'string', 'expires_at?': 'string',
   status, 'bot?': { id: 'string' }, media_shortcuts: { 'transcript?': { id: 'string' } } } as const;
 const ref = 'https://docs.recall.ai/reference';
 
