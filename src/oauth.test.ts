@@ -347,8 +347,16 @@ test("clientAuth 'none': a secret an untyped caller passes anyway is never sent"
   await exchangeCode(publicClient, untyped, { ...exchange, codeVerifier: 'v', fetch: fake.fetch });
   await refreshGrant(publicClient, untyped, 'r', { fetch: fake.fetch });
   await revokeGrant(publicClient, { refreshToken: 'r', client: untyped, fetch: fake.fetch });
-  expect(fake.calls).toHaveLength(3);
+  // Basic would carry it base64-encoded: no call has an `authorization` header, and no body holds it raw.
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual([undefined, undefined, undefined]);
   for (const call of fake.calls) expect(JSON.stringify(call)).not.toContain(client.clientSecret);
+});
+
+test("clientAuth 'none': an untyped caller's secret that is no string still fails as the provider's refusal", async () => {
+  const odd = { clientId: 'id', clientSecret: 123 } as unknown as { clientId: string };
+  const refused = endpoint({ error: 'invalid_request' }, 400);
+  await expect(refreshGrant(publicClient, odd, 'old-refresh', { fetch: refused.fetch })).rejects.toMatchObject({ code: 'request_failed', detail: 'invalid_request' });
+  expect(refused.calls.map(call => call.body)).toEqual(['refresh_token=old-refresh&grant_type=refresh_token&client_id=id']);
 });
 
 test("clientAuth 'none' beside `pkce: false` is refused before anything is sent: a public client needs PKCE", async () => {

@@ -251,6 +251,15 @@ async function clientByEntry(clientId: string, clientSecret: string, code: strin
   await finishConnect(firecrawl, { client: open, code, redirectUri, onRevokeFailed: () => undefined });
   fakeProvider(firecrawl, { key: 'k', client: open });
   expectTypeOf<OAuthClient<typeof firecrawl>>().toEqualTypeOf<{ clientId: string }>();
+  // Narrowed to OAuth 2, the same public client; narrowed to its key, a form finish that takes no client.
+  const oauthOnly = signInWith(firecrawl, 'oauth2');
+  expectTypeOf<OAuthClient<typeof oauthOnly>>().toEqualTypeOf<{ clientId: string }>();
+  // @ts-expect-error a public client has no secret
+  await refreshGrant(oauthOnly, { clientId, clientSecret }, refreshToken);
+  const keyOnly = signInWith(firecrawl, 'key');
+  await finishConnect(keyOnly, { secret: { apiKey: 'k' } });
+  // @ts-expect-error a key sign-in's finish takes no OAuth client
+  await finishConnect(keyOnly, { secret: { apiKey: 'k' }, client: open });
   // Linear's is confidential: its secret is required everywhere.
   // @ts-expect-error a confidential client's secret is required
   await exchangeCode(linear, open, exchange);

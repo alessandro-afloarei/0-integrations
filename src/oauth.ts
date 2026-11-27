@@ -107,7 +107,7 @@ function context(entry: Entry, credentials: AnyClient, input: Sent, request: OAu
   if (config.clientAuth !== 'none') void oauth.ClientSecretBasic(credentials.clientSecret ?? '')(as, client, new URLSearchParams(), sent);
   const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
-    config, as, client, auth, secrets: [credentials.clientSecret ?? '', ...(basic === undefined ? [] : [basic])],
+    config, as, client, auth, secrets: [config.clientAuth === 'none' ? '' : credentials.clientSecret ?? '', ...(basic === undefined ? [] : [basic])],
     options: { [oauth.customFetch]: bearerByDefault(config.json ? jsonBodies(fetch) : fetch), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
     processing: { recognizedTokenTypes: Object.fromEntries((config.tokenTypes ?? []).map(type => [type.toLowerCase(), () => undefined])) },
   };
