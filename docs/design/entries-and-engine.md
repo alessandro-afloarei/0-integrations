@@ -310,11 +310,11 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   provider is sent it today.
 - `oauth2.clientAuth` says how the client authenticates on every request: its id and secret in the body by default,
   or by HTTP Basic with `'basic'`. No error detail echoes the secret or its Basic value, whichever the request sends.
-  `'none'` is a public client (Dynamic Client Registration, a client ID metadata document): every request sends
-  `client_id` in the body and no secret, whatever the app passes; it needs PKCE (the table refuses it beside
-  `pkce: false`, and the engine refuses such an entry before anything is sent, `pkce_required: <entry id>`). How the app
-  obtains its `client_id` is the app's (the engine registers no client), and `OAuthClient<typeof entry>` has no
-  `clientSecret` (Firecrawl, Brevo).
+  `'none'` is a public client (Dynamic Client Registration, a client ID metadata document, or an app registered with
+  the provider): every request sends `client_id` in the body and no secret, whatever the app passes; it needs PKCE
+  (the table refuses it beside `pkce: false`, and the engine refuses such an entry before anything is sent,
+  `pkce_required: <entry id>`). How the app obtains its `client_id` is the app's (the engine registers no client), and
+  `OAuthClient<typeof entry>` has no `clientSecret` (Firecrawl, Brevo).
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
