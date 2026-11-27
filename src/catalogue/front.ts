@@ -2,8 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Front: OAuth 2 (scopes set on the app; an admin authorizes; an app is private to its own instance until Front's team
  * publishes it: https://dev.frontapp.com/docs/create-and-manage-apps), or an API token. Identify (the company):
- * https://dev.frontapp.com/reference/api-token-details. `messages.create` emails people, `replies.create` the customer.
- * A 429 waits `Retry-After`: https://dev.frontapp.com/docs/rate-limiting. Lists answer one page (company-host next). */
+ * https://dev.frontapp.com/reference/api-token-details. `messages.create` emails people; `replies.create` reaches the
+ * customer. 429: `Retry-After`, https://dev.frontapp.com/docs/rate-limiting. Lists: one page (company-host next). */
 const conversation = { id: 'string', type: 'string', subject: 'string', status: 'string', 'status_category?': 'string',
   is_closed: 'boolean', 'created_at?': 'number', 'updated_at?': 'number' } as const;
 const page = { limit: { in: 'query', type: 'integer', description: '50 by default, at most 100.' },
@@ -62,7 +62,7 @@ export const front = defineProvider({
     'comments.create': { docs: `${ref}/add-comment`, method: 'POST', path: '/conversations/{conversation_id}/comments',
       params: { ...conversationId, body: { in: 'body', type: 'string', required: true }, author_id: { in: 'body', type: 'string' },
         is_pinned: { in: 'body', type: 'boolean' } },
-      result: { id: 'string', 'body?': 'unknown', 'posted_at?': 'number', 'is_pinned?': 'boolean' } },
+      result: { id: 'string', body: 'unknown', 'posted_at?': 'number', is_pinned: 'boolean' } },
     'contacts.list': { docs: `${ref}/list-contacts`, path: '/contacts', params: page, result: { ...pagination, _results: [contact] } },
   },
 });
