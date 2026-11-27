@@ -126,9 +126,10 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   (its `default`, else its first choice, else, for a field that is the base's whole host, the first host its
   `http.host` allows, such as `kit.myfreshworks.com`, else `kit-<name>`). Every value in the base's host must be given:
   a field's, even one with a default or choices (Intercom's `apiHost`: the account may live in another region), and a
-  host the token answer names (Pipedrive's `apiDomain`). Without it the recorder refuses before anything is sent, so a
-  real key never goes to a host the kit chose. Each value given is written as its kit value, so a recording made on a sandbox or another region is written
-  with the default host.
+  host the token answer names (Pipedrive's `apiDomain`), each as the host alone (`company.pipedrive.com`, never the
+  `https://` origin a token answer holds). Without it, or given as an origin, the recorder refuses before anything is
+  sent, so a real key never goes to a host the kit chose. Each value given is written as its kit value, so a recording
+  made on a sandbox or another region is written with the default host.
 - A module's scenario of that name is recorded first. A provider with a module but no such scenario is refused before
   anything is sent. Otherwise the recorder signs in to the entry (a `token` entry's token request, then identify) with
   the key, then with a bad key, which must be refused as `rejected`. It writes `src/catalogue/<id>.recording.json`

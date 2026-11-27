@@ -90,6 +90,9 @@ async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<
   const typed = placeholders(/^https:\/\/[^/]*/u.exec(entry.http.baseUrl)?.[0] ?? '');
   const unnamed = typed.find(name => given[name] === undefined);
   if (unnamed !== undefined) throw new Error(`recording refused: give ${unnamed}, in the base's host, in RECORD_VALUES`);
+  // An origin (a token answer's `api_domain`) is sent as its host alone: swapped whole, it leaves no file that replays.
+  const origin = typed.find(name => given[name]?.includes('/'));
+  if (origin !== undefined) throw new Error(`recording refused: give ${origin}, in RECORD_VALUES, as the host alone`);
   const [auth] = entry.auth;
   if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
   const kit = kitValues(entry);
@@ -259,6 +262,20 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(refused).toBeUndefined();
     expect(sent[0]).toBe('https://eu.acme.test/api/me');
     expect(recording?.exchanges[0]?.url).toBe('https://kit.acme.test/api/me');
+  });
+
+  test('hostile: a named host given as the origin the token answer holds is refused before any request', async () => {
+    const named = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs',
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://oauth.acme.test/authorize', tokenUrl: 'https://oauth.acme.test/token' }], scopes: { default: [] },
+      save: { apiDomain: 'tokenAnswer.api_domain' }, http: { baseUrl: 'https://{apiDomain}/api', host: '*.acme.test' },
+      identify: { request: { path: '/me' }, id: 'id' } });
+    for (const origin of ['https://eu.acme.test', 'https://eu.acme.test/']) {
+      const sent: string[] = [];
+      const counting: Wrap = fetch => async (input, init) => { sent.push(new Request(input, init).url); return fetch(input, init); };
+      expect((await recordOnFake(named, { key: 'real-key-1', values: { apiDomain: origin }, account: { id: 'u-real-881' }, wrap: counting })).refused)
+        .toBe('recording refused: give apiDomain, in RECORD_VALUES, as the host alone');
+      expect(sent).toEqual([]);
+    }
   });
 
   test('a host field with a default and choices (Intercom\'s region) is refused before any request too', async () => {
