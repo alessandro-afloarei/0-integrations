@@ -826,3 +826,10 @@ test("an entry's authorizeParams never replace the parameters the engine sends",
   expect(Object.fromEntries(url.searchParams)).toEqual({ client_id: 'id', scope: 'read', redirect_uri: exchange.redirectUri, state: 's',
     code_challenge: 'challenge', code_challenge_method: 'S256', response_type: 'code' });
 });
+
+test("an entry's authorizeParams still replace a parameter its authorize URL carries", () => {
+  const prompted = defineProvider({ ...pkced, auth: [{ ...pkced.auth[0], authorizeUrl: 'https://auth.test/authorize?prompt=none',
+    authorizeParams: { prompt: 'consent' } }] });
+  const url = authorizeUrl(prompted, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's', codeChallenge: 'challenge' });
+  expect(url.searchParams.getAll('prompt')).toEqual(['consent']);
+});

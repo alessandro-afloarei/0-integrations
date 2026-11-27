@@ -12,7 +12,7 @@ import { callBase, createClient, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { argumentShape, clashing, declaredUrls, hostPart, hostSplit, namedHosts, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, namedHosts, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -82,8 +82,6 @@ const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole i
 const OWN_FIRST = "no own `fields`, `http` or `identify` on the first sign-in: its part is the entry's top level";
 const CLIENT_AUTH = "`clientAuth` is `'basic'` or `'none'`, or left out (the client's id and secret in the body)";
 const PUBLIC_PKCE = "a public client (`clientAuth: 'none'`) needs PKCE: leave `pkce` out";
-/** The authorize URL's parameters the engine sends itself, which an entry's `authorizeParams` never replace. */
-const ENGINE_PARAMS = ['client_id', 'scope', 'redirect_uri', 'state', 'code_challenge', 'code_challenge_method'];
 const OWN_PARAM = `\`authorizeParams\` never names a parameter the engine sends (${ENGINE_PARAMS.join(', ')}): leave it out`;
 const fields = z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
   secret: z.literal(true).optional(), default: z.string().optional(),

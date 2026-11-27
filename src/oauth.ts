@@ -4,7 +4,7 @@ import type { Entry, Kept, Plain, Values, ValuesOption } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
-import { checkHosts, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
+import { checkHosts, ENGINE_PARAMS, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 /** The app's OAuth 2 client: a public client's (`clientAuth: 'none'`) has no secret. */
@@ -60,8 +60,8 @@ export function authorizeUrl<const E extends Entry>(entry: E, input: {
     url.searchParams.set('code_challenge', input.codeChallenge);
     url.searchParams.set('code_challenge_method', 'S256');
   }
-  // The entry's parameters never replace the engine's own (the client, scopes, redirect, state and challenge).
-  for (const [key, value] of Object.entries(config.authorizeParams ?? {})) if (!url.searchParams.has(key)) url.searchParams.set(key, value);
+  // The entry's parameters never replace the engine's own; they still replace one the authorize URL carries.
+  for (const [key, value] of Object.entries(config.authorizeParams ?? {})) if (!ENGINE_PARAMS.includes(key)) url.searchParams.set(key, value);
   return url;
 }
 
