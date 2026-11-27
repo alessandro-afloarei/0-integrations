@@ -65,9 +65,11 @@ function withCursor(where: Where, options: RequestOptions, cursor: string | numb
  * entries the list holds, a skipped record included, never a number the answer names; a last-record value is read from
  * the answer's own last entry, so a skipped record still gives it. A missing list, or one that is no list, is
  * `invalid_response`: a malformed answer never reads as an empty list. A list equal to the page before's is
- * `page_repeated`: the provider ignores the value, and would never end. */
+ * `page_repeated`: the provider ignores the value, and would never end. A `page` list with `total` also ends once the
+ * pages, or the entries (a skipped record included), it read reach the number each answer names. */
 function listed(http: HttpClient, shape: Listed, path: string, options: RequestOptions) {
   let previous: string | undefined;
+  let read = 0;
   return async (page: string | undefined) => {
     const answer = await http.json(path, page === undefined ? options
       : withCursor(shape.send, options, shape.kind === 'last' ? page : Number(page)));
@@ -77,7 +79,11 @@ function listed(http: HttpClient, shape: Listed, path: string, options: RequestO
     if (previous !== undefined && seen === previous) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
     previous = seen;
     if (shape.kind === 'last') return { items: [answer], skipped: [], cursor: list.length === 0 ? null : nextCursor(shape, answer, list.at(-1)) };
-    const end = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
+    const total = shape.kind === 'page' ? shape.total : undefined;
+    const count = total && readPath(answer, 'pages' in total ? total.pages : total.entries);
+    if (total && !(Number.isSafeInteger(count) && Number(count) >= 0)) throw new ProviderHttpError('invalid_response', null, 'missing_fields');
+    read += total && 'pages' in total ? 1 : list.length;
+    const end = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more)) || (total !== undefined && read >= Number(count));
     const next = shape.kind === 'offset' ? Number(page ?? 0) + list.length
       : Number(page ?? (shape.zeroBased ? 0 : 1)) + 1;
     return { items: [answer], skipped: [], cursor: end ? null : String(next) };

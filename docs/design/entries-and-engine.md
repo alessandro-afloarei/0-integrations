@@ -522,7 +522,8 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
   | { kind: 'offset'; send: Where; list?: Path; more?: Path }
-  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
+  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size;
+      total?: { pages: Path } | { entries: Path } }
   | { kind: 'last'; next: Path; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
@@ -545,6 +546,14 @@ a shape's `send` writes: the walk sends it.
   number would otherwise never end. Records are expected to differ between pages (they carry ids), so two adjacent pages
   that are truly identical end the walk the same way. An operation on a `page` shape names the shape's `list` as its `records` (both
   absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
+  With `total`, a `page` walk also stops after the page at which the pages it read (`{ pages }`), or the entries it
+  read, a skipped record included (`{ entries }`), reach the number at that path in that page's answer. The number is
+  read from each answer, never carried from an earlier one. It counts what the walk read, never the page number it
+  sent, so `zeroBased` changes nothing. A `total` that is missing, or not a non-negative safe integer, is
+  `invalid_response` (`missing_fields`): a malformed answer never reads as an end. An empty list still ends the walk,
+  a falsy `more` still ends it, and `page_repeated` still applies, so a total larger than what the pages hold ends
+  there, loudly. Declare `total` where a page past the last answers the last page again, or where no page states what
+  it answers; cite the field's meaning. Pages counted from 1 are cited as for any `page` shape.
 - `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
   request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the
   parser skips included, in `send`'s place (a string in the query, a number in the body). The count is one rule for

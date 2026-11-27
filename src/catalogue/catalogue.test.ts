@@ -76,6 +76,10 @@ const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName 
     text: z.literal(true).optional(), unsigned: z.literal(true).optional() })
     .refine(item => typeof item.echo === 'string' || item.text === true, 'a challenge read from a query is answered as text: give `text: true`').optional() };
 const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]);
+/** A `page` shape's count: of pages or of entries, one path to it. */
+const countPath = z.string().min(1, "a `total` is a path to the answer's count: give it");
+const total = z.strictObject({ pages: countPath.optional(), entries: countPath.optional() })
+  .refine(item => (item.pages === undefined) !== (item.entries === undefined), 'a `total` counts `pages` or `entries`: give one of them');
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
@@ -157,7 +161,7 @@ const entrySchema = z.strictObject({
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(), send: where }),
     z.strictObject({ kind: z.literal('page'), send: where, list: z.string().optional(), more: z.string().optional(),
-      zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional() }),
+      zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional(), total: total.optional() }),
     z.strictObject({ kind: z.literal('offset'), send: where, list: z.string().optional(), more: z.string().optional() }),
     z.strictObject({ kind: z.literal('last'), next: z.string().min(1, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"),
       send: where, list: z.string().optional(), more: z.string().optional() }),
@@ -1065,6 +1069,11 @@ test.each<[Record<string, unknown>, string]>([
   [{ kind: 'last', next: 'cursor', send: { query: 'cursor' }, pathPrefix: '/me/' }, 'Unrecognized key: "pathPrefix"'],
   [{ kind: 'last', next: '', send: { query: 'cursor' } }, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"],
   [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
+  [{ kind: 'cursor', next: 'next', send: { query: 'cursor' }, total: { pages: 'pages' } }, 'Unrecognized key: "total"'],
+  [{ kind: 'offset', send: { query: 'offset' }, total: { entries: 'total' } }, 'Unrecognized key: "total"'],
+  [{ kind: 'page', send: { query: 'page' }, total: { pages: 'pages', entries: 'total' } }, 'a `total` counts `pages` or `entries`: give one of them'],
+  [{ kind: 'page', send: { query: 'page' }, total: {} }, 'a `total` counts `pages` or `entries`: give one of them'],
+  [{ kind: 'page', send: { query: 'page' }, total: { entries: '' } }, "a `total` is a path to the answer's count: give it"],
   ...['me', '/me', 'me/'].flatMap(pathPrefix => [{ kind: 'linkHeader', pathPrefix }, { kind: 'nextUrl', next: 'next', pathPrefix }]
     .map((shape): [Record<string, unknown>, string] => [shape, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)'])),
 ])('a paging shape %j fails the schema, with what to fix', (shape, message) => {
