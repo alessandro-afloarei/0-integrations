@@ -18,7 +18,8 @@ export const cognism = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'Assigned by Cognism, or made in Cognism Prospector or Refresh; it lives six months, and the API cannot be used until Cognism Support has set up its entitlements. Searches and enrichments count against the account\'s preview limit, which its credits set.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://app.cognism.com/api/search', retry: {} },
+  http: { baseUrl: 'https://app.cognism.com/api/search',
+    retry: { defaultWaitMs: 60_000, wait: { header: 'x-rate-limit-reset', unit: 's' } } },
   identify: { request: { path: '/entitlement/contactEntitlementSubscription' } },
   operations: {
     'contacts.search': { docs: `${docs}#6c453b29-38c4-4037-8c09-7ba084bb3b7f`, method: 'POST', path: '/contact/search',
