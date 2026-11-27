@@ -21,7 +21,7 @@ export const peopledatalabs = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'From the API Dashboard, under Account, then API Keys. Enrichments and searches spend the account\'s credits.' }],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
-  http: { baseUrl: 'https://api.peopledatalabs.com/v5', retry: {} },
+  http: { baseUrl: 'https://api.peopledatalabs.com/v5', retry: { onlyStated: true } },
   errors: { detail: 'error.type' },
   identify: { request: { path: '/autocomplete', query: { field: 'title' } } },
   operations: {
