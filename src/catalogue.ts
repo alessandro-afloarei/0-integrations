@@ -56,7 +56,6 @@ export type Http = { baseUrl: Template;
   timeoutMs?: number; minIntervalMs?: number; retry?: Retry; rateLimit?: RateLimit };
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
-/** A webhook's timestamp: plain epoch seconds unless `unit` says epoch milliseconds or an ISO 8601 instant. */
 type Timestamp = { header: string; unit?: 'epochMs' | 'iso8601'; toleranceSeconds?: number };
 /** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `secret`: the key is the secret's
  * exact `base64` or `hex` decoding (else its bytes); `part`: the header is a comma-separated list of `name=value`

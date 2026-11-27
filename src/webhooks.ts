@@ -37,8 +37,7 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   const named = (name: string) => received.split(between).filter(piece => piece.startsWith(name + assign)).map(piece => piece.slice(name.length + 1));
   const stamp = scheme.timestamp;
   const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
-  // Whole seconds, whole milliseconds or an ISO 8601 instant (as a `Wait` reads one) within the tolerance of now; the
-  // header's text is what is signed, so a long one loses nothing.
+  // Seconds, milliseconds or an ISO 8601 instant within the tolerance; the header's text is what is signed.
   const at = stamp?.unit === 'iso8601' ? instantMs(timestamp)
     : /^\d+$/.test(timestamp) ? Number(timestamp) * (stamp?.unit === 'epochMs' ? 1 : 1000) : undefined;
   const now = stamp?.unit === undefined ? Math.floor(Date.now() / 1000) * 1000 : Date.now();
@@ -107,7 +106,6 @@ export function challengeAnswer(webhook: Webhook, request: WebhookRequest, secre
     : request.rawBody.byteLength > 0 ? null : new URLSearchParams(/^[^#?]*\?([^#]*)/u.exec(request.url)?.[1]).get(name);
   // A body path answers only where `when` holds; a query parameter or a header, wherever it is present.
   const asked = when === undefined ? typeof echo !== 'string' : holds(when, { status: 200, headers: request.headers, body });
-  // A value from outside the body is answered only as text, never inside JSON.
   const safe = typeof value === 'string' ? /^[!-;=?-~]{1,512}$/u.test(value) && (text || typeof echo === 'string')
     : !text && typeof value === 'number' && Number.isFinite(value);
   // Verified last, so a delivery that is no handshake is verified once, by the app's own `verifyWebhook`.
