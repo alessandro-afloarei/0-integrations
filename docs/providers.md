@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers: 132 declared, 0 recorded;
-558 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
+557 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -53,7 +53,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers:
 | [Freshsales](https://developers.freshworks.com/crm/api/#authentication) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, accounts.list, deals.list | — | declared |
 | [Freshservice](https://api.freshservice.com/#authentication) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, conversations.list, conversations.create, notes.create, requesters.list | — | declared |
 | [Front](https://dev.frontapp.com/docs/oauth) | support, mail | OAuth 2, key | conversations.list, conversations.search, conversations.get, inboxes.list, drafts.create, messages.create, conversations.update, messages.list, replies.create, comments.create, contacts.list | — | declared |
-| [Gist](https://developers.getgist.com/docs/working-with-oauth) | support | OAuth 2, key | conversations.list, conversations.search, conversations.get, conversations.update, messages.list, messages.create, contacts.list | — | declared |
+| [Gist](https://developers.getgist.com/docs/working-with-oauth) | support | OAuth 2, key | conversations.list, conversations.search, conversations.get, conversations.update, messages.list, contacts.list | — | declared |
 | [GitBook](https://gitbook.com/docs/developers/gitbook-api/authentication) | docs | key | pages.list, pages.get, spaces.list | — | declared |
 | [GitHub](https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api) | code | OAuth 2, key | — | — | declared |
 | [GitLab](https://docs.gitlab.com/api/rest/authentication/) | code | OAuth 2, key | — | standard | declared |

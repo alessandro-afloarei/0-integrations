@@ -15,7 +15,9 @@ Nothing here is released yet.
   and `contacts.list`. A reply (`replies.create`, `threads.create`, Intercom's with `message_type: 'comment'`) reaches
   the customer.
 - Breaking: Intercom's requests carry `Intercom-Version: 2.18`, the version its declared operations are read from; it
-  overrides the version selected on the app, so an app's raw `json` and `request` calls answer in 2.18's shapes too.
+  overrides the version selected on the app. An app's raw `json`, `request` and `paginate` calls send it too, unless the
+  call passes its own `intercom-version` header; a client built with its own `headers` sends that version on every
+  call, the declared operations' included.
 - Breaking: Help Scout's base is `https://api.helpscout.net`, each path naming its version (`customers.list` is
   `/v3/customers`); its operations send the same URLs as before. An app's raw `json`, `request` and `paginate` paths
   name the version now (`api.json('/v2/users/me')`, where `/users/me` was), and `baseUrl` lost its `/v2`. No sign-in,
