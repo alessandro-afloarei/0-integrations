@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Bitbucket Cloud: OAuth 2, or a person's API token as a bearer token, no email (https://support.atlassian.com/bitbucket-cloud/docs/using-api-tokens/).
- * An OAuth consumer's scopes are set on it, not asked for: give it account and pullrequest:write
- * (https://support.atlassian.com/bitbucket-cloud/docs/use-oauth-on-bitbucket-cloud/). Webhooks with a secret sign the body,
- * `X-Hub-Signature: sha256=<hex HMAC-SHA256>` (https://support.atlassian.com/bitbucket-cloud/docs/manage-webhooks/). */
+/** Bitbucket Cloud: OAuth 2, or a person's API token as a bearer token, no email. Webhooks with a secret sign the body,
+ * `X-Hub-Signature: sha256=<hex HMAC-SHA256>`. An OAuth consumer's scopes are set on it, not asked for: give it account
+ * and pullrequest:write. Pages under https://support.atlassian.com/bitbucket-cloud/: docs/using-api-tokens/,
+ * docs/use-oauth-on-bitbucket-cloud/, docs/manage-webhooks/, kb/bitbucket-cloud-rate-limit-troubleshooting/ (429). */
 const link = { 'links?': { 'html?': { 'href?': 'string' } } } as const;
 const repository = { uuid: 'string', 'full_name?': 'string', 'name?': 'string', ...link, 'created_on?': 'string',
   'updated_on?': 'string' } as const;
@@ -22,7 +22,7 @@ export const bitbucket = defineProvider({
     tokenUrl: 'https://bitbucket.org/site/oauth2/access_token', clientAuth: 'basic', pkce: false,
     authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: [] },
-  http: { baseUrl: 'https://api.bitbucket.org/2.0' },
+  http: { baseUrl: 'https://api.bitbucket.org/2.0', retry: {} },
   identify: { request: { path: '/user' }, id: 'uuid', name: ['display_name', 'nickname'] },
   paging: { next: { kind: 'nextUrl', next: 'next' } },
   webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha256=' },

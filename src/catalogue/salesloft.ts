@@ -21,7 +21,7 @@ export const salesloft = defineProvider({
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://accounts.salesloft.com/oauth/authorize', tokenUrl: 'https://accounts.salesloft.com/oauth/token',
     json: true, pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: ['people:read', 'people:write', 'cadences:read'] },
-  http: { baseUrl: 'https://api.salesloft.com' },
+  http: { baseUrl: 'https://api.salesloft.com', retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/v2/me' }, id: 'data.id', name: ['data.name', 'data.email'] },
   webhook: { kind: 'hmac', header: 'x-salesloft-signature', hash: 'sha1' },
   paging: { page: { kind: 'page', send: { query: 'page' }, list: 'data' } },
