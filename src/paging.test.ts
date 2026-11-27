@@ -270,6 +270,62 @@ test('offset: a record the parser skips still counts, so the next offset never s
   expect(fake.calls.map(call => call.url)).toEqual(['https://api.acme.test/things', 'https://api.acme.test/things?offset=3']);
 });
 
+const render = { kind: 'last', next: 'cursor', send: { query: 'cursor' } } as const;
+test('last: the first request sends no cursor, then the last record\'s; an empty list ends the walk', async () => {
+  const walked = await pageWalk(render, [[{ deploy: { id: 'd1' }, cursor: 'c1' }, { deploy: { id: 'd2' }, cursor: 'c2' }],
+    [{ deploy: { id: 'd3' }, cursor: 'c3' }], []], { query: { limit: '2' } });
+  expect(walked.urls).toEqual(['https://api.acme.test/items?limit=2', 'https://api.acme.test/items?limit=2&cursor=c2',
+    'https://api.acme.test/items?limit=2&cursor=c3']);
+  expect(walked.pages).toHaveLength(3);
+  expect(walked.error).toBeUndefined();
+});
+
+test('last: a falsy more ends the walk; a truthy more with no value is cursor_missing; without more a record with no value ends it', async () => {
+  const more = { kind: 'last', next: 'id', send: { query: 'after' }, list: 'data', more: 'has_more' } as const;
+  const ended = await pageWalk(more, [{ data: [{ id: 'a' }], has_more: true }, { data: [{ id: 'b' }], has_more: false }, { data: [] }]);
+  expect([ended.urls, ended.error]).toEqual([['https://api.acme.test/items', 'https://api.acme.test/items?after=a'], undefined]);
+  const missing = await pageWalk(more, [{ data: [{ id: 'a' }, {}], has_more: true }]);
+  expect(missing.error).toMatchObject({ code: 'invalid_response', detail: 'cursor_missing' });
+  const bare = await pageWalk(render, [[{ cursor: 'c1' }, { deploy: {} }], [{ cursor: 'c9' }]]);
+  expect([bare.urls, bare.error]).toEqual([['https://api.acme.test/items'], undefined]);
+});
+
+test('last: a value that comes back is cursor_repeated; a page equal to the one before is page_repeated; a missing list is missing_fields', async () => {
+  const again = await pageWalk(render, [[{ cursor: 'c1' }], [{ id: 2, cursor: 'c1' }], []]);
+  expect(again.error).toMatchObject({ code: 'invalid_response', detail: 'cursor_repeated' });
+  expect(again.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?cursor=c1']);
+  const repeated = await pageWalk(render, [[{ cursor: 'c1' }], [{ cursor: 'c1' }], []]);
+  expect(repeated.error).toMatchObject({ code: 'invalid_response', detail: 'page_repeated' });
+  expect(repeated.pages).toHaveLength(1);
+  const missing = await pageWalk({ ...render, list: 'data' }, [{ items: [{ cursor: 'c1' }] }]);
+  expect([missing.urls.length, missing.error]).toEqual([1, expect.objectContaining({ code: 'invalid_response', detail: 'missing_fields' })]);
+});
+
+test('last: a body value goes in the body; a record the parser skips still gives the cursor', async () => {
+  const body = await pageWalk({ kind: 'last', next: 'id', send: { body: 'starting_after' } }, [[{ id: 'r1' }], []], { method: 'POST', json: { q: 'x' } });
+  expect(body.bodies).toEqual(['{"q":"x"}', '{"q":"x","starting_after":"r1"}']);
+  const things = defineProvider({ id: 'things', name: 'Things', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' },
+    paging: { last: render }, operations: { 'things.list': { path: '/things', paging: 'last', result: [{ id: 'string', cursor: 'string' }] } } });
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json([{ id: 'a', cursor: 'c1' }, { id: 7, cursor: 'c2' }]),
+    () => Response.json([])) }]);
+  const seen: unknown[] = [];
+  for await (const thing of client(things, { token, fetch: fake.fetch }).things.list()) seen.push(thing);
+  expect(seen).toEqual([{ id: 'a', cursor: 'c1' }]);
+  expect(fake.calls.map(call => call.url)).toEqual(['https://api.acme.test/things', 'https://api.acme.test/things?cursor=c2']);
+});
+
+test('a cursor that is a non-negative whole number is sent as its digits; any other number, or a boolean, ends the walk', async () => {
+  const numeric = { kind: 'cursor', next: 'pagination.next', send: { query: 'until' } } as const;
+  expect(nextCursor(numeric, { pagination: { next: 42 } })).toBe('42');
+  expect(nextCursor(numeric, { pagination: { next: 0 } })).toBe('0');
+  expect(nextCursor({ ...numeric, more: 'more' }, { more: true, pagination: { next: 42 } })).toBe('42');
+  for (const next of [-1, 1.5, true, Number.MAX_SAFE_INTEGER + 1]) expect(nextCursor(numeric, { pagination: { next } })).toBeNull();
+  const walked = await pageWalk(numeric, [{ pagination: { next: 1700000000000 } }, { pagination: { next: null } }]);
+  expect(walked.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?until=1700000000000']);
+  const last = await pageWalk({ kind: 'last', next: 'id', send: { query: 'after' } }, [[{ id: 42 }], [{ id: -1 }]]);
+  expect([last.urls, last.error]).toEqual([['https://api.acme.test/items', 'https://api.acme.test/items?after=42'], undefined]);
+});
+
 test('ClickUp tasks.list, through client() and raw paginate: { tasks: [] } ends cleanly, {} fails loudly', async () => {
   const run = async (last: unknown, read: (api: Client<typeof clickup>) => AsyncGenerator) => {
     const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ tasks: [{ id: 't1' }] }), () => Response.json(last)) }]);

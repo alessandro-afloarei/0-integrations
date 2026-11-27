@@ -111,7 +111,8 @@ describe('fakeProvider', () => {
     const api = client(notion, { token: 'k', fetch: fake.fetch });
     await expect(api.pages.markdown({ pageId: 'p 1' })).resolves.toEqual({ markdown: '# Plan', truncated: false });
     expect(fake.calls[0]?.url).toBe('https://api.notion.com/v1/pages/p%201/markdown?markdown_version=v2');
-    expect(calls).toEqual([{ path: { pageId: 'p 1' }, query: { markdown_version: 'v2' }, body: undefined }]);
+    expect(calls).toEqual([{ path: { pageId: 'p 1' }, query: { markdown_version: 'v2' }, body: undefined,
+      headers: { authorization: 'Bearer k', 'content-type': 'application/json', 'notion-version': '2026-03-11' } }]);
     await expect(client(notion, { token: 'x', fetch: fake.fetch }).pages.markdown({ pageId: 'p' })).rejects.toMatchObject({ code: 'rejected' });
   });
 
@@ -134,7 +135,8 @@ describe('fakeProvider', () => {
     const user = { user_id: 'u1', email: 'kit@example.test', name: 'Kit' };
     const { fetch } = fakeFetch(fakeProvider(fireflies, { key: 'k', operations: { user: call => { calls.push(call); return { data: { user } }; } } }));
     await expect(client(fireflies, { token: 'k', fetch }).user()).resolves.toEqual({ data: { user } });
-    expect(calls).toEqual([{ path: {}, query: {}, body: { query: fireflies.operations.user.graphql, variables: {} } }]);
+    expect(calls).toEqual([{ path: {}, query: {}, body: { query: fireflies.operations.user.graphql, variables: {} },
+      headers: { authorization: 'Bearer k', 'content-type': 'application/json' } }]);
     await expect(fetch('https://api.fireflies.ai/graphql', { method: 'POST', headers: { authorization: 'Bearer k' },
       body: JSON.stringify({ query: 'query Other { other }' }) }))
       .rejects.toThrow('fakeProvider: no answer for this GraphQL query at POST https://api.fireflies.ai/graphql');
@@ -295,7 +297,8 @@ describe('fakeProvider', () => {
     const api = client(formed, { token: 'k', fetch });
     await expect(api.notes.create({ text: 'a & b', pinned: true })).resolves.toEqual({ by: 'create' });
     await expect(api.notes.update({ id: 7 })).resolves.toEqual({ by: 'update' });
-    expect(calls).toEqual([{ path: {}, query: {}, body: { text: 'a & b', pinned: 'true' } }]);
+    expect(calls).toEqual([{ path: {}, query: {}, body: { text: 'a & b', pinned: 'true' },
+      headers: { authorization: 'Bearer k', 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' } }]);
   });
 
   test("lemlist's create and update share a route: the update answers a body carrying its required contactId", async () => {
@@ -304,6 +307,21 @@ describe('fakeProvider', () => {
     const api = client(lemlist, { token: 'k', fetch });
     await expect(api.contacts.create({ email: 'a@example.test' })).resolves.toEqual({ data: { _id: 'created' } });
     await expect(api.contacts.update({ contactId: 'c1' })).resolves.toEqual({ data: { _id: 'updated' } });
+  });
+
+  test('a function receives the headers; of two operations on one route, the one whose required header the call carries answers', async () => {
+    const versioned = defineProvider({ id: 'versioned', name: 'Versioned', auth: [{ kind: 'key' }],
+      http: { baseUrl: 'https://api.versioned.test', headers: { 'x-version': '1' } }, operations: {
+        'items.list': { path: '/items', params: { 'x-version': { in: 'header', type: 'string' } } },
+        'items.mine': { path: '/items', params: { from: { in: 'header', type: 'string', required: true } } } } });
+    const calls: FakeCall[] = [];
+    const by = (name: string) => (call: FakeCall) => { calls.push(call); return { by: name }; };
+    const { fetch } = fakeFetch(fakeProvider(versioned, { key: 'k', operations: { 'items.list': by('list'), 'items.mine': by('mine') } }));
+    const api = client(versioned, { token: 'k', fetch });
+    await expect(api.items.list({ 'x-version': '2' })).resolves.toEqual({ by: 'list' });
+    await expect(api.items.mine({ from: 'ana@versioned.test' })).resolves.toEqual({ by: 'mine' });
+    expect(calls.map(call => [call.headers['x-version'], call.headers.from, call.headers.authorization])).toEqual([
+      ['2', undefined, 'Bearer k'], ['1', 'ana@versioned.test', 'Bearer k']]);
   });
 
   /** Basic client authentication, a JSON token body and no PKCE: the three shapes that differ from the defaults. */

@@ -242,7 +242,7 @@ describe("the HubSpot client", () => {
       "https://api.hubapi.com/crm/owners/2026-09?limit=100&after=a%2Bb%3D+c%26d%2F%3F%23"]);
   });
 
-  it.each([{ after: "" }, { after: 7 }, {}])("ends the owners at a blank or non-string cursor %j", async next => {
+  it.each([{ after: "" }, { after: 1.5 }, { after: -1 }, {}])("ends the owners at a blank cursor, or one neither a string nor a whole number %j", async next => {
     const { calls, fetch } = scripted(json({ results: [], paging: { next } }));
     expect(await hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).owners()).toEqual({ items: [], skipped: [] });
     expect(calls).toHaveLength(1);

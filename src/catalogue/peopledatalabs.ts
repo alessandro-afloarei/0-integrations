@@ -21,7 +21,10 @@ export const peopledatalabs = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'From the API Dashboard, under Account, then API Keys. Enrichments and searches spend the account\'s credits.' }],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
-  http: { baseUrl: 'https://api.peopledatalabs.com/v5', retry: { onlyStated: true } },
+  // A 429 waits until its `x-ratelimit-reset`, an ISO 8601 time: the reset of the limit it hit
+  // (https://docs.peopledatalabs.com/support/troubleshooting/rate-limit-errors).
+  http: { baseUrl: 'https://api.peopledatalabs.com/v5',
+    retry: { onlyStated: true, wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } } },
   errors: { detail: 'error.type' },
   identify: { request: { path: '/autocomplete', query: { field: 'title' } } },
   operations: {

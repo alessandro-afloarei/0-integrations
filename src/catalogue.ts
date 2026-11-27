@@ -44,8 +44,8 @@ export type Identify = { request?: Call; id?: Value; name?: Value; lowercase?: t
 export type Revoke = ({ url: string; token: readonly ('refresh' | 'access')[] } | { request: Call })
   & { goneErrors?: readonly string[] };
 /** A wait an answer states: a header's positive decimal number (of several, the longest present) or a body's number, a
- * duration (`s`, `ms`) or an instant (`epochSeconds`, `epochMs`). */
-export type Wait = ({ header: string | readonly string[] } | { path: Path }) & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' };
+ * duration (`s`, `ms`) or an instant (`epochSeconds`, `epochMs`); or an ISO 8601 instant with its zone (`iso8601`). */
+export type Wait = ({ header: string | readonly string[] } | { path: Path }) & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' | 'iso8601' };
 /** `onlyStated`: an answer that states no wait, and a network failure, are not retried. */
 export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number; onlyStated?: true; wait?: Wait };
 export type RateLimit = { when: readonly (When & { wait?: Wait })[]; defaultWaitMs?: number };
@@ -78,19 +78,21 @@ export type Webhook = (
 export type Where = { query: string } | { body: string };
 /** `page`: no number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the
  * answer when absent) is empty; a missing or non-list `list` is `invalid_response`. `offset`: as `page`, the next value
- * the offset sent (0 first) plus the entries in `list`. `linkHeader`, `nextUrl`: the `Link` header's `rel="next"`, or
+ * the offset sent (0 first) plus the entries in `list`. `last`: as `page`, the next value read at `next` in the
+ * list's last record, by the cursor's rules. `linkHeader`, `nextUrl`: the `Link` header's `rel="next"`, or
  * the value at `next`, read on the base's origin when a path, and kept under the base's path and `pathPrefix`. */
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true }
   | { kind: 'offset'; send: Where; list?: Path; more?: Path }
+  | { kind: 'last'; next: Path; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
   pathPrefix?: string };
 /** A value's declared type. In an object, a key ending in `?` may be missing or null, and is read as absent. */
 export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
 /** An operation's argument and where it is sent: `body` in a JSON object, `form` in a form-encoded body (never beside a
- * `body` one); `nullable` lets it be sent as JSON `null`. */
-export type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables'; type: Shape; required?: true; nullable?: true;
+ * `body` one), `header` as the request header of its name; `nullable` lets it be sent as JSON `null`. */
+export type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables' | 'header'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
 /** A named read or write. `kind` defaults from the method; `paging` names an entry's shape, `records` the list in a page.
  * `anyOf`: sets of argument paths (`email`, `contact.email`), of which a call gives every one of at least one set. */

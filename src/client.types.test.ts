@@ -34,6 +34,7 @@ const acme = defineProvider({
         labels: { in: 'body', type: ['string'] },
         estimate: { in: 'body', type: { points: 'integer', 'unit?': 'string' } },
         parent: { in: 'body', type: 'string', nullable: true },
+        from: { in: 'header', type: 'string' },
       },
       result: { id: 'string', url: 'string' },
     },
@@ -103,6 +104,10 @@ function typed() {
   void api.issues.create({ title: 'x', estimate: { unit: 'h' } });
   // @ts-expect-error title is not nullable
   void api.issues.create({ title: null });
+  // A header parameter is an argument.
+  void api.issues.create({ title: 'Ship', from: 'ana@acme.test' });
+  // @ts-expect-error from is a string header
+  void api.issues.create({ title: 'Ship', from: 7 });
   // @ts-expect-error first is an integer variable
   void api.viewer({ first: 'five' });
   // An operation or a result field that is not declared is not there (asserted, since a read of it lints as unsafe).

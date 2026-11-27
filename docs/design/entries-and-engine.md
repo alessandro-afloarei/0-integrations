@@ -440,7 +440,8 @@ the same lookup, where `{id}` is the id already found: `'Portal {id}'`.
 ### `http.retry`, `http.rateLimit` and `errors`
 
 ```ts
-type Wait = ({ header: string | readonly string[] } | { path: Path }) & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' };
+type Wait = ({ header: string | readonly string[] } | { path: Path })
+  & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' | 'iso8601' };
 type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number; onlyStated?: true; wait?: Wait };
 type RateLimit = { when: readonly (When & { wait?: Wait })[]; defaultWaitMs?: number };
 type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
@@ -454,9 +455,8 @@ classified in this order, and the first step that decides wins:
 1. `errors.revoked`: the provider's code is on the list, so the grant is gone (`GrantRevoked`).
 2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code. The error carries only
    the stated wait (below): never a rate limit's.
-3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is the
-   stated wait, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`. The rule's `wait` is the error's
-   alone: the retry never reads it.
+3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`), or a 429 a rule names.
+   The wait reported is the answer's wait (below), else `rateLimit.defaultWaitMs`.
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -470,32 +470,41 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   checks the first code found, so a refused one hides a later path.
 - Only a call marked idempotent is retried: a GET unless the caller says `idempotent: false`, or any call the caller
   marks `idempotent: true` (an operation of `kind: 'read'`, an idempotent DELETE), never with a caller's `signal`. It is
-  retried after a 429, a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was
-  dropped before an answer), up to `retry.limit` retries of any of these together. The limit counts per request sent:
-  a redirect hop and the resend after a 401 each get their own.
+  retried after a 429, an answer step 3 decides (Google's 403 `rateLimitExceeded`, Notion's 529), a 408, 500, 502, 503
+  or 504, or a network failure (the connection could not be made, or was dropped before an answer), up to `retry.limit`
+  retries of any of these together. Such a rate limit is retried as a 429 is; to test a rule, the body is read only when
+  a rule's `status` is the answer's (or it names none, or `error`), within `timeoutMs`. An answer whose body does not
+  arrive in that time is not retried, and is classified by its status and headers (a 429 is `rate_limited`, carrying
+  its `Retry-After`). The limit counts per request sent: a redirect hop and the resend after a 401 each get their own.
 - A **wait** (`Wait`) is read from a header, or several (the longest of those present counts), holding a positive
   decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
-  instants, whose wait is the instant minus now, at least 0. Anything else states no wait. One reader serves the retry
-  and the error.
-- An answer's **stated wait** is a positive `Retry-After`, else `retry.wait`: a wait declared as a header counts only
-  on a 429, since a reset header rides on every answer; one declared as a body path counts on any answer that holds
-  it, for the retry on every retried status. A declared wait that is not positive (an instant already past, a body
-  `0`) states no wait, as a past `Retry-After` date does. The retry reads `Retry-After` and the entry's `retry.wait`;
-  a rate-limit rule's own `wait` is carried by the error and is not read by the retry. A retry never comes before the
-  stated wait (rounded up to a whole millisecond): an answer whose stated wait is longer than `maxWaitMs` is not
-  retried, whatever its status, and its error carries that wait. An error carries the stated wait, else a `Retry-After`
-  of 0 when nothing else is stated. With `retry.onlyStated`, an answer that states no wait is not retried either, and
-  neither is a network failure (Jira: "Only retry if the API is idempotent and the response includes a Retry-After
-  header"); so `onlyStated` and `defaultWaitMs` do not go together, and the table refuses the pair.
-- Otherwise a 429 waits its stated wait, else `retry.defaultWaitMs`, with no jitter. The others wait a positive
-  `Retry-After`; without one, the n-th retry (n from 0) waits a full-jitter backoff: a random share of
-  `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. No wait is longer than `maxWaitMs`.
-  The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (a minute for Firecrawl).
+  instants, whose wait is the instant minus now, at least 0. An `iso8601` wait is the header's or the path's string read
+  as an instant: `YYYY-MM-DDTHH:MM:SS`, an optional fraction, then `Z` or an offset `±HH:MM` or `±HHMM` (hours 00 to 23,
+  minutes 00 to 59; Teamleader's `2021-06-15T10:51:23.035+0100`), a fraction rounded up to a whole millisecond, by its
+  own pattern, never `Date.parse`'s wider grammar; a time the calendar lacks (30 February) is none. Anything else states
+  no wait. One reader serves the retry and the error.
+- An answer's **stated wait** is a positive `Retry-After`, else `retry.wait`: a wait declared as a header counts only on
+  a 429 (or an answer step 3 decides), since a reset header rides on every answer; one declared as a body path counts on
+  any answer that holds it, for the retry on every retried status. A declared wait that is not positive (an instant
+  already past, a body `0`) states no wait, as a past `Retry-After` date does. **The answer's wait**, which the retry
+  and the error both read, is the later of its stated wait and the matching rate-limit rule's own `wait`, when the rule
+  has one: a page that gives two times not to retry before (GitHub's `retry-after` and its reset while
+  `x-ratelimit-remaining` is 0) is never answered before the later, on a 403 or a 429. A retry never comes before the
+  answer's wait (rounded up to a whole millisecond): an answer whose wait is longer than `maxWaitMs` is not retried,
+  whatever its status, and its error carries that wait. An error carries the answer's wait, else a `Retry-After` of 0
+  when nothing else is stated. With `retry.onlyStated`, an answer that states no wait is not retried either (a rule's
+  own wait alone states none: Jira's 429 with only its reset is reported, carrying it), and neither is a network failure
+  (Jira: "Only retry if the API is idempotent and the response includes a Retry-After header"); so `onlyStated` and
+  `defaultWaitMs` do not go together, and the table refuses the pair.
+- Otherwise a 429 (or an answer step 3 decides) waits its wait, else `retry.defaultWaitMs` raised to the rule's own
+  `wait` when that is later, with no jitter. The others wait a positive `Retry-After`; without one, the n-th retry (n
+  from 0) waits a full-jitter backoff: a random share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4
+  seconds and so on. No wait is longer than `maxWaitMs`. The backoff never starts from `defaultWaitMs`, which entries
+  set for a rate limit (a minute for Firecrawl).
 - Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
   retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
-  the OAuth token endpoint, a `token` entry's request and an RFC 7009 revoke. An answer that step 3 reclassifies is
-  reported, not retried. The last answer is classified as any other; a timeout, and a network failure after the last
-  retry, are `unavailable`.
+  the OAuth token endpoint, a `token` entry's request and an RFC 7009 revoke. The last answer is classified as any
+  other; a timeout, and a network failure after the last retry, are `unavailable`.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
   1 second; the table refuses a `defaultWaitMs` above `maxWaitMs`. A `limit` of 0 means no retry; an error still carries
   the wait the provider names.
@@ -508,6 +517,7 @@ type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
   | { kind: 'offset'; send: Where; list?: Path; more?: Path }
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
+  | { kind: 'last'; next: Path; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
 type Where = { query: string } | { body: string };
@@ -518,7 +528,9 @@ The engine owns the stop rules, and entries hold no stop expressions. An operati
 a shape's `send` writes: the walk sends it.
 
 - `cursor`: with `more`, stop when it is falsy; a truthy `more` with a blank cursor is `invalid_response`
-  (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`.
+  (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`. A cursor is a
+  non-empty string, or a non-negative safe integer sent as a string of its digits, in the query and in a JSON body alike
+  (Vercel's `pagination.next`), as `errors.detail` reads a code; any other value is blank.
 - `page`: sends nothing on the first request, then 2, 3 and so on (with `zeroBased`, 1, 2 and so on), in `send`'s
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
@@ -537,6 +549,13 @@ a shape's `send` writes: the walk sends it.
   after it does. The offset grows on every page, so a provider that ignores it is `page_repeated`. An operation on an
   `offset` shape names the shape's `list` as its `records`. Declare it only for an offset that counts the records
   skipped from 0, cited (an example of `0`, or a starting record position); one counted from 1 waits.
+- `last`: the `page` kind's walk and stop rules, run by the same loader, with another next value: the value at `next`
+  inside the last element of `list` (the answer itself when `list` is absent), sent in `send`'s place (Render's
+  `cursor`, a sibling of each resource). The first request sends nothing; an empty list ends the walk. With `more`, a
+  falsy `more` ends it and a truthy `more` with a blank value is `invalid_response` (`cursor_missing`); without `more`,
+  a blank value ends it. The value follows the cursor's rule, and one that comes back is `cursor_repeated`, through the
+  one `paginate` guard. The last element is read from the answer itself, so a record the parser skips still gives the
+  value. An operation on a `last` shape names the shape's `list` as its `records`.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.
@@ -637,8 +656,8 @@ for `standard`.
 type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Record<string, Param>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null'; base?: string; anyOf?: readonly (readonly Path[])[] };
-type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables'; type: Shape; required?: true; nullable?: true;
-  enum?: readonly string[]; description?: string };
+type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables' | 'header'; type: Shape; required?: true;
+  nullable?: true; enum?: readonly string[]; description?: string };
 type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
 ```
 
@@ -649,9 +668,9 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   says `kind: 'read'`: the engine retries only a call marked idempotent, a GET by default and an operation of
   `kind: 'read'`.
 - A shape key ending in `?` may be missing or null, and is read as absent.
-- `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 204
-  (the usual answer to DELETE, PUT and PATCH) answers `null`, which `unknown` already covers. Any other answer without
-  JSON, and a 204 to an operation with a `result`, is `invalid_response`.
+- `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 2xx
+  with an empty body (a 202, a 201, a 204) answers `null`, which `unknown` already covers. Any other answer without
+  JSON, and an empty 2xx to an operation with a `result`, is `invalid_response`.
 - A path's `{name}` must be a declared `path` parameter; the compiler refuses the entry otherwise.
 - An operation id's first dot-separated segment is never `json`, `request` or `paginate` (compared for equality, so
   `requests.list` is fine): those are the client's own calls. Nor is an id `then`, which would make the client a
@@ -667,9 +686,17 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   posted with the query to the base. `form` parameters are sent as an `application/x-www-form-urlencoded` body, each
   value as its string (`true`, `25`), an empty form when none is given, with the form's `content-type`, which wins over
   one the entry or the app sets (Chatwork, Zulip and Agile CRM take one).
+- A `header` parameter's name is the header's name, a lowercase token; its value is a string, a finite number or a
+  boolean, sent as its text. Headers are set in this order, a later one replacing an earlier one of the same name: the
+  entry's `http.headers`, the app's `headers`, the operation's header arguments, the credential, a form's
+  `content-type`. So a header parameter may replace an entry's header for one operation (Cal.com's `cal-api-version`),
+  and never the credential. A value holding a character outside printable ASCII, space and tab (a CR, an LF, a NUL) is
+  `param_invalid: <name>` before anything is sent.
 - A parameter has a place in its request or the entry is refused (the table test, and `client()` with
   `param_unplaced: <id> <name>` when it is built): a `path` one only where the path names it, `body` and `form` ones
-  never on a GET and never in one operation together, and on a GraphQL operation only `variables`.
+  never on a GET and never in one operation together, on a GraphQL operation only `variables`, and a `header` one
+  only as a scalar, never `nullable`, never named `content-type`, `host` or the credential's header of any sign-in
+  (`authorization` unless its `send` names another).
 - `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
   creates one record by any of several equal inputs (`[['email'], ['phone', 'last_name']]`). A path names a parameter
   or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read
@@ -729,8 +756,8 @@ a provider whose OAuth 2 cannot be declared yet is not declared with a key alone
   or field states it); a wait in another header or a body field, `wait` with the page's unit; a window of at most 60
   seconds with no wait promised on every 429, `defaultWaitMs` the window; a 429 and nothing more, `retry: {}`. `limit`
   and `maxWaitMs` only from stated numbers. `minIntervalMs` only from a stated
-  limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
-  limit answer. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
+  limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` for a documented non-429 limit answer, or
+  to carry a 429's reset on the error. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
   the credential that signs the calls: a limit that varies by plan, or that the credential shares with its
   organization, is left out.
 - `errors.detail` only for a documented machine code, never a human message.
@@ -785,6 +812,9 @@ start and end keep the page's shape (an object of `dateTime` and `timeZone` stay
 only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
+A header the page requires on one operation is a required `header` parameter (PagerDuty's `From`). `http.headers` holds
+the value most declared operations share; an operation whose page fixes another ("Must be set to …") declares it as a
+required `header` parameter with that one value as its `enum` (Cal.com's `cal-api-version`).
 A send that needs a multipart body (attachments) or a raw RFC 5322 message is declared with only the plain fields its
 page lets it take; a multipart body waits.
 When a page states that at least one of several equal inputs is required to find or create one record (in a sentence, a

@@ -3,7 +3,7 @@ import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
-import { backoffMs, declaredWait, responseJson, retryPolicy, sentWith } from './http-response.js';
+import { backoffMs, classify, declaredLimit, declaredWait, emptyAnswers, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
 import { checkHosts, fill, hostPart, namedHosts, parseJson, placeholders, plainValue } from './rules.js';
 
@@ -11,6 +11,8 @@ import { checkHosts, fill, hostPart, namedHosts, parseJson, placeholders, plainV
 export type RequestOptions = {
   method?: Method;
   query?: Readonly<Record<string, string>>;
+  /** Over the entry's and the app's, under the credential and a form's type. */
+  headers?: Readonly<Record<string, string>>;
   idempotent?: boolean;
   signal?: AbortSignal;
 } & ({ json?: unknown; form?: undefined } | { form: Readonly<Record<string, string>>; json?: undefined });
@@ -33,12 +35,13 @@ export type HttpClient = {
   request(path: string, options?: RequestOptions): Promise<ProviderResponse>;
 };
 
-async function retryBody(response: Response, timeoutMs: number): Promise<string> {
+/** The body of an answer the retry reads, or null when it does not arrive within `timeoutMs`. */
+async function retryBody(response: Response, timeoutMs: number): Promise<string | null> {
   const reader = response.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
   if (!reader) return '';
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => { reject(new ProviderHttpError('unavailable', null)); }, timeoutMs);
+  const timeout = new Promise<null>(resolve => {
+    timer = setTimeout(() => { resolve(null); }, timeoutMs);
   });
   const body = (async () => {
     const chunks: Uint8Array[] = [];
@@ -195,6 +198,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];
   const retry = retryPolicy(entry.http.retry);
   const onlyStated = entry.http.retry?.onlyStated === true;
+  const wait = entry.http.retry?.wait;
+  const limits = entry.http.rateLimit?.when ?? [];
   const timeoutMs = entry.http.timeoutMs ?? 30_000;
   const minIntervalMs = input.minIntervalMs ?? entry.http.minIntervalMs ?? 0;
   let nextSend = 0;
@@ -223,18 +228,6 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     return renewal;
   }
 
-  /** The wait an answer states, as its error reads it (`retryAfterMs`): a positive Retry-After, else the entry's
-   * declared `wait`; a 0 states none. */
-  async function statedWait(response: Response): Promise<number | undefined> {
-    const { status, headers } = response;
-    const now = Date.now();
-    const wait = entry.http.retry?.wait;
-    // The body is read only for a wait the entry says it names, past no positive Retry-After: a slow body must not
-    // hold up the retry.
-    const body = !retryAfterMs(headers, now) && wait && 'path' in wait ? parseJson(await retryBody(response, timeoutMs)) : undefined;
-    return retryAfterMs(headers, now, declaredWait(wait, { status, headers, body }, now)) || undefined;
-  }
-
   async function pace(): Promise<void> {
     const wait = Math.max(0, nextSend - Date.now());
     nextSend = Math.max(nextSend, Date.now()) + minIntervalMs;
@@ -248,7 +241,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     let headers: Headers;
     try {
       headers = new Headers(entry.http.headers);
-      for (const [key, header] of Object.entries(input.headers ?? {})) headers.set(key, header);
+      for (const [key, header] of [...Object.entries(input.headers ?? {}), ...Object.entries(options.headers ?? {})]) headers.set(key, header);
       if (credential) headers.set(...credential);
       // A form's type over the entry's and the app's.
       if (options.form) headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
@@ -269,18 +262,36 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
         hooks: {
           beforeRequest: [pace], beforeRetry: [pace],
           afterResponse: [async ({ response, retryCount }) => {
-            if (!RETRIED.includes(response.status) || retryCount >= limit) return;
-            // Never before the stated wait: one past the cap is reported, not retried; with `onlyStated`, so is none.
-            const stated = await statedWait(response);
-            if (stated === undefined ? onlyStated : stated > retry.maxWaitMs) return;
-            // Without a stated wait, a 429 waits the provider's default, with no jitter, any other status the backoff.
-            const fallback = response.status === 429 ? retry.defaultWaitMs : backoffMs(retry.maxWaitMs, retryCount);
-            return ky.retry({ delay: Math.min(stated ?? fallback, retry.maxWaitMs) });
+            const { status, headers } = response;
+            // A rate limit the entry declares on another status (a 403, a 529) is retried as a 429 is. The body is read
+            // only when a rule may hold for the status, or for a body wait past no positive Retry-After.
+            const mayLimit = status >= 400 && limits.some(rule => [undefined, 'error', status].includes(rule.status));
+            if ((!RETRIED.includes(status) && !mayLimit) || retryCount >= limit) return;
+            const now = Date.now();
+            const read = mayLimit || (wait !== undefined && 'path' in wait && !retryAfterMs(headers, now));
+            const text = read ? await retryBody(response, timeoutMs) : '';
+            // A body that never arrives is not retried: the answer is classified by its status and headers.
+            if (text === null) return;
+            const body = parseJson(text);
+            const declared = mayLimit ? declaredLimit(classify(entry, { status, headers, data: body }, now)) : undefined;
+            const limited = status === 429 || declared !== undefined;
+            if (!limited && !RETRIED.includes(status)) return;
+            // The stated wait (Retry-After, else `retry.wait`, a header's on a rate limit alone); none with `onlyStated`
+            // is not retried. Never before it or the rule's own wait, the later of the two: past the cap, reported.
+            const stated = retryAfterMs(headers, now, declaredWait(wait, { status: limited ? 429 : status, headers, body }, now)) || undefined;
+            const own = Math.ceil(declared?.own ?? 0);
+            if ((stated === undefined ? onlyStated : stated > retry.maxWaitMs) || own > retry.maxWaitMs) return;
+            // Without a stated wait, a rate limit waits the provider's default, no jitter; another status the backoff.
+            const fallback = limited ? retry.defaultWaitMs : backoffMs(retry.maxWaitMs, retryCount);
+            return ky.retry({ delay: Math.min(Math.max(stated ?? fallback, own), retry.maxWaitMs) });
           }],
         },
       });
       const response = await pending;
-      return { status: response.status, headers: response.headers, data: parseJson(await pending.text()) };
+      const text = await pending.text();
+      const answer = { status: response.status, headers: response.headers, data: parseJson(text) };
+      if (text.trim() === '') emptyAnswers.add(answer);
+      return answer;
     } catch (error) {
       if (error instanceof HTTPError) {
         return { status: error.response.status, headers: error.response.headers,
@@ -324,7 +335,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     const sendAs = (bearer: string) => follow(url, bearer, credentialOf(entry, bearer, input.values ?? {}), options);
     const bearer = await token();
     const response = await sendAs(bearer);
-    if (response.status !== 401) return response;
+    // A 401 a rate-limit rule marks is a limit, not a refused token: never renewed and sent before its stated time.
+    if (response.status !== 401 || declaredLimit(classify(entry, response))) return response;
     const renewed = await renew(bearer);
     return renewed === bearer ? response : sendAs(renewed);
   };

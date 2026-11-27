@@ -140,6 +140,24 @@ test("a request with the caller's signal never waits", async () => {
   expect(fake.calls).toHaveLength(1);
 });
 
+test('a 401 a rate-limit rule marks is not renewed and sent again before its stated time; an ordinary 401 is', async () => {
+  const limited401 = defineProvider({ id: 'limited-401', name: 'Limited 401', auth: [{ kind: 'key' }],
+    http: { baseUrl: 'https://api.limited-401.test', retry: {},
+      rateLimit: { when: [{ status: 401, header: 'x-reset', wait: { header: 'x-reset', unit: 's' } }] } } });
+  for (const method of ['GET', 'POST'] as const) {
+    const fake = script(limited401, () => Response.json({}, { status: 401, headers: { 'retry-after': '90', 'x-reset': '120' } }), ok);
+    fake.token.mockResolvedValueOnce('old').mockResolvedValue('new');
+    const result = fake.client.json('/items', { method }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(await result).toMatchObject({ code: 'rate_limited', status: 401, retryAfterMs: 120_000 });
+    expect(fake.calls).toHaveLength(1);
+  }
+  const ordinary = script(limited401, () => Response.json({}, { status: 401 }), ok);
+  ordinary.token.mockResolvedValueOnce('old').mockResolvedValue('new');
+  expect(await ordinary.client.json('/items')).toEqual({ ok: true });
+  expect(ordinary.calls.map(call => call.headers.authorization)).toEqual(['Bearer old', 'Bearer new']);
+});
+
 test('a 401 asks once for a fresh token', async () => {
   const fake = script(hubspot, () => Response.json({}, { status: 401 }), ok);
   fake.token.mockResolvedValueOnce('old').mockResolvedValue('new');
@@ -247,7 +265,7 @@ test('invalid token headers fail without carrying the token', async () => {
   expect(fake.calls).toHaveLength(0);
 });
 
-test('a hanging 429 body times out and is cancelled', async () => {
+test("a hanging 429 body times out twice (the retry's read, then the error's), is cancelled and is rate_limited, sent once", async () => {
   const cancel = vi.fn();
   const body = new ReadableStream<Uint8Array>({ cancel });
   const fake = fakeFetch([{ url: /https:/, respond: () => new Response(body, { status: 429 }) }]);
@@ -255,11 +273,11 @@ test('a hanging 429 body times out and is cancelled', async () => {
   const client = createClient(slow, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   let settled = false;
   const result = client.json('/items').catch((error: unknown) => { settled = true; return error; });
-  await vi.advanceTimersByTimeAsync(19);
+  await vi.advanceTimersByTimeAsync(39);
   expect(settled).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
   expect(settled).toBe(true);
-  expect(await result).toMatchObject({ code: 'unavailable', status: null });
+  expect(await result).toMatchObject({ code: 'rate_limited', status: 429, retryAfterMs: null });
   expect(cancel).toHaveBeenCalledTimes(1);
   expect(fake.calls).toHaveLength(1);
 });
@@ -1321,6 +1339,15 @@ describe("a retry never comes before the provider's stated wait", () => {
     await retriesAfter(reset('s'), answer(429, { 'ratelimit-reset': 'soon' }), 1000);
   });
 
+  test('a declared ISO 8601 header waits until that instant; one past the cap, or in the year 9999, is sent once with its wait', async () => {
+    const iso = retrying({ defaultWaitMs: 60_000, wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } });
+    const at = (ms: number) => new Date(Date.now() + ms).toISOString().replace('Z', '+0000');
+    await retriesAfter(iso, answer(429, { 'x-ratelimit-reset': at(5000) }), 5000);
+    expect(await sentOnce(iso, answer(429, { 'x-ratelimit-reset': at(90_000) }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
+    const far = Date.UTC(9999, 11, 31, 23, 59, 59) - Date.now();
+    expect(await sentOnce(iso, answer(429, { 'x-ratelimit-reset': '9999-12-31T23:59:59Z' }))).toMatchObject({ code: 'rate_limited', retryAfterMs: far });
+  });
+
   test('a positive Retry-After wins over the declared wait', async () => {
     await retriesAfter(reset('s'), answer(429, { 'retry-after': '2', 'ratelimit-reset': '5' }), 2000);
   });
@@ -1395,6 +1422,97 @@ describe('which answers state a declared wait', () => {
   test('onlyStated on a 5xx: retried after its Retry-After, sent once without one', async () => {
     await retriesAfter(retrying({ onlyStated: true }), answer(503, { 'retry-after': '2' }), 2000);
     expect(await sentOnce(retrying({ onlyStated: true }), answer(503))).toMatchObject({ code: 'unavailable', retryAfterMs: null });
+  });
+});
+
+describe('an answer a rate-limit rule marks is retried as a 429 is', () => {
+  /** Google's 403 rate limit: its reason at `error.errors.0.reason`. */
+  const marked = (retry: Retry, when: Entry['http']['rateLimit'] = { when: [{ status: 403, detail: 'rateLimitExceeded' }] }) =>
+    retrying(retry, { http: { baseUrl: 'https://api.retrying.test', retry, rateLimit: when }, errors: { detail: 'error.errors.0.reason' } });
+  const reason = (status: number, code: string, headers: Record<string, string> = {}) => () =>
+    Response.json({ error: { errors: [{ reason: code }] } }, { status, headers });
+  const endless = (status: number, headers: Record<string, string>) => () =>
+    new Response(new ReadableStream({ pull: () => new Promise(() => undefined) }), { status, headers });
+
+  test('a body that never arrives keeps the stated wait: rate_limited, sent once, the rule unread is not retried', async () => {
+    const google = marked({}, { when: [{ status: 429 }, { status: 403, detail: 'rateLimitExceeded' }] });
+    expect(await sentOnce(google, endless(429, { 'retry-after': '90' }))).toMatchObject({ code: 'rate_limited', status: 429, retryAfterMs: 90_000 });
+    expect(await sentOnce(github, endless(403, { 'retry-after': '2' }))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 2000 });
+  });
+
+
+  test('a 403 the rule holds for waits the default second, a Retry-After of 2 its two, one of 90 is sent once with its wait', async () => {
+    await retriesAfter(marked({}), reason(403, 'rateLimitExceeded'), 1000);
+    await retriesAfter(marked({}), reason(403, 'rateLimitExceeded', { 'retry-after': '2' }), 2000);
+    expect(await sentOnce(marked({}), reason(403, 'rateLimitExceeded', { 'retry-after': '90' })))
+      .toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 90_000 });
+  });
+
+  test("a 529 the rule names waits the entry's default; a declared reset header counts on it as on a 429", async () => {
+    await retriesAfter(marked({ defaultWaitMs: 5000 }, { when: [{ status: 529 }] }), answer(529), 5000);
+    await retriesAfter(marked({ wait: { header: 'ratelimit-reset', unit: 's' } }, { when: [{ status: 529 }] }),
+      answer(529, { 'ratelimit-reset': '3' }), 3000);
+  });
+
+  test('a 403 no rule holds for, a write, and onlyStated with no stated wait are each sent once', async () => {
+    expect(await sentOnce(marked({}), reason(403, 'insufficientPermissions'))).toMatchObject({ code: 'rejected', status: 403 });
+    expect(await sentOnce(marked({ onlyStated: true }), reason(403, 'rateLimitExceeded'))).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+    const fake = script(marked({}), reason(403, 'rateLimitExceeded'), ok);
+    await expect(fake.client.json('/a', { method: 'POST', json: {} })).rejects.toMatchObject({ code: 'rate_limited', status: 403 });
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  test("GitHub's secondary 403 waits its retry-after, a header its rule reads; one with none is sent once", async () => {
+    const message = (headers: Record<string, string>) => () => Response.json({ message: 'You have exceeded a secondary rate limit' }, { status: 403, headers });
+    const fake = fakeFetch([{ url: /https:/, respond: sequence(message({ 'retry-after': '3' }), ok) }]);
+    const result = createClient(github, { token: () => Promise.resolve('k'), fetch: fake.fetch, minIntervalMs: 0 }).json('/user');
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(fake.calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toEqual({ ok: true });
+    expect(await sentOnce(github, message({}))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 60_000 });
+  });
+
+  test("GitHub's primary limit is never sent again before its reset: a 429 or a 403, whatever Retry-After says", async () => {
+    const primary = (status: number, seconds: number | undefined, headers: Record<string, string> = {}) => answer(status, {
+      'x-ratelimit-remaining': '0', ...(seconds === undefined ? {} : { 'x-ratelimit-reset': String(Date.now() / 1000 + seconds) }), ...headers });
+    for (const status of [429, 403]) {
+      expect(await sentOnce(github, primary(status, 1800, { 'retry-after': '2' }))).toMatchObject({ code: 'rate_limited', status, retryAfterMs: 1_800_000 });
+      expect(await sentOnce(github, primary(status, 1800))).toMatchObject({ code: 'rate_limited', status, retryAfterMs: 1_800_000 });
+      await retriesAfter(github, primary(status, 20, { 'retry-after': '2' }), 20_000);
+      await retriesAfter(github, primary(status, 1, { 'retry-after': '30' }), 30_000);
+      await retriesAfter(github, primary(status, undefined, { 'retry-after': '2' }), 2000);
+    }
+  });
+
+  test("Jira's shape: onlyStated beside a rule's ISO reset, retried only after a Retry-After, never before the reset", async () => {
+    const jira = retrying({ onlyStated: true }, { http: { baseUrl: 'https://api.retrying.test', retry: { onlyStated: true },
+      rateLimit: { when: [{ status: 429, wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } }] } } });
+    const at = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
+    expect(await sentOnce(jira, answer(429, { 'x-ratelimit-reset': at(1800) }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 1_800_000 });
+    expect(await sentOnce(jira, answer(429, { 'x-ratelimit-reset': at(3) }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 3000 });
+    expect(await sentOnce(jira, answer(429, { 'x-ratelimit-reset': at(1800), 'retry-after': '5' })))
+      .toMatchObject({ code: 'rate_limited', retryAfterMs: 1_800_000 });
+    await retriesAfter(jira, answer(429, { 'x-ratelimit-reset': at(3), 'retry-after': '5' }), 5000);
+  });
+
+  test("with no stated wait, the default is raised to a rule's own wait when that is later", async () => {
+    const own = marked({}, { when: [{ status: 403, wait: { header: 'x-reset', unit: 's' } }] });
+    await retriesAfter(own, answer(403, { 'x-reset': '7' }), 7000);
+    await retriesAfter(marked({}, { when: [{ status: 429, wait: { header: 'x-reset', unit: 's' } }] }), answer(429, { 'x-reset': '7' }), 7000);
+    expect(await sentOnce(own, answer(403, { 'x-reset': '90' }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
+  });
+
+  test("the error carries the header wait the retry reads on a marked answer: a 529's 90 s is sent once with it", async () => {
+    const reset = marked({ wait: { header: 'ratelimit-reset', unit: 's' } }, { when: [{ status: 529 }] });
+    expect(await sentOnce(reset, answer(529, { 'ratelimit-reset': '90' }))).toMatchObject({ code: 'rate_limited', status: 529, retryAfterMs: 90_000 });
+  });
+
+  test('an error a revoked code or an errors rule decides first is no rate limit, and is sent once', async () => {
+    const decided = retrying({}, { http: { baseUrl: 'https://api.retrying.test', retry: {}, rateLimit: { when: [{ status: 403 }] } },
+      errors: { detail: 'code', revoked: ['gone'], rules: [{ when: { detail: 'denied' }, code: 'rejected' }] } });
+    expect(await sentOnce(decided, () => Response.json({ code: 'denied' }, { status: 403 }))).toMatchObject({ code: 'rejected' });
+    expect(await sentOnce(decided, () => Response.json({ code: 'gone' }, { status: 403 }))).toMatchObject({ name: 'GrantRevoked' });
   });
 });
 

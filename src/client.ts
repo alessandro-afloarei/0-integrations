@@ -1,7 +1,7 @@
 import type { Entry, Operation, Shape, TypeOf } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { callRequest, createClient, defaultFetch, type HttpOptions, type ProviderResponse, type RequestOptions } from './http.js';
-import { responseJson } from './http-response.js';
+import { classify, emptyAnswers, responseJson } from './http-response.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
 import { argumentShape, checkHosts, clashing, fill, pagedParam, pagedRecords, placed, readPath, shapeAt } from './rules.js';
@@ -81,7 +81,7 @@ const bare = () => Object.create(null) as Record<string, unknown>;
 
 /** The request an operation's arguments make: each declared one checked by its shape and sent in its place. */
 function operationRequest(id: string, op: Operation, args: Given, signal?: AbortSignal): [string, RequestOptions] {
-  const at = { path: bare(), query: bare(), body: bare(), form: bare(), variables: bare() };
+  const at = { path: bare(), query: bare(), body: bare(), form: bare(), variables: bare(), header: bare() };
   const given = bare(); // each argument as checked, for `anyOf`
   for (const [name, param] of Object.entries(op.params ?? {})) {
     const value = Object.hasOwn(args, name) ? args[name] : undefined;
@@ -91,9 +91,11 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
     }
     const checked = value === null ? null : shaped(param.type, value);
     const scalar = typeof checked === 'string' || typeof checked === 'number' || typeof checked === 'boolean';
-    // A path value is one segment: never empty or a dot segment, which the URL would resolve away.
+    // A path value is one segment: never empty or a dot segment, which the URL would resolve away. A header value is
+    // printable ASCII, space and tab: a CR or an LF would end the header.
     if (checked === INVALID || (checked !== null && param.enum !== undefined && !(typeof checked === 'string' && param.enum.includes(checked)))
-      || (param.in === 'path' || param.in === 'query' || param.in === 'form') && !scalar
+      || (param.in === 'path' || param.in === 'query' || param.in === 'form' || param.in === 'header') && !scalar
+      || (param.in === 'header' && !/^[\t\x20-\x7e]*$/u.test(String(checked)))
       || (param.in === 'path' && ['', '.', '..'].includes(String(checked)))) refuse(`param_invalid: ${name}`);
     given[name] = checked;
     at[param.in][name] = param.in === 'body' || param.in === 'variables' ? checked
@@ -106,6 +108,7 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
   return callRequest('graphql' in op ? { graphql: op.graphql }
     : { method: op.method ?? 'GET', path: fill(op.path, name => at.path[name] ?? refuse(`param_missing: ${name}`), id) }, {
     ...(Object.keys(at.query).length > 0 ? { query: at.query as Record<string, string> } : {}),
+    ...(Object.keys(at.header).length > 0 ? { headers: at.header as Record<string, string> } : {}),
     // A provider may require a JSON body whose every field is optional: an operation with a body parameter always sends one.
     // One operation never declares both (`param_unplaced`).
     ...(Object.values(op.params ?? {}).some(param => param.in === 'body') ? { json: at.body }
@@ -128,7 +131,7 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
 
   function operation(id: string, op: Operation) {
     const { paging, records, result } = op;
-    for (const [name, param] of Object.entries(op.params ?? {})) if (!placed(op, name, param)) refuse(`param_unplaced: ${id} ${name}`);
+    for (const [name, param] of Object.entries(op.params ?? {})) if (!placed(entry, op, name, param)) refuse(`param_unplaced: ${id} ${name}`);
     for (const path of op.anyOf?.flat() ?? []) if (argumentShape(op, path) === undefined) refuse(`param_group_unknown: ${id} ${path}`);
     // An empty set is always given whole, so it would let every call through.
     if (op.anyOf?.length === 0 || op.anyOf?.some(set => set.length === 0)) refuse(`param_group_unknown: ${id}`);
@@ -136,8 +139,8 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
       return async (args: Given = {}, { signal }: Pick<RequestOptions, 'signal'> = {}) => {
         try {
           const response = await http.request(...operationRequest(id, op, args, signal));
-          // A 204 answers null when no result is declared; any other answer without JSON is `invalid_response`.
-          if (result === undefined && response.status === 204) return null;
+          // An empty 2xx answers null when no result is declared; any other answer without JSON is `invalid_response`.
+          if (result === undefined && emptyAnswers.has(response) && classify(entry, response) === null) return null;
           const answer = responseJson(entry, response);
           return result === undefined ? answer : parseAnswer(schemaOf(result), answer);
         } catch (error) {

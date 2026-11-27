@@ -314,6 +314,20 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(text).not.toContain('ana.lopez');
   });
 
+  test('an ISO 8601 wait header is kept as the instant the engine reads; one holding other text is dropped', async () => {
+    const waiting = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test', retry: { wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } } },
+      identify: { request: { path: '/me' }, id: 'id' } });
+    const resets: Wrap = fetch => async (input, init) => {
+      const response = await fetch(input, init);
+      const reset = response.ok ? '2021-06-15T10:51:23.035+0100' : '2021-06-15T10:51:23 ask ana.lopez@lumen.io';
+      return new Response(response.body, { status: response.status, headers: { 'x-ratelimit-reset': reset } });
+    };
+    const { text, recording } = await recordOnFake(waiting, { key: 'real-key-1', account: { id: 'u-real-881' }, wrap: resets });
+    expect(recording?.exchanges.map(exchange => exchange.headers)).toEqual([{ 'x-ratelimit-reset': '2021-06-15T10:51:23.035+0100' }, {}]);
+    expect(text).not.toContain('ana.lopez');
+  });
+
   test('a token entry: only the token and its life are kept, the token as kit-token, the body with the kit values; it replays', async () => {
     const { text, recording } = await recordOnFake(zoom, { key: 'real-key-1', values: { accountId: 'real-acct-1', clientId: 'real-cid-1' },
       wrap: answering(body => ({ ...body as object, access_token: 'zoom-issued-7Hk2', refresh_token: 'rt-real-99', scope: 'user:read' })) });

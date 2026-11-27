@@ -40,8 +40,9 @@ one takes five steps:
    - read what each page requires, not only what you declare: every parameter it marks required (path, query or body),
      a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
      the list to its one container (a project, a board), are required, and when none of them is its container the list
-     declares the page's sets as `anyOf`; an operation that needs a header whose value changes per call stays out and
-     goes on the [waiting list](docs/waiting-list.md);
+     declares the page's sets as `anyOf`; a header the page requires on one operation is a required `header` parameter
+     (PagerDuty's `From`); a header whose value the page fixes for one operation is a required `header` parameter with
+     that one value as its `enum` (Cal.com's `cal-api-version`);
    - when the page states that at least one of several equal inputs that find or create one record (an email, a LinkedIn
      URL, a domain) is required, none is required and the operation declares the page's sets as `anyOf`
      (`[['email'], ['phone', 'last_name']]`), which the descriptions do not repeat; a rule that reads two ways gives the
@@ -105,13 +106,13 @@ entry:
   (`equals` or `in`), or a query parameter answered as `text` (its `when` may be left out), and is
   `unsigned` only where the provider's page says the handshake carries no signature;
 - retries as the engine can: a `retry.wait` or a rate-limit rule's `wait` reads one header (or a list) or one body
-  path, in `s`, `ms`, `epochSeconds` or `epochMs`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000 when left
-  out) and never beside `onlyStated`;
+  path, in `s`, `ms`, `epochSeconds`, `epochMs` or `iso8601`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000
+  when left out) and never beside `onlyStated`;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
-  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
-  names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's
-  `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id
-  is a client call or a dotted prefix of another;
+  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation names
+  a declared shape and no `notFound`, a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's
+  `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id is
+  a client call or a dotted prefix of another;
 - has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields
   (the refresh URL may also name a host the token answer names), and whose URLs, base and `http.bases` share one host
   when any of them is typed: a token goes only to the host that issued it; a public client (`clientAuth: 'none'`)
@@ -135,8 +136,8 @@ signs in, and, before anything is sent, a value in the base's host (a field's, e
 host the token answer names) that `RECORD_VALUES` does not give as the host alone (an `https://` origin is refused).
 Otherwise it signs in with the key and with a bad key, and writes `src/catalogue/<id>.recording.json`, replacing any
 recording of that name. Each exchange keeps its method, URL, request body, status, `retry-after` and the entry's
-declared wait headers (no other header), and from the answer only the paths the entry reads; at an error or condition
-path, only a provider code, a number or a boolean. It swaps the key, the plain values, the tokens issued, the account's
+declared wait headers, each only as a number or an ISO 8601 instant the engine reads (no other header), and from the
+answer only the paths the entry reads; at an error or condition path, only a provider code, a number or a boolean. It swaps the key, the plain values, the tokens issued, the account's
 id and name and the saved values for the kit's stand-ins. It refuses to write when a sign-in was redirected, when a
 value is too short to swap or a real value is still in an exchange, and when the file, replayed before it is written,
 fails the table test's own replay check ([testing](docs/modules/testing.md#recording-an-entry-with-no-module) says

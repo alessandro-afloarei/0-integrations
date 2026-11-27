@@ -134,16 +134,33 @@ test('an answer keeps its declared keys; a key? missing or null is absent; anyth
   await expect(raw.api.issues.raw()).rejects.toEqual(new ProviderHttpError('invalid_response', null));
 });
 
-test('a 204 answers null when the operation declares no result; with a result, or any other 2xx without JSON, it is invalid_response', async () => {
-  const { fake, api } = setup(() => new Response(null, { status: 204 }));
+const answered = (status: number, body: string | null = null) => () => new Response(body, { status });
+
+test('an operation with no result answers null for any 2xx with an empty body: a 202, a 201, whitespace, a 204', async () => {
+  const { fake, api } = setup(sequence(answered(202), answered(201), answered(200, '   \n'), answered(204), answered(204)));
+  expect(await api.issues.create({ title: 'a' })).toBeNull();
+  expect(await api.issues.create({ title: 'b' })).toBeNull();
+  expect(await api.issues.rate({ score: 1 })).toBeNull();
+  expect(await api.requests.list()).toBeNull();
   expect(await api.issues.delete({ id: 'x' })).toBeNull();
+  expect(wire(fake).map(([method]) => method)).toEqual(['POST', 'POST', 'POST', 'GET', 'DELETE']);
+});
+
+test('a body that is no JSON, or an empty 2xx to an operation with a result, is invalid_response; an error status throws', async () => {
+  const { api } = setup(sequence(answered(202, '<html>proxy</html>'), answered(202), answered(204), answered(403)));
+  await expect(api.issues.create({ title: 'a' })).rejects.toMatchObject({ code: 'invalid_response', status: 202 });
+  await expect(api.issues.archive()).rejects.toMatchObject({ code: 'invalid_response', status: 202 });
   await expect(api.issues.archive()).rejects.toMatchObject({ code: 'invalid_response', status: 204 });
-  expect(wire(fake)).toEqual([['DELETE', `${BASE}/issues/x`, ''], ['PUT', `${BASE}/archive`, '']]);
-  const { api: odd } = setup(sequence(() => new Response('', { status: 200 }), () => new Response('<html>proxy</html>', { status: 200 })));
-  await expect(odd.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
-  await expect(odd.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
-  const { api: refused } = setup(() => new Response(null, { status: 403 }));
-  await expect(refused.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'rejected', status: 403 });
+  await expect(api.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'rejected', status: 403 });
+});
+
+test("hostile: an empty 2xx the entry's errors.failed marks still throws; a paged list's empty page is invalid_response", async () => {
+  const failing = defineProvider({ id: 'failing', name: 'Failing', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    errors: { failed: { status: 200 } }, operations: { 'mail.send': { method: 'POST', path: '/send' } } });
+  const fake = fakeFetch([{ url: /https:/, respond: answered(200) }]);
+  await expect(client(failing, { token: 'k', fetch: fake.fetch }).mail.send()).rejects.toMatchObject({ code: 'request_failed', status: 200 });
+  const { api } = setup(answered(200));
+  await expect(api.issues.list({ teamId: 'T' }).next()).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
 });
 
 test('notFound: null answers a 404 with null; any other operation keeps not_found', async () => {
@@ -317,15 +334,16 @@ test("an app's operation with a parameter in the place its paging shape's `send`
     paging: { list: shape }, operations: { 'things.list': { method: 'POST', kind: 'read', path: '/things', paging: 'list',
       params: { at: { in: place, type: 'integer' } } } } }) as Entry;
   for (const [shape, place] of [[{ kind: 'page', send: { query: 'at' } }, 'query'], [{ kind: 'offset', send: { body: 'at' } }, 'body'],
-    [{ kind: 'cursor', next: 'next', send: { query: 'at' } }, 'query']] as const) {
+    [{ kind: 'cursor', next: 'next', send: { query: 'at' } }, 'query'], [{ kind: 'last', next: 'cursor', send: { query: 'at' } }, 'query']] as const) {
     expect(() => client(entry(shape, place), { token: 'k' })).toThrow(new TypeError('param_paged: things.list at'));
   }
   // The same name in the other place is the caller's own.
   expect(() => client(entry({ kind: 'offset', send: { body: 'at' } }, 'query'), { token: 'k' })).not.toThrow();
   // A cursor written into a JSON body would replace a form's body from the second page on.
   const fake = fakeFetch([]);
-  expect(() => client(entry({ kind: 'cursor', next: 'next', send: { body: 'offset' } }, 'form'), { token: 'k', fetch: fake.fetch }))
-    .toThrow(new TypeError('param_paged: things.list offset'));
+  for (const shape of [{ kind: 'cursor', next: 'next', send: { body: 'offset' } }, { kind: 'last', next: 'id', send: { body: 'offset' } }]) {
+    expect(() => client(entry(shape, 'form'), { token: 'k', fetch: fake.fetch })).toThrow(new TypeError('param_paged: things.list offset'));
+  }
   expect(fake.calls).toEqual([]);
 });
 
@@ -364,11 +382,12 @@ test("an operation whose path's own query names the key its paging writes is ref
   expect(() => client(entry('//x/items?offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
 });
 
-test("an app's operation on an `offset` shape whose `records` is not the shape's `list` is refused when built", () => {
-  const entry = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
-    paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'items' } },
-    operations: { 'things.list': { path: '/things', paging: 'offset', records: 'data', result: { data: ['string'], items: ['string'] } } } } as Entry;
-  expect(() => client(entry, { token: 'k' })).toThrow(new TypeError('records_unpaged: things.list'));
+test("an app's operation on an `offset` or `last` shape whose `records` is not the shape's `list` is refused when built", () => {
+  for (const shape of [{ kind: 'offset', send: { query: 'offset' }, list: 'items' }, { kind: 'last', next: 'id', send: { query: 'after' }, list: 'items' }]) {
+    const entry = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, paging: { list: shape },
+      operations: { 'things.list': { path: '/things', paging: 'list', records: 'data', result: { data: ['string'], items: ['string'] } } } } as Entry;
+    expect(() => client(entry, { token: 'k' })).toThrow(new TypeError('records_unpaged: things.list'));
+  }
 });
 
 test("an app's operation on a `page` shape reads its records at the shape's `list`, or is refused when built", async () => {
@@ -433,4 +452,69 @@ test("an app's `anyOf` path that names no declared argument is refused when its 
   }
   expect(() => client(entry([['email'], ['input.company.domain']]), { token: 'k' })).not.toThrow();
   for (const anyOf of [[['email'], []], []]) expect(() => client(entry(anyOf), { token: 'k' })).toThrow(new TypeError('param_group_unknown: people.get'));
+});
+
+/** Header parameters: an acting user the caller names, and a version one operation must send in place of the entry's. */
+const headed = defineProvider({ id: 'headed', name: 'Headed', auth: [{ kind: 'key' }],
+  http: { baseUrl: BASE, headers: { 'x-version': '1', accept: 'application/json' } },
+  paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } } },
+  operations: {
+    'incidents.create': { method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
+      title: { in: 'body', type: 'string' } } },
+    'items.list': { path: '/items', paging: 'cursor', records: 'items', result: { items: ['string'], 'next?': 'string' },
+      params: { 'x-version': { in: 'header', type: 'string', enum: ['2'], required: true }, 'x-page': { in: 'header', type: 'integer' } } },
+  } });
+
+test('a header parameter is sent as a header: required, given, replacing the entry\'s and the app\'s, never the credential', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const api = client(headed, { token: 'k', fetch: fake.fetch, headers: { from: 'app@acme.test', 'x-app': 'a' } });
+  await expect(untyped(api.incidents.create)({ title: 'Fire' })).rejects.toThrow(new TypeError('param_missing: from'));
+  expect(fake.calls).toEqual([]);
+  await api.incidents.create({ from: 'ana@acme.test', title: 'Fire' });
+  expect(fake.calls[0]).toMatchObject({ method: 'POST', url: `${BASE}/incidents`, body: '{"title":"Fire"}',
+    headers: { from: 'ana@acme.test', 'x-app': 'a', 'x-version': '1', accept: 'application/json', authorization: 'Bearer k' } });
+});
+
+test("a required one-value header replaces the entry's and the app's of its name on every page; without it or another, nothing is sent", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(json({ items: ['a'], next: 'c2' }), json({ items: ['b'] })) }]);
+  const api = client(headed, { token: 'k', fetch: fake.fetch, headers: { 'x-version': 'app' } });
+  const list = (args: Record<string, unknown>) => untyped(api.items.list)(args) as AsyncGenerator<string>;
+  await expect(list({}).next()).rejects.toThrow(new TypeError('param_missing: x-version'));
+  await expect(list({ 'x-version': '9' }).next()).rejects.toThrow(new TypeError('param_invalid: x-version'));
+  expect(fake.calls).toEqual([]);
+  const seen = [];
+  for await (const item of api.items.list({ 'x-version': '2', 'x-page': 3 })) seen.push(item);
+  expect(seen).toEqual(['a', 'b']);
+  // One `x-version` goes out, the operation's, on every page.
+  expect(fake.calls.map(call => [call.url, call.headers['x-version'], call.headers['x-page']])).toEqual([
+    [`${BASE}/items`, '2', '3'], [`${BASE}/items?cursor=c2`, '2', '3']]);
+});
+
+test('H: a header value with a CR, an LF, a NUL or a character past printable ASCII is param_invalid before anything is sent', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const create = untyped(client(headed, { token: 'k', fetch: fake.fetch }).incidents.create);
+  for (const from of ['a\r\nx-evil: 1', 'a\nb', 'a\0b', 'é', 'a b', { a: 1 }, null]) {
+    await expect(create({ from })).rejects.toThrow(new TypeError(from === null ? 'param_missing: from' : 'param_invalid: from'));
+  }
+  expect(fake.calls).toEqual([]);
+  await create({ from: 'tab\tand ~ ok' });
+  expect(fake.calls[0]?.headers.from).toBe('tab\tand ~ ok');
+});
+
+test("an app's header parameter that could not be sent as its own header is refused when its client is built", () => {
+  const entry = (param: object, send?: object, op: object = { method: 'POST', path: '/a' }) => ({ id: 'w', name: 'W', http: { baseUrl: BASE },
+    auth: [{ kind: 'key', ...send && { send } }], operations: { op: { ...op, params: param } } }) as unknown as Entry;
+  for (const [param, send, op] of [
+    [{ authorization: { in: 'header', type: 'string' } }], [{ Authorization: { in: 'header', type: 'string' } }],
+    [{ 'content-type': { in: 'header', type: 'string' } }], [{ Host: { in: 'header', type: 'string' } }],
+    [{ 'x-api-key': { in: 'header', type: 'string' } }, { header: 'X-Api-Key' }],
+    [{ authorization: { in: 'header', type: 'string' } }, { basic: ['{token}', ''] }],
+    [{ x: { in: 'header', type: 'string', nullable: true } }], [{ x: { in: 'header', type: { a: 'string' } } }],
+    [{ x: { in: 'header', type: ['string'] } }], [{ x: { in: 'header', type: 'string' } }, undefined, { graphql: 'query { a }' }],
+  ] as const) {
+    const name = Object.keys(param)[0] ?? '';
+    expect(() => client(entry(param, send, op), { token: 'k' })).toThrow(new TypeError(`param_unplaced: op ${name}`));
+  }
+  // Beside a credential sent in another header, `authorization` is the app's to name.
+  expect(() => client(entry({ authorization: { in: 'header', type: 'string' } }, { header: 'x-api-key' }), { token: 'k' })).not.toThrow();
 });

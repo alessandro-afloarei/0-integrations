@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Vercel: a full-account token names a team's resources with `teamId` (https://vercel.com/docs/accounts/access-tokens);
- * a 429 past a limit; error codes: https://vercel.com/docs/rest-api/errors. Lists answer one page: send `until` from
- * `pagination.next`, a timestamp. Webhooks: hex HMAC-SHA1 of the body in `x-vercel-signature`
+ * a 429 past a limit; error codes: https://vercel.com/docs/rest-api/errors. Deployments walk by `pagination.next`,
+ * a timestamp as `until` (inferred: the token list's rule). Webhooks: hex HMAC-SHA1 of the body in `x-vercel-signature`
  * (https://vercel.com/docs/webhooks/webhooks-api#securing-webhooks). */
 const deployment = { id: 'string', readyState: 'string', 'name?': 'string', 'projectId?': 'string', 'url?': 'string',
   'inspectorUrl?': 'string', 'createdAt?': 'number' } as const;
@@ -21,9 +21,10 @@ export const vercel = defineProvider({
     rejectWhen: [{ status: 403, path: 'error.invalidToken', equals: true }] },
   errors: { detail: 'error.code' },
   webhook: { kind: 'hmac', header: 'x-vercel-signature', hash: 'sha1', deliveryId: { body: ['id'] } },
+  paging: { until: { kind: 'cursor', next: 'pagination.next', send: { query: 'until' } } },
   operations: {
-    'deployments.list': { docs: `${deployments}/list-deployments`, path: '/v7/deployments',
-      params: { projectId: { in: 'query', type: 'string' }, limit: { in: 'query', type: 'number' }, until: { in: 'query', type: 'number' }, teamId },
+    'deployments.list': { docs: `${deployments}/list-deployments`, path: '/v7/deployments', paging: 'until', records: 'deployments',
+      params: { projectId: { in: 'query', type: 'string' }, limit: { in: 'query', type: 'number' }, teamId },
       result: { deployments: [{ uid: 'string', name: 'string', readyState: 'string', projectId: 'string', 'url?': 'string',
         'inspectorUrl?': 'string', createdAt: 'number' }], pagination: { count: 'number', 'next?': 'number', 'prev?': 'number' } } },
     'deployments.get': { docs: `${deployments}/get-a-deployment-by-id-or-url`, path: '/v13/deployments/{idOrUrl}',

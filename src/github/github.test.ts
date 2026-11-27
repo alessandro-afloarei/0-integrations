@@ -75,8 +75,9 @@ test("reports GitHub's rate limits as rate_limited with the wait GitHub asks for
   // The hourly limit lasts until its reset, two minutes from now.
   const primary = answer(403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1793444400' });
   await expect(client(primary.fetch).user()).rejects.toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 120000 });
-  const secondary = answer(403, { 'x-ratelimit-remaining': '4800', 'retry-after': '30' });
-  await expect(client(secondary.fetch).user()).rejects.toMatchObject({ code: 'rate_limited', retryAfterMs: 30000 });
+  // A secondary limit's retry-after past a minute is reported; one within it is waited, then the read sent again.
+  const secondary = answer(403, { 'x-ratelimit-remaining': '4800', 'retry-after': '90' });
+  await expect(client(secondary.fetch).user()).rejects.toMatchObject({ code: 'rate_limited', retryAfterMs: 90000 });
   // A secondary limit may name no wait in any header: its message says what it is, and GitHub asks for a minute.
   const bare = answer(403, { 'x-ratelimit-remaining': '4800' }, 'You have exceeded a secondary rate limit. Please wait a few minutes.');
   await expect(client(bare.fetch).user()).rejects.toMatchObject({ code: 'rate_limited', retryAfterMs: 60000 });

@@ -42,7 +42,7 @@ const condition = <T extends Selects>(schema: z.ZodType<T>) =>
 const when = condition(whenObject);
 /** A wait an answer states: one header, or several (the longest present counts), or one body path. */
 const wait = z.strictObject({ header: z.union([headerName, z.array(headerName).min(1)]).optional(), path: z.string().optional(),
-  unit: z.enum(['s', 'ms', 'epochSeconds', 'epochMs'], { error: "a wait's `unit` is 's', 'ms', 'epochSeconds' or 'epochMs'" }) })
+  unit: z.enum(['s', 'ms', 'epochSeconds', 'epochMs', 'iso8601'], { error: "a wait's `unit` is 's', 'ms', 'epochSeconds', 'epochMs' or 'iso8601'" }) })
   .refine(item => (item.header === undefined) !== (item.path === undefined), 'a `wait` reads one `header` (or a list of headers) or one `path`');
 const send = z.union([z.strictObject({ header: headerName, value: template.regex(/^\P{Cc}*$/u, 'a header `value` holds no control character').optional() }), z.strictObject({ basic: z.tuple([template, template]) }),
   z.strictObject({ query: z.record(z.string(), template) })])
@@ -58,9 +58,11 @@ const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true
   sales: true, mail: true, calendar: true, meetings: true, support: true, marketing: true, finance: true, hr: true,
   storage: true, ecommerce: true, phone: true, design: true, analytics: true, search: true };
 const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 'delete']).optional(),
-  params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'form', 'variables']), type: shape,
+  params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'form', 'variables', 'header']), type: shape,
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
-    description: z.string().optional() })).optional(),
+    description: z.string().optional() }))
+    .refine(params => Object.entries(params).every(([name, param]) => param.in !== 'header' || headerName.safeParse(name).success), headerMessage)
+    .optional(),
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional(),
   anyOf: z.array(z.array(z.string())).optional() };
 const toleranceSeconds = z.number().int().positive().optional();
@@ -157,6 +159,8 @@ const entrySchema = z.strictObject({
     z.strictObject({ kind: z.literal('page'), send: where, list: z.string().optional(), more: z.string().optional(),
       zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional() }),
     z.strictObject({ kind: z.literal('offset'), send: where, list: z.string().optional(), more: z.string().optional() }),
+    z.strictObject({ kind: z.literal('last'), next: z.string().min(1, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"),
+      send: where, list: z.string().optional(), more: z.string().optional() }),
     z.strictObject({ kind: z.literal('linkHeader'), pathPrefix }),
     z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix }),
   ])).optional(),
@@ -217,6 +221,7 @@ const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs,
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
+const PLACED = "a `params[].in` the operation's request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL, a header a scalar, never `nullable`, never named `content-type`, `host` or a sign-in's credential header)";
 const runnable = {
   // The host the URL parser reads is then the host part every other rule reads.
   [WELL_FORMED_URLS]: (entry: Entry) => declaredUrls(entry).every(url => hostPart(url) !== undefined),
@@ -338,8 +343,8 @@ const runnable = {
   // `json` or `then` would hide one of the client's own.
   '`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)': (entry: Entry) => clashing(Object.keys(entry.operations ?? {})) === undefined,
   // A parameter with no place in the request would be left off it silently.
-  'a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)': (entry: Entry) => operations(entry).every(op =>
-    Object.entries(op.params ?? {}).every(([name, param]) => placed(op, name, param))),
+  [PLACED]: (entry: Entry, whole: Entry = entry) => operations(entry).every(op =>
+    Object.entries(op.params ?? {}).every(([name, param]) => placed(whole, op, name, param))),
   // The client checks an argument against its enum as a string.
   '`params[].enum` only on a `type: \'string\'` parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
   // A path segment, a query value and a form value are one string each: never null, a list or an object.
@@ -404,7 +409,7 @@ const runnable = {
   // The rule the engine runs before every OAuth 2 request and every call on a named base.
   [HOST_SPLIT]: (entry: Entry) => !hostSplit(entry),
   // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
-  "an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
+  "an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
     operations(entry).every(op => { const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
       return shape === undefined || pagedRecords(op, shape); }),
   // The walk sets that parameter itself on every page after the first.
@@ -705,13 +710,20 @@ test.each<[Rule, Entry]>([
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { '': { path: '/a' } }],
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { 'a..b': { path: '/a' } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'form', type: 'string' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: 'string' }, r: { in: 'body', type: 'string' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { q: { in: 'form', type: 'string' } } } }],
+    [PLACED, { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
+    [PLACED, { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
+    [PLACED, { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
+    [PLACED, { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
+    [PLACED, { get: { path: '/items', params: { q: { in: 'form', type: 'string' } } } }],
+    [PLACED, { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: 'string' }, r: { in: 'body', type: 'string' } } } }],
+    [PLACED, { me: { graphql: 'query { me { id } }', params: { q: { in: 'form', type: 'string' } } } }],
+    [PLACED, { add: { method: 'POST', path: '/items', params: { authorization: { in: 'header', type: 'string' } } } }],
+    [PLACED, { add: { method: 'POST', path: '/items', params: { 'content-type': { in: 'header', type: 'string' } } } }],
+    [PLACED, { add: { method: 'POST', path: '/items', params: { host: { in: 'header', type: 'string' } } } }],
+    [PLACED, { add: { method: 'POST', path: '/items', params: { from: { in: 'header', type: 'string', nullable: true } } } }],
+    [PLACED, { add: { method: 'POST', path: '/items', params: { from: { in: 'header', type: { a: 'string' } } } } }],
+    [PLACED, { add: { method: 'POST', path: '/items', params: { from: { in: 'header', type: ['string'] } } } }],
+    [PLACED, { me: { graphql: 'query { me { id } }', params: { from: { in: 'header', type: 'string' } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: { a: 'string' } } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: 'string', nullable: true } } } }],
     ['`notFound` only on an operation with no `paging`', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
@@ -753,19 +765,24 @@ test.each<[Rule, Entry]>([
     { echo: { query: 'challenge' }, when: { path: 'type', detail: 'ping' }, text: true, unsigned: true }] as const)
     .map((challenge): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query may leave `when` out)",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'standard', challenge } })]),
-  ["an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+  ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' }, list: 'items' } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'result.items',
       result: { result: { items: [{ id: 'string' }] } } } } })],
-  ["an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+  ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { offset: { kind: 'offset', send: { body: 'offset' }, list: 'data' } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'offset',
       result: { data: [{ id: 'string' }] } } } })],
-  ["an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+  ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' } } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'items', result: { items: [{ id: 'string' }] } } } })],
+  ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+    auth: [{ kind: 'key' }], fields: [secret], paging: { last: { kind: 'last', next: 'id', send: { query: 'after' }, list: 'data' } },
+    operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'last', records: 'items',
+      result: { data: [{ id: 'string' }], items: [{ id: 'string' }] } } } })],
   ...([[{ kind: 'page', send: { query: 'page' } }, 'page', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'cursor', 'body'],
-    [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'q', 'form']] as const)
+    [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'q', 'form'],
+    [{ kind: 'last', next: 'id', send: { query: 'after' } }, 'after', 'query'], [{ kind: 'last', next: 'id', send: { body: 'after' } }, 'q', 'form']] as const)
     .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
@@ -917,6 +934,11 @@ test.each<[string, Entry, string[]]>([
       http: { baseUrl: 'https://{host}/api', host: '*.k.test' } }] }), [`${HOST_SPLIT} (token)`]],
   ['a Basic email the key alone reads, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }],
     scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }), [`${OAUTH_READS} (oauth2)`]],
+  // A header parameter named as any sign-in's credential is refused on every sign-in: one entry, its operations shared.
+  ['a header parameter named as a later key\'s credential header', defineProvider({ ...key, fields: [secret], scopes: { default: [] },
+    auth: [oauth2.auth[0], { kind: 'key', send: { header: 'x-api-key' } }],
+    operations: { add: { docs: 'https://k.test/docs/add', method: 'POST', path: '/items', params: { 'x-api-key': { in: 'header', type: 'string' } } } } }),
+    [`${PLACED} (oauth2)`, `${PLACED} (key)`]],
 ])('%s breaks only its rule', (_, entry, rules) => { expect(broken(entry)).toEqual(rules); });
 
 test.each<[string, Entry]>([
@@ -1014,9 +1036,17 @@ test.each<[string, Record<string, unknown>, string]>([
     'Unrecognized key: "resetAt"'],
   ['a wait with both a header and a path', { retry: { wait: { header: 'x-reset', path: 'wait', unit: 's' } } },
     'a `wait` reads one `header` (or a list of headers) or one `path`'],
-  ['a wait in minutes', { retry: { wait: { header: 'x-reset', unit: 'min' } } }, "a wait's `unit` is 's', 'ms', 'epochSeconds' or 'epochMs'"],
+  ['a wait in minutes', { retry: { wait: { header: 'x-reset', unit: 'min' } } }, "a wait's `unit` is 's', 'ms', 'epochSeconds', 'epochMs' or 'iso8601'"],
 ])('%s fails the schema, with what to fix', (_, http, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, ...http } };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+});
+
+test.each<[string, object, string]>([
+  ['a header parameter named with a capital', { From: { in: 'header', type: 'string' } }, headerMessage],
+  ['a header parameter named with a space', { 'x from': { in: 'header', type: 'string' } }, headerMessage],
+])('%s fails the schema, with what to fix', (_, params, message) => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], operations: { add: { method: 'POST', path: '/items', params } } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
 
@@ -1031,6 +1061,9 @@ test.each<[Record<string, unknown>, string]>([
   [{ kind: 'page', send: { query: 'page' }, zeroBased: false }, '`zeroBased` is `true` or left out (the first page is 1)'],
   [{ kind: 'offset', send: { query: 'offset' }, zeroBased: true }, 'Unrecognized key: "zeroBased"'],
   [{ kind: 'linkHeader', zeroBased: true }, 'Unrecognized key: "zeroBased"'],
+  [{ kind: 'last', next: 'cursor', send: { query: 'cursor' }, zeroBased: true }, 'Unrecognized key: "zeroBased"'],
+  [{ kind: 'last', next: 'cursor', send: { query: 'cursor' }, pathPrefix: '/me/' }, 'Unrecognized key: "pathPrefix"'],
+  [{ kind: 'last', next: '', send: { query: 'cursor' } }, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"],
   [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
   ...['me', '/me', 'me/'].flatMap(pathPrefix => [{ kind: 'linkHeader', pathPrefix }, { kind: 'nextUrl', next: 'next', pathPrefix }]
     .map((shape): [Record<string, unknown>, string] => [shape, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)'])),
@@ -1085,6 +1118,8 @@ test('an entry whose operations keep every rule passes them all', () => {
       'people.get': { docs: 'https://k.test/docs/people', method: 'POST', path: '/people', anyOf: [['email'], ['person.name', 'person.company.domain']],
         params: { email: { in: 'body', type: 'string' }, person: { in: 'body', type: { 'name?': 'string', 'company?': { domain: 'string' } }, required: true } } },
       me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
+      'incidents.create': { docs: 'https://k.test/docs/incidents', method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
+        'x-version': { in: 'header', type: 'string', enum: ['2026-05-01'], required: true, description: 'The version this operation needs.' } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
   expect(entrySchema.safeParse(good).error).toBeUndefined();

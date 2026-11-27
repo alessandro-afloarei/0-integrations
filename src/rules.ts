@@ -20,6 +20,9 @@ export function readPath(value: unknown, path: Path): unknown {
   return Object.hasOwn(record, head) ? readPath(record[head], path.slice(dot + 1)) : undefined;
 }
 
+/** A value as text: a non-empty string, or a non-negative safe integer as its digits; null for any other (a cursor, a code). */
+export const textOf = (value: unknown) => typeof value === 'string' && value !== '' ? value : Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : null;
+
 /** The shape at a dotted path through an object shape's keys, the whole rest tried as one key first, as `readPath` reads. */
 export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined {
   if (typeof shape !== 'object' || Array.isArray(shape)) return undefined;
@@ -37,19 +40,23 @@ export function argumentShape(op: Operation, path: Path): Shape | undefined {
 }
 
 /** Whether a parameter has a place in its operation's request: GraphQL takes only variables; a path operation takes no
- * variables, a path parameter only where its path names it, and a body or form parameter only when it is not a GET and
- * the operation has no parameter of the other of the two. */
-export function placed(op: Operation, name: string, param: Param): boolean {
+ * variables, a path parameter only where its path names it, a body or form parameter only when it is not a GET and
+ * the operation has no parameter of the other of the two, and a header one only as a scalar, never `nullable`, never
+ * named `content-type`, `host` or a sign-in's credential header (`authorization` unless its `send` names another). */
+export function placed(entry: Entry, op: Operation, name: string, param: Param): boolean {
+  const credentials = entry.auth.map(auth => ('send' in auth && 'header' in auth.send ? auth.send.header : 'authorization').toLowerCase());
+  if (param.in === 'header') return !('graphql' in op) && param.nullable === undefined && typeof param.type === 'string'
+    && !['content-type', 'host', ...credentials].includes(name.toLowerCase());
   return 'graphql' in op ? param.in === 'variables'
     : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))
       && ((param.in !== 'body' && param.in !== 'form') || ((op.method ?? 'GET') !== 'GET'
         && !Object.values(op.params ?? {}).some(each => each.in === (param.in === 'body' ? 'form' : 'body'))));
 }
 
-/** Whether a paged operation reads its records where its shape walks: on a `page` or `offset` shape, at the shape's
- * `list` (both left out for a list at the answer's top level), else the walk and the records read two lists. */
+/** Whether a paged operation reads its records where its shape walks: on a `page`, `offset` or `last` shape, at the
+ * shape's `list` (both left out for a list at the answer's top level), else the walk and the records read two lists. */
 export function pagedRecords(op: Operation, shape: Paging): boolean {
-  return (shape.kind !== 'page' && shape.kind !== 'offset') || op.records === shape.list;
+  return !(shape.kind === 'page' || shape.kind === 'offset' || shape.kind === 'last') || op.records === shape.list;
 }
 
 /** The parameter an operation declares in the place its paging shape's `send` writes, if any: the walk sends that value

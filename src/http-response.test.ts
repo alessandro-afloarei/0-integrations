@@ -89,11 +89,13 @@ const limits: Rules = {
   errors: { detail: 'error.code' },
 };
 
-test('a declared rate limit waits its reset, Retry-After first, else the default', () => {
+test('a declared rate limit waits its reset, or a later Retry-After, else the default', () => {
   const reset = String(NOW / 1000 + 90);
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset })).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': 'soon' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
-  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset, 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 30_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset, 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 90_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 + 10), 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 30_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': 'soon', 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 30_000 });
   expect(fail(limits, 403, { message: 'Please SLOW DOWN' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
   expect(fail(limits, 403, { error: { code: 'quota' } })).toMatchObject({ code: 'rate_limited', detail: 'quota', retryAfterMs: 60_000 });
   expect(fail(limits, 403, { error: { code: 403 } })).toMatchObject({ code: 'rejected', detail: '403', retryAfterMs: null });
@@ -101,12 +103,14 @@ test('a declared rate limit waits its reset, Retry-After first, else the default
   expect(fail(limits, 403, {})).toMatchObject({ code: 'rejected', retryAfterMs: null });
 });
 
-test("a declared rate limit's error carries the stated wait first: Retry-After, else retry.wait, else the rule's", () => {
+test("a declared rate limit's error carries the stated wait (Retry-After, else retry.wait), or the rule's own when later", () => {
   const both: Rules = { http: { ...BASE, retry: { limit: 0, wait: { path: 'waitMs', unit: 'ms' } },
     rateLimit: { when: [{ status: 429, wait: { header: 'x-reset', unit: 's' } }] } } };
-  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 5000 });
+  expect(fail(both, 429, { waitMs: 15_000 }, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 15_000 });
+  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 9000 });
   expect(fail(both, 429, {}, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 9000 });
-  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9', 'Retry-After': '2' })).toMatchObject({ retryAfterMs: 2000 });
+  expect(fail(both, 429, { waitMs: 15_000 }, { 'x-reset': '9', 'Retry-After': '2' })).toMatchObject({ retryAfterMs: 9000 });
+  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9', 'Retry-After': '20' })).toMatchObject({ retryAfterMs: 20_000 });
 });
 
 test('a rule with no status holds on any status and names its own detail', () => {
@@ -251,8 +255,11 @@ test.each(['a b', 'a@b.test', 'error\nprivate', 'x'.repeat(65)])('an unsafe prov
   expect(gone).toMatchObject({ detail: null });
 });
 
-test('a reset already past waits 0; one beyond the safe range once in milliseconds the largest; a negative body wait none', () => {
-  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: 0 });
+test('a reset already past states none, so the default; one beyond the safe range the largest; a negative body wait none', () => {
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10), 'Retry-After': '3' })).toMatchObject({ retryAfterMs: 3000 });
+  const noDefault: Rules = { http: { ...BASE, rateLimit: { when: [{ status: 429, wait: { header: 'x-reset', unit: 'epochSeconds' } }] } } };
+  expect(fail(noDefault, 429, {}, { 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(Number.MAX_SAFE_INTEGER) }))
     .toMatchObject({ code: 'rate_limited', retryAfterMs: Number.MAX_SAFE_INTEGER });
   const chat: Rules = { http: { ...BASE, retry: { wait: { path: 'waitMs', unit: 'ms' } } } };
@@ -294,6 +301,35 @@ test('codeOf: an earlier code that `allow` refuses hides a later allowed one', (
   expect(codeOf({ detail: ['a', 'b'], allow: ['KNOWN'] }, { a: 'OTHER', b: 'KNOWN' })).toBeUndefined();
   expect(codeOf({ detail: ['a', 'b'], allow: ['KNOWN'] }, { a: '', b: 'KNOWN' })).toBe('KNOWN');
   expect(codeOf({ detail: ['a', 'b'], allow: ['KNOWN'] }, { b: 'KNOWN' })).toBe('KNOWN');
+});
+
+test('an ISO 8601 instant with its zone waits until then, at least 0; any other form states no wait', () => {
+  const header = (text: string) => waitOf({ header: 'x-ratelimit-reset', unit: 'iso8601' },
+    { headers: new Headers({ 'x-ratelimit-reset': text }), body: {} }, NOW);
+  // NOW is 2026-11-01T12:00:00Z: Teamleader's form, an offset without a colon, then the same instants otherwise written.
+  for (const [text, ms] of [['2026-11-01T12:59:55.035+0100', 0], ['2026-11-01T13:00:05.035+0100', 5035],
+    ['2026-11-01T13:00:05.035+01:00', 5035], ['2026-11-01T11:59:55Z', 0], ['2026-11-01T12:00:05Z', 5000],
+    ['2026-11-01T12:00:05.5Z', 5500], ['2026-11-01T12:00:05.000000001Z', 5001], ['2026-11-01T12:00:05.123456789Z', 5124],
+    ['2026-11-01T12:00:05-00:00', 5000], ['2026-11-02T11:59:05+2359', 5000], ['2026-11-01T07:00:05-0500', 5000], ['9999-12-31T23:59:59Z', Date.UTC(9999, 11, 31, 23, 59, 59) - NOW]] as const) {
+    expect(header(text)).toBe(ms);
+  }
+  for (const text of ['2026-11-01', 'Sun, 01 Nov 2026 12:00:05 GMT', '1793534405', '2026-11-01T12:00:05', '2026-11-01 12:00:05Z',
+    '2026-11-01T12:00:05+1', '2026-11-01T12:00:05.Z', '2026-02-30T12:00:05Z', '2026-11-01T24:00:00Z',
+    '2026-11-01T12:00:05+2400', '2026-11-01T12:00:05+9999', '2026-11-01T12:00:05-9999', '2026-11-01T12:00:05+01:60', `2026-11-01T12:00:05.${'1'.repeat(180)}Z`, 'x'.repeat(200)]) {
+    expect(header(text)).toBeUndefined();
+  }
+  const body = (value: unknown) => waitOf({ path: 'reset', unit: 'iso8601' }, { headers: new Headers(), body: { reset: value } }, NOW);
+  expect(body('2026-11-01T12:00:05Z')).toBe(5000);
+  expect(body(Date.UTC(2026, 10, 1, 12, 0, 5))).toBeUndefined();
+});
+
+test("an ISO 8601 header wait is a 429's alone; one in the year 9999 is measured whole", () => {
+  const reset: Rules = { http: { ...BASE, retry: { wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } } } };
+  expect(fail(reset, 429, {}, { 'x-ratelimit-reset': '2026-11-01T13:00:05+0100' })).toMatchObject({ retryAfterMs: 5000 });
+  expect(fail(reset, 429, {}, { 'x-ratelimit-reset': '2026-11-01T13:00:05.0001+0100' })).toMatchObject({ retryAfterMs: 5001 });
+  expect(fail(reset, 429, {}, { 'x-ratelimit-reset': '2026-11-01T12:59:55+0100' })).toMatchObject({ retryAfterMs: null });
+  expect(fail(reset, 404, {}, { 'x-ratelimit-reset': '2026-11-01T13:00:05+0100' })).toMatchObject({ retryAfterMs: null });
+  expect(fail(reset, 429, {}, { 'x-ratelimit-reset': '9999-12-31T23:59:59Z' })).toMatchObject({ retryAfterMs: Date.UTC(9999, 11, 31, 23, 59, 59) - NOW });
 });
 
 test("a declared header wait is a 429's alone, Retry-After first", () => {

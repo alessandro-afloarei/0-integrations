@@ -2,7 +2,7 @@ import type { Entry, Errors, Http, Retry, Wait } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError, type ProviderErrorCode } from './errors.js';
 import type { ProviderResponse } from './http.js';
 import { retryAfterMs } from './retry-after.js';
-import { holds, readPath, type Answer } from './rules.js';
+import { holds, readPath, textOf, type Answer } from './rules.js';
 
 function statusCode(status: number): ProviderErrorCode {
   if (status === 401 || status === 403) return 'rejected';
@@ -24,6 +24,9 @@ export function safeDetail(code: string, secrets: readonly string[] = []): strin
 /** The credentials each answer's request sent, so a code echoing one is never a detail; they never leave this library. */
 const credentials = new WeakMap<ProviderResponse, readonly string[]>();
 
+/** The 2xx answers whose body held nothing but whitespace, which an operation with no result reads as null. */
+export const emptyAnswers = new WeakSet<ProviderResponse>();
+
 /** Records the credentials `response`'s request sent; only the HTTP client calls it. */
 export function sentWith(response: ProviderResponse, sent: readonly string[]): ProviderResponse {
   credentials.set(response, sent);
@@ -44,18 +47,30 @@ export function responseJson(entry: Pick<Entry, 'http' | 'errors'>, response: Pr
  * as its digits), kept only if `allow` lists it. */
 export function codeOf(errors: Errors | undefined, body: unknown): string | undefined {
   const paths = typeof errors?.detail === 'string' ? [errors.detail] : errors?.detail ?? [];
-  const code = paths.map(path => readPath(body, path)).map(value => (Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : value))
-    .find(value => typeof value === 'string' && value !== '');
-  return typeof code === 'string' && (errors?.allow?.includes(code) ?? true) ? code : undefined;
+  const code = paths.map(path => textOf(readPath(body, path))).find(value => value !== null);
+  return code && (errors?.allow?.includes(code) ?? true) ? code : undefined;
+}
+
+/** An ISO 8601 instant with its zone (Teamleader's `2021-06-15T10:51:23.035+0100`) in epoch milliseconds, read by its
+ * own pattern, never `Date.parse`'s wider grammar; a time the calendar lacks (30 February, 24:00) is none. */
+export function instantMs(value: unknown): number | undefined {
+  const [, time = '', fraction = '', sign, hours = '', minutes = ''] = typeof value === 'string'
+    ? /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(?:Z|([+-])([01]\d|2[0-3]):?([0-5]\d))$/u.exec(value) ?? [] : [];
+  const local = Date.parse(`${time}Z`);
+  if (Number.isNaN(local) || new Date(local).toISOString().slice(0, 19) !== time) return undefined;
+  // A fraction is rounded up, so the wait never ends before the instant.
+  return local + Math.ceil(Number(`0.${fraction}`) * 1000) - (sign === '-' ? -1 : 1) * (Number(hours) * 60 + Number(minutes)) * 60_000;
 }
 
 /** The wait `wait` reads from an answer, in milliseconds from `now` (an instant already past is 0); `retryAfterMs`
  * checks its range, in milliseconds. The one reader of a declared wait, for the retry and for the error. */
 export function waitOf(wait: Wait | undefined, { headers, body }: Pick<Answer, 'headers' | 'body'>, now: number): number | undefined {
   if (wait === undefined) return undefined;
-  // A header holds a positive decimal number (the longest of those present counts), a body a number from 0.
-  const read = 'path' in wait ? [readPath(body, wait.path)] : [wait.header].flat().map(name => headers.get(name) ?? '')
-    .filter(text => /^\d+(?:\.\d+)?$/u.test(text)).map(Number).filter(value => value > 0);
+  // A header holds a positive decimal number (the longest of those present counts), a body a number from 0; an
+  // `iso8601` wait either's string, an instant.
+  const read = 'path' in wait ? [readPath(body, wait.path)].map(value => (wait.unit === 'iso8601' ? instantMs(value) : value))
+    : [wait.header].flat().map(name => headers.get(name) ?? '').map(text => (wait.unit === 'iso8601' ? instantMs(text)
+      : /^\d+(?:\.\d+)?$/u.test(text) && Number(text) > 0 ? Number(text) : undefined));
   const values = read.filter((value): value is number => typeof value === 'number' && value >= 0);
   if (values.length === 0) return undefined;
   const ms = Math.max(...values) * (wait.unit === 's' || wait.unit === 'epochSeconds' ? 1000 : 1);
@@ -66,10 +81,15 @@ export function waitOf(wait: Wait | undefined, { headers, body }: Pick<Answer, '
 export const declaredWait = (wait: Wait | undefined, answer: Pick<Answer, 'status' | 'headers' | 'body'>, now: number) =>
   (wait && ('path' in wait || answer.status === 429) ? waitOf(wait, answer, now) || undefined : undefined);
 
-/** A rate limit the entry declares beyond a 429: the first rule that holds, waiting its `wait`, else the default. */
-function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined } | undefined {
+/** The errors a declared rate limit makes (step 3), each with its rule's own wait: a read retries one as a 429. */
+const declaredLimits = new WeakMap<Error, number | undefined>();
+export const declaredLimit = (error: Error | null): { own: number | undefined } | undefined =>
+  (error !== null && declaredLimits.has(error) ? { own: declaredLimits.get(error) } : undefined);
+
+/** A rate limit the entry declares beyond a 429: the first rule that holds, with its own `wait` as read. */
+function rateLimitOf(http: Http, answer: Answer, now: number): { own: number | undefined } | undefined {
   const rule = http.rateLimit?.when.find(item => holds(item, answer));
-  return rule && { waitMs: waitOf(rule.wait, answer, now) ?? http.rateLimit?.defaultWaitMs };
+  return rule && { own: waitOf(rule.wait, answer, now) };
 }
 
 /** No `retry`: none. With one: a single retry, waits up to a minute, a second by default; a `limit` of 0 waits nothing. */
@@ -101,8 +121,18 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   const rule = errors.rules?.find(item => holds(item.when, answer));
   if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, { retryAfterMs: retryAfterMs(headers, now, stated) });
   const limit = rateLimitOf(entry.http, answer, now);
-  // The wait the retry read first (`statedWait`); the rate limit's only when the answer states none.
-  const metadata = { retryAfterMs: retryAfterMs(headers, now, stated ?? limit?.waitMs) };
-  if (limit) return new ProviderHttpError('rate_limited', status, detail, metadata);
+  // The wait the retry reads (a header's on a rate limit as on a 429), raised to the rule's own when that is later, else
+  // `rateLimit.defaultWaitMs` (a past reset states none): an app that waits it never calls before a stated time.
+  const waited = limit
+    ? declaredWait(entry.http.retry?.wait, { ...answer, status: 429 }, now) ?? (limit.own || undefined) ?? entry.http.rateLimit?.defaultWaitMs
+    : stated;
+  const own = limit?.own ? retryAfterMs(new Headers(), now, limit.own) : null;
+  const carried = retryAfterMs(headers, now, waited);
+  const metadata = { retryAfterMs: own === null ? carried : Math.max(carried ?? 0, own) };
+  if (limit) {
+    const error = new ProviderHttpError('rate_limited', status, detail, metadata);
+    declaredLimits.set(error, limit.own);
+    return error;
+  }
   return new ProviderHttpError(ok ? 'request_failed' : statusCode(status), status, detail, metadata);
 }

@@ -82,9 +82,10 @@ export function fakeFetch(routes: readonly Route[]): { fetch: typeof fetch; call
   };
 }
 
-/** What a derived fake hands an operation's answer function: the request's path parameters, query and body (JSON, or a
- * form's fields as strings). */
-export type FakeCall = { path: Readonly<Record<string, string>>; query: Readonly<Record<string, string>>; body: unknown };
+/** What a derived fake hands an operation's answer function: the request's path parameters, query, body (JSON, or a
+ * form's fields as strings) and headers. */
+export type FakeCall = { path: Readonly<Record<string, string>>; query: Readonly<Record<string, string>>; body: unknown;
+  headers: Readonly<Record<string, string>> };
 type Answer = (call: FakeCall) => unknown;
 
 /** A URL as a route compares it: no query, and a bare origin without its `/`. */
@@ -146,7 +147,8 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
       const text = await request.clone().text();
       const form = request.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded');
       const value = await answer({ path: Object.fromEntries(placeholders(template).map((name, at) => [name, decodeURIComponent(params[at] ?? '')])),
-        query: Object.fromEntries(url.searchParams), body: form ? Object.fromEntries(new URLSearchParams(text)) : parseJson(text) }, request);
+        query: Object.fromEntries(url.searchParams), body: form ? Object.fromEntries(new URLSearchParams(text)) : parseJson(text),
+        headers: Object.fromEntries(request.headers) }, request);
       return value instanceof Response ? value : value === undefined ? Response.json({ error: 'not_found' }, { status: 404 }) : Response.json(value);
     } }];
   };
@@ -164,11 +166,13 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     if ('graphql' in op) graphql.push([base(), op.graphql, answer]);
     else paths.push([op.method ?? 'GET', op.path, op, answer]);
   }
-  // One route per method and path: of its operations, the one whose required query and body parameters the call all carries, the most first.
+  // One route per method and path: of its operations, the one whose required query, body and header parameters the call all
+  // carries, the most first.
   for (const [method, path] of paths.filter(([method, path], at) => paths.findIndex(([m, p]) => m === method && p === path) === at)) {
     routes.push(route(method, base(), path, call => paths.filter(([m, p]) => m === method && p === path).map(([, , op, answer]) => {
       const required = Object.entries(op.params ?? {}).filter(([, param]) => param.required && param.in !== 'path');
-      const carried = required.every(([name, param]) => (param.in === 'query' ? Object.hasOwn(call.query, name) : readPath(call.body, name) !== undefined));
+      const carried = required.every(([name, param]) => (param.in === 'query' ? Object.hasOwn(call.query, name)
+        : param.in === 'header' ? Object.hasOwn(call.headers, name.toLowerCase()) : readPath(call.body, name) !== undefined));
       return [carried ? required.length : -1, answer] as const;
     }).reduce((best, next) => (next[0] > best[0] ? next : best))[1](call)));
   }
