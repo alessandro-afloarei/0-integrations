@@ -4,6 +4,7 @@ import type { Webhook } from './catalogue.js';
 import { airtable } from './catalogue/airtable.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { chatwork } from './catalogue/chatwork.js';
+import { close } from './catalogue/close.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { gitlab } from './catalogue/gitlab.js';
@@ -316,6 +317,21 @@ test("verifies Chatwork's `x-chatworkwebhooksignature`: the base64 HMAC of the b
   expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': base64Of(keyBytes) }), token)).toBe(true);
   expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': base64Of(token) }), token)).toBe(false);
   expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': hmacHex(keyBytes) }), token)).toBe(false);
+});
+
+/** Close's example `signature_key` (its Webhooks page); the hash is the hex HMAC of `close-sig-timestamp` and the body. */
+const closeKey = '058bfb6a3d8cfdc4da7c3be5901b16ae11da982b46a25fb2cd7016e97a140a1c';
+const closeSigned = (timestamp: string, signedAt = timestamp, key: Buffer | string = Buffer.from(closeKey, 'hex')) =>
+  request({ 'close-sig-hash': hmacHex(key, Buffer.concat([Buffer.from(signedAt), body])), 'close-sig-timestamp': timestamp });
+
+test("verifies Close's `close-sig-hash` over `close-sig-timestamp` and the body, keyed with the hex `signature_key` decoded", () => {
+  expect(verifyWebhook(close.webhook, closeSigned(t), closeKey)).toBe(true);
+  expect(verifyWebhook(close.webhook, closeSigned(t, t, closeKey), closeKey)).toBe(false);
+  expect(verifyWebhook(close.webhook, closeSigned(String(now - 300)), closeKey)).toBe(true);
+  expect(verifyWebhook(close.webhook, closeSigned(String(now - 301)), closeKey)).toBe(false);
+  expect(verifyWebhook(close.webhook, closeSigned(t, String(now - 3600)), closeKey)).toBe(false);
+  expect(verifyWebhook(close.webhook, { ...closeSigned(t), headers: new Headers({ 'close-sig-hash': hmacHex(Buffer.from(closeKey, 'hex')) }) }, closeKey)).toBe(false);
+  expect(verifyWebhook(close.webhook, closeSigned(t), closeKey.slice(1))).toBe(false);
 });
 
 test('an empty secret accepts nothing, whatever the kind', () => {

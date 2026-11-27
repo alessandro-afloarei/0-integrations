@@ -24,6 +24,8 @@ export const close = defineProvider({
   http: { baseUrl: 'https://api.close.com/api/v1', retry: {} },
   identify: { request: { path: '/me/' }, id: 'id', name: 'email' },
   errors: { detail: 'error_code' },
+  webhook: { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
+    timestamp: { header: 'close-sig-timestamp' } },
   paging: { skip: { kind: 'offset', send: { query: '_skip' }, list: 'data', more: 'has_more' },
     cursor: { kind: 'cursor', next: 'cursor', send: { body: 'cursor' } } },
   operations: {
