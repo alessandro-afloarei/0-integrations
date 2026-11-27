@@ -11,6 +11,7 @@ const thread = { id: 'string', ref: 'string', title: 'string', status: 'string',
   createdAt: time, updatedAt: time } as const;
 const pageInfo = { hasNextPage: 'boolean', 'endCursor?': 'string' } as const;
 const first = { first: { in: 'variables', type: 'integer', description: '25 by default, at most 100.' } } as const;
+const size = { first: { ...first.first, required: true } } as const;
 const page = { ...first, after: { in: 'variables', type: 'string', description: 'The `endCursor` of the page before.' } } as const;
 const threadId = { threadId: { in: 'variables', type: 'string', required: true } } as const;
 const reference = 'https://www.plain.com/docs/graphql-reference/queries';
@@ -28,20 +29,20 @@ export const plain = defineProvider({
   // A query's error code is in `extensions.code`: https://www.plain.com/docs/graphql/reporting
   errors: { detail: 'errors.0.extensions.code', failed: { path: 'errors.0' } },
   webhook: { kind: 'hmac', header: 'plain-request-signature', deliveryId: { body: ['id'] } },
-  // Relay paging (https://www.plain.com/docs/graphql/pagination), `hasNextPage` false on the last page:
-  // https://relay.dev/graphql/connections.htm
+  // Relay paging (https://www.plain.com/docs/graphql/pagination): `hasNextPage` is false on the last page when `first`
+  // is sent, so the paged lists require it: https://relay.dev/graphql/connections.htm
   paging: { threads: { kind: 'cursor', next: 'data.threads.pageInfo.endCursor', more: 'data.threads.pageInfo.hasNextPage', send: { variables: 'after' } },
     search: { kind: 'cursor', next: 'data.searchThreads.pageInfo.endCursor', more: 'data.searchThreads.pageInfo.hasNextPage', send: { variables: 'after' } },
     customers: { kind: 'cursor', next: 'data.customers.pageInfo.endCursor', more: 'data.customers.pageInfo.hasNextPage', send: { variables: 'after' } } },
   operations: {
     'threads.list': { docs: `${reference}/threads`, kind: 'read', paging: 'threads', records: 'data.threads.edges',
       graphql: `query Threads($filters: ThreadsFilter, $first: Int, $after: String) { threads(filters: $filters, first: $first, after: $after) { edges { node { ${threadFields} } } pageInfo { hasNextPage endCursor } } }`,
-      params: { filters: { in: 'variables', type: 'unknown', description: 'A ThreadsFilter (statuses, customer IDs, labels, …).' }, ...first },
+      params: { filters: { in: 'variables', type: 'unknown', description: 'A ThreadsFilter (statuses, customer IDs, labels, …).' }, ...size },
       result: { data: { threads: { edges: [{ node: thread }], pageInfo } } } },
     'threads.search': { docs: `${reference}/searchThreads`, kind: 'read', paging: 'search', records: 'data.searchThreads.edges',
       graphql: `query SearchThreads($searchQuery: ThreadsSearchQuery!, $first: Int, $after: String) { searchThreads(searchQuery: $searchQuery, first: $first, after: $after) { edges { node { thread { ${threadFields} } } } pageInfo { hasNextPage endCursor } } }`,
       params: { searchQuery: { in: 'variables', required: true, type: { term: 'string' },
-        description: '`term`, 3 to 500 characters, matched against titles, messages and customers\' names and emails.' }, ...first },
+        description: '`term`, 3 to 500 characters, matched against titles, messages and customers\' names and emails.' }, ...size },
       result: { data: { searchThreads: { edges: [{ node: { thread } }], pageInfo } } } },
     'threads.get': { docs: `${reference}/thread`, kind: 'read',
       graphql: `query Thread($threadId: ID!) { thread(threadId: $threadId) { ${threadFields} } }`,
@@ -52,7 +53,7 @@ export const plain = defineProvider({
       result: { data: { 'thread?': { timelineEntries: { edges: [{ node: { id: 'string', timestamp: time, entry: 'unknown' } }], pageInfo } } } } },
     'customers.list': { docs: `${reference}/customers`, kind: 'read', paging: 'customers', records: 'data.customers.edges',
       graphql: `query Customers($first: Int, $after: String) { customers(first: $first, after: $after) { edges { node { id externalId fullName shortName email { email } createdAt ${at} updatedAt ${at} } } pageInfo { hasNextPage endCursor } } }`,
-      params: first,
+      params: size,
       result: { data: { customers: { edges: [{ node: { id: 'string', 'externalId?': 'string', fullName: 'string', 'shortName?': 'string',
         email: { email: 'string' }, createdAt: time, updatedAt: time } }], pageInfo } } } },
   },
