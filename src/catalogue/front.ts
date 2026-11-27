@@ -2,13 +2,18 @@ import { defineProvider } from '../catalogue.js';
 
 /** Front: OAuth 2 (scopes set on the app; an admin authorizes; an app is private to its own instance until Front's team
  * publishes it: https://dev.frontapp.com/docs/create-and-manage-apps), or an API token. Identify (the company):
- * https://dev.frontapp.com/reference/api-token-details. `messages.create` emails people. A 429 waits `Retry-After`:
- * https://dev.frontapp.com/docs/rate-limiting. Each list answers one page: its next link is on the company's host. */
+ * https://dev.frontapp.com/reference/api-token-details. `messages.create` emails people; `replies.create` reaches the
+ * customer. 429: `Retry-After`, https://dev.frontapp.com/docs/rate-limiting. Lists: one page (company-host next). */
 const conversation = { id: 'string', type: 'string', subject: 'string', status: 'string', 'status_category?': 'string',
   is_closed: 'boolean', 'created_at?': 'number', 'updated_at?': 'number' } as const;
 const page = { limit: { in: 'query', type: 'integer', description: '50 by default, at most 100.' },
   page_token: { in: 'query', type: 'string', description: 'The page_token of the last answer\'s _pagination.next link.' } } as const;
 const pagination = { '_pagination?': { 'next?': 'string' } } as const;
+const message = { id: 'string', 'type?': 'string', 'is_inbound?': 'boolean', 'created_at?': 'number', 'subject?': 'string',
+  'blurb?': 'string', 'body?': 'unknown' } as const;
+const contact = { id: 'string', 'name?': 'string', 'description?': 'string', 'is_private?': 'boolean',
+  'handles?': [{ handle: 'string', source: 'string' }] } as const;
+const conversationId = { conversation_id: { in: 'path', type: 'string', required: true } } as const;
 const channelId = { channel_id: { in: 'path', type: 'string', required: true } } as const;
 const recipients = { to: { in: 'body', type: ['string'] }, cc: { in: 'body', type: ['string'] }, bcc: { in: 'body', type: ['string'] },
   subject: { in: 'body', type: 'string' }, body: { in: 'body', type: 'string', required: true }, author_id: { in: 'body', type: 'string' } } as const;
@@ -16,7 +21,7 @@ const ref = 'https://dev.frontapp.com/reference';
 
 export const front = defineProvider({
   id: 'front', name: 'Front', docs: 'https://dev.frontapp.com/docs/oauth',
-  categories: ['mail'],
+  categories: ['support', 'mail'],
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
     help: 'For your own Front instance: an app for every Front customer connects with the OAuth 2 sign-in, as Front requires. An admin makes the token under Settings, Developers, API Tokens, with Access resources and the read, write and send permissions on the inboxes the app uses.' }],
   // PKCE S256: https://app.frontapp.com/.well-known/oauth-authorization-server
@@ -41,5 +46,23 @@ export const front = defineProvider({
     'messages.create': { docs: `${ref}/create-message`, method: 'POST', path: '/channels/{channel_id}/messages',
       params: { ...channelId, ...recipients, sender_name: { in: 'body', type: 'string' }, text: { in: 'body', type: 'string' } },
       anyOf: [['to'], ['cc'], ['bcc']] },
+    'conversations.update': { docs: `${ref}/update-conversation`, method: 'PATCH', path: '/conversations/{conversation_id}',
+      params: { ...conversationId, assignee_id: { in: 'body', type: 'string', nullable: true, description: 'A teammate\'s id; null unassigns.' },
+        inbox_id: { in: 'body', type: 'string', description: 'Moves the conversation to this inbox.' },
+        status: { in: 'body', type: 'string', enum: ['archived', 'open', 'deleted', 'spam'], description: 'Give status or status_id, not both.' },
+        status_id: { in: 'body', type: 'string', description: 'A ticket status id (ticketing must be on); give status or status_id.' },
+        tag_ids: { in: 'body', type: ['string'], description: 'Every tag of the conversation: replaces its tags.' } } },
+    'messages.list': { docs: `${ref}/list-conversation-messages`, path: '/conversations/{conversation_id}/messages',
+      params: { ...conversationId, ...page }, result: { ...pagination, _results: [message] } },
+    'replies.create': { docs: `${ref}/create-message-reply`, method: 'POST', path: '/conversations/{conversation_id}/messages',
+      params: { ...conversationId, ...recipients, channel_id: { in: 'body', type: 'string', description: 'The channel to send from.' },
+        sender_name: { in: 'body', type: 'string' }, text: { in: 'body', type: 'string' },
+        options: { in: 'body', type: { 'tag_ids?': ['string'], 'archive?': 'boolean' },
+          description: 'archive is true by default: the conversation is archived as the reply is sent.' } } },
+    'comments.create': { docs: `${ref}/add-comment`, method: 'POST', path: '/conversations/{conversation_id}/comments',
+      params: { ...conversationId, body: { in: 'body', type: 'string', required: true }, author_id: { in: 'body', type: 'string' },
+        is_pinned: { in: 'body', type: 'boolean' } },
+      result: { id: 'string', body: 'unknown', 'posted_at?': 'number', is_pinned: 'boolean' } },
+    'contacts.list': { docs: `${ref}/list-contacts`, path: '/contacts', params: page, result: { ...pagination, _results: [contact] } },
   },
 });
