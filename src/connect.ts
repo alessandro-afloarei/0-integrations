@@ -46,7 +46,7 @@ const plainOf = (entry: Entry, given: Values): Record<string, string> =>
   Object.fromEntries(plainFields(entry).map(field => read(field, given)));
 
 /** A form of the entry's fields, or the provider's authorization URL with the PKCE verifier and the plain values read,
- * every OAuth 2 URL and the base filled and checked with them first. */
+ * every OAuth 2 URL but the refresh URL, and the base, filled and checked with them first. */
 export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart<E>], []>):
   Promise<E extends Entry ? ByKind<E, Redirect<E>, Form> : never>;
 export async function startConnect(entry: Entry, options?: OAuthStart): Promise<ConnectStart> {

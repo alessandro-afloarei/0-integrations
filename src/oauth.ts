@@ -42,8 +42,8 @@ function tokenAnswerOf(entry: Entry, answer: unknown): Record<string, unknown> {
     .filter(([, value]) => value !== undefined));
 }
 
-/** The consent URL. Every OAuth 2 URL of the entry is filled from `values` and checked first, so a value its token,
- * refresh or revoke URL would refuse is refused before the person is sent anywhere. */
+/** The consent URL. Every OAuth 2 URL of the entry but the refresh URL is filled from `values` and checked first, so a
+ * value its token or revoke URL would refuse is refused before the person is sent anywhere. */
 export function authorizeUrl<const E extends Entry>(entry: E, input: {
   clientId: string; redirectUri: string; scopes: readonly string[]; state: string; codeChallenge?: string } & ValuesOption<Plain<E>>): URL {
   const { config, authorize: url } = endpoints(entry, input.values);
