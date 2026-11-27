@@ -99,22 +99,23 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
     ...(entry.revoke && 'url' in entry.revoke ? { revoke: entry.revoke.url } : {}) };
 }
 
-/** The base's named hosts by name, with their paths: on an OAuth 2 sign-in, a `save` key read from one `tokenAnswer.*`
- * path, never a field. */
+/** The base's named host by name, with its path: on an OAuth 2 sign-in, the base's whole host one placeholder, a `save`
+ * key read from one `tokenAnswer.*` path, never a field. */
 export function namedHosts(entry: Entry): Readonly<Record<string, Path>> {
   if (entry.auth[0].kind !== 'oauth2') return {};
-  return Object.fromEntries(placeholders(hostPart(entry.http.baseUrl) ?? '').flatMap(name => { const path = entry.save?.[name];
+  return Object.fromEntries((/^https:\/\/\{([^{}]+)\}$/u.exec(hostPart(entry.http.baseUrl) ?? '')?.slice(1) ?? []).flatMap(name => { const path = entry.save?.[name];
     return typeof path === 'string' && /^tokenAnswer\.[^{]+$/u.test(path) && !entry.fields?.some(field => field.name === name) ? [[name, path]] : []; }));
 }
 
 /** Whether the entry's base, its `http.bases`, an OAuth 2 sign-in's URLs and a token request's URL differ in their host
  * part when any of them takes its host from a typed value, or a typed host sits beside a named one: on a typed host a
- * credential goes only to that host, and a cloud's never reaches it. A named host beside fixed URLs is no split. */
+ * credential goes only to that host, and a cloud's never reaches it. A named host, the whole host of each URL that names
+ * it, beside fixed URLs is no split; composed into another host it is typed. */
 export function hostSplit(entry: Entry): boolean {
   // One not well formed is kept whole: never equal to a host part, so it counts as another host.
   const hosts = declaredUrls(entry).map(url => hostPart(url) ?? url);
   const named = namedHosts(entry);
-  const typed = hosts.some(host => placeholders(host).some(name => !Object.hasOwn(named, name)));
+  const typed = hosts.some(host => placeholders(host).some(name => !Object.hasOwn(named, name) || host !== `https://{${name}}`));
   return typed && (new Set(hosts).size > 1 || Object.keys(named).length > 0);
 }
 

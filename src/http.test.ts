@@ -1407,9 +1407,13 @@ test.each<[string, Entry, string]>([
   // An app's own entry, built without the types: a list with no domain, or an empty host, matches nothing either.
   ...[[], ['*'], ''].map((host): [string, Entry, string] => [`\`http.host: ${JSON.stringify(host)}\``,
     { ...named, http: { ...named.http, host } }, 'base_host_refused: named']),
+  // A named host is the base's whole host: composed into another host, or a refresh URL's, it is typed and split.
+  ['the base composing its host', { ...named, http: { ...named.http, baseUrl: 'https://api-{host}.named.test/api' } }, 'host_split: named'],
+  ['the base under its host', { ...named, http: { ...named.http, baseUrl: 'https://{host}.named.test/api' } }, 'host_split: named'],
+  ['a refresh URL composing another host from it', { ...named, auth: [{ ...named.auth[0], refreshUrl: 'https://auth.{host}/token' }] }, 'host_split: named'],
   ['a typed host beside it', { ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' } }, 'host_split: named'],
-  ['a typed host beside it in every URL', { ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' },
-    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}.{region}/authorize', tokenUrl: 'https://{host}.{region}/token' }] }, 'host_split: named'],
+  ['a typed host beside it in the sign-in URLs', { ...named, fields: [{ name: 'region', title: 'Region' }],
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{region}/authorize', tokenUrl: 'https://{region}/token' }] }, 'host_split: named'],
   // Typed, so split from the fixed sign-in URLs: a field of its name, or a value read from identify's answer.
   ['a field of its name', { ...named, fields: [{ name: 'host', title: 'Host' }] }, 'host_split: named'],
   ["its value read from identify's answer", { ...named, save: { host: 'host' } }, 'host_split: named'],

@@ -776,6 +776,10 @@ test.each<[Rule, Entry]>([
   ...(['authorizeUrl', 'tokenUrl'] as const).map((part): [Rule, Entry] => [OAUTH_PLAIN_URLS,
     defineProvider({ ...named, auth: [{ ...named.auth[0], [part]: 'https://{host}/oauth' }] })]),
   [OAUTH_PLAIN_URLS, defineProvider({ ...named, revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] } })],
+  // A named host is the base's whole host: composed into another, it is typed, so split from the fixed sign-in URLs.
+  ...['https://api-{host}.k.test/api', 'https://{host}.k.test/api'].map((baseUrl): [Rule, Entry] => [HOST_SPLIT,
+    defineProvider({ ...named, http: { ...named.http, baseUrl } })]),
+  [HOST_SPLIT, defineProvider({ ...named, auth: [{ ...named.auth[0], refreshUrl: 'https://auth.{host}/token' }] })],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
 test.each([
