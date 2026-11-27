@@ -99,8 +99,10 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
     ...(entry.revoke && 'url' in entry.revoke ? { revoke: entry.revoke.url } : {}) };
 }
 
-/** The base's named hosts by name, with their paths: a `save` key read from one `tokenAnswer.*` path, never a field. */
+/** The base's named hosts by name, with their paths: on an OAuth 2 sign-in, a `save` key read from one `tokenAnswer.*`
+ * path, never a field. */
 export function namedHosts(entry: Entry): Readonly<Record<string, Path>> {
+  if (entry.auth[0].kind !== 'oauth2') return {};
   return Object.fromEntries(placeholders(hostPart(entry.http.baseUrl) ?? '').flatMap(name => { const path = entry.save?.[name];
     return typeof path === 'string' && /^tokenAnswer\.[^{]+$/u.test(path) && !entry.fields?.some(field => field.name === name) ? [[name, path]] : []; }));
 }

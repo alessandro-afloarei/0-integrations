@@ -1377,14 +1377,21 @@ test.each([[{}, 'template_missing: named {host}'], [{ host: 'evil.test' }, 'base
     expect([fake.token.mock.calls.length, fake.before.mock.calls.length, fake.calls.length]).toEqual([0, 0, 0]);
   });
 
-test('a token entry on a named host: a client with a tampered host never asks its token source, nothing sent', async () => {
-  const tokened = defineProvider({ id: 'named', name: 'Named', fields: [{ name: 'secret', title: 'Secret', secret: true }],
-    auth: [{ kind: 'token', request: { url: 'https://login.named.test/token', body: { s: '{secret}' } } }], save: { host: 'tokenAnswer.host' },
-    http: { baseUrl: 'https://{host}/api', host: '*.named.test' } });
-  const fake = fakeFetch([{ url: /./u, respond: ok }]);
-  const values = { host: 'evil.test' };
-  await expect(client(tokened, { token: tokenSource(tokened, { secret: { secret: 's' }, values, fetch: fake.fetch }), values, fetch: fake.fetch })
-    .json('/me')).rejects.toThrow(new TypeError('base_host_refused: named'));
+/** A token sign-in whose base host is read from its token answer: a named host is OAuth 2's alone, so it is typed and split. */
+const tokenSignIn = { kind: 'token', request: { url: 'https://login.named.test/token', body: { s: '{secret}' } } } as const;
+const secretField = { name: 'secret', title: 'Secret', secret: true } as const;
+test.each<[string, Entry]>([
+  ['first', defineProvider({ id: 'named', name: 'Named', fields: [secretField], auth: [tokenSignIn], save: { host: 'tokenAnswer.host' },
+    http: { baseUrl: 'https://{host}/api', host: '*.named.test' } })],
+  ['later, with its own base', signInWith(defineProvider({ ...named, http: { baseUrl: 'https://api.named.test' },
+    auth: [named.auth[0], { ...tokenSignIn, fields: [secretField], http: { baseUrl: 'https://{host}/api', host: '*.named.test' } }] }), 'token')],
+])('a token sign-in, %s, whose base host its token answer names is host_split on every path, nothing sent', async (_, tokened) => {
+  const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'a', host: 'evil.test' }) }]);
+  const refused = new TypeError('host_split: named');
+  const values = { host: 'a.named.test' };
+  await expect(finishConnect(tokened, { secret: { secret: 's' }, fetch: fake.fetch })).rejects.toThrow(refused);
+  await expect(tokenSource(tokened, { secret: { secret: 's' }, values, fetch: fake.fetch })()).rejects.toThrow(refused);
+  expect(() => client(tokened, { token: 't', values, fetch: fake.fetch })).toThrow(refused);
   expect(fake.calls).toEqual([]);
 });
 

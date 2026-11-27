@@ -830,6 +830,13 @@ test.each<[string, Entry, string[]]>([
   ['a later token sign-in with its own typed base beside a fixed token URL', defineProvider({ ...key, scopes: { default: [] },
     auth: [oauth2.auth[0], { kind: 'token', request: { url: 'https://k.test/token', body: { s: '{apiKey}' } }, fields: [{ name: 'host', title: 'Host' }, secret],
       http: { baseUrl: 'https://{host}/api', host: '*' } }] }), [`${HOST_SPLIT} (token)`]],
+  // A named host is OAuth 2's alone: a token sign-in's base read from its token answer is typed, beside a fixed token URL.
+  ['a token entry whose base host its token answer names', defineProvider({ ...key, fields: [secret], save: { host: 'tokenAnswer.host' },
+    auth: [{ kind: 'token', request: { url: 'https://login.k.test/token', body: { s: '{apiKey}' } } }], http: { baseUrl: 'https://{host}/api', host: '*.k.test' } }),
+    [`${HOST_SPLIT} (token)`]],
+  ['a later token sign-in whose own base host its token answer names', defineProvider({ ...key, scopes: { default: [] }, save: { host: 'tokenAnswer.host' },
+    auth: [oauth2.auth[0], { kind: 'token', request: { url: 'https://login.k.test/token', body: { s: '{apiKey}' } }, fields: [secret],
+      http: { baseUrl: 'https://{host}/api', host: '*.k.test' } }] }), [`${HOST_SPLIT} (token)`]],
   ['a Basic email the key alone reads, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }],
     scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }), [`${OAUTH_READS} (oauth2)`]],
 ])('%s breaks only its rule', (_, entry, rules) => { expect(broken(entry)).toEqual(rules); });
