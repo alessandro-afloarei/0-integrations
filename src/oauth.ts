@@ -4,10 +4,13 @@ import type { Entry, Kept, Plain, Values, ValuesOption } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
-import { checkHosts, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
+import { checkHosts, ENGINE_PARAMS, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
-export type OAuthClient = { clientId: string; clientSecret: string };
+/** The app's OAuth 2 client: a public client's (`clientAuth: 'none'`) has no secret. */
+export type OAuthClient<E extends Entry = Entry> = E['auth'][0] extends { clientAuth: 'none' } ? { clientId: string }
+  : { clientId: string; clientSecret: string };
+type AnyClient = { clientId: string; clientSecret?: string }; // an untyped caller's secret for a public client is never sent
 /** A refresh's input, which may be left out only when its values may. */
 type RefreshInput<E extends Entry, I = { fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>> = Partial<I> extends I ? [input?: I] : [input: I];
 
@@ -57,7 +60,8 @@ export function authorizeUrl<const E extends Entry>(entry: E, input: {
     url.searchParams.set('code_challenge', input.codeChallenge);
     url.searchParams.set('code_challenge_method', 'S256');
   }
-  for (const [key, value] of Object.entries(config.authorizeParams ?? {})) url.searchParams.set(key, value);
+  // The entry's parameters never replace the engine's own; they still replace one the authorize URL carries.
+  for (const [key, value] of Object.entries(config.authorizeParams ?? {})) if (!ENGINE_PARAMS.includes(key)) url.searchParams.set(key, value);
   return url;
 }
 
@@ -88,20 +92,21 @@ type Sent = { values?: Values; fetch?: typeof globalThis.fetch };
 
 /** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. The app's
  * `fetch`, else the entry's default: the address guard for a typed host. */
-function context(entry: Entry, credentials: OAuthClient, input: Sent, refresh = false) {
+function context(entry: Entry, credentials: AnyClient, input: Sent, refresh = false) {
   // Each URL passes the one check every URL the library sends to passes, before anything is sent.
   const { config, token, refresh: renew, revoke } = endpoints(entry, input.values);
   const fetch = input.fetch ?? defaultFetch(entry);
   const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (refresh ? renew() : token).href,
     ...(revoke ? { revocation_endpoint: revoke.href } : {}) };
   const client = { client_id: credentials.clientId };
-  const auth = config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret);
-  // The Basic value as sent (the id and secret form-encoded first), so no error detail echoes it.
+  const secret = config.clientAuth === 'none' ? undefined : credentials.clientSecret ?? ''; // read once; a public client has none
+  const auth = secret === undefined ? oauth.None() : (config.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(secret);
+  // The secret's Basic value (id and secret form-encoded first): no error detail echoes it, whatever this request sends.
   const sent = new Headers();
-  void auth(as, client, new URLSearchParams(), sent);
+  if (secret !== undefined) void oauth.ClientSecretBasic(secret)(as, client, new URLSearchParams(), sent);
   const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
-    config, as, client, auth, secrets: [credentials.clientSecret, ...(basic === undefined ? [] : [basic])],
+    config, as, client, auth, secrets: [secret ?? '', ...(basic === undefined ? [] : [basic])],
     options: { [oauth.customFetch]: bearerByDefault(config.json ? jsonBodies(fetch) : fetch), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
     processing: { recognizedTokenTypes: Object.fromEntries((config.tokenTypes ?? []).map(type => [type.toLowerCase(), () => undefined])) },
   };
@@ -151,13 +156,14 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
     expiresAt: answer.expires_in === undefined ? null : new Date(Date.now() + answer.expires_in * 1000).toISOString() };
 }
 
-export async function exchangeCode<const E extends Entry>(entry: E, client: OAuthClient, input: { code: string; redirectUri: string;
+export async function exchangeCode<const E extends Entry>(entry: E, client: OAuthClient<E>, input: { code: string; redirectUri: string;
   codeVerifier?: string | undefined; fetch?: typeof globalThis.fetch } & ValuesOption<Plain<E>>): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
   const c = context(entry, client, input);
-  if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
-  const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });
-  if (input.codeVerifier) params.set('code_verifier', input.codeVerifier);
-  const secrets = [...c.secrets, input.code, input.codeVerifier ?? ''];
+  const { code, codeVerifier } = input; // each read once: the values checked are the values sent and redacted
+  if (c.config.pkce !== false && !codeVerifier?.trim()) throw new TypeError('code_verifier_required');
+  const params = new URLSearchParams({ code, redirect_uri: input.redirectUri });
+  if (codeVerifier) params.set('code_verifier', codeVerifier);
+  const secrets = [...c.secrets, code, codeVerifier ?? ''];
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options));
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
@@ -167,7 +173,7 @@ export async function exchangeCode<const E extends Entry>(entry: E, client: OAut
   }
 }
 
-export async function refreshGrant<const E extends Entry>(entry: E, client: OAuthClient, refreshToken: string,
+export async function refreshGrant<const E extends Entry>(entry: E, client: OAuthClient<E>, refreshToken: string,
   ...[input]: RefreshInput<E>): Promise<Grant> {
   const c = context(entry, client, input ?? {}, true);
   const secrets = [...c.secrets, refreshToken];
@@ -179,7 +185,7 @@ export async function refreshGrant<const E extends Entry>(entry: E, client: OAut
   }
 }
 
-async function revokeToken(entry: Entry, client: OAuthClient, token: string, input: Sent): Promise<void> {
+async function revokeToken(entry: Entry, client: AnyClient, token: string, input: Sent): Promise<void> {
   const c = context(entry, client, input);
   const secrets = [...c.secrets, token];
   const response = await send(c, entry, secrets, () => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options));
@@ -197,7 +203,7 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
  * revoke's 404 (a request revoke's 404 is a missing route, not a gone token).
  * `client` is the OAuth app, sent only by an RFC 7009 revoke, which refuses to start without it. */
 export async function revokeGrant<const E extends Entry>(entry: E, input: { accessToken?: string; refreshToken?: string | null;
-  client?: OAuthClient; fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>): Promise<void> {
+  client?: OAuthClient<E>; fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>): Promise<void> {
   const { revoke } = entry;
   checkHosts(entry, input.values);
   if (revoke === undefined) return;

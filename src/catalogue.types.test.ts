@@ -1,6 +1,7 @@
 import { expect, expectTypeOf, test } from 'vitest';
 import { defineProvider, signInWith, type Entry, type Own, type SignIn } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
+import { firecrawl } from './catalogue/firecrawl.js';
 import { jira } from './catalogue/jira.js';
 import { linear } from './catalogue/linear.js';
 import { azuredevops } from './catalogue/azuredevops.js';
@@ -237,7 +238,43 @@ function ownTypes() {
   return wide;
 }
 
+// Never called: the types are the test.
+async function clientByEntry(clientId: string, clientSecret: string, code: string, redirectUri: string, refreshToken: string) {
+  // Firecrawl's OAuth 2 client is public: it has no secret, and a typed caller cannot give one.
+  const open = { clientId };
+  const exchange = { code, redirectUri, codeVerifier: 'v' };
+  await exchangeCode(firecrawl, open, exchange);
+  // @ts-expect-error a public client has no secret
+  await exchangeCode(firecrawl, { clientId, clientSecret }, exchange);
+  await refreshGrant(firecrawl, open, refreshToken);
+  await revokeGrant(firecrawl, { refreshToken, client: open });
+  await finishConnect(firecrawl, { client: open, code, redirectUri, onRevokeFailed: () => undefined });
+  fakeProvider(firecrawl, { key: 'k', client: open });
+  expectTypeOf<OAuthClient<typeof firecrawl>>().toEqualTypeOf<{ clientId: string }>();
+  // Narrowed to OAuth 2, the same public client; narrowed to its key, a form finish that takes no client.
+  const oauthOnly = signInWith(firecrawl, 'oauth2');
+  expectTypeOf<OAuthClient<typeof oauthOnly>>().toEqualTypeOf<{ clientId: string }>();
+  // @ts-expect-error a public client has no secret
+  await refreshGrant(oauthOnly, { clientId, clientSecret }, refreshToken);
+  const keyOnly = signInWith(firecrawl, 'key');
+  await finishConnect(keyOnly, { secret: { apiKey: 'k' } });
+  // @ts-expect-error a key sign-in's finish takes no OAuth client
+  await finishConnect(keyOnly, { secret: { apiKey: 'k' }, client: open });
+  // Linear's is confidential: its secret is required everywhere.
+  // @ts-expect-error a confidential client's secret is required
+  await exchangeCode(linear, open, exchange);
+  // @ts-expect-error a confidential client's secret is required
+  await refreshGrant(linear, open, refreshToken);
+  // @ts-expect-error a confidential client's secret is required
+  await revokeGrant(linear, { refreshToken, client: open });
+  // @ts-expect-error a confidential client's secret is required
+  await finishConnect(linear, { client: open, code, redirectUri, onRevokeFailed: () => undefined });
+  await exchangeCode(linear, { clientId, clientSecret }, exchange);
+  // An entry the types do not know takes a confidential client, its secret sent only where the entry says.
+  expectTypeOf<OAuthClient>().toEqualTypeOf<{ clientId: string; clientSecret: string }>();
+}
+
 test('the narrowed types compile', () => {
-  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide, ownTypes].every(item => typeof item === 'function')).toBe(true);
+  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide, ownTypes, clientByEntry].every(item => typeof item === 'function')).toBe(true);
   expect(mailed.auth.map(auth => auth.kind)).toEqual(['oauth2', 'key']);
 });
