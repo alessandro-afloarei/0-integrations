@@ -465,7 +465,9 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   retried after a 429, an answer step 3 decides (Google's 403 `rateLimitExceeded`, Notion's 529), a 408, 500, 502, 503
   or 504, or a network failure (the connection could not be made, or was dropped before an answer), up to `retry.limit`
   retries of any of these together. Such a rate limit is retried as a 429 is; to test a rule, the body is read only when
-  a rule's `status` is the answer's (or it names none, or `error`), within `timeoutMs`. The limit counts per request
+  a rule's `status` is the answer's (or it names none, or `error`), within `timeoutMs`. A body that does not arrive in
+  that time is `unavailable` with no wait, so a 429 that a rule of the entry may hold for (Google's, GitHub's, Jira's)
+  is reported so when its body never arrives. The limit counts per request
   sent: a redirect hop and the resend after a 401 each get their own.
 - A **wait** (`Wait`) is read from a header, or several (the longest of those present counts), holding a positive
   decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
@@ -520,8 +522,8 @@ a shape's `send` writes: the walk sends it.
 
 - `cursor`: with `more`, stop when it is falsy; a truthy `more` with a blank cursor is `invalid_response`
   (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`. A cursor is a
-  non-empty string, or a non-negative safe integer sent as its digits (Vercel's `pagination.next`), as `errors.detail`
-  reads a code; any other value is blank.
+  non-empty string, or a non-negative safe integer sent as a string of its digits, in the query and in a JSON body alike
+  (Vercel's `pagination.next`), as `errors.detail` reads a code; any other value is blank.
 - `page`: sends nothing on the first request, then 2, 3 and so on (with `zeroBased`, 1, 2 and so on), in `send`'s
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
@@ -747,8 +749,8 @@ a provider whose OAuth 2 cannot be declared yet is not declared with a key alone
   or field states it); a wait in another header or a body field, `wait` with the page's unit; a window of at most 60
   seconds with no wait promised on every 429, `defaultWaitMs` the window; a 429 and nothing more, `retry: {}`. `limit`
   and `maxWaitMs` only from stated numbers. `minIntervalMs` only from a stated
-  limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
-  limit answer. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
+  limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` for a documented non-429 limit answer, or
+  to carry a 429's reset on the error. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
   the credential that signs the calls: a limit that varies by plan, or that the credential shares with its
   organization, is left out.
 - `errors.detail` only for a documented machine code, never a human message.

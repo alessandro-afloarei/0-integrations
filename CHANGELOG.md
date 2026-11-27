@@ -25,34 +25,55 @@ Nothing here is released yet.
     whose `deliveryId` header is neither `webhook-id` nor `svix-id` accepts nothing (no catalogue entry has one).
   - Krisp declares its webhook as `token` on `authorization`: the person adds an `Authorization` request header
     holding the app's secret in Krisp's webhook settings, and the app passes that value as the secret.
-- An operation that declares no result answers `null` for any 2xx with an empty body (a 202 or a 201 as well as a 204);
-  a body that is not JSON is still `invalid_response`. SendGrid sends mail (`emails.create`).
-- New: `last` paging reads the next cursor from the last record of a page (Render). Render's `deploys.list` and
-  `services.list` walk to their end; their `cursor` parameter is the walk's own and no longer an argument.
-- A cursor may be a whole number, sent as its digits (Vercel's `pagination.next`): a numeric cursor no longer ends a
-  walk after its first page, or throws `cursor_missing` beside a truthy `more`. A negative or fractional one is still
-  blank.
-- New: `in: 'header'` parameters, sent as a request header over the entry's and the app's (never the credential); a
-  value outside printable ASCII is `param_invalid`. `RequestOptions` takes `headers`, and the derived fake hands an
-  operation's function the request's `headers` and routes by a required header the request carries.
-- PagerDuty creates and updates incidents (`incidents.create`, `incidents.update`) with the `From` header the page
-  requires. Its OAuth 2 sign-in asks `write` in place of `read`, which the writes need: an app registered for Classic
-  User OAuth with `Read` access is set to `Read/Write` (else PagerDuty grants only `openid` and the connect fails), and
-  its connections are made again.
-- Cal.com lists event types and bookings (`eventTypes.list`, `bookings.list`, paged by its cursor), each taking the
-  `cal-api-version` its page fixes as a required argument, sent in place of the entry's.
-- New: a wait may be an ISO 8601 time (`unit: 'iso8601'`: `2021-06-15T10:51:23.035+0100`, its zone required), waited
-  until that instant. Teamleader waits until its `x-ratelimit-reset`, where it waited a minute.
-- A read whose answer a `rateLimit` rule marks is retried as a 429 is, never past `maxWaitMs`: Google's 403
-  `rateLimitExceeded`, `userRateLimitExceeded` and `quotaExceeded` after a second, GitHub's secondary-limit 403 after its
-  `retry-after`.
-- An answer's wait, for the retry and its error alike, is the later of its stated wait (`Retry-After`, else
-  `retry.wait`) and the matching `rateLimit` rule's own `wait`. GitHub's primary limit (a 403 or a 429 with
-  `x-ratelimit-remaining: 0`) is never sent again before its reset: with a reset past a minute it is reported, carrying
-  the reset, where a shorter `Retry-After` was retried and carried. `onlyStated` still asks for a `Retry-After` (or
-  `retry.wait`); a rule's own wait alone is carried, not retried.
-- Notion's 529 `service_overload` is a rate limit: `rate_limited` where it was `unavailable`, and a read is retried
-  after its `Retry-After`, else a second, as a 429 is.
+- Requests and paging:
+  - An operation that declares no `result` answers `null` for any 2xx with an empty body (whitespace only; a 202 or a
+    201 as well as a 204); a body that is not JSON is still `invalid_response`, and so is an empty 2xx to an operation
+    with a `result`. SendGrid sends mail (`emails.create`, its 202) and Missive creates drafts (`drafts.create`, its
+    201), which never send: `send` and `send_at` are not declared, and a key inside `drafts` the entry does not declare
+    is dropped.
+  - New: `last` paging reads the next value at `next` in the last record of a page's list, to an empty list (or a falsy
+    `more`); `client()` refuses an operation on it whose `records` is not the shape's `list`. Render's `deploys.list`
+    and `services.list` walk by `cursor`, Resend's `emails.list` and `domains.list` by `after` while `has_more`,
+    Daily's `rooms.list` and `recordings.list` by `starting_after`, and Agile CRM's `deals.list` by the last deal's
+    `cursor`.
+  - A cursor may be a whole number, sent as a string of its digits in the query or a JSON body: a numeric cursor no
+    longer ends a walk after its first page, or throws `cursor_missing` beside a truthy `more`; a negative or
+    fractional one is still blank. Vercel's `deployments.list` walks by `pagination.next`, a timestamp, sent as `until`.
+  - Breaking: Render's `deploys.list` and `services.list`, Resend's `emails.list` and `domains.list`, Daily's
+    `rooms.list` and `recordings.list`, Agile CRM's `deals.list` and Vercel's `deployments.list` return an async
+    iterator of records, not one page (`for await (const room of api.rooms.list())`). Their cursor arguments are gone
+    (Render's `cursor`, Resend's `after` and `before`, Daily's `starting_after` and `ending_before`, Agile CRM's
+    `cursor`, Vercel's `until`): an app that paged by hand drops its loop, reads backward with a one-page `json` call,
+    and resumes from a stored cursor with `api.paginate(<shape>, <path>, { query: { <param>: <cursor> } })`.
+  - New: `in: 'header'` parameters, sent as a request header over the entry's and the app's, never the credential; a
+    value outside printable ASCII is `param_invalid`. `RequestOptions` takes `headers`, and the derived fake hands an
+    operation's function the request's `headers` and routes by a required header the request carries. PagerDuty
+    creates and updates incidents (`incidents.create`, `incidents.update`) with the `From` header its page requires;
+    Cal.com lists event types and bookings (`eventTypes.list`, `bookings.list`, the bookings paged by its cursor), each
+    taking the one `cal-api-version` its page fixes as a required argument, sent in place of the entry's; Resend's
+    `emails.create` takes an optional `idempotency-key`.
+  - Breaking: PagerDuty's OAuth 2 sign-in asks `write` in place of `read`, which the writes need. An app registered for
+    Classic User OAuth with `Read` access is set to `Read/Write` (else PagerDuty grants only `openid` and the connect
+    fails), and its connections are made again. Its key's help asks for an account API token with full access.
+  - New: a wait may be an ISO 8601 time (`unit: 'iso8601'`: `2021-06-15T10:51:23.035+0100`, its zone required), waited
+    until that instant. Teamleader waits until its `x-ratelimit-reset`, where it waited a minute. People Data Labs waits
+    a read's 429 until its `x-ratelimit-reset` when that is within a minute, and reports a longer one (a day's limit)
+    with that wait; a 429 that states no wait is still not retried. A Jira 429 carries its `X-RateLimit-Reset` as its
+    wait, or its `Retry-After` when that is later; a read is still retried only after a `Retry-After`, and never before
+    the reset (a reset past a minute is reported).
+  - A read whose answer a `rateLimit` rule marks is retried as a 429 is (a header `retry.wait` counts on it as on a
+    429), never past `maxWaitMs`: Google's 403 `rateLimitExceeded` and `userRateLimitExceeded` after a second, GitHub's
+    secondary-limit 403 after its `retry-after`. Notion's 529 `service_overload` is a rate limit: `rate_limited` where
+    it was `unavailable`, and a read is retried after its `Retry-After`, else a second.
+  - An answer's wait, for the retry and its error alike, is the later of its stated wait (`Retry-After`, else
+    `retry.wait`) and the matching `rateLimit` rule's own `wait`. GitHub's primary limit (a 403 or a 429 with
+    `x-ratelimit-remaining: 0`) is never sent again before its reset: with a reset past a minute it is reported,
+    carrying the reset, where a shorter `Retry-After` was retried and carried. `onlyStated` still asks for a
+    `Retry-After` (or `retry.wait`); a rule's own wait alone is carried, not retried. A 429 that a rule of the entry may
+    hold for (Google's, GitHub's, Jira's) has its body read, and one whose body does not arrive within `timeoutMs` is
+    `unavailable`, with no wait.
+  - Google's 403 `quotaExceeded` (Calendar's usage limits, which last hours) is still `rate_limited` but never retried,
+    and its error carries only a wait the answer states (it carried a minute no page states).
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
@@ -171,10 +192,10 @@ Nothing here is released yet.
     retried once, not three times; `firecrawlClient`'s map and plain scrape too.
   - Freshsales: waits a minute when it names no wait, not one second.
   - GitBook: waits its `X-RateLimit-Reset` header, not one second.
-  - GitHub: is retried only on a 408, 429, 500, 502, 503 or 504 that names a positive `Retry-After` of at most 60
-    seconds: such a read is waited and tried once more, `githubClient`'s reads too; it was not retried. Every other
-    error status (a 403, a 505) is reported at once, with its wait where it names one, and so are a primary limit with
-    no `Retry-After` and a longer wait.
+  - GitHub: is retried only on a 408, 429, 500, 502, 503 or 504, or a secondary-limit 403, that names a positive
+    `Retry-After` of at most 60 seconds, and never before a primary limit's reset: such a read is waited and tried once
+    more, `githubClient`'s reads too; it was not retried. Every other error status (another 403, a 505) is reported at
+    once, with its wait where it names one, and so are a primary limit with no `Retry-After` and a longer wait.
   - GitLab: is retried after its `Retry-After`, else one second, and a 408, a 5xx or a dropped connection on a read is
     now retried once; it was not retried.
   - Google: is retried once, after its `Retry-After` or one second, up to the engine's 60-second cap, and a 5xx or a
@@ -194,8 +215,8 @@ Nothing here is released yet.
     drives a retry on a 429 (or a 408 or a 5xx); a GraphQL error that arrives with HTTP 200 is reported at once, its
     wait carried on the error.
   - PayPal: is retried only when its answer names `Retry-After`; it was not retried.
-  - People Data Labs: identify and a raw read are retried only when the answer states a wait; its 429's reset is an
-    ISO 8601 time, so it is reported, not retried after one second, and a 5xx that names no wait is no longer retried.
+  - People Data Labs: identify and a raw read are retried only when the answer states a wait (a `Retry-After`, or its
+    429's ISO 8601 reset), not after one second, and a 5xx that names no wait is no longer retried.
     Its typed operations are writes (searches by POST, enrichments that spend credits), never retried.
   - Render: waits a minute when it names no wait, not one second.
   - Rollbar: waits its `X-Rate-Limit-Remaining-Seconds` header, not one second.
@@ -226,8 +247,7 @@ Nothing here is released yet.
   stated wait is longer than the entry's `maxWaitMs` is not retried, whatever its status, and its error carries that
   wait. Breaking: such an answer was retried at the cap (HubSpot's hour-long `Retry-After` after 10 seconds); an app
   now gets `rate_limited` with `retryAfterMs` and waits it itself. Every error's `retryAfterMs` is that stated wait: a
-  `Retry-After` of 0 no longer hides Breakcold's or Fireflies' body wait, and a rate limit's own wait counts only when
-  none is stated.
+  `Retry-After` of 0 no longer hides Breakcold's or Fireflies' body wait.
 - New: `retry.wait` reads a wait from a header (seconds, milliseconds or an epoch time; of several headers, the longest
   present; counted on a 429 only) or a body field (on any answer that holds it), and `retry.onlyStated` retries only an
   answer that states its wait, and no network failure. A wait already past, or 0, counts as none (Breakcold's body 0
@@ -330,7 +350,7 @@ Nothing here is released yet.
 - New: `offset` paging (a record offset in the query or the body, the next one counted from the records received),
   first used by Outline and PagerDuty, whose lists now page to their end. PagerDuty's page up to its 10,000-record
   cap; past it PagerDuty answers 400 and the walk fails there, so narrow a larger result set with a filter.
-- `client()` refuses an operation on a `page` or `offset` shape whose `records` is not the shape's `list`
+- `client()` refuses an operation on a `page`, `offset` or `last` shape whose `records` is not the shape's `list`
   (`records_unpaged`), as the table test already did for this library's entries.
 - `client()` refuses an operation with a parameter in the place its paging shape's `send` writes (`param_paged`), as the
   table test already did for this library's entries; a call sent the caller's value first, then the walk's. A
