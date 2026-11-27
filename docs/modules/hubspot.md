@@ -50,18 +50,19 @@ import { fakeFetch } from '0-integrations/testing';
 
 const redirectUri = 'https://app.test/api/integrations/hubspot/callback';
 const http = fakeFetch(fakeHubSpot({ ...portalData, client, redirectUri }));
-const { url } = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
+const { url, codeVerifier } = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
 const consent = await http.fetch(url, { redirect: 'manual' });
 const back = new URL(consent.headers.get('location') ?? '');
 if (back.searchParams.get('state') !== state) throw new Error('state_mismatch');
 const code = back.searchParams.get('code');
 if (!code) throw new Error('missing_code');
 const connected = await finishConnect(hubspot, {
-  client, code, redirectUri, fetch: http.fetch, onRevokeFailed,
+  client, code, redirectUri, codeVerifier, fetch: http.fetch, onRevokeFailed,
 });
 ```
 
-The example uses app-owned `portalData`, OAuth `client`, a fresh stored `state`, and an `onRevokeFailed` observer.
+The example uses app-owned `portalData`, OAuth `client`, a fresh stored `state` with the start's `codeVerifier`, and an
+`onRevokeFailed` observer.
 In the app, consume and validate that state once; keep the returned secret on the server.
 
 ## Stage history

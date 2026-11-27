@@ -172,14 +172,14 @@ async function hubspotFakeConnect(portalData: Omit<HubSpotFakeData, 'client' | '
   state: string, onRevokeFailed: (error: unknown) => void) {
   const redirectUri = 'https://app.test/api/integrations/hubspot/callback';
   const http = fakeFetch(fakeHubSpot({ ...portalData, client, redirectUri }));
-  const { url } = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
+  const { url, codeVerifier } = await startConnect(hubspot, { clientId: client.clientId, redirectUri, state });
   const consent = await http.fetch(url, { redirect: 'manual' });
   const back = new URL(consent.headers.get('location') ?? '');
   if (back.searchParams.get('state') !== state) throw new Error('state_mismatch');
   const code = back.searchParams.get('code');
   if (!code) throw new Error('missing_code');
   const connected = await finishConnect(hubspot, {
-    client, code, redirectUri, fetch: http.fetch, onRevokeFailed,
+    client, code, redirectUri, codeVerifier, fetch: http.fetch, onRevokeFailed,
   });
   return connected;
 }

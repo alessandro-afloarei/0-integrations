@@ -6,8 +6,9 @@ import { defineProvider } from '../catalogue.js';
 export const jira = defineProvider({
   id: 'jira', name: 'Jira', docs: 'https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/',
   categories: ['tasks'],
+  // PKCE S256: https://auth.atlassian.com/.well-known/oauth-authorization-server
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://auth.atlassian.com/authorize', tokenUrl: 'https://auth.atlassian.com/oauth/token',
-    json: true, pkce: false, authorizeParams: { audience: 'api.atlassian.com', prompt: 'consent', response_type: 'code' } }],
+    json: true, authorizeParams: { audience: 'api.atlassian.com', prompt: 'consent', response_type: 'code' } }],
   scopes: { default: ['read:jira-work', 'read:jira-user', 'offline_access'] },
   http: { baseUrl: 'https://api.atlassian.com/ex/jira/{cloudId}', bases: { api: 'https://api.atlassian.com' },
     headers: { accept: 'application/json' }, retry: { onlyStated: true },

@@ -65,6 +65,10 @@ one takes five steps:
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
    - `revoke` holds only what the docs state; when either token is accepted and the docs do not say which ends the
      authorization, the refresh token goes first;
+   - an OAuth 2 sign-in sends PKCE: an entry turns PKCE off (`pkce: false`) only where the provider's page states that
+     the server refuses it (Slack's `pkce_not_allowed`), or where a real sign-in fails with it on (the entry's comment
+     then says what was seen); a stated refusal is cited in the entry's comment. A page that does not mention PKCE is
+     no reason;
    - the key's `help` names the credential the operations need (a token type, scopes, an access level, a role, an
      expiry default) when the docs make it matter.
 

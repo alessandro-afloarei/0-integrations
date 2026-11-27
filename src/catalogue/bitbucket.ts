@@ -19,7 +19,7 @@ export const bitbucket = defineProvider({
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
     help: 'For your own account: an app for other people connects with the OAuth 2 sign-in, as Atlassian recommends. Give it read:user:bitbucket, read:repository:bitbucket, read:pullrequest:bitbucket and write:pullrequest:bitbucket, and an expiry of at most a year.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://bitbucket.org/site/oauth2/authorize',
-    tokenUrl: 'https://bitbucket.org/site/oauth2/access_token', clientAuth: 'basic', pkce: false,
+    tokenUrl: 'https://bitbucket.org/site/oauth2/access_token', clientAuth: 'basic',
     authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: [] },
   http: { baseUrl: 'https://api.bitbucket.org/2.0', retry: {} },

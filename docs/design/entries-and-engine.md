@@ -304,7 +304,13 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
 - `query` sets each parameter, filled, on the URL of every request and every redirect hop, after the caller's query, so
   it replaces a value of the same name. It adds no header, and `beforeRequest` sees the URL without it. A query send
   names at least one parameter.
-- `oauth2` states only what differs: PKCE on, the client secret in the body, scopes joined by a space. `failed` marks
+- `oauth2` states only what differs: PKCE on, the client secret in the body, scopes joined by a space. An entry turns
+  PKCE off (`pkce: false`) only where the provider's page states that the server refuses it (Slack's
+  `pkce_not_allowed`), or where a real sign-in fails with it on (the entry's comment then says what was seen). A page
+  that does not mention PKCE is no reason: an authorization server "MUST ignore unrecognized request parameters" at
+  its authorization and token endpoints (RFC 6749 sections 3.1 and 3.2), so a server that does not know the PKCE
+  parameters ignores them, and one that does checks the verifier against the challenge, which protects the code;
+  RFC 9700 (section 2.1.1) recommends PKCE for confidential clients too. `failed` marks
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today, and never replaces a parameter the engine sends (`client_id`, `scope`, `redirect_uri`,

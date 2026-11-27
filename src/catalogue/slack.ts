@@ -10,6 +10,9 @@ export const slack = defineProvider({
   categories: ['chat'],
   fields: [{ name: 'domain', title: 'Slack instance', choices: ['slack.com', 'slack-gov.com'], default: 'slack.com',
     help: 'slack.com, or slack-gov.com for GovSlack, an instance of Slack designed for U.S. public sector use, whose app is registered apart on api.slack-gov.com.' }],
+  // No PKCE: Slack refuses it (`pkce_not_allowed`) unless the app turns it on, which makes the app a public client, one
+  // way (only Slack support undoes it): https://docs.slack.dev/reference/methods/oauth.v2.access/,
+  // https://docs.slack.dev/authentication/using-pkce/
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://{domain}/oauth/v2/authorize', tokenUrl: 'https://{domain}/api/oauth.v2.access',
     pkce: false, scopeSeparator: ',', tokenTypes: ['bot'], failed: { path: 'ok', equals: false } }],
   scopes: { default: ['chat:write', 'chat:write.public', 'channels:read', 'groups:read'] },

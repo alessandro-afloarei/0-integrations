@@ -15,7 +15,7 @@ export const wrike = defineProvider({
   id: 'wrike', name: 'Wrike', docs: 'https://developers.wrike.com/docs/oauth-20-authorization',
   categories: ['tasks'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.wrike.com/oauth2/authorize/v4', tokenUrl: 'https://login.wrike.com/oauth2/token',
-    refreshUrl: 'https://{host}/oauth2/token', pkce: false, scopeSeparator: ',', authorizeParams: { response_type: 'code' } }],
+    refreshUrl: 'https://{host}/oauth2/token', scopeSeparator: ',', authorizeParams: { response_type: 'code' } }],
   scopes: { default: ['wsReadWrite'] },
   save: { host: 'tokenAnswer.host' },
   http: { baseUrl: 'https://{host}/api/v4', host: ['www.wrike.com', 'app-eu.wrike.com', 'app-us2.wrike.com', 'app-ap.wrike.com'], retry: {} },

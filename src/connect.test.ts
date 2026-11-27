@@ -103,6 +103,17 @@ describe('connect', () => {
     expect(new URLSearchParams(http.calls[0]?.body).get('code_verifier')).toBe(begun.codeVerifier);
   });
 
+  it("connects an app's copy of a catalogue entry whose sign-in says `pkce: false`: no challenge, no verifier", async () => {
+    const noPkce = defineProvider({ ...intercom, auth: [{ ...intercom.auth[0], pkce: false }, intercom.auth[1]] });
+    const begun = await startConnect(noPkce, start);
+    expect(begun.codeVerifier).toBeUndefined();
+    expect(new URL(begun.url).searchParams.has('code_challenge')).toBe(false);
+    const http = fakeFetch(fakeProvider(noPkce, { key: 'k', client }));
+    await expect(finishConnect(noPkce, { client, code: 'kit-code', redirectUri: callback, fetch: http.fetch, onRevokeFailed: vi.fn() }))
+      .resolves.toMatchObject({ secret: { accessToken: 'k' } });
+    expect(new URLSearchParams(http.calls[0]?.body).has('code_verifier')).toBe(false);
+  });
+
   it("returns a key entry's fields and verifies a refused key", async () => {
     const http = fakeFetch([{ url: 'https://api.attio.com/v2/self', respond: request => (request.headers.get('authorization') === 'Bearer valid'
       ? Response.json({ active: true, workspace_id: 'w1', workspace_name: 'Account' }) : Response.json({}, { status: 401 })) }]);
