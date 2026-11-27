@@ -1404,6 +1404,9 @@ test.each<[string, Entry]>([
 test.each<[string, Entry, string]>([
   ["`http.host: '*'`", { ...named, http: { ...named.http, host: '*' } }, 'base_host_refused: named'],
   ['no `http.host`', { ...named, http: { baseUrl: named.http.baseUrl } }, 'base_host_refused: named'],
+  // An app's own entry, built without the types: a list with no domain, or an empty host, matches nothing either.
+  ...[[], ['*'], ''].map((host): [string, Entry, string] => [`\`http.host: ${JSON.stringify(host)}\``,
+    { ...named, http: { ...named.http, host } }, 'base_host_refused: named']),
   ['a typed host beside it', { ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' } }, 'host_split: named'],
   ['a typed host beside it in every URL', { ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' },
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}.{region}/authorize', tokenUrl: 'https://{host}.{region}/token' }] }, 'host_split: named'],
@@ -1415,7 +1418,9 @@ test.each<[string, Entry, string]>([
 ])('a named host with %s is refused on every path before anything is sent', async (_, entry, message) => {
   const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'a', token_type: 'bearer', host: 'a.named.test', id: '1' }) }]);
   const refused = new TypeError(message);
-  const values = { host: 'a.named.test', region: 'named.test', site: 'a.named.test' };
+  // The saved host, and each typed one the entry declares.
+  const values = Object.fromEntries(Object.entries({ host: 'a.named.test', region: 'named.test', site: 'a.named.test' })
+    .filter(([name]) => name === 'host' || entry.fields?.some(field => field.name === name)));
   const oauthClient = { clientId: 'c', clientSecret: 's' };
   await expect(startConnect(entry, { clientId: 'c', redirectUri: 'https://app.test/cb', state: 's', values })).rejects.toThrow(refused);
   await expect(finishConnect(entry, { client: oauthClient, code: 'c', redirectUri: 'https://app.test/cb', codeVerifier: 'v'.repeat(43), values,

@@ -132,7 +132,8 @@ export function declaredUrls(entry: Entry): string[] {
 export function checkHosts(entry: Entry, values: Values = {}): void {
   if (['fields', 'http', 'identify'].some(name => name in entry.auth[0])) throw new TypeError(`sign_in_own_first: ${entry.id}`);
   if (declaredUrls(entry).some(url => hostPart(url) === undefined)) throw new TypeError(`base_host_refused: ${entry.id}`);
-  if (Object.keys(namedHosts(entry)).length > 0 && (entry.http.host ?? '*') === '*') throw new TypeError(`base_host_refused: ${entry.id}`);
+  const domainless = [entry.http.host ?? '*'].flat().every(host => host === '*' || host === ''); // an app's `[]` or `['*']` too
+  if (Object.keys(namedHosts(entry)).length > 0 && domainless) throw new TypeError(`base_host_refused: ${entry.id}`);
   if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
   const undeclared = Object.keys(values).find(name => !entry.fields?.some(field => field.name === name) && !Object.hasOwn(entry.save ?? {}, name));
   if (undeclared !== undefined) throw new TypeError(`value_undeclared: ${entry.id} ${undeclared}`);

@@ -214,8 +214,8 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   *named* host: the token endpoint that issued the grant chose it (Wrike's data centre: `baseUrl:
   'https://{host}/api/v4'`, `save: { host: 'tokenAnswer.host' }`). A token is then sent only to the host that issued it,
   or to a host its issuer named inside a domain the entry declares:
-  - it needs an `http.host` with a domain (a name, `*.` and a domain, or a list), never `*`, else `base_host_refused`
-    before anything is sent (`checkHosts`), and the table refuses it;
+  - it needs an `http.host` with a domain (a name, `*.` and a domain, or a list), never `*` (nor an app's `[]`, `['*']`
+    or `''`), else `base_host_refused` before anything is sent (`checkHosts`), and the table refuses it;
   - its value is checked as a typed host's is (`filledBase`), and may be an https origin (Pipedrive's `api_domain`):
     `https://`, the host and at most a `/`, whose host is used; a port, a path, a query, a fragment, userinfo or
     `http:` is `base_value_invalid`;

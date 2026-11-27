@@ -24,7 +24,8 @@ Nothing here is released yet.
   domain at connect (whether or not identify sends a request), before every call and before every refresh. The host may
   come as an https origin (`https://x.example.com`, read as its host); a token answer without one is `invalid_response`
   (`missing_fields`) and the fresh grant is revoked. Such a host beside one the person types is `host_split`, and with
-  `http.host: '*'`, or none, it is refused (`base_host_refused`) before anything is sent.
+  `http.host: '*'`, none, or a list with no domain (`[]`, `['*']`), it is refused (`base_host_refused`) before anything
+  is sent.
 - The refresh URL is filled and checked only when a refresh is sent (the consent URL, the exchange and a revoke no
   longer fill it), and it alone of the OAuth 2 URLs may name a host the token answer names.
 - New entry: Wrike (tasks; OAuth 2, on the data centre its token answer names). Every entry is `declared`.
