@@ -770,6 +770,16 @@ describe('a host the token answer names', () => {
       expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://login.named.test/revoke']);
     });
 
+  it('after a failed identify, a revoke on the base goes to the host the token answer named', async () => {
+    const requested = defineProvider({ ...named, revoke: { request: { method: 'POST', path: '/revoke' } } });
+    const http = fakeFetch([
+      { url: 'https://login.named.test/token', respond: () => Response.json({ access_token: 'a', refresh_token: 'r', token_type: 'bearer', host: 'a.named.test' }) },
+      { url: 'https://a.named.test/api/me', respond: () => Response.json({}) },
+      { url: 'https://a.named.test/api/revoke', respond: () => new Response(null, { status: 200 }) }]);
+    await expect(finish(http.fetch, {}, requested)).rejects.toMatchObject({ code: 'invalid_response' });
+    expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://a.named.test/api/me', 'https://a.named.test/api/revoke']);
+  });
+
   it("never takes the host from a caller's values: the start fills nothing named, the finish sends where the token answer says", async () => {
     const offered = { values: { host: 'evil.test' } } as object;
     const started = await startConnect(named, { ...start, ...offered });

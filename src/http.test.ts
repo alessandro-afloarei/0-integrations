@@ -1399,6 +1399,11 @@ test.each<[string, Entry, string]>([
   ["`http.host: '*'`", { ...named, http: { ...named.http, host: '*' } }, 'base_host_refused: named'],
   ['no `http.host`', { ...named, http: { baseUrl: named.http.baseUrl } }, 'base_host_refused: named'],
   ['a typed host beside it', { ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' } }, 'host_split: named'],
+  ['a typed host beside it in every URL', { ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' },
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}.{region}/authorize', tokenUrl: 'https://{host}.{region}/token' }] }, 'host_split: named'],
+  // Typed, so split from the fixed sign-in URLs: a field of its name, or a value read from identify's answer.
+  ['a field of its name', { ...named, fields: [{ name: 'host', title: 'Host' }] }, 'host_split: named'],
+  ["its value read from identify's answer", { ...named, save: { host: 'host' } }, 'host_split: named'],
   ['a typed base with a named refresh URL', { ...named, fields: [{ name: 'site', title: 'Site' }], http: { ...named.http, baseUrl: 'https://{site}/api' },
     auth: [{ ...named.auth[0], refreshUrl: 'https://{host}/token' }] }, 'host_split: named'],
 ])('a named host with %s is refused on every path before anything is sent', async (_, entry, message) => {
