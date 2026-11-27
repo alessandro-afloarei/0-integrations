@@ -18,7 +18,7 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   const standard = webhook.kind === 'standard';
   // Svix, the reference implementation, names them `svix-*`: the `webhook-*` set is read when it signs, else Svix's. An
   // entry that dedupes on a header reads only that header's set, so the id it dedupes on is the one signed.
-  const set = request.headers.has('webhook-signature') ? 'webhook' : 'svix';
+  const set = standard && request.headers.has('webhook-signature') ? 'webhook' : 'svix';
   const dedupe = webhook.deliveryId;
   if (standard && dedupe && 'header' in dedupe && dedupe.header !== `${set}-id`) return false;
   const scheme = standard ? STANDARD(set) : webhook;
@@ -26,7 +26,8 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   if (!received || received.length > MAX_HEADER_BYTES) return false;
   // Compared as digests of equal length, so the token's length leaks nothing.
   if (scheme.kind === 'token') return timingSafeEqual(sha256(received), sha256(secret));
-  // RFC 7617: `Basic`, one space, the base64 of `user:password`; a secret with no password keys nothing.
+  // `Basic` (any case) and one space, as providers send it, then the base64 of `user:password` (RFC 7617); a secret
+  // with no password keys nothing.
   if (scheme.kind === 'basic') return /^[^:]*:./su.test(secret) && /^basic /iu.test(received)
     && timingSafeEqual(sha256(received.slice(6)), sha256(Buffer.from(secret).toString('base64')));
   // With `part`, the header is `name=value` pieces split on `,` (Standard Webhooks: `name,value` on spaces). A name holds
@@ -95,10 +96,10 @@ export function challengeAnswer(webhook: Webhook, request: WebhookRequest, secre
   if (challenge === undefined) return null;
   const { when, echo, text } = challenge;
   const body = parseJson(Buffer.from(request.rawBody).toString('utf8'));
-  const name = typeof echo === 'string' ? echo : 'header' in echo ? echo.header : echo.query;
-  const value = typeof echo === 'string' ? readPath(body, echo) : 'header' in echo ? request.headers.get(name)
+  const name = typeof echo === 'string' ? echo : echo.query;
+  const value = typeof echo === 'string' ? readPath(body, echo)
     : new URLSearchParams(/^[^#?]*\?([^#]*)/u.exec(request.url)?.[1]).get(name);
-  // A body path answers only where `when` holds; a header or a query parameter, wherever it is present.
+  // A body path answers only where `when` holds; a query parameter, wherever it is present.
   const asked = when === undefined ? typeof echo !== 'string' : holds(when, { status: 200, headers: request.headers, body });
   const safe = typeof value === 'string' ? /^[!-;=?-~]{1,512}$/u.test(value) : !text && typeof value === 'number' && Number.isFinite(value);
   // Verified last, so a delivery that is no handshake is verified once, by the app's own `verifyWebhook`.

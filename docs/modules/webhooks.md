@@ -116,11 +116,12 @@ Nylas makes the webhook's secret, so it is unsigned; it is answered with the val
 `text/plain; charset=utf-8` with `x-content-type-options: nosniff` and its `content-length`: Nylas refuses an answer
 sent with chunked encoding, so keep that header when your server sends the `Response`.
 
-A challenge read from the body is answered only where its `when` holds; one read from a header or a query parameter
-where its `when` holds or, with none, wherever the value is present, and only as text (`text: true`). The value comes
-from whoever sent the request, so it is answered only when it is 1 to 512 printable ASCII characters with no space, `<`
-or `>` (in a JSON answer, a finite number too): never markup, never a header. The answer copies nothing else of the request, changes nothing and holds nothing secret; anyone may receive
-one for an unsigned challenge. Verify every request it does not answer.
+A challenge read from the body is answered only where its `when` holds; one read from a query parameter where its
+`when` holds or, with none, wherever the value is present, and only as text (`text: true`). The value comes from
+whoever sent the request, so it is answered only when it is 1 to 512 printable ASCII characters with no space, `<` or
+`>` (in a JSON answer, a finite number too): never markup, never a header. The answer copies nothing else of the
+request, changes nothing and holds nothing secret; anyone may receive one for an unsigned challenge. Verify every
+request it does not answer.
 
 ```ts
 import type { Webhook } from '0-integrations/catalogue';

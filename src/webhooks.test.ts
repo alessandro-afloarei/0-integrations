@@ -7,6 +7,7 @@ import { breakcold } from './catalogue/breakcold.js';
 import { chatwork } from './catalogue/chatwork.js';
 import { close } from './catalogue/close.js';
 import { discord } from './catalogue/discord.js';
+import { fellow } from './catalogue/fellow.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { google } from './catalogue/google.js';
@@ -448,14 +449,20 @@ test('a challenge value is 1 to 512 printable ASCII characters with no space, `<
   for (const value of [null, true, {}, [], 1e400]) expect(challengeAnswer(slack.webhook, slackChallenge(value), secret)).toBeNull();
 });
 
-test('a header challenge echoes the header alone, after the request is verified unless it is unsigned', async () => {
-  const front: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: { header: 'x-front-challenge' }, text: true } };
-  const sent = (headers: Record<string, string>) => request(headers, Buffer.from('{"challenge":"from-body","secret":"s"}'));
-  expect(await answered(challengeAnswer(front, sent({ 'x-token': secret, 'x-front-challenge': 'abc' }), secret))).toEqual(asText('abc'));
-  expect(challengeAnswer(front, sent({ 'x-token': 'wrong', 'x-front-challenge': 'abc' }), secret)).toBeNull();
-  expect(challengeAnswer(front, sent({ 'x-token': secret }), secret)).toBeNull();
-  const unsigned: Webhook = { ...front, challenge: { echo: { header: 'x-front-challenge' }, text: true, unsigned: true } };
-  expect(await answered(challengeAnswer(unsigned, sent({ 'x-front-challenge': 'abc' }), ''))).toEqual(asText('abc'));
+test("answers Fellow's `url_verification` on its page's body with the challenge alone, as text, unsigned", async () => {
+  const json = '{\n  "type": "url_verification",\n  "challenge": "3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P"\n}';
+  expect(await answered(challengeAnswer(fellow.webhook, posted(json), ''))).toEqual(asText('3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P'));
+  expect(challengeAnswer(fellow.webhook, posted('{"type":"meeting.ended","challenge":"abc"}'), '')).toBeNull();
+});
+
+test('a query challenge echoes the query alone, after the request is verified unless it is unsigned', async () => {
+  const signed: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: { query: 'challenge' }, text: true } };
+  const sent = (headers: Record<string, string>) => ({ ...request(headers, Buffer.from('{"challenge":"from-body"}')), url: 'https://app.test/webhook?challenge=abc' });
+  expect(await answered(challengeAnswer(signed, sent({ 'x-token': secret }), secret))).toEqual(asText('abc'));
+  expect(challengeAnswer(signed, sent({ 'x-token': 'wrong' }), secret)).toBeNull();
+  expect(challengeAnswer(signed, sent({}), secret)).toBeNull();
+  const unsigned: Webhook = { ...signed, challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
+  expect(await answered(challengeAnswer(unsigned, sent({}), ''))).toEqual(asText('abc'));
 });
 
 test('a text answer is a string: a number at a body path is not answered as text', async () => {
@@ -465,6 +472,7 @@ test('a text answer is a string: a number at a body path is not answered as text
 });
 
 test("a body path is answered only when `when` holds: an app's own declaration without one answers nothing", () => {
+  // @ts-expect-error A body path needs `when`.
   const loose: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: 'challenge', unsigned: true } };
   expect(challengeAnswer(loose, posted('{"challenge":"abc"}'), '')).toBeNull();
 });

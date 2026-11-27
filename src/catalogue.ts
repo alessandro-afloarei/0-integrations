@@ -61,9 +61,9 @@ type Timestamp = { header: string; toleranceSeconds?: number };
  * same list. `ed25519`: the header is the hex signature of `signed`, the secret the provider's public key in hex.
  * `token`: the header is the secret itself. `basic`: `authorization` is HTTP Basic of the secret, `user:password`.
  * `standard`: Standard Webhooks, the secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on.
- * `challenge`: a handshake, its value read at `echo` (a body path, a header or a query parameter) where `when` holds,
- * answered `{ [echo]: <the value> }`, or with `text` the value alone (a header or a query only as `text`; Slack's
- * `url_verification`, Discord's PING, Nylas' GET); `unsigned`: the handshake carries no signature. */
+ * `challenge`: a handshake, its value read at `echo` (a body path where `when` holds, or a query parameter), answered
+ * `{ [echo]: <the value> }`, or with `text` the value alone (a query only as `text`; Slack's `url_verification`,
+ * Discord's PING, Nylas' GET); `unsigned`: the handshake carries no signature. */
 export type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
     secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
@@ -72,7 +72,7 @@ export type Webhook = (
   | { kind: 'standard' }
   | { kind: 'basic' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] };
-  challenge?: { when?: When; unsigned?: true } & ({ echo: Path; text?: true } | { echo: { header: string } | { query: string }; text: true }) };
+  challenge?: { unsigned?: true } & ({ when: When; echo: Path; text?: true } | { when?: When; echo: { query: string }; text: true }) };
 export type Where = { query: string } | { body: string };
 /** `page`: no number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the
  * answer when absent) is empty; a missing or non-list `list` is `invalid_response`. `offset`: as `page`, the next value
