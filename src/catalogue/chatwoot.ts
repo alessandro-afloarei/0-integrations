@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Chatwoot Cloud or the person's own server: the typed host is reached only through the address guard unless the app
- * passes its own `fetch`. A user's access token as Bearer (Chatwoot 4.19.0 and later); each call names the numeric
- * `account_id`. An outgoing message, and a new conversation's first message, reach the contact on its channel;
- * `private` keeps a message an internal note. Messages answer one page (`after`, `before`); no rate limit is stated. */
+ * passes its own `fetch`. A user's access token as Bearer (4.19.0 and later), its user id local to that host; each call
+ * names the numeric `account_id`. An outgoing message, and a new conversation's first message, reach the contact;
+ * `private` keeps a message a note. Messages answer one page (`after`, `before`); no limit status is stated. */
 const ref = 'https://developers.chatwoot.com/api-reference';
 const conversation = { id: 'number', 'account_id?': 'number', 'inbox_id?': 'number', 'status?': 'string', 'priority?': 'string',
   'created_at?': 'number', 'updated_at?': 'number', 'last_activity_at?': 'number' } as const;
@@ -14,7 +14,7 @@ const one = { ...account, conversation_id: { in: 'path', type: 'integer', requir
 const conversations = '/api/v1/accounts/{account_id}/conversations';
 
 export const chatwoot = defineProvider({
-  id: 'chatwoot', name: 'Chatwoot', docs: `${ref}/introduction`,
+  id: 'chatwoot', name: 'Chatwoot', docs: `${ref}/profile/fetch-user-profile`,
   categories: ['support'],
   fields: [{ name: 'host', title: 'Chatwoot host', default: 'app.chatwoot.com',
     help: 'app.chatwoot.com, or the host name of your own Chatwoot (4.19.0 or later), with no port.' },
@@ -26,7 +26,7 @@ export const chatwoot = defineProvider({
     contacts: { kind: 'page', send: { query: 'page' }, list: 'payload' } },
   // https://www.chatwoot.com/hc/user-guide/articles/1677693021-how-to-use-webhooks: a hex digest, the time in seconds.
   webhook: { kind: 'hmac', header: 'x-chatwoot-signature', prefix: 'sha256=', signed: '{timestamp}.{body}',
-    timestamp: { header: 'x-chatwoot-timestamp' }, deliveryId: { header: 'x-chatwoot-delivery' } },
+    timestamp: { header: 'x-chatwoot-timestamp' } },
   operations: {
     'conversations.list': { docs: `${ref}/conversations/conversations-list`, path: conversations, paging: 'conversations',
       records: 'data.payload',
