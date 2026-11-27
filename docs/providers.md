@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers: 106 declared, 0 recorded;
-356 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
+357 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -91,7 +91,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [Salesflare](https://api.salesflare.com/docs) | crm | key | contacts.list, contacts.get, contacts.create, contacts.update, accounts.list, opportunities.list | — | declared |
 | [Salesloft](https://developers.salesloft.com/docs/platform/api-basics/oauth-authentication/) | sales | OAuth 2, key | cadences.list, people.list, people.get, people.create, people.update | hmac | declared |
 | [SavvyCal](https://docs.savvycal.com/developers/authentication) | calendar | OAuth 2, key | links.list, events.list, events.get, events.create | — | declared |
-| [Twilio SendGrid](https://www.twilio.com/docs/sendgrid/api-reference/users-api/retrieve-your-username) | mail | key | messages.search, messages.get, domains.list | — | declared |
+| [Twilio SendGrid](https://www.twilio.com/docs/sendgrid/api-reference/users-api/retrieve-your-username) | mail | key | messages.search, messages.get, domains.list, emails.create | — | declared |
 | [Sentry](https://docs.sentry.io/api/auth/) | monitoring | key | issues.list, issues.get, issues.update, projects.list | hmac | declared |
 | [SerpApi](https://serpapi.com/account-api) | search | key | — | — | declared |
 | [Shortcut](https://developer.shortcut.com/api/rest/v3#Authentication) | tasks | key | stories.search, stories.get, stories.create, stories.update, workflows.list | hmac | declared |

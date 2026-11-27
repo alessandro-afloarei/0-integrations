@@ -4,6 +4,8 @@
 
 Nothing here is released yet.
 
+- An operation that declares no result answers `null` for any 2xx with an empty body (a 202 or a 201 as well as a 204);
+  a body that is not JSON is still `invalid_response`. SendGrid sends mail (`emails.create`).
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
