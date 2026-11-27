@@ -10,6 +10,7 @@ import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
 import { metabase } from './catalogue/metabase.js';
+import { outline } from './catalogue/outline.js';
 import { paypal } from './catalogue/paypal.js';
 import { slack } from './catalogue/slack.js';
 import { zoom } from './catalogue/zoom.js';
@@ -641,6 +642,38 @@ describe("a sign-in's own part", () => {
     expect(() => consentUrl(oauthFirst, { ...start, scopes: [], codeChallenge: 'c', values })).toThrow(refused);
     await expect(tokenSource(tokenFirst, { secret: { secret: 's' }, values, fetch: http.fetch })()).rejects.toThrow(refused);
     expect(http.calls).toEqual([]);
+  });
+
+  it('Outline narrowed to OAuth 2 sends only to app.getoutline.com, whatever host the values name', async () => {
+    const oauth = signInWith(outline, 'oauth2');
+    const http = fakeFetch(fakeProvider(oauth, { key: 'kit', code: 'c', operations: { 'documents.get': () => ({ data: { id: 'd' } }) } }));
+    const typed = { values: { host: 'evil.test' } } as object;
+    const started = await startConnect(oauth, { ...start, ...typed });
+    expect(new URL(started.url).host).toBe('app.getoutline.com');
+    const { secret } = await finishConnect(oauth, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, code: 'c', redirectUri: callback,
+      codeVerifier: started.codeVerifier, fetch: http.fetch, onRevokeFailed: vi.fn(), ...typed });
+    await refreshGrant(oauth, { clientId: 'kit-client', clientSecret: 'kit-secret' }, secret.refreshToken ?? '', { fetch: http.fetch, ...typed });
+    await apiClient(oauth, { token: 'kit', fetch: http.fetch, ...typed }).documents.get({ id: 'd' });
+    // The whole entry is its first sign-in, the key's own part unseen.
+    await apiClient(outline, { token: 'kit', fetch: http.fetch, ...typed }).documents.get({ id: 'd' });
+    expect((await startConnect(outline, start)).kind).toBe('redirect');
+    expect(new Set(http.calls.map(call => new URL(call.url).host))).toEqual(new Set(['app.getoutline.com']));
+    expect(http.calls.map(call => new URL(call.url).pathname)).toEqual(['/oauth/token', '/api/auth.info', '/oauth/token', '/api/documents.info',
+      '/api/documents.info']);
+  });
+
+  it("Outline narrowed to its key asks for the key's own fields, and refuses a host that is an address before the key is read", async () => {
+    const key = signInWith(outline, 'key');
+    expect(await startConnect(key)).toEqual({ kind: 'form', fields: key.fields });
+    expect(key.fields.map(field => field.name)).toEqual(['host', 'apiKey']);
+    const http = anything();
+    let reads = 0;
+    const token = () => { reads++; return Promise.resolve('k'); };
+    await expect(apiClient(key, { token, values: { host: '127.0.0.1' }, fetch: http.fetch }).documents.get({ id: 'd' }))
+      .rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
+    await expect(finishConnect(key, { secret: { apiKey: 'k' }, values: { host: '127.0.0.1' }, fetch: http.fetch }))
+      .rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
+    expect([reads, http.calls]).toEqual([0, []]);
   });
 
   it('refuses a later token sign-in whose own typed base sits beside a fixed token URL: host_split, with no request', async () => {

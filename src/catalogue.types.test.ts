@@ -4,6 +4,7 @@ import { clickup } from './catalogue/clickup.js';
 import { linear } from './catalogue/linear.js';
 import { azuredevops } from './catalogue/azuredevops.js';
 import { mattermost } from './catalogue/mattermost.js';
+import { outline } from './catalogue/outline.js';
 import { client } from './client.js';
 import { finishConnect, startConnect, type Connected } from './connect.js';
 import { slack } from './catalogue/slack.js';
@@ -214,6 +215,10 @@ function ownTypes() {
   expectTypeOf(oauth.http).toEqualTypeOf(owned.http);
   expectTypeOf(oauth.identify).toEqualTypeOf(owned.identify);
   expectTypeOf(oauth.auth).toEqualTypeOf<readonly [typeof owned.auth[0]]>();
+  // Outline: its key's connection keeps the host typed; its OAuth 2 one has none.
+  expectTypeOf<Connected<SignIn<typeof outline, 'key'>>['values']['host']>().toEqualTypeOf<string>();
+  expectTypeOf<Connected<SignIn<typeof outline, 'oauth2'>>['values']>().not.toHaveProperty('host');
+  expectTypeOf<Connected<SignIn<typeof outline, 'key'>>['secret']>().toEqualTypeOf<Readonly<Record<'apiKey', string>>>();
   defineProvider({ id: 'first', name: 'First', http: { baseUrl: 'https://first.test' },
     // @ts-expect-error the first sign-in's part is the entry's top level
     auth: [{ kind: 'key', http: { baseUrl: 'https://{host}/api', host: '*' } }] });
