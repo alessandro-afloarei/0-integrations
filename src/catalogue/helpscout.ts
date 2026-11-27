@@ -10,7 +10,7 @@ const customer = { 'id?': 'integer', 'email?': 'string', 'firstName?': 'string',
 const thread = { id: 'integer', 'type?': 'string', 'status?': 'string', 'state?': 'string', 'body?': 'unknown', 'createdAt?': 'string',
   'createdBy?': { 'id?': 'integer', 'type?': 'string', 'email?': 'string' } } as const;
 const conversationId = { conversationId: { in: 'path', type: 'integer', required: true } } as const;
-const statuses = ['active', 'closed', 'inbox_predefined', 'open', 'pending', 'spam'] as const;
+const statuses = ['active', 'closed', 'inbox_predefined', 'open', 'pending'] as const;
 const imported = { in: 'body', type: 'boolean', description: 'true sends no emails or notifications.' } as const;
 const ref = 'https://developer.helpscout.com/mailbox-api/endpoints';
 
@@ -49,9 +49,9 @@ export const helpscout = defineProvider({
     'conversations.update': { docs: `${ref}/conversations/update/`, method: 'PATCH', path: '/v2/conversations/{conversationId}',
       params: { ...conversationId, op: { in: 'body', type: 'string', required: true, enum: ['add', 'move', 'remove', 'replace'],
         description: 'replace for every path but /mailboxId (move) and un-assigning /assignTo (remove).' },
-      path: { in: 'body', type: 'string', required: true, enum: ['/assignTo', '/draft', '/mailboxId', '/primaryCustomer.id', '/status', '/subject'],
-        description: 'The field changed; /draft with true publishes the draft, which sends it.' },
-      value: { in: 'body', type: 'unknown', description: 'A string for /subject and /status, a number for an id, a boolean for /draft.' } } },
+      path: { in: 'body', type: 'string', required: true, enum: ['/assignTo', '/mailboxId', '/primaryCustomer.id', '/status', '/subject'],
+        description: 'The field changed.' },
+      value: { in: 'body', type: 'unknown', description: 'A string for /subject and /status (active, closed, open or pending), a number for an id.' } } },
     'threads.list': { docs: `${ref}/conversations/threads/list/`, path: '/v2/conversations/{conversationId}/threads', paging: 'next',
       records: '_embedded.threads', params: conversationId, result: { _embedded: { threads: [thread] } } },
     'threads.create': { docs: `${ref}/conversations/threads/reply/`, method: 'POST', path: '/v2/conversations/{conversationId}/reply',
@@ -60,12 +60,10 @@ export const helpscout = defineProvider({
         draft: { in: 'body', type: 'boolean', description: 'true creates a draft reply, which sends nothing.' }, imported,
         status: { in: 'body', type: 'string', enum: statuses,
           description: 'The conversation\'s new status; without it the reply thread reactivates the conversation.' },
-        user: { in: 'body', type: 'integer', description: 'The user adding the reply; the token\'s by default.' },
         assignTo: { in: 'body', type: 'integer' }, cc: { in: 'body', type: ['string'] }, bcc: { in: 'body', type: ['string'] } } },
     'notes.create': { docs: `${ref}/conversations/threads/note/`, method: 'POST', path: '/v2/conversations/{conversationId}/notes',
       params: { ...conversationId, text: { in: 'body', type: 'string', required: true }, imported,
-        status: { in: 'body', type: 'string', enum: statuses, description: 'The conversation\'s new status.' },
-        user: { in: 'body', type: 'integer', description: 'The user adding the note; the token\'s by default.' } } },
+        status: { in: 'body', type: 'string', enum: statuses, description: 'The conversation\'s new status.' } } },
     'customers.list': { docs: `${ref}/customers/list-v3/`, path: '/v3/customers', paging: 'next', records: '_embedded.customers',
       params: { firstName: { in: 'query', type: 'string' }, lastName: { in: 'query', type: 'string' }, email: { in: 'query', type: 'string' },
         createdSince: { in: 'query', type: 'string', description: 'A date: customers created after it.' },
