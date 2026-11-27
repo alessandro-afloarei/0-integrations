@@ -355,6 +355,9 @@ test("clientAuth 'none' beside `pkce: false` is refused before anything is sent:
   await expect(exchangeCode(bare, { clientId: 'id' }, { ...exchange, fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
   await expect(refreshGrant(bare, { clientId: 'id' }, 'r', { fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
   await expect(revokeGrant(bare, { refreshToken: 'r', client: { clientId: 'id' }, fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
+  // A revoke sent as a request reaches no token URL, and is refused all the same.
+  const byRequest = defineProvider({ ...bare, revoke: { request: { method: 'POST', path: '/revoke' } } });
+  await expect(revokeGrant(byRequest, { accessToken: 'a', fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
   expect(fake.calls).toEqual([]);
 });
 
@@ -780,3 +783,46 @@ test.each([['authorizeUrl', 'https://{host}/authorize'], ['tokenUrl', 'https://{
       .rejects.toThrow(new TypeError('template_missing: named {host}'));
     expect(fake.calls).toEqual([]);
   });
+
+/** A client whose secret answers another value on each read, as a getter may. */
+const shifting = () => {
+  const secrets = ['abcdef', 'ghijkl', 'mnopqr', 'stuvwx'];
+  let reads = 0;
+  return { client: { clientId: 'id', get clientSecret() { return secrets[reads++ % secrets.length] ?? ''; } }, reads: () => reads };
+};
+/** A token endpoint that answers 400 with the client's credential it was sent, its Basic value or its body secret. */
+const echoing = () => fakeFetch([{ url: /https:\/\//, respond: async (sent: Request) => Response.json({ error: sent.headers.get('authorization')
+  ?.slice('Basic '.length) ?? (JSON.parse(await sent.text()) as { client_secret?: string }).client_secret }, { status: 400 }) }]);
+
+test.each([['basic', pkced], ['post', jsonBodied]] as const)('a %s secret is read once: the value sent is the value no error detail echoes', async (_, entry) => {
+  const { client: changing, reads } = shifting();
+  const echo = echoing();
+  await expect(refreshGrant(entry, changing, 'old-refresh', { fetch: echo.fetch })).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(reads()).toBe(1);
+});
+
+test("a public client's secret is never read", async () => {
+  const { client: changing, reads } = shifting();
+  await refreshGrant(publicClient, changing, 'old-refresh', { fetch: endpoint(token).fetch });
+  expect(reads()).toBe(0);
+});
+
+test('the code and the verifier are read once: validated, sent and redacted as the same values', async () => {
+  let verifierReads = 0;
+  let codeReads = 0;
+  const fake = endpoint(token);
+  // Getters, never spread: a spread would read each once before the engine does.
+  const input = { redirectUri: exchange.redirectUri, fetch: fake.fetch, get codeVerifier() { return verifierReads++ === 0 ? 'v'.repeat(43) : ''; },
+    get code() { return codeReads++ === 0 ? 'first-code' : 'other-code'; } };
+  await exchangeCode(publicClient, { clientId: 'id' }, input);
+  expect(new URLSearchParams(fake.calls[0]?.body).get('code_verifier')).toBe('v'.repeat(43));
+  expect([verifierReads, codeReads]).toEqual([1, 1]);
+});
+
+test("an entry's authorizeParams never replace the parameters the engine sends", () => {
+  const own = { client_id: 'evil', redirect_uri: 'https://evil.test', state: 'x', scope: 'all', code_challenge: 'c', code_challenge_method: 'plain' };
+  const overriding = defineProvider({ ...pkced, auth: [{ ...pkced.auth[0], authorizeParams: { response_type: 'code', ...own } }] });
+  const url = authorizeUrl(overriding, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: ['read'], state: 's', codeChallenge: 'challenge' });
+  expect(Object.fromEntries(url.searchParams)).toEqual({ client_id: 'id', scope: 'read', redirect_uri: exchange.redirectUri, state: 's',
+    code_challenge: 'challenge', code_challenge_method: 'S256', response_type: 'code' });
+});

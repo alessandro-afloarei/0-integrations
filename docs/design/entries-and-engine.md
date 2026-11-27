@@ -307,13 +307,14 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
 - `oauth2` states only what differs: PKCE on, the client secret in the body, scopes joined by a space. `failed` marks
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
-  provider is sent it today.
+  provider is sent it today, and never replaces a parameter the engine sends (`client_id`, `scope`, `redirect_uri`,
+  `state`, `code_challenge`, `code_challenge_method`), which the table also refuses there.
 - `oauth2.clientAuth` says how the client authenticates on every request: its id and secret in the body by default,
   or by HTTP Basic with `'basic'`. No error detail echoes the secret or its Basic value, whichever the request sends.
   `'none'` is a public client (Dynamic Client Registration, a client ID metadata document, or an app registered with
   the provider): every request sends `client_id` in the body and no secret, whatever the app passes; it needs PKCE
-  (the table refuses it beside `pkce: false`, and the engine refuses such an entry before anything is sent,
-  `pkce_required: <entry id>`). How the app obtains its `client_id` is the app's (the engine registers no client), and
+  (the table refuses it beside `pkce: false`, and the engine refuses such an entry before anything is sent, a revoke
+  by request included, `pkce_required: <entry id>`). How the app obtains its `client_id` is the app's (the engine registers no client), and
   `OAuthClient<typeof entry>` has no `clientSecret` (Firecrawl, Brevo).
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.

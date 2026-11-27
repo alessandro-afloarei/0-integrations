@@ -136,6 +136,7 @@ export function declaredUrls(entry: Entry): string[] {
  * (`value_undeclared`: a connection kept from another sign-in), each before a credential is read or anything is sent. */
 export function checkHosts(entry: Entry, values: Values = {}): void {
   if (['fields', 'http', 'identify'].some(name => name in entry.auth[0])) throw new TypeError(`sign_in_own_first: ${entry.id}`);
+  if (entry.auth[0].kind === 'oauth2' && entry.auth[0].clientAuth === 'none' && entry.auth[0].pkce === false) throw new TypeError(`pkce_required: ${entry.id}`);
   if (declaredUrls(entry).some(url => hostPart(url) === undefined)) throw new TypeError(`base_host_refused: ${entry.id}`);
   const domainless = [entry.http.host ?? '*'].flat().every(host => host === '*' || host === ''); // an app's `[]` or `['*']` too
   if (Object.keys(namedHosts(entry)).length > 0 && domainless) throw new TypeError(`base_host_refused: ${entry.id}`);

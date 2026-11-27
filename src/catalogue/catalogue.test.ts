@@ -82,6 +82,9 @@ const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole i
 const OWN_FIRST = "no own `fields`, `http` or `identify` on the first sign-in: its part is the entry's top level";
 const CLIENT_AUTH = "`clientAuth` is `'basic'` or `'none'`, or left out (the client's id and secret in the body)";
 const PUBLIC_PKCE = "a public client (`clientAuth: 'none'`) needs PKCE: leave `pkce` out";
+/** The authorize URL's parameters the engine sends itself, which an entry's `authorizeParams` never replace. */
+const ENGINE_PARAMS = ['client_id', 'scope', 'redirect_uri', 'state', 'code_challenge', 'code_challenge_method'];
+const OWN_PARAM = `\`authorizeParams\` never names a parameter the engine sends (${ENGINE_PARAMS.join(', ')}): leave it out`;
 const fields = z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
   secret: z.literal(true).optional(), default: z.string().optional(),
   help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
@@ -103,7 +106,7 @@ const entrySchema = z.strictObject({
     z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, refreshUrl: https.optional(),
       json: z.literal(true, '`json` is `true` or left out').optional(), pkce: z.literal(false).optional(),
       clientAuth: z.enum(['basic', 'none'], CLIENT_AUTH).optional(), scopeSeparator: z.literal(',').optional(),
-      authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
+      authorizeParams: z.record(z.string(), z.string()).refine(params => !ENGINE_PARAMS.some(name => name in params), OWN_PARAM).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() })
       .refine(item => !(item.clientAuth === 'none' && item.pkce === false), PUBLIC_PKCE),
     z.strictObject({ kind: z.literal('token'), send: send.optional(), ...own, request: z.strictObject({ url: https,
@@ -844,6 +847,11 @@ test.each([[{ refreshUrl: 'http://k.test/refresh' }, 'refreshUrl', 'Invalid stri
 test.each(['post', {}, true])('clientAuth %o fails the schema, with what to fix', value => {
   const bad = { ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], clientAuth: value }] };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([CLIENT_AUTH]);
+});
+
+test.each(ENGINE_PARAMS)('`authorizeParams` naming %s fails the schema, with what to fix', name => {
+  const bad = { ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], authorizeParams: { response_type: 'code', [name]: 'x' } }] };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([OWN_PARAM]);
 });
 
 test('a public client beside `pkce: false` fails the schema, with what to fix', () => {

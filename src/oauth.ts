@@ -20,7 +20,6 @@ function endpoints(entry: Entry, values: Values = {}) {
   const [auth] = entry.auth;
   const urls = oauthUrls(entry);
   if (auth.kind !== 'oauth2' || urls === undefined) throw new TypeError('oauth_unsupported');
-  if (auth.clientAuth === 'none' && auth.pkce === false) throw new TypeError(`pkce_required: ${entry.id}`); // a public client's code needs it
   checkHosts(entry, values);
   const pick = (names: string[]) => Object.fromEntries(names.map(name => [name, values[name]]));
   const plain = pick(plainFields(entry).map(({ name }) => name));
@@ -61,7 +60,8 @@ export function authorizeUrl<const E extends Entry>(entry: E, input: {
     url.searchParams.set('code_challenge', input.codeChallenge);
     url.searchParams.set('code_challenge_method', 'S256');
   }
-  for (const [key, value] of Object.entries(config.authorizeParams ?? {})) url.searchParams.set(key, value);
+  // The entry's parameters never replace the engine's own (the client, scopes, redirect, state and challenge).
+  for (const [key, value] of Object.entries(config.authorizeParams ?? {})) if (!url.searchParams.has(key)) url.searchParams.set(key, value);
   return url;
 }
 
@@ -99,14 +99,14 @@ function context(entry: Entry, credentials: AnyClient, input: Sent, refresh = fa
   const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (refresh ? renew() : token).href,
     ...(revoke ? { revocation_endpoint: revoke.href } : {}) };
   const client = { client_id: credentials.clientId };
-  const auth = config.clientAuth === 'none' ? oauth.None()
-    : (config.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(credentials.clientSecret ?? '');
+  const secret = config.clientAuth === 'none' ? undefined : credentials.clientSecret ?? ''; // read once; a public client has none
+  const auth = secret === undefined ? oauth.None() : (config.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(secret);
   // The secret's Basic value (id and secret form-encoded first): no error detail echoes it, whatever this request sends.
   const sent = new Headers();
-  if (config.clientAuth !== 'none') void oauth.ClientSecretBasic(credentials.clientSecret ?? '')(as, client, new URLSearchParams(), sent);
+  if (secret !== undefined) void oauth.ClientSecretBasic(secret)(as, client, new URLSearchParams(), sent);
   const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
-    config, as, client, auth, secrets: [config.clientAuth === 'none' ? '' : credentials.clientSecret ?? '', ...(basic === undefined ? [] : [basic])],
+    config, as, client, auth, secrets: [secret ?? '', ...(basic === undefined ? [] : [basic])],
     options: { [oauth.customFetch]: bearerByDefault(config.json ? jsonBodies(fetch) : fetch), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
     processing: { recognizedTokenTypes: Object.fromEntries((config.tokenTypes ?? []).map(type => [type.toLowerCase(), () => undefined])) },
   };
@@ -159,10 +159,11 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
 export async function exchangeCode<const E extends Entry>(entry: E, client: OAuthClient<E>, input: { code: string; redirectUri: string;
   codeVerifier?: string | undefined; fetch?: typeof globalThis.fetch } & ValuesOption<Plain<E>>): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
   const c = context(entry, client, input);
-  if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
-  const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });
-  if (input.codeVerifier) params.set('code_verifier', input.codeVerifier);
-  const secrets = [...c.secrets, input.code, input.codeVerifier ?? ''];
+  const { code, codeVerifier } = input; // each read once: the values checked are the values sent and redacted
+  if (c.config.pkce !== false && !codeVerifier?.trim()) throw new TypeError('code_verifier_required');
+  const params = new URLSearchParams({ code, redirect_uri: input.redirectUri });
+  if (codeVerifier) params.set('code_verifier', codeVerifier);
+  const secrets = [...c.secrets, code, codeVerifier ?? ''];
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options));
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);

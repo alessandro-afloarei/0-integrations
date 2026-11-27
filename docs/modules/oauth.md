@@ -5,7 +5,9 @@ on `oauth4webapi`, each driven by a catalogue entry whose sign-in is OAuth 2. `p
 uses it. The app owns the state nonce. The scopes asked are joined by the entry's `scopeSeparator` (a space by
 default); none asked sends no `scope` parameter. `exchangeCode` returns only the token-answer fields the entry reads
 (`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
-condition marks is refused with the entry's own code.
+condition marks is refused with the entry's own code. An entry's `authorizeParams` never replace a parameter the
+engine sends (`client_id`, `scope`, `redirect_uri`, `state`, `code_challenge`, `code_challenge_method`). The client's
+secret, the code and the verifier are each read once, so the value checked is the value sent and redacted.
 
 Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` (the
 refresh URL also from a host the token answer named, below) and checked as a base is, and a URL that names a value not
@@ -44,7 +46,7 @@ Client Registration, or the URL of a client ID metadata document); nothing here 
 client by the entry, `OAuthClient<typeof firecrawl>` being `{ clientId }`, so a typed caller is never asked for a secret
 (one passed anyway is not sent), and a confidential entry's client must have one (`OAuthClient` alone, for an entry
 typed `Entry`, has one too). A public client needs PKCE: an entry that declares `'none'` beside `pkce: false` is refused
-before anything is built or sent (`TypeError('pkce_required: <entry id>')`).
+before anything is built or sent, a revoke by request included (`TypeError('pkce_required: <entry id>')`).
 
 `revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke: an RFC 7009 revoke of the
 first token the entry's `revoke.token` names (it needs `client`, else `oauth_client_required`), or the entry's

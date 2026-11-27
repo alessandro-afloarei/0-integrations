@@ -16,6 +16,11 @@ Nothing here is released yet.
   client whose app Brevo reviews before other accounts authorize it, and its API key second, for your own Brevo
   account, `signInWith(brevo, 'key')`. `declared`.
 - An OAuth 2 error detail never echoes the client's Basic value, also from a request that sent the client in the body.
+  The client's secret, the code and the verifier are each read once, so a getter cannot send one value and redact
+  another. A public client beside `pkce: false` is also refused before a revoke sent as a request.
+- An entry's `authorizeParams` no longer replace a parameter the engine sends (`client_id`, `scope`, `redirect_uri`,
+  `state`, `code_challenge`, `code_challenge_method`): an app's own entry that named one sent its value in place of the
+  engine's, and now sends the engine's. No catalogue entry names one, and the table refuses it.
 - Webhooks:
   - Breaking: `challengeAnswer(webhook, request, secret)` verifies the request itself unless the entry marks its
     challenge `unsigned`; call it before `verifyWebhook`. Slack's `url_verification` and Discord's PING are answered
