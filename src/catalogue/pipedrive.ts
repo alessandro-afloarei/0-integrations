@@ -24,6 +24,9 @@ export const pipedrive = defineProvider({
   identify: { request: { path: '/v1/users/me' }, id: '{data.company_id}:{data.id}', name: ['data.name', 'data.email'] },
   errors: { detail: 'code' },
   paging: { cursor: { kind: 'cursor', next: 'additional_data.next_cursor', send: { query: 'cursor' } } },
+  // Nothing is signed: the app sets `http_auth_user` and `http_auth_password` on the webhook it creates and passes
+  // `user:password` as the secret; `meta.id` is the event's id: https://pipedrive.readme.io/docs/guide-for-webhooks-v2
+  webhook: { kind: 'basic', deliveryId: { body: ['meta.id'] } },
   operations: {
     'persons.list': { docs: `${ref}/Persons#getPersons`, path: '/v2/persons', paging: 'cursor', records: 'data',
       params: { org_id: { in: 'query', type: 'integer' }, ...limit }, result: { data: [person] } },

@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers: 106 declared, 0 recorded;
-356 typed operations; webhooks: basic 1, ed25519 1, hmac 35, standard 5, token 2. What waits is in the [waiting list](waiting-list.md).
+356 typed operations; webhooks: basic 3, ed25519 1, hmac 35, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -35,7 +35,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [Discord](https://docs.discord.com/developers/reference) | chat | key | — | ed25519 | declared |
 | [Exa](https://exa.ai/docs/reference/search) | search | key | — | — | declared |
 | [Fathom](https://developers.fathom.ai/quickstart) | meetings | key | — | — | declared |
-| [Fellow](https://developers.fellow.ai/reference/authentication-1) | meetings | key | recordings.list, recordings.get | — | declared |
+| [Fellow](https://developers.fellow.ai/reference/authentication-1) | meetings | key | recordings.list, recordings.get | standard | declared |
 | [Figma](https://developers.figma.com/docs/rest-api/oauth-apps/) | design | OAuth 2, key | — | — | declared |
 | [Firecrawl](https://docs.firecrawl.dev/api-reference/v2-introduction) | search | key | — | — | declared |
 | [Fireflies](https://docs.fireflies.ai/fundamentals/authorization) | meetings | key | user | hmac | declared |
@@ -58,7 +58,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [Instantly](https://developer.instantly.ai/getting-started/authorization) | sales | key | campaigns.list, leads.list, leads.get, leads.create, leads.update | — | declared |
 | [Intercom](https://developers.intercom.com/docs/references/rest-api/api.intercom.io/admins/identifyadmin) | support | OAuth 2, key | — | hmac | declared |
 | [Jira](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/) | tasks | OAuth 2 | — | — | declared |
-| [Krisp](https://meeting-api-docs.krisp.ai/reference/get_me) | meetings | key | meetings.list, meetings.get | — | declared |
+| [Krisp](https://meeting-api-docs.krisp.ai/reference/get_me) | meetings | key | meetings.list, meetings.get | token | declared |
 | [Leadfeeder (formerly Dealfront)](https://docs.leadfeeder.com/api/public/authentication-354547m0) | sales | key | contacts.search, contacts.get, companies.search, companies.get | — | declared |
 | [LeadIQ](https://leadiqhelp.zendesk.com/hc/en-us/articles/29375289152795-LeadIQ-Public-API-Guide) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
 | [lemlist](https://developer.lemlist.com/api-reference/getting-started/authentication) | sales | key | campaigns.list, contacts.list, contacts.get, contacts.create, contacts.update, leads.create | — | declared |
@@ -80,12 +80,12 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [PagerDuty](https://docs.pagerduty.com/developer/authentication) | monitoring | OAuth 2, key | incidents.list, incidents.get, services.list | hmac | declared |
 | [PayPal](https://developer.paypal.com/api/rest/authentication/) | finance | token | — | — | declared |
 | [People Data Labs](https://docs.peopledatalabs.com/docs/authentication) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
-| [Pipedrive](https://pipedrive.readme.io/docs/marketplace-oauth-authorization) | crm | OAuth 2 | persons.list, persons.search, persons.get, persons.create, persons.update, organizations.list, deals.list | — | declared |
-| [Postmark](https://postmarkapp.com/developer/api/overview) | mail | key | messages.list, messages.get, messages.create | — | declared |
+| [Pipedrive](https://pipedrive.readme.io/docs/marketplace-oauth-authorization) | crm | OAuth 2 | persons.list, persons.search, persons.get, persons.create, persons.update, organizations.list, deals.list | basic | declared |
+| [Postmark](https://postmarkapp.com/developer/api/overview) | mail | key | messages.list, messages.get, messages.create | basic | declared |
 | [Recall.ai](https://docs.recall.ai/reference/authentication) | meetings | key | recordings.list, recordings.get, transcripts.get | standard | declared |
 | [Render](https://api-docs.render.com/reference/authentication) | code | key | deploys.list, deploys.get, deploys.create, services.list | standard | declared |
 | [Reply.io](https://docs.reply.io/api-reference/authentication) | sales | key | sequences.list, contacts.list, contacts.get, contacts.create, contacts.update, contactLinks.create | — | declared |
-| [Resend](https://resend.com/docs/api-reference/introduction) | mail | OAuth 2, key | emails.list, emails.get, domains.list, emails.create | — | declared |
+| [Resend](https://resend.com/docs/api-reference/introduction) | mail | OAuth 2, key | emails.list, emails.get, domains.list, emails.create | standard | declared |
 | [RocketReach](https://docs.rocketreach.co/reference/rocketreach-api-account) | sales | key | people.search, people.get, companies.search, companies.get | hmac | declared |
 | [Rollbar](https://docs.rollbar.com/reference/getting-started-1) | monitoring | key | items.list, items.get, items.update | — | declared |
 | [Salesflare](https://api.salesflare.com/docs) | crm | key | contacts.list, contacts.get, contacts.create, contacts.update, accounts.list, opportunities.list | — | declared |
