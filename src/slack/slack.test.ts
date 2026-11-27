@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Entry } from '../catalogue.js';
 import { slack } from '../catalogue/slack.js';
 import { GrantRevoked } from '../errors.js';
+import { startConnect } from '../connect.js';
 import { revokeGrant } from '../oauth.js';
 import { fakeFetch } from '../testing.js';
 import { fakeSlack } from './fake.js';
@@ -17,7 +19,7 @@ describe('Slack client', () => {
     const client = slackClient({ token: 'xoxb-fixture', fetch: http.fetch });
     expect(await client.channels()).toEqual({ items: [data.channels[1], data.channels[0]], skipped: [], channelsCut: false });
     expect((await client.postMessage({ channel: 'C1', text: 'hi' })).ts).toMatch(/^\d+\.000100$/u);
-    await expect(revokeGrant(slack, { accessToken: 'xoxb-fixture', fetch: http.fetch })).resolves.toBeUndefined();
+    await expect(revokeGrant(slack, { accessToken: 'xoxb-fixture', fetch: http.fetch, values: { domain: 'slack.com' } })).resolves.toBeUndefined();
     await expect(client.postMessage({ channel: 'C0GONE', text: 'hi' }))
       .rejects.toMatchObject({ code: 'request_failed', status: 200, detail: 'channel_not_found' });
   });
@@ -115,7 +117,7 @@ describe('Slack review regressions', () => {
     const http = fakeFetch(fakeSlack(data));
     const client = slackClient({ token: 'xoxb-1', fetch: http.fetch });
     await client.channels();
-    await revokeGrant(slack, { accessToken: 'xoxb-1', fetch: http.fetch });
+    await revokeGrant(slack, { accessToken: 'xoxb-1', fetch: http.fetch, values: { domain: 'slack.com' } });
     expect(http.calls.map(call => call.headers['content-type'])).toEqual([undefined, undefined]);
   });
 
@@ -130,5 +132,23 @@ describe('Slack review regressions', () => {
   it.each([undefined, null, {}])('refuses a missing or malformed channel list %j', async channels => {
     const http = fakeFetch([{ url: 'https://slack.com/api/conversations.list', respond: () => Response.json({ ok: true, channels }) }]);
     await expect(slackClient({ token: 'xoxb-1', fetch: http.fetch }).channels()).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+});
+
+describe('Slack instance', () => {
+  const start = { clientId: 'id', redirectUri: data.redirectUri, state: 's' };
+  it.each([[undefined, 'https://slack.com/oauth/v2/authorize'], ['slack-gov.com', 'https://slack-gov.com/oauth/v2/authorize']])(
+    'signs in on %s: slack.com when no domain is given, kept in the values', async (domain, authorize) => {
+      const started = await startConnect(slack, domain === undefined ? start : { ...start, values: { domain } });
+      expect([started.url.split('?')[0], started.values]).toEqual([authorize, { domain: domain ?? 'slack.com' }]);
+    });
+
+  it('sends a GovSlack connection to slack-gov.com, and a kept connection with no domain nowhere', async () => {
+    const http = fakeFetch([{ url: 'https://slack-gov.com/api/auth.revoke', respond: () => Response.json({ ok: true }) }]);
+    await revokeGrant(slack, { accessToken: 'a', fetch: http.fetch, values: { domain: 'slack-gov.com' } });
+    const kept: Entry = slack; // a connection stored before the domain
+    await expect(revokeGrant(kept, { accessToken: 'a', fetch: http.fetch })).rejects.toThrow('template_missing: slack {domain}');
+    await expect(startConnect(slack, { ...start, values: { domain: 'evil.test' } })).rejects.toThrow(TypeError);
+    expect(http.calls.map(call => call.url)).toEqual(['https://slack-gov.com/api/auth.revoke']);
   });
 });

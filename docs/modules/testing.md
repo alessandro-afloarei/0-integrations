@@ -39,10 +39,11 @@ password); for an OAuth 2 entry, the access token its token URL gives.
 - Each operation the app answers is routed by its method and path (each `{name}` one segment, decoded into
   `call.path`), or for GraphQL by its query. When two paths match a request, the one whose first differing segment is
   literal answers: `/items/recent` before `/items/{id}`, and `/a/b/{y}` before `/a/{x}/c`. Of two operations on the
-  same method and path (folk's `people.list` and `people.search`), the one whose required query and body parameters
-  the request all carries answers, the most such first, the first declared on a tie; when none carries its own, the
-  first declared answers. Its function gets `{ path, query, body }` and returns the JSON answered with 200,
-  `undefined` for a 404, or a `Response` answered as it is. Paging is the function's: it answers each page as it likes.
+  same method and path (folk's `people.list` and `people.search`), the one whose required query, body and form
+  parameters the request all carries answers, the most such first, the first declared on a tie; when none carries its
+  own, the first declared answers. Its function gets `{ path, query, body }` (a form body as its fields, each a
+  string) and returns the JSON answered with 200, `undefined` for a 404, or a `Response` answered as it is. Paging is
+  the function's: it answers each page as it likes.
   On a route two operations share, every request is routed afresh: a next page whose request drops the filter is
   answered by the other operation.
 - The fake owns a GraphQL URL: a query it has no answer for throws
@@ -56,8 +57,9 @@ password); for an OAuth 2 entry, the access token its token URL gives.
 
 ```ts
 // An app's test, for an entry with no module:
-const { fetch } = fakeFetch(fakeProvider(trello, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
-const { account } = await finishConnect(trello, { secret: { apiToken: 'kit-token' }, values: { apiKey: 'kit-key' }, fetch });
+const key = signInWith(trello, 'key'); // Trello lists OAuth 2 first; this is its API key and token
+const { fetch } = fakeFetch(fakeProvider(key, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
+const { account } = await finishConnect(key, { secret: { apiToken: 'kit-token' }, values: { apiKey: 'kit-key' }, fetch });
 ```
 
 ```ts
@@ -121,8 +123,13 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   `accessToken`. An OAuth entry that reads its account only from the token answer, with no `identify.request`, sends
   nothing to record, and the recorder refuses it.
 - `RECORD_VALUES` holds the test account's plain values, which are not secret. A field left out takes its kit value
-  (its `default`, else its first choice, else `kit-<name>`). Each value given is written as its kit value, so a
-  recording made on a sandbox or another region is written with the default host.
+  (its `default`, else its first choice, else, for a field that is the base's whole host, the first host its
+  `http.host` allows, such as `kit.myfreshworks.com`, else `kit-<name>`). Every value in the base's host must be given:
+  a field's, even one with a default or choices (Intercom's `apiHost`: the account may live in another region), and a
+  host the token answer names (Pipedrive's `apiDomain`), each as the host alone (`company.pipedrive.com`, never the
+  `https://` origin a token answer holds). Without it, or given as an origin, the recorder refuses before anything is
+  sent, so a real key never goes to a host the kit chose. Each value given is written as its kit value, so a recording
+  made on a sandbox or another region is written with the default host.
 - A module's scenario of that name is recorded first. A provider with a module but no such scenario is refused before
   anything is sent. Otherwise the recorder signs in to the entry (a `token` entry's token request, then identify) with
   the key, then with a bad key, which must be refused as `rejected`. It writes `src/catalogue/<id>.recording.json`

@@ -96,7 +96,7 @@ test('a declared rate limit waits its reset, Retry-After first, else the default
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset, 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 30_000 });
   expect(fail(limits, 403, { message: 'Please SLOW DOWN' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
   expect(fail(limits, 403, { error: { code: 'quota' } })).toMatchObject({ code: 'rate_limited', detail: 'quota', retryAfterMs: 60_000 });
-  expect(fail(limits, 403, { error: { code: 403 } })).toMatchObject({ code: 'rejected', detail: null, retryAfterMs: null });
+  expect(fail(limits, 403, { error: { code: 403 } })).toMatchObject({ code: 'rejected', detail: '403', retryAfterMs: null });
   expect(fail(limits, 429, {})).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
   expect(fail(limits, 403, {})).toMatchObject({ code: 'rejected', retryAfterMs: null });
 });
@@ -130,7 +130,7 @@ test('a revoked code is GrantRevoked, a slash becomes a dot, a body wait in mill
 });
 
 test('codeOf, waitOf and retryPolicy', () => {
-  expect(codeOf({ detail: ['a', 'b'] }, { a: 7, b: 'x' })).toBe('x');
+  expect(codeOf({ detail: ['a', 'b'] }, { a: 7.5, b: 'x' })).toBe('x');
   expect(codeOf({ detail: ['a', 'b'] }, { a: '', b: 'x' })).toBe('x');
   expect(codeOf({ detail: 'a' }, { a: { a: 'x' } })).toBeUndefined();
   expect(codeOf({ detail: 'a', allow: ['KNOWN'] }, { a: 'OTHER' })).toBeUndefined();
@@ -196,7 +196,7 @@ const headerKey = defineProvider({ id: 'header-key', name: 'Header key', auth: [
 
 test("Breakcold's body wait in milliseconds and code at error.code; a slash in a code made a dot", () => {
   expect(fail(breakcold, 429, { error: { code: 'usage_limit', retryAfterMs: 12.1 } })).toMatchObject({ code: 'rate_limited', detail: 'usage_limit', retryAfterMs: 13 });
-  expect(fail(breakcold, 402, { error: { code: 7 } })).toMatchObject({ code: 'request_failed', detail: null });
+  expect(fail(breakcold, 402, { error: { code: { id: 7 } } })).toMatchObject({ code: 'request_failed', detail: null });
   expect(fail(headerKey, 403, { type: 'provider/insufficient_permissions' })).toMatchObject({ code: 'rejected', detail: 'provider.insufficient_permissions' });
 });
 
@@ -257,6 +257,37 @@ test('a reset already past waits 0; one beyond the safe range once in millisecon
     .toMatchObject({ code: 'rate_limited', retryAfterMs: Number.MAX_SAFE_INTEGER });
   const chat: Rules = { http: { ...BASE, retry: { wait: { path: 'waitMs', unit: 'ms' } } } };
   expect(fail(chat, 429, { waitMs: -5 })).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+});
+
+test('a code that is a non-negative safe integer is read as its digits; any other number, a boolean or an object is none', () => {
+  const at = { detail: 'error.code' } as const;
+  expect(codeOf(at, { error: { code: 2001 } })).toBe('2001');
+  expect(codeOf(at, { error: { code: 0 } })).toBe('0');
+  for (const code of [1.5, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1, true, { code: 1 }, [1]]) {
+    expect(codeOf(at, { error: { code } })).toBeUndefined();
+  }
+  expect(codeOf({ detail: ['a', 'b'] }, { a: 7, b: 'x' })).toBe('7');
+  expect(codeOf({ ...at, allow: ['2001'] }, { error: { code: 2001 } })).toBe('2001');
+  expect(codeOf({ ...at, allow: ['2001'] }, { error: { code: 2002 } })).toBeUndefined();
+});
+
+test('a numeric code is compared as its digits by rules, `failed` and `revoked`', () => {
+  const numbered: Rules = { http: BASE, errors: { detail: 'error.code', revoked: ['3001'], failed: { detail: '1001' },
+    rules: [{ when: { detail: '2001' }, code: 'not_found' }] } };
+  expect(fail(numbered, 400, { error: { code: 2001 } })).toMatchObject({ code: 'not_found', detail: '2001' });
+  expect(fail(numbered, 400, { error: { code: 2002 } })).toMatchObject({ code: 'request_failed', detail: '2002' });
+  expect(fail(numbered, 200, { error: { code: 1001 } })).toMatchObject({ code: 'request_failed', status: 200, detail: '1001' });
+  expect(classify(numbered, response(200, { error: { code: 1002 } }))).toBeNull();
+  const gone = classify(numbered, response(401, { error: { code: 3001 } }));
+  expect(gone).toBeInstanceOf(GrantRevoked);
+  expect(gone).toMatchObject({ detail: '3001' });
+});
+
+test("a numeric code holding the credential its request sent is no detail", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ type: 4012 }, { status: 403 }) }]);
+  const answer = await createClient(headerKey, { token: () => Promise.resolve('4012'), fetch: fake.fetch }).request('/accounts');
+  expect(classify(headerKey, answer)).toMatchObject({ code: 'rejected', detail: null });
+  expect(fail(headerKey, 403, { type: 4012 })).toMatchObject({ code: 'rejected', detail: '4012' });
 });
 
 test('codeOf: an earlier code that `allow` refuses hides a later allowed one', () => {

@@ -18,7 +18,7 @@ export const google = defineProvider({
     headers: { accept: 'application/json' }, retry: {},
     rateLimit: { defaultWaitMs: 60_000, when: [{ status: 429 }, { status: 403, detail: 'rateLimitExceeded' },
       { status: 403, detail: 'userRateLimitExceeded' }, { status: 403, detail: 'quotaExceeded' }] } },
-  errors: { detail: ['error.code', 'error.errors.0.reason', 'error.status'] },
+  errors: { detail: ['error.errors.0.reason', 'error.status'] },
   identify: { request: { path: '/users/me/profile' }, id: 'emailAddress', name: 'emailAddress', lowercase: true },
   paging: { pageToken: { kind: 'cursor', next: 'nextPageToken', send: { query: 'pageToken' } } },
   // Calendar push sends no signature: the channel's own `token` comes back on every notification

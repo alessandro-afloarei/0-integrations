@@ -158,12 +158,12 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 A placeholder in `http.baseUrl` names a plain field or a `save` key (in the host, one read from the token answer is a
 named host, below). In the host (between `https://` and the next `/`)
 it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
-and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those when the hosts are on
-several domains (the filled host matches one), or `*` (any). Intercom's region is the first: `baseUrl:
-'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts; Smartsheet's
-products are the first list, `host: ['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu',
-'api.smartsheet.au']`. In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as
-`a%2Fb`; a value that is `.` or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no
+and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those (the filled host
+matches one), or `*` (any). Intercom's region is the first: its access token's `baseUrl: 'https://{apiHost}'`, with
+`apiHost` a field whose `choices` are its three API hosts and `host` those three names; Smartsheet's products are the
+first list, `host: ['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu', 'api.smartsheet.au']`.
+In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as `a%2Fb`; a value that is `.`
+or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no
 placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
 'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value its `save` keeps.
 
@@ -453,10 +453,13 @@ classified in this order, and the first step that decides wins:
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
 
-- `errors.detail` is where the provider's own error code sits. A code counts only when it is a non-empty string: an
-  empty one is skipped and the next path read. A `/` in it becomes `.`, and it must then pass the library's strict
-  pattern, so no provider text or secret reaches an error. `allow` keeps only the listed codes. It checks the first
-  code found, so a refused one hides a later path.
+- `errors.detail` is where the provider's own error code sits. A code counts only when it is a non-empty string or a
+  non-negative safe integer, read as its decimal digits (`2001` is `'2001'`, which `allow`, `revoked`, `rules`,
+  `failed` and `goneErrors` compare); anything else (an empty string, a fraction, a negative, a boolean) is skipped
+  and the next path read. A path that holds the HTTP status as a number (Google's `error.code`) is not a code path:
+  leave it out, or it reads as the code and hides a later path. A `/` in a code becomes `.`, and it must then pass the
+  library's strict pattern, so no provider text or secret reaches an error. `allow` keeps only the listed codes. It
+  checks the first code found, so a refused one hides a later path.
 - Only a call marked idempotent is retried: a GET unless the caller says `idempotent: false`, or any call the caller
   marks `idempotent: true` (an operation of `kind: 'read'`, an idempotent DELETE), never with a caller's `signal`. It is
   retried after a 429, a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was
@@ -547,7 +550,7 @@ repeated-cursor guard.
 type Timestamp = { header: string; toleranceSeconds?: number };
 type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
-      part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+      secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
@@ -560,7 +563,11 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 `deliveryId` is what an app dedupes on; several body paths are joined with `:`.
 
 1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
-   (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`).
+   (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`). The key is the secret's bytes, or
+   with `secret: 'base64'` or `'hex'` its decoding (Airtable and Chatwork base64, Close hex), which must encode back to
+   exactly the secret (hex in either case, base64's `=` padding optional): loose base64 (another alphabet, whitespace,
+   unused bits set), hex of odd length or with another character, and a key of only zero bytes (HMAC pads a key with
+   zeros, so it is the empty key) are `false`, never the secret's text.
 2. `hmac` with `part` (Stripe's `t=…,v1=…,v1=…`): the header is split on `,`, each piece on its first `=`. Every value
    whose name is `part` is a signature, the other pieces (another scheme, debug entries) are ignored, and the request
    passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
@@ -578,16 +585,17 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 6. `standard` (Standard Webhooks, GitLab): `webhook-id`, `webhook-timestamp`
    (seconds, 300 seconds of tolerance) and `webhook-signature` (space-separated `v1,<base64>`, other versions ignored)
    over `<webhook-id>.<webhook-timestamp>.<raw body>`, keyed with the base64 decoding of the secret after an optional
-   `whsec_`. An id holding a `.` is `false`, as the specification bars it.
+   `whsec_`, as strict as `secret: 'base64'`. An id holding a `.` is `false`, as the specification bars it.
 7. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
 8. `challengeAnswer(webhook, request)`, called only after `verifyWebhook` accepted the request, answers a handshake: a
    JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
    string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
 
-In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom) and `part` (Stripe), `ed25519` and
-`Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge` (Slack, Discord). A secret that keys
-nothing (empty, or a `standard` secret whose base64 decodes to nothing) is `false`. The table test also refuses a
-`challenge.when` with a `status`, `header` or `detail` or without a `path`, and an `echo` holding a `.`.
+In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
+Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge`
+(Slack, Discord). A secret that keys nothing (one that does not decode exactly, or a key of only zero bytes) is
+`false`. The table test also refuses a `challenge.when` with a `status`, `header` or `detail` or without a `path`, and
+an `echo` holding a `.`.
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a
@@ -600,7 +608,7 @@ provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft 
 type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Record<string, Param>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null'; base?: string; anyOf?: readonly (readonly Path[])[] };
-type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
+type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
 type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
 ```
@@ -624,10 +632,15 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 - At run time each argument is checked by its declared type (and `enum`) before anything is sent; one that does not fit
   is a `TypeError` naming it (`param_missing: <name>`, `param_invalid: <name>`). An argument that is not declared, or is
   `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
-  out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
-  strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
+  out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path`, `query` and `form` values
+  are strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
   parameters are sent as one JSON object, `{}` when none is given, `variables` as GraphQL's variables (`{}` when none),
-  posted with the query to the base.
+  posted with the query to the base. `form` parameters are sent as an `application/x-www-form-urlencoded` body, each
+  value as its string (`true`, `25`), an empty form when none is given, with the form's `content-type`, which wins over
+  one the entry or the app sets (Chatwork, Zulip and Agile CRM take one).
+- A parameter has a place in its request or the entry is refused (the table test, and `client()` with
+  `param_unplaced: <id> <name>` when it is built): a `path` one only where the path names it, `body` and `form` ones
+  never on a GET and never in one operation together, and on a GraphQL operation only `variables`.
 - `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
   creates one record by any of several equal inputs (`[['email'], ['phone', 'last_name']]`). A path names a parameter
   or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read
@@ -671,9 +684,10 @@ a provider whose OAuth 2 cannot be declared yet is not declared with a key alone
 
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
-  scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host` with `http.host: '*'`; a documented list of regional
-  hosts on one domain is `choices` with `http.host: '*.<domain>'`, on several domains `choices` with `http.host`
-  those names. A host the token answer names is no field but a `save` key, `http.host` the narrowest the pages support.
+  scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host`,
+  `http.host` the domains its pages name (Freshsales' two), else `'*'`; a documented list of regional hosts is
+  `choices` with `http.host` those names (Intercom's three), never the wider domain. A host the token answer names is
+  no field but a `save` key, `http.host` the narrowest the pages support.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
 - `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
   authorization, the refresh token goes first.

@@ -81,7 +81,7 @@ const bare = () => Object.create(null) as Record<string, unknown>;
 
 /** The request an operation's arguments make: each declared one checked by its shape and sent in its place. */
 function operationRequest(id: string, op: Operation, args: Given, signal?: AbortSignal): [string, RequestOptions] {
-  const at = { path: bare(), query: bare(), body: bare(), variables: bare() };
+  const at = { path: bare(), query: bare(), body: bare(), form: bare(), variables: bare() };
   const given = bare(); // each argument as checked, for `anyOf`
   for (const [name, param] of Object.entries(op.params ?? {})) {
     const value = Object.hasOwn(args, name) ? args[name] : undefined;
@@ -93,7 +93,7 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
     const scalar = typeof checked === 'string' || typeof checked === 'number' || typeof checked === 'boolean';
     // A path value is one segment: never empty or a dot segment, which the URL would resolve away.
     if (checked === INVALID || (checked !== null && param.enum !== undefined && !(typeof checked === 'string' && param.enum.includes(checked)))
-      || (param.in === 'path' || param.in === 'query') && !scalar
+      || (param.in === 'path' || param.in === 'query' || param.in === 'form') && !scalar
       || (param.in === 'path' && ['', '.', '..'].includes(String(checked)))) refuse(`param_invalid: ${name}`);
     given[name] = checked;
     at[param.in][name] = param.in === 'body' || param.in === 'variables' ? checked
@@ -107,7 +107,9 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
     : { method: op.method ?? 'GET', path: fill(op.path, name => at.path[name] ?? refuse(`param_missing: ${name}`), id) }, {
     ...(Object.keys(at.query).length > 0 ? { query: at.query as Record<string, string> } : {}),
     // A provider may require a JSON body whose every field is optional: an operation with a body parameter always sends one.
-    ...(Object.values(op.params ?? {}).some(param => param.in === 'body') ? { json: at.body } : {}),
+    // One operation never declares both (`param_unplaced`).
+    ...(Object.values(op.params ?? {}).some(param => param.in === 'body') ? { json: at.body }
+      : Object.values(op.params ?? {}).some(param => param.in === 'form') ? { form: at.form as Record<string, string> } : {}),
     variables: at.variables, idempotent: read, ...(signal ? { signal } : {}) });
 }
 

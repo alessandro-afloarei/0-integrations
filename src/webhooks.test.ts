@@ -1,7 +1,10 @@
 import { createHmac, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Webhook } from './catalogue.js';
+import { airtable } from './catalogue/airtable.js';
 import { breakcold } from './catalogue/breakcold.js';
+import { chatwork } from './catalogue/chatwork.js';
+import { close } from './catalogue/close.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { gitlab } from './catalogue/gitlab.js';
@@ -250,6 +253,108 @@ test('refuses a Standard Webhooks request that is not a fresh `v1` signature of 
   }
   // The 8 KiB cap: a list over it is false before it is parsed, though its last signature is good.
   expect(verifyWebhook(gitlab.webhook, standardSigned(`${'v1a,x '.repeat(1400)}${good}`), standardSecret)).toBe(false);
+});
+
+/** An `hmac` webhook keyed with the secret's decoding: the hex digest of the body, and the same with base64. */
+const decodedHex: Webhook = { kind: 'hmac', header: 'x-signature', secret: 'hex' };
+const decodedBase64: Webhook = { kind: 'hmac', header: 'x-signature', secret: 'base64' };
+const keyBytes = Buffer.from('0123456789abcdef0123456789abcdef', 'hex');
+const hmacHex = (key: Buffer | string, content: Buffer | string = body) => createHmac('sha256', key).update(content).digest('hex');
+
+test('`secret` keys the HMAC with the hex or base64 decoding of the secret, never its text', () => {
+  const hexSecret = keyBytes.toString('hex');
+  const base64Secret = keyBytes.toString('base64');
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': hmacHex(keyBytes) }), hexSecret)).toBe(true);
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': hmacHex(keyBytes) }), hexSecret.toUpperCase())).toBe(true);
+  expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(keyBytes) }), base64Secret)).toBe(true);
+  // Signed with the secret's text where the entry decodes it, or with the decoding where it does not: false.
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': hmacHex(hexSecret) }), hexSecret)).toBe(false);
+  expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(base64Secret) }), base64Secret)).toBe(false);
+  const plain: Webhook = { kind: 'hmac', header: 'x-signature' };
+  expect(verifyWebhook(plain, request({ 'x-signature': hmacHex(keyBytes) }), hexSecret)).toBe(false);
+  expect(verifyWebhook(plain, request({ 'x-signature': hmacHex(hexSecret) }), hexSecret)).toBe(true);
+});
+
+test.each<[string, 'base64' | 'hex']>([
+  ['ab$c', 'base64'], ['YWJj ZGVm', 'base64'], [' YWJjZGVm', 'base64'], ['YWJjZGVm\n', 'base64'], ['YR==', 'base64'], ['YR', 'base64'],
+  ['-_8-', 'base64'], ['', 'base64'], ['====', 'base64'],
+  ['abc', 'hex'], ['0g', 'hex'], ['zz', 'hex'], ['ab cd', 'hex'], ['0x00ff', 'hex'], ['', 'hex'],
+])('a %j secret that is no exact %s keys nothing: false, never its loose decoding or its text', (bad, encoding) => {
+  const webhook = encoding === 'hex' ? decodedHex : decodedBase64;
+  for (const key of [Buffer.from(bad, encoding), Buffer.from(bad)]) {
+    expect(verifyWebhook(webhook, request({ 'x-signature': hmacHex(key) }), bad)).toBe(false);
+  }
+});
+
+test.each(['YQ', 'YQ=', 'YQ==', 'YWI', 'YWI='])('a base64 secret %j with its padding left out or in is its bytes', padded => {
+  const key = Buffer.from(padded, 'base64');
+  expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(key) }), padded)).toBe(true);
+  expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(padded) }), padded)).toBe(false);
+});
+
+test('a key of only zero bytes is the empty key HMAC pads it to: a delivery signed with the empty key is false', () => {
+  const plain: Webhook = { kind: 'hmac', header: 'x-signature' };
+  for (const [webhook, zero] of <[Webhook, string][]>[[decodedHex, '00'], [decodedHex, '0'.repeat(64)], [decodedBase64, 'AAAA'], [plain, '\u0000'], [plain, '\u0000'.repeat(32)]]) {
+    expect(verifyWebhook(webhook, request({ 'x-signature': hmacHex('') }), zero)).toBe(false);
+  }
+  const zeroStandard = `whsec_${Buffer.alloc(32).toString('base64')}`;
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.alloc(0))), zeroStandard)).toBe(false);
+});
+
+test('a decoded secret keeps the signature rules: one header, the whole digest, these bytes', () => {
+  const hexSecret = keyBytes.toString('hex');
+  const good = hmacHex(keyBytes);
+  const flipped = (parseInt(good.slice(0, 1), 16) ^ 1).toString(16) + good.slice(1);
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': flipped }), hexSecret)).toBe(false);
+  expect(verifyWebhook(decodedHex, request({}), hexSecret)).toBe(false);
+  // Two signature headers arrive joined (`a, b`): neither alone is the header.
+  expect(verifyWebhook(decodedHex, { ...request({}), headers: new Headers([['x-signature', good], ['x-signature', good]]) }, hexSecret)).toBe(false);
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': good }, Buffer.from('{"event":"deleted"}')), hexSecret)).toBe(false);
+});
+
+test('a Standard Webhooks secret is decoded as strictly, padding optional: loose base64 after `whsec_` is false', () => {
+  const loose = [`whsec_${standardKey.toString('base64')} `, `whsec_${standardKey.toString('base64')}\n`, `whsec_${standardKey.toString('base64url')}-`, 'whsec_YR=='];
+  for (const secret of loose) {
+    for (const key of [Buffer.from(secret.slice(6), 'base64'), Buffer.from(secret.slice(6))]) {
+      expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, key)), secret)).toBe(false);
+    }
+  }
+  // The specification asks for base64 alone; its reference libraries read an unpadded secret, and so does this one.
+  const padded = Buffer.alloc(32, 7);
+  expect(padded.toString('base64')).toMatch(/=$/u);
+  const unpadded = `whsec_${padded.toString('base64').replace(/=+$/u, '')}`;
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, padded)), unpadded)).toBe(true);
+});
+
+// The three pages give no secret, body and signature together, so each vector is computed from the page's recipe.
+test("verifies Airtable's `X-Airtable-Content-MAC`: `hmac-sha256=` and the hex HMAC of the body, keyed with `macSecretBase64` decoded", () => {
+  const macSecretBase64 = keyBytes.toString('base64');
+  expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': `hmac-sha256=${hmacHex(keyBytes)}` }), macSecretBase64)).toBe(true);
+  expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': `hmac-sha256=${hmacHex(macSecretBase64)}` }), macSecretBase64)).toBe(false);
+  expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': hmacHex(keyBytes) }), macSecretBase64)).toBe(false);
+});
+
+test("verifies Chatwork's `x-chatworkwebhooksignature`: the base64 HMAC of the body, keyed with the token decoded from base64", () => {
+  const token = keyBytes.toString('base64');
+  const base64Of = (key: Buffer | string) => createHmac('sha256', key).update(body).digest('base64');
+  expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': base64Of(keyBytes) }), token)).toBe(true);
+  expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': base64Of(token) }), token)).toBe(false);
+  expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': hmacHex(keyBytes) }), token)).toBe(false);
+});
+
+/** Close's example `signature_key` (its Webhooks page); the hash is the hex HMAC of `close-sig-timestamp` and the body. */
+const closeKey = '058bfb6a3d8cfdc4da7c3be5901b16ae11da982b46a25fb2cd7016e97a140a1c';
+const closeSigned = (timestamp: string, signedAt = timestamp, key: Buffer | string = Buffer.from(closeKey, 'hex')) =>
+  request({ 'close-sig-hash': hmacHex(key, Buffer.concat([Buffer.from(signedAt), body])), 'close-sig-timestamp': timestamp });
+
+test("verifies Close's `close-sig-hash` over `close-sig-timestamp` and the body, keyed with the hex `signature_key` decoded", () => {
+  expect(verifyWebhook(close.webhook, closeSigned(t), closeKey)).toBe(true);
+  expect(verifyWebhook(close.webhook, closeSigned(t, t, closeKey), closeKey)).toBe(false);
+  expect(verifyWebhook(close.webhook, closeSigned(String(now - 300)), closeKey)).toBe(true);
+  expect(verifyWebhook(close.webhook, closeSigned(String(now - 301)), closeKey)).toBe(false);
+  expect(verifyWebhook(close.webhook, closeSigned(t, String(now - 3600)), closeKey)).toBe(false);
+  expect(verifyWebhook(close.webhook, { ...closeSigned(t), headers: new Headers({ 'close-sig-hash': hmacHex(Buffer.from(closeKey, 'hex')) }) }, closeKey)).toBe(false);
+  expect(verifyWebhook(close.webhook, closeSigned(t), closeKey.slice(1))).toBe(false);
 });
 
 test('an empty secret accepts nothing, whatever the kind', () => {

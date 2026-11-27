@@ -10,7 +10,7 @@ import { metabase } from './catalogue/metabase.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { slack } from './catalogue/slack.js';
-import { trello } from './catalogue/trello.js';
+import { trello as trelloEntry } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
@@ -22,6 +22,7 @@ import type { Sealed } from './vault.js';
 
 /** GitLab's personal access token sign-in: these tests send `private-token`. */
 const gitlab = signInWith(gitlabEntry, 'key');
+const trello = signInWith(trelloEntry, 'key');
 
 describe('fakeProvider', () => {
   const unauthorized = { status: 401, body: { error: 'unauthorized' } };
@@ -283,6 +284,20 @@ describe('fakeProvider', () => {
     expect(await ids(api.people.search({ 'filter[emails][eq]': 'a@example.test' }))).toEqual(['found']);
   });
 
+  test("a form operation's function receives its form body, and two on one route choose by a required form parameter", async () => {
+    const formed = defineProvider({ id: 'formed', name: 'Formed', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.formed.test' },
+      operations: { 'notes.create': { method: 'POST', path: '/notes', params: { text: { in: 'form', type: 'string', required: true },
+        pinned: { in: 'form', type: 'boolean' } } },
+      'notes.update': { method: 'POST', path: '/notes', params: { id: { in: 'form', type: 'integer', required: true } } } } });
+    const calls: FakeCall[] = [];
+    const { fetch } = fakeFetch(fakeProvider(formed, { key: 'k', operations: {
+      'notes.create': call => { calls.push(call); return { by: 'create' }; }, 'notes.update': () => ({ by: 'update' }) } }));
+    const api = client(formed, { token: 'k', fetch });
+    await expect(api.notes.create({ text: 'a & b', pinned: true })).resolves.toEqual({ by: 'create' });
+    await expect(api.notes.update({ id: 7 })).resolves.toEqual({ by: 'update' });
+    expect(calls).toEqual([{ path: {}, query: {}, body: { text: 'a & b', pinned: 'true' } }]);
+  });
+
   test("lemlist's create and update share a route: the update answers a body carrying its required contactId", async () => {
     const { fetch } = fakeFetch(fakeProvider(lemlist, { key: 'k', operations: {
       'contacts.create': () => ({ data: { _id: 'created' } }), 'contacts.update': () => ({ data: { _id: 'updated' } }) } }));
@@ -403,15 +418,15 @@ describe('fakeProvider', () => {
     });
 
   test("Slack's token answer holds the value given for the `save` key that reads it, and its kit values elsewhere", async () => {
-    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { botUserId: 'U1' } }));
+    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { domain: 'slack.com', botUserId: 'U1' } }));
     await expect(finishConnect(slack, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
       .resolves.toMatchObject({ values: { botUserId: 'U1' }, account: { id: 'kit-team.id', name: 'kit-team.name' } });
   });
 
   test("Slack's revoke, a request, is answered to the connection's token and refused to another", async () => {
-    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k' }));
-    await expect(revokeGrant(slack, { accessToken: 'k', fetch })).resolves.toBeUndefined();
-    await expect(revokeGrant(slack, { accessToken: 'x', fetch })).rejects.toMatchObject({ code: 'rejected' });
+    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { domain: 'slack.com' } }));
+    await expect(revokeGrant(slack, { accessToken: 'k', fetch, values: { domain: 'slack.com' } })).resolves.toBeUndefined();
+    await expect(revokeGrant(slack, { accessToken: 'x', fetch, values: { domain: 'slack.com' } })).rejects.toMatchObject({ code: 'rejected' });
   });
 
   test("a `tokenAnswer.*` kit value never replaces the token or `expires_in`", async () => {

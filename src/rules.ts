@@ -37,11 +37,13 @@ export function argumentShape(op: Operation, path: Path): Shape | undefined {
 }
 
 /** Whether a parameter has a place in its operation's request: GraphQL takes only variables; a path operation takes no
- * variables, a path parameter only where its path names it, and a body parameter only when it is not a GET. */
+ * variables, a path parameter only where its path names it, and a body or form parameter only when it is not a GET and
+ * the operation has no parameter of the other of the two. */
 export function placed(op: Operation, name: string, param: Param): boolean {
   return 'graphql' in op ? param.in === 'variables'
     : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))
-      && (param.in !== 'body' || (op.method ?? 'GET') !== 'GET');
+      && ((param.in !== 'body' && param.in !== 'form') || ((op.method ?? 'GET') !== 'GET'
+        && !Object.values(op.params ?? {}).some(each => each.in === (param.in === 'body' ? 'form' : 'body'))));
 }
 
 /** Whether a paged operation reads its records where its shape walks: on a `page` or `offset` shape, at the shape's
@@ -51,11 +53,13 @@ export function pagedRecords(op: Operation, shape: Paging): boolean {
 }
 
 /** The parameter an operation declares in the place its paging shape's `send` writes, if any: the walk sends that value
- * itself, and a caller's would start the walk there and be overwritten after the first page. */
+ * itself, and a caller's would start the walk there and be overwritten after the first page. A body cursor beside a form
+ * parameter is named too: from the second page its JSON would replace the form. */
 export function pagedParam(op: Operation, shape: Paging): string | undefined {
   const sent = 'send' in shape ? shape.send : undefined;
   // A literal query in the path (`/items?offset=2`) would start the walk there too.
   if (sent && 'query' in sent && 'path' in op && new URL(`https://a.test${op.path}`).searchParams.has(sent.query)) return sent.query;
+  if (sent && 'body' in sent && Object.values(op.params ?? {}).some(param => param.in === 'form')) return sent.body;
   return sent === undefined ? undefined
     : Object.entries(op.params ?? {}).find(([name, param]) => param.in in sent && sent[param.in as keyof typeof sent] === name)?.[0];
 }

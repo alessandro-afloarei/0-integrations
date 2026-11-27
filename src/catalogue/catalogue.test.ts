@@ -58,7 +58,7 @@ const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true
   sales: true, mail: true, calendar: true, meetings: true, support: true, marketing: true, finance: true, hr: true,
   storage: true, ecommerce: true, phone: true, design: true, analytics: true, search: true };
 const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 'delete']).optional(),
-  params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'variables']), type: shape,
+  params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'form', 'variables']), type: shape,
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
     description: z.string().optional() })).optional(),
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional(),
@@ -127,6 +127,7 @@ const entrySchema = z.strictObject({
   webhook: z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('hmac'), header: headerName, signed: template.optional(), prefix: z.string().optional(),
       encoding: z.literal('base64').optional(), hash: z.literal('sha1', "`hash` is 'sha1' or left out (SHA-256)").optional(),
+      secret: z.enum(['base64', 'hex'], "`secret` is 'base64', 'hex' or left out (the key is the secret's own bytes)").optional(),
       part: partName.optional(),
       timestamp: z.union([timestamp, z.strictObject({ part: partName, toleranceSeconds })]).optional(),
       ...webhookParts }),
@@ -138,8 +139,8 @@ const entrySchema = z.strictObject({
     z.strictObject({ kind: z.literal('token'), header: headerName, ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
       ? 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out' : undefined) }),
     // The scheme fixes its headers, its signed content and its timestamp.
-    z.strictObject({ kind: z.literal('standard'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys' && issue.keys.every(name => ['header', 'signed', 'timestamp', 'prefix'].includes(name))
-      ? 'a `standard` webhook takes no `header`, `signed`, `timestamp` or `prefix`: Standard Webhooks fixes them' : undefined) }),
+    z.strictObject({ kind: z.literal('standard'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys' && issue.keys.every(name => ['header', 'signed', 'timestamp', 'prefix', 'secret'].includes(name))
+      ? 'a `standard` webhook takes no `header`, `signed`, `timestamp`, `prefix` or `secret`: Standard Webhooks fixes them' : undefined) }),
   ]).optional(),
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(), send: where }),
@@ -327,13 +328,13 @@ const runnable = {
   // `json` or `then` would hide one of the client's own.
   '`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)': (entry: Entry) => clashing(Object.keys(entry.operations ?? {})) === undefined,
   // A parameter with no place in the request would be left off it silently.
-  'a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)': (entry: Entry) => operations(entry).every(op =>
+  'a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)': (entry: Entry) => operations(entry).every(op =>
     Object.entries(op.params ?? {}).every(([name, param]) => placed(op, name, param))),
   // The client checks an argument against its enum as a string.
   '`params[].enum` only on a `type: \'string\'` parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
-  // A path segment and a query value are one string each: never null, a list or an object.
-  'only a scalar, non-`nullable` parameter `in` a path or a query': (entry: Entry) => params(entry).every(param =>
-    (param.in !== 'path' && param.in !== 'query') || (param.nullable === undefined && typeof param.type === 'string')),
+  // A path segment, a query value and a form value are one string each: never null, a list or an object.
+  'only a scalar, non-`nullable` parameter `in` a path, a query or a form': (entry: Entry) => params(entry).every(param =>
+    !['path', 'query', 'form'].includes(param.in) || (param.nullable === undefined && typeof param.type === 'string')),
   // The rule `client()` applies to each path, and a group worth the name: a required parameter is given anyway.
   '`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter': (entry: Entry) =>
     operations(entry).every(op => op.anyOf === undefined || (op.anyOf.length > 1 && op.anyOf.every(set => set.length > 0
@@ -391,7 +392,7 @@ const runnable = {
     operations(entry).every(op => { const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
       return shape === undefined || pagedRecords(op, shape); }),
   // The walk sets that parameter itself on every page after the first.
-  "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)": (entry: Entry) => operations(entry).every(op => {
+  "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`": (entry: Entry) => operations(entry).every(op => {
     const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
     return shape === undefined || pagedParam(op, shape) === undefined;
   }),
@@ -677,17 +678,22 @@ test.each<[Rule, Entry]>([
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { '': { path: '/a' } }],
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { 'a..b': { path: '/a' } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'form', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: 'string' }, r: { in: 'body', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { q: { in: 'form', type: 'string' } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: { a: 'string' } } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: 'string', nullable: true } } } }],
     ['`notFound` only on an operation with no `paging`', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
     ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],
-    ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
-    ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
-    ['only a scalar, non-`nullable` parameter `in` a path or a query', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
     ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email']], params: { email: { in: 'body', type: 'string' } } } }],
     ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], []], params: { email: { in: 'body', type: 'string' } } } }],
     ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], ['emial']], params: { email: { in: 'body', type: 'string' } } } }],
@@ -727,8 +733,8 @@ test.each<[Rule, Entry]>([
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' } } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'items', result: { items: [{ id: 'string' }] } } } })],
   ...([[{ kind: 'page', send: { query: 'page' } }, 'page', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'cursor', 'body'],
-    [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query']] as const)
-    .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)",
+    [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'q', 'form']] as const)
+    .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
           params: { [name]: { in: place, type: 'integer' } } } } })]),
@@ -909,6 +915,12 @@ test("a webhook `hash` other than 'sha1' fails the schema, with what to fix", ()
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(["`hash` is 'sha1' or left out (SHA-256)"]);
 });
 
+test.each(['base64url', 'utf8', ''])("a webhook `secret` of %j fails the schema, with what to fix", value => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'hmac', header: 'x-signature', secret: value } };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
+    .toEqual(["`secret` is 'base64', 'hex' or left out (the key is the secret's own bytes)"]);
+});
+
 test.each(['prefix', 'encoding', 'hash', 'part'])('an `ed25519` webhook with `%s` fails the schema, with what to fix', part => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret],
     webhook: { kind: 'ed25519', header: 'x-signature-ed25519', [part]: part === 'encoding' ? 'base64' : 'x' } };
@@ -983,10 +995,12 @@ test.each<[string, Record<string, unknown>, string]>([
   ['token', { header: 'x-goog-channel-token', prefix: 'x' }, 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out'],
   ['token', { header: 'x-goog-channel-token', timestamp: { header: 'x-t' } }, 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out'],
   ['token', {}, 'Invalid input: expected string, received undefined'],
+  ['token', { header: 'x-goog-channel-token', secret: 'hex' }, 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out'],
+  ['ed25519', { header: 'x-signature-ed25519', secret: 'hex' }, 'Unrecognized key: "secret"'],
   ['standard', { deliveryld: { header: 'webhook-id' } }, 'Unrecognized key: "deliveryld"'],
-  ...['header', 'signed', 'timestamp', 'prefix'].map((part): [string, Record<string, unknown>, string] => ['standard',
+  ...['header', 'signed', 'timestamp', 'prefix', 'secret'].map((part): [string, Record<string, unknown>, string] => ['standard',
     { [part]: part === 'timestamp' ? { header: 'webhook-timestamp' } : 'x' },
-    'a `standard` webhook takes no `header`, `signed`, `timestamp` or `prefix`: Standard Webhooks fixes them']),
+    'a `standard` webhook takes no `header`, `signed`, `timestamp`, `prefix` or `secret`: Standard Webhooks fixes them']),
 ])('a `%s` webhook with %j fails the schema, with what to fix', (kind, parts, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind, ...parts } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);

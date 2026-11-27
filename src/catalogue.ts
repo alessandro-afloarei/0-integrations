@@ -55,15 +55,16 @@ export type Http = { baseUrl: Template;
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
 type Timestamp = { header: string; toleranceSeconds?: number };
-/** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `part`: the header is a
- * comma-separated list of `name=value` pieces, each piece named `part` a signature, any of which may match;
- * `timestamp.part` reads the timestamp from the same list. `ed25519`: the header is the hex signature of `signed`, the
+/** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `secret`: the key is the secret's
+ * exact `base64` or `hex` decoding (else its bytes); `part`: the header is a comma-separated list of `name=value`
+ * pieces, each piece named `part` a signature, any of which may match; `timestamp.part` reads the timestamp from the
+ * same list. `ed25519`: the header is the hex signature of `signed`, the
  * secret the provider's public key in hex. `token`: the header is the secret itself. `standard`: Standard Webhooks, the
  * secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on. `challenge`: a handshake whose body
  * `when` holds is answered `{ [echo]: <the body's value> }` (Slack's `url_verification`, Discord's PING). */
 export type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
-    part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+    secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
@@ -81,8 +82,9 @@ export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
   pathPrefix?: string };
 /** A value's declared type. In an object, a key ending in `?` may be missing or null, and is read as absent. */
 export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
-/** An operation's argument and where it is sent; `nullable` lets it be sent as JSON `null`. */
-export type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
+/** An operation's argument and where it is sent: `body` in a JSON object, `form` in a form-encoded body (never beside a
+ * `body` one); `nullable` lets it be sent as JSON `null`. */
+export type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
 /** A named read or write. `kind` defaults from the method; `paging` names an entry's shape, `records` the list in a page.
  * `anyOf`: sets of argument paths (`email`, `contact.email`), of which a call gives every one of at least one set. */

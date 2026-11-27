@@ -10,8 +10,8 @@ none and starts with a form, and an entry whose kind is not known in the types (
   A plain field with a `default` may be left out or blank, and takes the default; a value that is not a string (`5`,
   `null`) never does, and is `TypeError('connect_field_invalid: <name>')`. One with `choices` refuses any other value
   with the same error, also before anything is sent. The result's `values` hold
-  the value used: `finishConnect(intercom, { secret: { accessToken }, fetch })` connects to Intercom's US host and
-  answers `values.apiHost === 'api.intercom.io'`.
+  the value used: `finishConnect(signInWith(intercom, 'key'), { secret: { accessToken }, fetch })` connects to
+  Intercom's US host and answers `values.apiHost === 'api.intercom.io'`.
   The entry's only secret field is the credential: an entry that declares none is refused first, as the entry's fault,
   with `TypeError('connect_secret_field_missing: <entry id>')`. Then the entry's `identify` runs: with a request it
   checks the credential and learns the account; an entry that declares none sends nothing, and its `account` is `null`.

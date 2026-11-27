@@ -10,16 +10,18 @@ const projectId = { in: 'path', type: 'string', required: true } as const;
 const faultId = { in: 'path', type: 'string', required: true } as const;
 const perPage = { in: 'query', type: 'integer' } as const;
 const faults = 'https://docs.honeybadger.io/api/v3/faults';
+/** The US and EU API hosts (https://docs.honeybadger.io/api/v3/). */
+const hosts = ['app.honeybadger.io', 'eu-app.honeybadger.io'] as const;
 
 export const honeybadger = defineProvider({
   id: 'honeybadger', name: 'Honeybadger', docs: 'https://docs.honeybadger.io/api/v3/authentication/',
   categories: ['monitoring'],
-  fields: [{ name: 'apiHost', title: 'Region', choices: ['app.honeybadger.io', 'eu-app.honeybadger.io'],
+  fields: [{ name: 'apiHost', title: 'Region', choices: hosts,
     default: 'app.honeybadger.io', help: 'Where the account is hosted: the US (app.honeybadger.io) or the EU (eu-app.honeybadger.io).' },
   { name: 'apiToken', title: 'API token', secret: true,
     help: 'A user (hbu_) or account (hba_) API token, not the API v2 personal auth token, with the faults:read, faults:write and projects:read scopes: each scope is checked on its own. A token can be limited to some projects and can expire.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://{apiHost}/v3', host: '*.honeybadger.io', retry: {} },
+  http: { baseUrl: 'https://{apiHost}/v3', host: hosts, retry: {} },
   identify: { request: { path: '/token' }, id: 'data.account_id', name: 'data.name' },
   paging: { next: { kind: 'nextUrl', next: 'links.next' } },
   errors: { detail: 'error.code' },

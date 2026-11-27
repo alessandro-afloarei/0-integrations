@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Freshsales (Freshworks CRM): a user's API key as `Token token=`; 1,000 requests an hour per account, then a 429.
- * A list reads a view, 25 a page. The bundle alias's host is typed (reached only through the address guard unless the
- * app passes its own `fetch`), on one of two domains:
+/** Freshsales (Freshworks CRM): a user's API key as `Token token=`; past the plan's hourly or per-minute limit, a 429
+ * (https://crmsupport.freshworks.com/support/solutions/articles/50000014405). A list reads a view, 25 a page. The
+ * bundle alias's host is under one of two domains:
  * https://developers.freshworks.com/docs/app-sdk/v2.3/freshsales-suite/app-settings/installation-parameters/ */
 const ref = 'https://developers.freshworks.com/crm/api/';
 const contact = { id: 'number', 'first_name?': 'string', 'last_name?': 'string', 'display_name?': 'string', 'email?': 'string',
@@ -21,7 +21,7 @@ export const freshsales = defineProvider({
     help: 'The host of the bundle alias shown below your API key under Profile Settings, then API Settings: widgetz.myfreshworks.com, or widgetz.freshworks.com for an account migrated from Freshsales Classic.' },
   { name: 'apiKey', title: 'API key', secret: true, help: 'Your API key, under Profile Settings, then API Settings.' }],
   auth: [{ kind: 'key', send: { header: 'authorization', value: 'Token token={token}' } }],
-  http: { baseUrl: 'https://{host}/crm/sales/api', host: '*', headers: { 'content-type': 'application/json' }, retry: { defaultWaitMs: 60_000 } },
+  http: { baseUrl: 'https://{host}/crm/sales/api', host: ['*.myfreshworks.com', '*.freshworks.com'], headers: { 'content-type': 'application/json' }, retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/selector/owners' } },
   paging: { contacts: { kind: 'page', send: { query: 'page' }, list: 'contacts' },
     accounts: { kind: 'page', send: { query: 'page' }, list: 'sales_accounts' },

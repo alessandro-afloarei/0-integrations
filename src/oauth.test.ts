@@ -29,7 +29,7 @@ afterEach(() => vi.useRealTimers());
 test("builds HubSpot's and Slack's authorize URLs", () => {
   const input = { clientId: 'id', redirectUri: 'https://app.test/cb', scopes: ['oauth', 'crm.objects.deals.read'], state: 's' };
   expect(authorizeUrl(hubspot, input).href).toBe('https://app.hubspot.com/oauth/authorize?client_id=id&scope=oauth+crm.objects.deals.read&redirect_uri=https%3A%2F%2Fapp.test%2Fcb&state=s');
-  expect(authorizeUrl(slack, { ...input, scopes: ['chat:write', 'channels:read'] }).href)
+  expect(authorizeUrl(slack, { ...input, scopes: ['chat:write', 'channels:read'], values: { domain: 'slack.com' } }).href)
     .toContain('scope=chat%3Awrite%2Cchannels%3Aread');
 });
 
@@ -72,16 +72,16 @@ test('exchanges a HubSpot code', async () => {
 test("accepts Slack's bot token and its team", async () => {
   const fake = endpoint({ access_token: 'bot-token', token_type: 'bot', team: { id: 'T1' }, bot_user_id: 'U1',
     authed_user: { access_token: 'nested-token' }, incoming_webhook: { url: 'https://hooks.slack.test/private' } });
-  const result = await exchangeCode(slack, client, { ...exchange, fetch: fake.fetch });
+  const result = await exchangeCode(slack, client, { ...exchange, fetch: fake.fetch, values: { domain: 'slack.com' } });
   expect(result.grant).toEqual({ accessToken: 'bot-token', refreshToken: null, expiresAt: null });
   // Only the fields the catalogue names come back: the rest of an answer can hold other secrets.
   expect(result.extras).toEqual({ team: { id: 'T1' }, bot_user_id: 'U1' });
 });
 
 test("Slack's ok:false is a refusal, not a token", async () => {
-  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch }))
+  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch, values: { domain: 'slack.com' } }))
     .rejects.toMatchObject({ name: 'ProviderHttpError', code: 'request_failed', status: 200, detail: 'invalid_code' });
-  await expect(refreshGrant(slack, client, 'old', { fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch }))
+  await expect(refreshGrant(slack, client, 'old', { fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch, values: { domain: 'slack.com' } }))
     .rejects.toBeInstanceOf(GrantRevoked);
 });
 
@@ -187,7 +187,7 @@ test('a refusal that is not an OAuth error body is request_failed', async () => 
 });
 
 test.each(['', '  '])('authorizeUrl refuses blank state %j directly', state => {
-  expect(() => authorizeUrl(slack, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state }))
+  expect(() => authorizeUrl(slack, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state, values: { domain: 'slack.com' } }))
     .toThrow('state_required');
 });
 
@@ -201,7 +201,7 @@ test.each([undefined, '', '  '])('exchangeCode refuses missing PKCE verifier %j 
 test('Slack token_revoked has the same library error shape for refresh and posting', async () => {
   const fake = endpoint({ ok: false, error: 'token_revoked' });
   const errors = await Promise.all([
-    refreshGrant(slack, client, 'old', { fetch: fake.fetch }).catch((error: unknown) => error),
+    refreshGrant(slack, client, 'old', { fetch: fake.fetch, values: { domain: 'slack.com' } }).catch((error: unknown) => error),
     slackClient({ token: 'access', fetch: fake.fetch }).postMessage({ channel: 'C1', text: 'hi' })
       .catch((error: unknown) => error),
   ]);
@@ -228,15 +228,24 @@ test('revokeGrant: an RFC 7009 revoke without the OAuth app sends nothing', asyn
 
 test('revokeGrant: Slack revokes by request with the access token and no OAuth app, and a token already gone is done', async () => {
   const fake = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => Response.json({ ok: false, error: 'token_revoked' }) }]);
-  await expect(revokeGrant(slack, { accessToken: 'a', fetch: fake.fetch })).resolves.toBeUndefined();
+  await expect(revokeGrant(slack, { accessToken: 'a', fetch: fake.fetch, values: { domain: 'slack.com' } })).resolves.toBeUndefined();
   expect(fake.calls[0]?.headers.authorization).toBe('Bearer a');
 });
 
 test('revokeGrant: a request revoke reads its answer as any JSON call does: a 404 is no gone token, a 2xx without JSON fails', async () => {
   const missing = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => new Response('', { status: 404 }) }]);
-  await expect(revokeGrant(slack, { accessToken: 'a', fetch: missing.fetch })).rejects.toMatchObject({ code: 'not_found', status: 404 });
+  await expect(revokeGrant(slack, { accessToken: 'a', fetch: missing.fetch, values: { domain: 'slack.com' } })).rejects.toMatchObject({ code: 'not_found', status: 404 });
   const plain = fakeFetch([{ url: 'https://slack.com/api/auth.revoke', respond: () => new Response('ok') }]);
-  await expect(revokeGrant(slack, { accessToken: 'a', fetch: plain.fetch })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
+  await expect(revokeGrant(slack, { accessToken: 'a', fetch: plain.fetch, values: { domain: 'slack.com' } })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
+});
+
+test("revokeGrant: a `goneErrors` code that is a number is compared as its digits", async () => {
+  const numbered = defineProvider({ id: 'numbered', name: 'Numbered', auth: [{ kind: 'oauth2', authorizeUrl: 'https://auth.test/authorize',
+    tokenUrl: 'https://auth.test/token' }], http: { baseUrl: 'https://api.auth.test' }, errors: { detail: 'error.code' },
+    revoke: { request: { method: 'POST', path: '/revoke' }, goneErrors: ['2001'] } });
+  const answer = (code: number) => fakeFetch([{ url: 'https://api.auth.test/revoke', respond: () => Response.json({ error: { code } }, { status: 400 }) }]);
+  await expect(revokeGrant(numbered, { accessToken: 'a', fetch: answer(2001).fetch })).resolves.toBeUndefined();
+  await expect(revokeGrant(numbered, { accessToken: 'a', fetch: answer(2002).fetch })).rejects.toMatchObject({ code: 'request_failed', detail: '2002' });
 });
 
 test('revokeGrant: an entry with no revoke (Microsoft) sends nothing', async () => {
@@ -246,7 +255,7 @@ test('revokeGrant: an entry with no revoke (Microsoft) sends nothing', async () 
 });
 
 test("a token answer refused inside a 200 is read through the entry's own condition and code", async () => {
-  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch }))
+  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch, values: { domain: 'slack.com' } }))
     .rejects.toMatchObject({ code: 'request_failed', detail: 'invalid_code' });
   // A `failed` other than `ok: false`: today's hard-coded check would accept this answer.
   const strict = defineProvider({ id: 'strict', name: 'Strict', auth: [{ kind: 'oauth2', authorizeUrl: 'https://strict.test/authorize',
