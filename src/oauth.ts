@@ -1,6 +1,6 @@
 import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
-import type { Entry, Values } from './catalogue.js';
+import type { Entry, Kept, Plain, Values, ValuesOption } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
@@ -8,6 +8,8 @@ import { checkHosts, fill, holds, oauthUrls, parseJson, placeholders, plainField
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
+/** A refresh's input, which may be left out only when its values may. */
+type RefreshInput<E extends Entry, I = { fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>> = Partial<I> extends I ? [input?: I] : [input: I];
 
 /** The entry's OAuth 2 URLs, each filled and checked by the base's rule from the plain fields alone: a secret is never
  * in a URL, and a saved value does not exist before the exchange. */
@@ -40,14 +42,13 @@ function tokenAnswerOf(entry: Entry, answer: unknown): Record<string, unknown> {
 
 /** The consent URL. Every OAuth 2 URL of the entry is filled from `values` and checked first, so a value its token,
  * refresh or revoke URL would refuse is refused before the person is sent anywhere. */
-export function authorizeUrl(entry: Entry, input: {
-  clientId: string; redirectUri: string; scopes: readonly string[]; state: string; codeChallenge?: string; values?: Values;
-}): URL {
+export function authorizeUrl<const E extends Entry>(entry: E, input: {
+  clientId: string; redirectUri: string; scopes: readonly string[]; state: string; codeChallenge?: string } & ValuesOption<Plain<E>>): URL {
   const { config, authorize: url } = endpoints(entry, input.values);
   if (!input.state.trim()) throw new TypeError('state_required');
   if (config.pkce !== false && !input.codeChallenge) throw new TypeError('code_challenge_required');
   url.searchParams.set('client_id', input.clientId);
-  url.searchParams.set('scope', input.scopes.join(config.scopeSeparator ?? ' '));
+  if (input.scopes.length > 0) url.searchParams.set('scope', input.scopes.join(config.scopeSeparator ?? ' '));
   url.searchParams.set('redirect_uri', input.redirectUri);
   url.searchParams.set('state', input.state);
   if (input.codeChallenge) {
@@ -148,8 +149,8 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
     expiresAt: answer.expires_in === undefined ? null : new Date(Date.now() + answer.expires_in * 1000).toISOString() };
 }
 
-export async function exchangeCode(entry: Entry, client: OAuthClient, input: { code: string; redirectUri: string;
-  codeVerifier?: string | undefined } & Sent): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
+export async function exchangeCode<const E extends Entry>(entry: E, client: OAuthClient, input: { code: string; redirectUri: string;
+  codeVerifier?: string | undefined; fetch?: typeof globalThis.fetch } & ValuesOption<Plain<E>>): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
   const c = context(entry, client, input);
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
   const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });
@@ -164,8 +165,9 @@ export async function exchangeCode(entry: Entry, client: OAuthClient, input: { c
   }
 }
 
-export async function refreshGrant(entry: Entry, client: OAuthClient, refreshToken: string, input: Sent = {}): Promise<Grant> {
-  const c = context(entry, client, input, true);
+export async function refreshGrant<const E extends Entry>(entry: E, client: OAuthClient, refreshToken: string,
+  ...[input]: RefreshInput<E>): Promise<Grant> {
+  const c = context(entry, client, input ?? {}, true);
   const secrets = [...c.secrets, refreshToken];
   const response = await send(c, entry, secrets, () => oauth.refreshTokenGrantRequest(c.as, c.client, c.auth, refreshToken, c.options));
   try {
@@ -192,8 +194,8 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
  * names, and when the grant is already gone: a 2xx, `invalid_grant`, a revoked code, a `goneErrors` detail, and an RFC 7009
  * revoke's 404 (a request revoke's 404 is a missing route, not a gone token).
  * `client` is the OAuth app, sent only by an RFC 7009 revoke, which refuses to start without it. */
-export async function revokeGrant(entry: Entry, input: { accessToken?: string; refreshToken?: string | null;
-  client?: OAuthClient } & Sent): Promise<void> {
+export async function revokeGrant<const E extends Entry>(entry: E, input: { accessToken?: string; refreshToken?: string | null;
+  client?: OAuthClient; fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>): Promise<void> {
   const { revoke } = entry;
   checkHosts(entry);
   if (revoke === undefined) return;
@@ -271,7 +273,7 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
 
 /** The token function `client()` takes, for a `token` entry: requests a token, keeps it until it expires (60 s early) or
  * is refused, and shares one request among concurrent callers. A failed request is not kept. */
-export function tokenSource(entry: Entry, input: TokenInput): (rejected?: string) => Promise<string> {
+export function tokenSource<const E extends Entry>(entry: E, input: Omit<TokenInput, 'values'> & ValuesOption<Kept<E>>): (rejected?: string) => Promise<string> {
   let kept: Promise<{ token: string; expiresAt: number | null }> | undefined;
   let settled = false;
   const request = () => {

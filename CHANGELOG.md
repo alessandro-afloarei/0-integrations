@@ -4,6 +4,36 @@
 
 Nothing here is released yet.
 
+- New: an operation may declare `anyOf`, sets of arguments of which a call must give one whole. `client()` refuses a
+  call that gives none (`param_group_missing: <id>`) before anything is sent, and an `anyOf` path that names no declared
+  argument, or an empty set, when the client is built (`param_group_unknown: <id> <path>`). Freshsales, Hunter,
+  lemlist, People Data Labs, Reply.io and Salesloft declare their groups.
+- Cognism's, LeadIQ's and RocketReach's parameter descriptions no longer say to give at least one input, which no page
+  of theirs states; `catalogue.json` carries those descriptions to an app.
+- A retry never comes before the provider's stated wait, its `Retry-After` or the entry's `retry.wait`: an answer whose
+  stated wait is longer than the entry's `maxWaitMs` is not retried, whatever its status, and its error carries that
+  wait. Breaking: such an answer was retried at the cap (HubSpot's hour-long `Retry-After` after 10 seconds); an app
+  now gets `rate_limited` with `retryAfterMs` and waits it itself. Every error's `retryAfterMs` is that stated wait: a
+  `Retry-After` of 0 no longer hides Breakcold's or Fireflies' body wait, and a rate limit's own wait counts only when
+  none is stated.
+- New: `retry.wait` reads a wait from a header (seconds, milliseconds or an epoch time; of several headers, the longest
+  present; counted on a 429 only) or a body field (on any answer that holds it), and `retry.onlyStated` retries only an
+  answer that states its wait, and no network failure. A wait already past, or 0, counts as none (Breakcold's body 0
+  now waits the default second).
+- Breaking: `retry.waitFromBody` and a rate-limit rule's `resetAt` are gone. An app's own entry writes
+  `retry: { wait: { path, unit } }` and the rule's `wait: { header, unit }`.
+- Buildkite and PagerDuty wait their reset headers (PagerDuty a minute when a 429 comes without one); Todoist waits its
+  error body's `retry_after`; Jira now retries a read whose answer names `Retry-After`, and no other.
+- An authorize URL carries no `scope` when the entry asks for none (Attio, Bitbucket, ClickUp, GitHub, Mattermost,
+  Teamleader); it sent an empty `scope=`.
+- `authorizeUrl`, `exchangeCode`, `refreshGrant`, `revokeGrant` and `tokenSource` type `values` by the entry, as
+  `startConnect` and `finishConnect` do. Breaking for types: for an entry with a plain field (Mattermost's `host`) an
+  app must pass `values`, and an undeclared key does not compile; a connection's own `values` may be passed back for
+  every entry, and an entry read as a wide `Entry` takes them as optional. The value types (`Plain`, `Kept`, `Entered`,
+  `Secrets`, `ValuesOption`, `Wait`) are exported from `0-integrations/catalogue`.
+- `fakeProvider` answers an OAuth 2 entry's token, refresh and revoke URLs (with `client` and `code` options) and a
+  revoke sent as a request, and of two operations that share a route, the one whose required parameters the request
+  carries. A token answer holds the value `values` gives a `save` key that reads it.
 - The 28 entries written before every value had to be cited from the provider's documentation are checked against
   their providers' pages.
 - Exa's and Firecrawl's `docs` links point to their current pages.

@@ -1,6 +1,7 @@
+/** A wait in whole milliseconds; one too large to be a safe integer is the largest, never none. */
 function delay(value: number | undefined): number | null {
-  if (value === undefined || value < 0 || !Number.isSafeInteger(Math.ceil(value))) return null;
-  return Math.ceil(value);
+  if (value === undefined || !(value >= 0)) return null; // negative or NaN
+  return Math.min(Math.ceil(value), Number.MAX_SAFE_INTEGER);
 }
 
 /** Normalize only HTTP-date's three wire formats; Date.parse alone also accepts values such as "-1". */
@@ -26,17 +27,16 @@ function httpDate(value: string, nowMs: number): number | null {
   return new Date(timestamp).toUTCString() === canonical ? timestamp : null;
 }
 
-/** The wait a response names: a valid Retry-After, else the body's wait. The retry caps it; errors carry it as is. */
+function headerWait(value: string | null, nowMs: number): number | null {
+  if (value === null) return null;
+  if (/^\d+(?:\.\d+)?$/u.test(value)) return delay(Number(value) * 1000);
+  const timestamp = httpDate(value, nowMs);
+  return timestamp === null ? null : delay(Math.max(0, timestamp - nowMs));
+}
+
+/** The wait a response states, the one rule of the retry and its error: a positive Retry-After, else the declared wait
+ * given, else a Retry-After of 0; no retry comes before it. */
 export function retryAfterMs(headers: Headers, nowMs: number, bodyWaitMs?: number): number | null {
-  const value = headers.get('retry-after');
-  if (value !== null) {
-    if (/^\d+(?:\.\d+)?$/u.test(value)) {
-      const milliseconds = delay(Number(value) * 1000);
-      if (milliseconds !== null) return milliseconds;
-    } else {
-      const timestamp = httpDate(value, nowMs);
-      if (timestamp !== null) return delay(Math.max(0, timestamp - nowMs)) ?? delay(bodyWaitMs);
-    }
-  }
-  return delay(bodyWaitMs);
+  const header = headerWait(headers.get('retry-after'), nowMs);
+  return header || (delay(bodyWaitMs) ?? header);
 }

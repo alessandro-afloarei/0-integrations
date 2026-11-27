@@ -10,8 +10,6 @@ const account = { id: 'string', 'name?': 'string' } as const;
 const page = { indexSize: { in: 'query', type: 'integer', description: 'Records per call, 20 to 100.' },
   lastReturnedKey: { in: 'query', type: 'string', description: 'The previous answer\'s `lastReturnedKey`, for the next page.' } } as const;
 const found = { 'lastReturnedKey?': 'string', 'totalResults?': 'integer' } as const;
-const oneContact = ' One of: email/sha256 or linkedinUrl, or firstName, lastName and jobTitle with accountName.';
-const oneAccount = ' One of: website, domain or linkedinUrl.';
 const docs = 'https://developers.cognism.com/';
 
 export const cognism = defineProvider({
@@ -29,17 +27,17 @@ export const cognism = defineProvider({
         linkedinUrl: { in: 'body', type: 'string' } },
       result: { ...found, results: [contact] } },
     'contacts.get': { docs: `${docs}#157c4853-80fc-4f50-a538-8d92bda2cc57`, method: 'POST', path: '/contact/enrich',
-      params: { email: { in: 'body', type: 'string', description: 'The contact\'s email.' + oneContact },
-        sha256: { in: 'body', type: 'string', description: 'The email\'s hash, in hexadecimal.' + oneContact },
-        linkedinUrl: { in: 'body', type: 'string', description: 'The contact\'s LinkedIn URL.' + oneContact } },
+      params: { email: { in: 'body', type: 'string', description: 'The contact\'s email.' },
+        sha256: { in: 'body', type: 'string', description: 'The email\'s hash, in hexadecimal.' },
+        linkedinUrl: { in: 'body', type: 'string', description: 'The contact\'s LinkedIn URL.' } },
       result: { 'matchScore?': 'number', 'results?': [contact] } },
     'accounts.search': { docs: `${docs}#daadfd7c-19ce-4bb2-84f0-ba731397e1da`, method: 'POST', path: '/account/search',
       params: { ...page, names: { in: 'body', type: ['string'] }, domains: { in: 'body', type: ['string'] } },
       result: { ...found, results: [account] } },
     'accounts.get': { docs: `${docs}#fd0486ff-1d47-4e8f-84d7-cb15a8c8a9b4`, method: 'POST', path: '/account/enrich',
-      params: { website: { in: 'body', type: 'string', description: 'The account\'s website.' + oneAccount },
-        domain: { in: 'body', type: 'string', description: 'The account\'s domain.' + oneAccount },
-        linkedinUrl: { in: 'body', type: 'string', description: 'The account\'s LinkedIn URL.' + oneAccount } },
+      params: { website: { in: 'body', type: 'string', description: 'The account\'s website.' },
+        domain: { in: 'body', type: 'string', description: 'The account\'s domain.' },
+        linkedinUrl: { in: 'body', type: 'string', description: 'The account\'s LinkedIn URL.' } },
       result: { 'matchScore?': 'number', 'results?': [account] } },
   },
 });

@@ -40,8 +40,11 @@ one takes five steps:
      a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
      the list to its container (a project, a board), are required; an operation that needs a header whose value changes
      per call stays out and goes on the [waiting list](docs/waiting-list.md);
-   - when the page asks for at least one of several equal inputs that find or create one record (an email, a LinkedIn URL, a
-     domain), none is required and each input's description names the group: the provider refuses a call with none;
+   - when the page states that at least one of several equal inputs that find or create one record (an email, a LinkedIn
+     URL, a domain) is required, none is required and the operation declares the page's sets as `anyOf`
+     (`[['email'], ['phone', 'last_name']]`), which the descriptions do not repeat; a rule that reads two ways gives the
+     reading that refuses fewer calls, and a page that only lists ways to identify a record declares no group (nor do
+     its descriptions claim one);
    - a call the docs say spends credits is `kind: 'write'`, whatever its method, and its leading comment names the
      credit page;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
@@ -56,7 +59,7 @@ one takes five steps:
 3. `pnpm providers`, which writes the entry's row into [`docs/providers.md`](docs/providers.md), then `pnpm check`.
    The table test below says what to fix, a `TODO` left included, and signs the entry in on the fake derived from it
    (`fakeProvider`, from `0-integrations/testing`) with a good key and a bad one, whenever the entry has an identify
-   request or a token request; an entry with two sign-ins runs the rules and the sign-in once for each. `pnpm check` also fails while the committed page differs from the entries.
+   request or a token request, and connects an OAuth 2 sign-in on it with a good code and a bad one; an entry with two sign-ins runs the rules and the sign-in once for each. `pnpm check` also fails while the committed page differs from the entries.
 4. Optional: record it from a test account (below), read the file, and commit it. An entry the recorder can record (one
    with no module that sends a request when it signs in) becomes `recorded`.
 5. Add one line to `CHANGELOG.md` under `Unreleased`, then open a pull request.
@@ -91,12 +94,16 @@ entry:
   of them and the `default` fills the base to a host `http.host` takes, and a secret field has neither;
 - declares a webhook the engine can trust: `{body}` is signed (by default, or in `signed`), and `{timestamp}` exactly
   when a timestamp is declared, read apart from the signature (another `part` or header); a `part` name holds no `,`,
-  `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, `http.headers` keys) is
-  one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
+  `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, a wait's, `http.headers`
+  keys) is one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
+- retries as the engine can: a `retry.wait` or a rate-limit rule's `wait` reads one header (or a list) or one body
+  path, in `s`, `ms`, `epochSeconds` or `epochMs`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000 when left
+  out) and never beside `onlyStated`;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
   names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's
-  `list`), and no id is a client call or a dotted prefix of another;
+  `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id
+  is a client call or a dotted prefix of another;
 - has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields,
   and whose URLs, base and `http.bases` share one host when any of them is typed: a token goes only to the host that
   issued it.
@@ -116,11 +123,11 @@ An entry with OAuth 2 and a key is recorded with its key: a recording is of the 
 The recorder refuses a provider with a module but no kit scenario of that name, and an entry that sends no request
 when it signs in. Otherwise it signs in with the key and with a bad key, and writes
 `src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request
-body, status and `retry-after` (no other header), and from the answer only the paths the entry reads; at an error or
-condition path, only a provider code, a number or a boolean. It swaps the key, the plain values, the tokens issued, the
-account's id and name and the saved values for the kit's stand-ins. It refuses to write when a sign-in was redirected,
-when a value is too short to swap or a real value is still in an exchange, and when the file, replayed before it is
-written, fails the table test's own replay check
+body, status, `retry-after` and the entry's declared wait headers (no other header), and from the answer only the
+paths the entry reads; at an error or condition path, only a provider code, a number or a boolean. It swaps the key,
+the plain values, the tokens issued, the account's id and name and the saved values for the kit's stand-ins. It refuses
+to write when a sign-in was redirected, when a value is too short to swap or a real value is still in an exchange, and
+when the file, replayed before it is written, fails the table test's own replay check
 ([testing](docs/modules/testing.md#recording-an-entry-with-no-module) says exactly what is written, swapped and
 refused). Only such a capture from a real test account (`synthetic: false`)
 makes the entry `recorded`; never copy a file from a `.record-test-*` folder, which the recorder's own tests write on a

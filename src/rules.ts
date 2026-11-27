@@ -28,6 +28,14 @@ export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined
   return Object.hasOwn(keys, path) ? keys[path] : dot === -1 ? undefined : shapeAt(keys[path.slice(0, dot)], path.slice(dot + 1));
 }
 
+/** The declared shape an `anyOf` path names: a parameter's `type`, then at each dot a key of an object, a `key?` named without its `?`. */
+export function argumentShape(op: Operation, path: Path): Shape | undefined {
+  const own = (shape: Shape | undefined, key: string) => typeof shape === 'object' && !Array.isArray(shape) && Object.hasOwn(shape, key)
+    ? (shape as { readonly [key: string]: Shape })[key] : undefined;
+  const types: Shape = Object.fromEntries(Object.entries(op.params ?? {}).map(([name, param]) => [name, param.type]));
+  return path.split('.').reduce<Shape | undefined>((shape, key) => key.endsWith('?') ? undefined : own(shape, key) ?? own(shape, `${key}?`), types);
+}
+
 /** Whether a parameter has a place in its operation's request: GraphQL takes only variables; a path operation takes no
  * variables, a path parameter only where its path names it, and a body parameter only when it is not a GET. */
 export function placed(op: Operation, name: string, param: Param): boolean {

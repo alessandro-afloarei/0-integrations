@@ -11,7 +11,6 @@ const id = { in: 'path', type: 'string', required: true } as const;
 const written = { first_name: { in: 'body', type: 'string' }, last_name: { in: 'body', type: 'string' },
   title: { in: 'body', type: 'string' }, phone: { in: 'body', type: 'string' }, account_id: { in: 'body', type: 'integer' },
   owner_id: { in: 'body', type: 'integer' } } as const;
-const oneOf = 'Either email_address or phone/last_name must be provided as a unique lookup.';
 const api = 'https://developers.salesloft.com/docs/api';
 
 export const salesloft = defineProvider({
@@ -33,10 +32,8 @@ export const salesloft = defineProvider({
     'people.list': { docs: `${api}/people-index/`, path: '/v2/people', paging: 'page', records: 'data', params: perPage,
       result: { data: [person] } },
     'people.get': { docs: `${api}/people-show/`, path: '/v2/people/{id}', notFound: 'null', params: { id }, result: { data: person } },
-    'people.create': { docs: `${api}/people-create/`, method: 'POST', path: '/v2/people',
-      params: { ...written, email_address: { in: 'body', type: 'string', description: oneOf },
-        phone: { in: 'body', type: 'string', description: `With last_name. ${oneOf}` },
-        last_name: { in: 'body', type: 'string', description: `With phone. ${oneOf}` } },
+    'people.create': { docs: `${api}/people-create/`, method: 'POST', path: '/v2/people', anyOf: [['email_address'], ['phone'], ['last_name']],
+      params: { ...written, email_address: { in: 'body', type: 'string' } },
       result: { data: person } },
     'people.update': { docs: `${api}/people-update/`, method: 'PUT', path: '/v2/people/{id}',
       params: { id, email_address: { in: 'body', type: 'string' }, ...written }, result: { data: person } },

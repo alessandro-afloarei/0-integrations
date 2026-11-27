@@ -124,8 +124,8 @@ export async function replayProblem(whole: Entry, recording: Recording): Promise
 }
 
 /** Records every exchange a real fetch makes, as sent and answered, for `src/record.test.ts`: `scrub` makes them safe to
- * write. */
-export function recorder(real: typeof fetch, key: Exchange['key']): { fetch: typeof fetch; exchanges: Exchange[] } {
+ * write. `waits`: the entry's declared wait headers, kept beside `retry-after`. */
+export function recorder(real: typeof fetch, key: Exchange['key'], waits: readonly string[] = []): { fetch: typeof fetch; exchanges: Exchange[] } {
   const exchanges: Exchange[] = [];
   return { exchanges, async fetch(input, init) {
     const request = new Request(input, init);
@@ -133,9 +133,10 @@ export function recorder(real: typeof fetch, key: Exchange['key']): { fetch: typ
     const response = await real(request);
     const text = await response.clone().text();
     // `link` names GitHub's next page.
-    const headers = Object.fromEntries(['retry-after', 'content-type', 'link'].flatMap(name => {
+    const headers = Object.fromEntries(['retry-after', 'content-type', 'link', ...waits].flatMap(name => {
       const value = response.headers.get(name);
-      return value === null ? [] : [[name, value]];
+      // A declared wait header is kept only as the number the engine reads (`waitOf`): free text never reaches a fixture.
+      return value === null || (waits.includes(name) && !/^\d+(?:\.\d+)?$/u.test(value)) ? [] : [[name, value]];
     }));
     // An answer that is not JSON is written as null: the engine reads nothing from it.
     exchanges.push({ key, method: request.method, url: request.url, ...(body === undefined ? {} : { body }),
@@ -143,6 +144,12 @@ export function recorder(real: typeof fetch, key: Exchange['key']): { fetch: typ
     return response;
   } };
 }
+
+/** The waits an entry declares: its retry's and its rate-limit rules'. */
+const waitsOf = ({ http }: Entry) => [http.retry?.wait, ...(http.rateLimit?.when ?? []).map(rule => rule.wait)]
+  .filter(wait => wait !== undefined);
+/** The wait headers an entry reads, which a recording keeps beside `retry-after`. */
+export const waitHeaders = (entry: Entry) => waitsOf(entry).flatMap(wait => ('header' in wait ? [wait.header].flat() : []));
 
 /** Every path the engine reads from an entry's answers. `values`: identify's and `save`'s (with `tokenAnswer.` stripped,
  * read from the token answer), a token answer's token and `expires_in`, and the body's wait. `codes`: each condition's
@@ -153,7 +160,7 @@ export function answerReads(entry: Entry): { values: string[]; codes: string[] }
   const detail = errors?.detail ?? [];
   const values = [...lookupNames(entry).filter(name => !name.startsWith('connection.')).map(name => name.replace(/^tokenAnswer\./u, '')),
     ...auth.kind === 'token' ? [auth.request.token ?? 'access_token', 'expires_in'] : [],
-    ...http.retry?.waitFromBody === undefined ? [] : [http.retry.waitFromBody.path]];
+    ...waitsOf(entry).flatMap(wait => ('path' in wait ? [wait.path] : []))];
   const codes = [...[...identify?.rejectWhen ?? [], errors?.failed, ...(errors?.rules ?? []).map(rule => rule.when), ...http.rateLimit?.when ?? []]
     .flatMap(when => (when?.path === undefined ? [] : [when.path])), ...typeof detail === 'string' ? [detail] : detail];
   return { values, codes: codes.filter(path => !values.includes(path)) };

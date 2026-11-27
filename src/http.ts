@@ -3,7 +3,7 @@ import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
-import { backoffMs, bodyWaitOf, responseJson, retryPolicy, sentWith } from './http-response.js';
+import { backoffMs, declaredWait, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
 import { checkHosts, fill, hostPart, parseJson, placeholders, plainValue } from './rules.js';
 
@@ -48,7 +48,7 @@ async function retryBody(response: Response, timeoutMs: number): Promise<string>
       if (done) return Buffer.concat(chunks).toString('utf8');
       chunks.push(value);
     }
-  })();
+  })().catch(() => ''); // a body that fails as it is read states no wait, and its error is the provider's, never ours
   try {
     return await Promise.race([body, timeout]);
   } finally {
@@ -193,6 +193,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   const [auth] = entry.auth;
   const queried = 'send' in auth && 'query' in auth.send ? Object.keys(auth.send.query) : [];
   const retry = retryPolicy(entry.http.retry);
+  const onlyStated = entry.http.retry?.onlyStated === true;
   const timeoutMs = entry.http.timeoutMs ?? 30_000;
   const minIntervalMs = input.minIntervalMs ?? entry.http.minIntervalMs ?? 0;
   let nextSend = 0;
@@ -221,16 +222,16 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     return renewal;
   }
 
-  /** A 429's wait: a positive Retry-After, else the wait the body names, else the provider's default, with no jitter. A
-   * 408's or a 5xx's: a positive Retry-After, else the backoff. */
-  async function waitFor(response: Response, retryCount: number): Promise<number> {
-    const header = retryAfterMs(response.headers, Date.now());
-    if (header !== null && header > 0) return header;
-    if (response.status !== 429) return backoffMs(retry.maxWaitMs, retryCount);
-    // The body is read only for a wait the entry says it names: a slow body must not hold up the retry.
-    const fromBody = entry.http.retry?.waitFromBody === undefined ? undefined
-      : bodyWaitOf(entry.http.retry, parseJson(await retryBody(response, timeoutMs)), Date.now());
-    return fromBody !== undefined && Number.isFinite(fromBody) && fromBody >= 0 ? fromBody : retry.defaultWaitMs;
+  /** The wait an answer states, as its error reads it (`retryAfterMs`): a positive Retry-After, else the entry's
+   * declared `wait`; a 0 states none. */
+  async function statedWait(response: Response): Promise<number | undefined> {
+    const { status, headers } = response;
+    const now = Date.now();
+    const wait = entry.http.retry?.wait;
+    // The body is read only for a wait the entry says it names, past no positive Retry-After: a slow body must not
+    // hold up the retry.
+    const body = !retryAfterMs(headers, now) && wait && 'path' in wait ? parseJson(await retryBody(response, timeoutMs)) : undefined;
+    return retryAfterMs(headers, now, declaredWait(wait, { status, headers, body }, now)) || undefined;
   }
 
   async function pace(): Promise<void> {
@@ -261,12 +262,17 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
         // A status is retried by the hook below; ky retries only a network failure, after the backoff, on the request's
         // own method (`limit` already says whether it is a read). A timeout has spent the time budget: never retried.
         retry: { limit, methods: [method], statusCodes: [], delay: attempt => backoffMs(retry.maxWaitMs, attempt - 1),
-          shouldRetry: ({ error }) => isNetworkError(error) },
+          shouldRetry: ({ error }) => isNetworkError(error) && !onlyStated },
         hooks: {
           beforeRequest: [pace], beforeRetry: [pace],
           afterResponse: [async ({ response, retryCount }) => {
             if (!RETRIED.includes(response.status) || retryCount >= limit) return;
-            return ky.retry({ delay: Math.min(await waitFor(response, retryCount), retry.maxWaitMs) });
+            // Never before the stated wait: one past the cap is reported, not retried; with `onlyStated`, so is none.
+            const stated = await statedWait(response);
+            if (stated === undefined ? onlyStated : stated > retry.maxWaitMs) return;
+            // Without a stated wait, a 429 waits the provider's default, with no jitter, any other status the backoff.
+            const fallback = response.status === 429 ? retry.defaultWaitMs : backoffMs(retry.maxWaitMs, retryCount);
+            return ky.retry({ delay: Math.min(stated ?? fallback, retry.maxWaitMs) });
           }],
         },
       });

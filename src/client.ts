@@ -4,7 +4,7 @@ import { callRequest, createClient, defaultFetch, type HttpOptions, type Provide
 import { responseJson } from './http-response.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
-import { checkHosts, clashing, fill, pagedParam, pagedRecords, placed, readPath, shapeAt } from './rules.js';
+import { argumentShape, checkHosts, clashing, fill, pagedParam, pagedRecords, placed, readPath, shapeAt } from './rules.js';
 
 export type { ProviderResponse, RequestOptions };
 export { guardedFetch } from './guard.js';
@@ -82,6 +82,7 @@ const bare = () => Object.create(null) as Record<string, unknown>;
 /** The request an operation's arguments make: each declared one checked by its shape and sent in its place. */
 function operationRequest(id: string, op: Operation, args: Given, signal?: AbortSignal): [string, RequestOptions] {
   const at = { path: bare(), query: bare(), body: bare(), variables: bare() };
+  const given = bare(); // each argument as checked, for `anyOf`
   for (const [name, param] of Object.entries(op.params ?? {})) {
     const value = Object.hasOwn(args, name) ? args[name] : undefined;
     if (value === undefined || (value === null && param.nullable !== true)) {
@@ -94,9 +95,12 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
     if (checked === INVALID || (checked !== null && param.enum !== undefined && !(typeof checked === 'string' && param.enum.includes(checked)))
       || (param.in === 'path' || param.in === 'query') && !scalar
       || (param.in === 'path' && ['', '.', '..'].includes(String(checked)))) refuse(`param_invalid: ${name}`);
+    given[name] = checked;
     at[param.in][name] = param.in === 'body' || param.in === 'variables' ? checked
       : param.in === 'path' ? encodeURIComponent(String(checked)) : String(checked);
   }
+  const blank = (value: unknown) => value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+  if (op.anyOf !== undefined && !op.anyOf.some(set => set.every(path => !blank(readPath(given, path))))) refuse(`param_group_missing: ${id}`);
   // A read is what the engine retries: a GET unless `kind` says otherwise (GraphQL is a POST, so a write by default).
   const read = op.kind === undefined ? !('graphql' in op) && (op.method ?? 'GET') === 'GET' : op.kind === 'read';
   return callRequest('graphql' in op ? { graphql: op.graphql }
@@ -123,6 +127,9 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
   function operation(id: string, op: Operation) {
     const { paging, records, result } = op;
     for (const [name, param] of Object.entries(op.params ?? {})) if (!placed(op, name, param)) refuse(`param_unplaced: ${id} ${name}`);
+    for (const path of op.anyOf?.flat() ?? []) if (argumentShape(op, path) === undefined) refuse(`param_group_unknown: ${id} ${path}`);
+    // An empty set is always given whole, so it would let every call through.
+    if (op.anyOf?.length === 0 || op.anyOf?.some(set => set.length === 0)) refuse(`param_group_unknown: ${id}`);
     if (paging === undefined) {
       return async (args: Given = {}, { signal }: Pick<RequestOptions, 'signal'> = {}) => {
         try {

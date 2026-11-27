@@ -2,14 +2,22 @@
 
 `oauth` builds consent URLs with `authorizeUrl(entry, …)` and handles `exchangeCode`, `refreshGrant` and `revokeGrant`
 on `oauth4webapi`, each driven by a catalogue entry whose sign-in is OAuth 2. `pkcePair` supplies PKCE where the entry
-uses it. The app owns the state nonce. `exchangeCode` returns only the token-answer fields the entry reads
+uses it. The app owns the state nonce. The scopes asked are joined by the entry's `scopeSeparator` (a space by
+default); none asked sends no `scope` parameter. `exchangeCode` returns only the token-answer fields the entry reads
 (`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
 condition marks is refused with the entry's own code.
 
 Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` and
-checked as a base is: `authorizeUrl(entry, { …, values? })`, `exchangeCode(entry, client, { …, values? })`,
-`refreshGrant(entry, client, refreshToken, { values?, fetch? })` and `revokeGrant` take the connection's `values`, and a
-URL that names a value not given is `template_missing` before anything is sent. An entry whose OAuth 2 URLs, base or
+checked as a base is, and a URL that names a value not given is `template_missing` before anything is sent. Each
+function types `values` by the entry, as `startConnect` and `finishConnect` do. `authorizeUrl(entry, { …, values })`
+and `exchangeCode(entry, client, { …, values })` take the plain fields, since nothing is saved before the exchange;
+`refreshGrant(entry, client, refreshToken, { values, fetch? })`, `revokeGrant(entry, { …, values })` and `tokenSource`
+take the connection's `values` as `finishConnect` returned them, plain and saved. `values` is required when the entry
+declares a plain field; optional when it declares only `save` keys (for the three that take a connection's values) or
+when the entry is typed `Entry`; and otherwise empty, so a connection's own empty `values` may be handed back. A key the
+entry does not declare is a compile error. A wrapper generic over the entry is typed as one over `startConnect` is: it
+takes `Entry` and `Values`, as in `(entry: Entry, values: Values) => refreshGrant(entry, client, refreshToken, { values })`,
+and the values are checked at run time. An entry whose OAuth 2 URLs, base or
 `http.bases` mix a typed host with any other host is refused with `TypeError('host_split: <entry id>')` before
 anything is built or sent: on a typed host a credential goes only to that host. `exchangeCode`, `refreshGrant` and
 `revokeGrant` default `fetch` to `guardedFetch` for an entry whose host is typed, else the global one. The exchange, a
@@ -21,7 +29,7 @@ without a `refresh_token` keeps the one sent. With `json: true` (Atlassian) the 
 revoke send their parameters as one JSON object (`content-type: application/json`); Basic client authentication stays a
 header.
 
-`revokeGrant(entry, { accessToken?, refreshToken?, client?, values?, fetch? })` is the one revoke: an RFC 7009 revoke of the
+`revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke: an RFC 7009 revoke of the
 first token the entry's `revoke.token` names (it needs `client`, else `oauth_client_required`), or the entry's
 `revoke.request` sent with the access token, to the `http.bases` entry its `base` names, if any. A 2xx,
 `invalid_grant`, a revoked code and the entry's `goneErrors` are done, and so is an RFC 7009 revoke's 404, an entry
@@ -31,7 +39,7 @@ is `not_found` (a missing route, not a gone token), and a 2xx without JSON is `i
 ## A `token` entry: `tokenSource`
 
 A `token` entry (Zoom's Server-to-Server OAuth) turns what the person entered into a short-lived token with one declared
-request. `tokenSource(entry, { secret, values?, fetch? })` is the token function `client()` takes for it:
+request. `tokenSource(entry, { secret, values, fetch? })` is the token function `client()` takes for it:
 
 ```ts
 import { zoom } from '0-integrations/catalogue/zoom';

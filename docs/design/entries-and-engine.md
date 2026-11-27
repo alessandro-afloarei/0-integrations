@@ -232,8 +232,7 @@ keeps the global one.
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
-`Operation.base`, placeholders in `identify`'s request path, the `s` and `epochSeconds` body-wait units, the `epochMs`
-reset unit, `Size`, and `Where.variables`.
+`Operation.base`, placeholders in `identify`'s request path, `Size`, and `Where.variables`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -287,11 +286,12 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     codes (`invalid_client`, …), else none; any other answer is classified as usual. No detail holds a secret field, a
     body value filled from one, or the Basic value sent.
     The request is sent once, never retried: it is no read of the provider's API.
-  - `tokenSource(entry, { secret, values?, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
+  - `tokenSource(entry, { secret, values, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
     the token until it is passed back as refused or a call comes within 60 seconds of its expiry, or after it (that
     call requests a new one; nothing renews by itself), concurrent calls share one
     request, and a failed request is not kept. It applies no field's `default`, so an app passes it, and `client`, the
-    connection's `values` as `finishConnect` returned them.
+    connection's `values` as `finishConnect` returned them: required for an entry with a plain field, optional with
+    only saved keys, empty with neither.
   - `startConnect` returns the form. `finishConnect(entry, { secret, values?, fetch? })` reads the fields as a key
     entry does (defaults, choices), requests a token (the credential check), identifies with it, with the token
     answer's keys the entry names as `tokenAnswer.*`, and returns the secret fields as `secret`; the token is not
@@ -380,10 +380,9 @@ the same lookup, where `{id}` is the id already found: `'Portal {id}'`.
 ### `http.retry`, `http.rateLimit` and `errors`
 
 ```ts
-type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number;
-  waitFromBody?: { path: Path; unit: 'ms' | 's' | 'epochMs' | 'epochSeconds' } };
-type RateLimit = { when: readonly (When & { resetAt?: { header: string; unit: 'epochSeconds' | 'epochMs' } })[];
-  defaultWaitMs?: number };
+type Wait = ({ header: string | readonly string[] } | { path: Path }) & { unit: 's' | 'ms' | 'epochSeconds' | 'epochMs' };
+type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number; onlyStated?: true; wait?: Wait };
+type RateLimit = { when: readonly (When & { wait?: Wait })[]; defaultWaitMs?: number };
 type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[];
   rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
@@ -394,9 +393,10 @@ classified in this order, and the first step that decides wins:
 
 1. `errors.revoked`: the provider's code is on the list, so the grant is gone (`GrantRevoked`).
 2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code. The error carries only
-   `Retry-After`, else the body's wait: never a rate limit's.
-3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is
-   `Retry-After`, else the matching rule's `resetAt`, else `rateLimit.defaultWaitMs`, else the body's wait.
+   the stated wait (below): never a rate limit's.
+3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is the
+   stated wait, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`. The rule's `wait` is the error's
+   alone: the retry never reads it.
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -410,17 +410,32 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   retried after a 429, a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was
   dropped before an answer), up to `retry.limit` retries of any of these together. The limit counts per request sent:
   a redirect hop and the resend after a 401 each get their own.
-- A 429 waits `Retry-After`, else `waitFromBody`, else `retry.defaultWaitMs`, capped by `maxWaitMs`, with no jitter. The
-  others wait a positive `Retry-After`, capped by `maxWaitMs`; without one, the n-th retry (n from 0) waits a
-  full-jitter backoff: a random share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so
-  on. The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
+- A **wait** (`Wait`) is read from a header, or several (the longest of those present counts), holding a positive
+  decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
+  instants, whose wait is the instant minus now, at least 0. Anything else states no wait. One reader serves the retry
+  and the error.
+- An answer's **stated wait** is a positive `Retry-After`, else `retry.wait`: a wait declared as a header counts only
+  on a 429, since a reset header rides on every answer; one declared as a body path counts on any answer that holds
+  it, for the retry on every retried status. A declared wait that is not positive (an instant already past, a body
+  `0`) states no wait, as a past `Retry-After` date does. The retry reads `Retry-After` and the entry's `retry.wait`;
+  a rate-limit rule's own `wait` is carried by the error and is not read by the retry. A retry never comes before the
+  stated wait (rounded up to a whole millisecond): an answer whose stated wait is longer than `maxWaitMs` is not
+  retried, whatever its status, and its error carries that wait. An error carries the stated wait, else a `Retry-After`
+  of 0 when nothing else is stated. With `retry.onlyStated`, an answer that states no wait is not retried either, and
+  neither is a network failure (Jira: "Only retry if the API is idempotent and the response includes a Retry-After
+  header"); so `onlyStated` and `defaultWaitMs` do not go together, and the table refuses the pair.
+- Otherwise a 429 waits its stated wait, else `retry.defaultWaitMs`, with no jitter. The others wait a positive
+  `Retry-After`; without one, the n-th retry (n from 0) waits a full-jitter backoff: a random share of
+  `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. No wait is longer than `maxWaitMs`.
+  The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
 - Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
   retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
   the OAuth token endpoint, a `token` entry's request and an RFC 7009 revoke. An answer that step 3 reclassifies is
   reported, not retried. The last answer is classified as any other; a timeout, and a network failure after the last
   retry, are `unavailable`.
 - With no `http.retry` there is no retry. `retry: {}` means one retry, waits capped at 60 seconds and a default wait of
-  1 second. A `limit` of 0 means no retry; an error still carries the wait the provider names.
+  1 second; the table refuses a `defaultWaitMs` above `maxWaitMs`. A `limit` of 0 means no retry; an error still carries
+  the wait the provider names.
 - The error taxonomy does not change.
 
 ### `paging`
@@ -532,7 +547,7 @@ provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft 
 ```ts
 type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Record<string, Param>; result?: Shape; records?: Path;
-  paging?: string; notFound?: 'null'; base?: string };
+  paging?: string; notFound?: 'null'; base?: string; anyOf?: readonly (readonly Path[])[] };
 type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
 type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
@@ -561,6 +576,14 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
   parameters are sent as one JSON object, `{}` when none is given, `variables` as GraphQL's variables (`{}` when none),
   posted with the query to the base.
+- `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
+  creates one record by any of several equal inputs (`[['email'], ['phone', 'last_name']]`). A path names a parameter
+  or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read
+  from the arguments as checked; one that is `undefined`, `null` or a blank string is not given. After each argument's
+  own check and before anything is sent, a call that gives no set whole is `param_group_missing: <id>`; `client()`
+  refuses a path that names no declared argument when it is built (`param_group_unknown: <id> <path>`), and an empty
+  list or an empty set, which a set is never (`param_group_unknown: <id>`). The table test asks for two or more sets,
+  none empty, and no path naming a `required` parameter.
 - A paged operation yields the records at `records`, page by page, each checked against the element of `result` there;
   a record that does not fit is skipped, and the call's `onSkipped(ids)` option hears once from each page that skipped
   any, with their `id`s (or `null`). Without `records`, a list `result` is the records themselves (a list at the answer's
@@ -603,8 +626,12 @@ other people must use OAuth, the key's `help` says the key is for the person's o
   authorization, the refresh token goes first.
 - `identify`: the documented request that answers who the credential is, `id` its id path, `name` its display name,
   then its email. With none, a credential check with no `id` on the cheapest read the credential can always make.
-- `http`: `headers` for every header the docs say each request needs, `content-type` included, and no other; `retry: {}` when the docs state a 429 or a
-  `Retry-After`, with `maxWaitMs` and `defaultWaitMs` only from stated numbers; `minIntervalMs` only from a stated
+- `http`: `headers` for every header the docs say each request needs, `content-type` included, and no other. `retry`
+  as the docs say: no limit status stated, or a limit that blocks a caller who keeps calling with no stated wait, no
+  `retry`; "retry only with `Retry-After`" or "wait until the reset", `onlyStated: true` (with `wait` when another header
+  or field states it); a wait in another header or a body field, `wait` with the page's unit; a window of at most 60
+  seconds with no wait promised on every 429, `defaultWaitMs` the window; a 429 and nothing more, `retry: {}`. `limit`
+  and `maxWaitMs` only from stated numbers. `minIntervalMs` only from a stated
   limit of N requests per W seconds, `Math.ceil(W * 1000 / N)`; `rateLimit` only for a documented non-429
   limit answer. `minIntervalMs` is declared only when the docs give one number that holds on every plan and belongs to
   the credential that signs the calls: a limit that varies by plan, or that the credential shares with its
@@ -650,10 +677,11 @@ are `'unknown'`. A `get`, `create` and `update` declare the same record as the l
 only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
-When a page requires at least one of several equal inputs to find or create one record (an email, a LinkedIn URL, a domain), none
-is `required` and each input's description names the group: the engine sends what the app gives, and the provider
-refuses a call with none until the engine can refuse it first ("A group of parameters of which at least one is
-required" on the [waiting list](../waiting-list.md#mechanisms)). For a list, the filter that scopes it stays required.
+When a page states that at least one of several equal inputs is required to find or create one record (in a sentence, a
+schema's "one of", or an error documented for a call with none), none is `required`: the operation declares the
+page's sets as `anyOf`, and the descriptions do not repeat them. A rule that reads two ways gives the sets of the
+reading that refuses fewer calls. A page that only lists ways to identify a record declares no group, and its
+descriptions do not claim one either. For a list, the filter that scopes it stays required.
 
 ## The engine
 
@@ -665,7 +693,7 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 | `catalogue` (new) | `defineProvider`, the entry types, the template and path helpers. |
 | `http` (internal) | `createClient(entry, options)` reads `auth.send`, `http`, `errors`, `rateLimit` from the entry, and `classify` interprets the declared rules. `./http` is no longer a subpath: `client` is the public client. |
 | `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2; an OAuth 2 start takes and returns the plain `values`, and its finish takes them back. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
-| `oauth`, `credentials` | Driven by the entry. `refreshGrant(entry, client, refreshToken, { values?, fetch? })`. `revokeGrant(entry, { accessToken?, refreshToken?, client?, values?, fetch? })` is the one revoke (`client` only for an RFC 7009 revoke): by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
+| `oauth`, `credentials` | Driven by the entry. `refreshGrant(entry, client, refreshToken, { values, fetch? })`. `revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke (`client` only for an RFC 7009 revoke); both take the connection's `values`, required for an entry with a plain field, optional with only saved keys, empty with neither: by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
 | `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, then `challengeAnswer(entry.webhook, request)` and `deliveryId(entry.webhook, request)`. |
 | `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |
@@ -707,24 +735,27 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
    the end and a 429 on the same recordings, through modules that run on the entry. Paging, a 429, the OAuth exchange
    and revoke, and webhook samples join the table's replay with the first entry that has them and no module.
 3. **Derived fake.** Every entry signs in on a fake derived from it: `fakeProvider(entry, { key, values })` (from
-   `./testing`) answers identify, a `token` entry's token request and each operation the app answers, filling the base
-   and the credential with the engine's own functions, and comparing a token request with the one the engine sends for
-   the good key. Every sign-in of an entry that sends a request to sign in (an identify request, or a `token` sign-in's
-   token request) signs in on it with a good key and is `rejected` with a bad one, with no recording.
+   `./testing`) answers identify, a `token` entry's token request, an OAuth 2 entry's token, refresh and revoke URLs,
+   and each operation the app answers, filling the base and the credential with the engine's own functions, and
+   comparing a token request with the one the engine sends for the good key. Every sign-in of an entry that sends a
+   request to sign in (an identify request, or a `token` sign-in's token request) signs in on it with a good key and is
+   `rejected` with a bad one, and every OAuth 2 sign-in connects with a good code and is refused with a bad one
+   (`GrantRevoked`), with no recording.
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.
 
 A recording is a real capture from a real account; a made-up one tests the code but leaves the entry `declared`. The
 recorder (`src/record.test.ts`) records an entry with no module that sends a request to sign in, and refuses any other
-that has no kit scenario. Each exchange keeps its method, URL, request body, status and `retry-after`, and from the
-answer only the paths the entry reads (an object or a list reached by one keeps only its shell; at an error or
-condition path, only a provider code, a number or a boolean). The key, the plain values and the tokens issued are
-swapped for the kit's stand-ins in the URL, the body and that header; in the answers, they and the account's id, name
-and saved values are swapped where they are a whole value. It refuses to write when a sign-in was redirected, when a
-value is under 4 characters, when a real value is still in an exchange (searched before the stand-ins go in, ignoring
-case, percent-decoded and with base64 runs decoded), and when the file fails the table test's own replay check: the
-key signs in (to an account when the entry names an id) and the bad key is `rejected`, each sending no more requests
-than the file holds. The module kits stay for what an entry cannot know, such as incremental reads.
+that has no kit scenario. Each exchange keeps its method, URL, request body, status, `retry-after` and the entry's
+declared wait headers, and from the answer only the paths the entry reads (an object or a list reached by one keeps
+only its shell; at an error or condition path, only a provider code, a number or a boolean). The key, the plain values
+and the tokens issued are swapped for the kit's stand-ins in the URL, the body and those headers; in the answers, they
+and the account's id, name and saved values are swapped where they are a whole value. It refuses to write when a
+sign-in was redirected, when a value is under 4 characters, when a real value is still in an exchange (searched before
+the stand-ins go in, ignoring case, percent-decoded and with base64 runs decoded), and when the file fails the table
+test's own replay check: the key signs in (to an account when the entry names an id) and the bad key is `rejected`,
+each sending no more requests than the file holds. The module kits stay for what an entry cannot know, such as
+incremental reads.
 
 `pnpm check` remains the one gate, with no network.
 

@@ -6,9 +6,13 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
-import { createClient } from '../http.js';
+import { finishConnect, startConnect } from '../connect.js';
+import { GrantRevoked } from '../errors.js';
+import { callBase, createClient, credentialOf, filledBase } from '../http.js';
+import { refreshGrant, revokeGrant } from '../oauth.js';
+import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { argumentShape, clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -36,6 +40,10 @@ const selectsOne = (item: Selects) => !(item.header !== undefined && item.path !
 const condition = <T extends Selects>(schema: z.ZodType<T>) =>
   schema.refine(selectsOne, 'a condition compares one header or one path, and a header only to a string');
 const when = condition(whenObject);
+/** A wait an answer states: one header, or several (the longest present counts), or one body path. */
+const wait = z.strictObject({ header: z.union([headerName, z.array(headerName).min(1)]).optional(), path: z.string().optional(),
+  unit: z.enum(['s', 'ms', 'epochSeconds', 'epochMs'], { error: "a wait's `unit` is 's', 'ms', 'epochSeconds' or 'epochMs'" }) })
+  .refine(item => (item.header === undefined) !== (item.path === undefined), 'a `wait` reads one `header` (or a list of headers) or one `path`');
 const send = z.union([z.strictObject({ header: headerName, value: template.regex(/^\P{Cc}*$/u, 'a header `value` holds no control character').optional() }), z.strictObject({ basic: z.tuple([template, template]) }),
   z.strictObject({ query: z.record(z.string(), template) })])
   .refine(item => !('query' in item) || Object.keys(item.query).length > 0, 'a query send names at least one parameter');
@@ -53,7 +61,8 @@ const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 
   params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'variables']), type: shape,
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
     description: z.string().optional() })).optional(),
-  result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional() };
+  result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional(),
+  anyOf: z.array(z.array(z.string())).optional() };
 const toleranceSeconds = z.number().int().positive().optional();
 const timestamp = z.strictObject({ header: headerName, toleranceSeconds });
 /** A piece's name in a `name=value,…` header: what splits the pieces never sits in it. */
@@ -100,10 +109,9 @@ const entrySchema = z.strictObject({
   http: z.strictObject({ baseUrl: https, host: z.string().optional(), bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
     timeoutMs: z.number().int().positive().optional(), minIntervalMs: z.number().int().nonnegative().optional(),
     retry: z.strictObject({ limit: z.number().int().nonnegative().optional(), maxWaitMs: z.number().int().nonnegative().optional(),
-      defaultWaitMs: z.number().int().nonnegative().optional(),
-      waitFromBody: z.strictObject({ path: z.string(), unit: z.enum(['ms', 'epochMs']) }).optional() }).optional(),
+      defaultWaitMs: z.number().int().nonnegative().optional(), onlyStated: z.literal(true).optional(), wait: wait.optional() }).optional(),
     rateLimit: z.strictObject({
-      when: z.array(condition(whenObject.extend({ resetAt: z.strictObject({ header: headerName, unit: z.literal('epochSeconds') }).optional() }))),
+      when: z.array(condition(whenObject.extend({ wait: wait.optional() }))),
       defaultWaitMs: z.number().int().nonnegative().optional() }).optional() }),
   errors: z.strictObject({ detail: value.optional(), allow: z.array(z.string()).optional(), failed: when.optional(),
     revoked: z.array(z.string()).optional(),
@@ -183,6 +191,8 @@ const plainReads = (entry: Entry) => [...placeholders(entry.http.baseUrl), ...re
 const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.secret === true)?.name;
 /** An OAuth 2 sign-in's URLs, as the engine reads them. */
 const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
+const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (1 000 and 60 000 when left out): the cap would cut a longer default';
+const RETRY_ONLY_STATED = "no `http.retry.defaultWaitMs` beside `onlyStated`: an answer that states no wait is not retried, so the default is never read";
 const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
@@ -210,6 +220,8 @@ const runnable = {
   '`categories`: one or two unique values of the `Category` type in src/catalogue.ts, the first the main one': (entry: Entry) => entry.categories !== undefined
     && entry.categories.length >= 1 && entry.categories.length <= 2 && new Set(entry.categories).size === entry.categories.length,
   'a `docs` page on every operation, https': (entry: Entry) => operations(entry).every(op => op.docs?.startsWith('https://') === true),
+  [RETRY_DEFAULT]: ({ http: { retry } }: Entry) => { const { defaultWaitMs, maxWaitMs } = retryPolicy(retry); return defaultWaitMs <= maxWaitMs; },
+  [RETRY_ONLY_STATED]: ({ http: { retry } }: Entry) => retry?.onlyStated !== true || retry.defaultWaitMs === undefined,
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
   [HOST_PATTERN]: (entry: Entry) => (declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
     ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
@@ -309,6 +321,10 @@ const runnable = {
   // A path segment and a query value are one string each: never null, a list or an object.
   'only a scalar, non-`nullable` parameter `in` a path or a query': (entry: Entry) => params(entry).every(param =>
     (param.in !== 'path' && param.in !== 'query') || (param.nullable === undefined && typeof param.type === 'string')),
+  // The rule `client()` applies to each path, and a group worth the name: a required parameter is given anyway.
+  '`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter': (entry: Entry) =>
+    operations(entry).every(op => op.anyOf === undefined || (op.anyOf.length > 1 && op.anyOf.every(set => set.length > 0
+      && set.every(path => argumentShape(op, path) !== undefined && op.params?.[path]?.required !== true)))),
   // A paged operation yields its records: a 404 is no record to answer null for.
   '`notFound` only on an operation with no `paging`': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
   // A saved value would replace the field the person entered, which `Connected` types as a string.
@@ -391,6 +407,46 @@ describe.each(entries)('%s', (id, entry) => {
         const signedIn = signIn(one, key === 'good' ? GOOD_KEY : BAD_KEY, fetch);
         if (key === 'bad') await expect(signedIn).rejects.toMatchObject({ code: 'rejected' });
         else expect((await signedIn).account === null).toBe(one.identify?.id === undefined);
+      });
+    }
+    // Every OAuth 2 sign-in connects on its derived fake (the kit's client, the consent's code and verifier), keeps the
+    // grant and each `save` value the fake answered, then refreshes, and revokes where the entry declares a revoke.
+    if (one.auth[0].kind === 'oauth2') {
+      test.each(['good', 'bad'] as const)(`connects on its derived fake with a %s code${named}`, async code => {
+        const { fetch, calls } = fakeFetch(fakeProvider(one, { key: GOOD_KEY, values: kitValues(one) }));
+        const client = { clientId: 'kit-client', clientSecret: 'kit-secret' };
+        const redirectUri = 'https://app.example.test/callback';
+        const start = await startConnect(one, { clientId: 'kit-client', redirectUri, state: 'kit-state', values: kitValues(one) });
+        if (start.kind !== 'redirect') throw new Error('an OAuth 2 sign-in starts with a redirect');
+        const connected = finishConnect(one, { client, code: code === 'good' ? 'kit-code' : 'kit-bad-code',
+          redirectUri, codeVerifier: start.codeVerifier, values: start.values, fetch, onRevokeFailed: error => { throw error; } });
+        if (code === 'bad') return expect(connected).rejects.toBeInstanceOf(GrantRevoked);
+        const { secret, values, account } = await connected;
+        expect(account === null).toBe(one.identify?.id === undefined);
+        const grant = { accessToken: GOOD_KEY, refreshToken: 'kit-refresh' };
+        expect(secret).toMatchObject(grant);
+        // A token answer's value is `kit-<path>`; a value read from identify's answer is the kit's.
+        expect(values).toMatchObject(Object.fromEntries(Object.entries(one.save ?? {}).map(([name, read]) => [name,
+          typeof read === 'string' && read.startsWith('tokenAnswer.') ? `kit-${read.slice('tokenAnswer.'.length)}` : expect.anything()])));
+        await expect(refreshGrant(one, client, 'kit-refresh', { fetch, values })).resolves.toMatchObject(grant);
+        const { revoke } = one;
+        if (revoke === undefined) return;
+        const before = calls.length;
+        await expect(revokeGrant(one, { ...grant, client, values, fetch })).resolves.toBeUndefined();
+        // One request reached the revoke, with the token `revoke.token` selects, or a request revoke's credential.
+        const sent = calls.slice(before);
+        if ('url' in revoke) {
+          expect(sent.map(call => call.url)).toEqual([new URL(filledBase(one, values, revoke.url)).href]);
+          const body = sent[0]?.body ?? '';
+          const json = one.auth[0].kind === 'oauth2' && one.auth[0].json === true;
+          expect(new URLSearchParams(json ? JSON.parse(body) as Record<string, string> : body).get('token'))
+            .toBe(revoke.token[0] === 'refresh' ? grant.refreshToken : grant.accessToken);
+        } else {
+          const base = filledBase(one, values, callBase(one, revoke.request).baseUrl).replace(/\/+$/u, '');
+          expect(sent.map(call => call.url)).toEqual([`${base}${revoke.request.path ?? ''}`]);
+          const [name = '', value] = credentialOf(one, GOOD_KEY, values).header ?? [];
+          expect(sent[0]?.headers[name]).toBe(value);
+        }
       });
     }
   }
@@ -586,6 +642,10 @@ test.each<[Rule, Entry]>([
     ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path or a query', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
+    ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email']], params: { email: { in: 'body', type: 'string' } } } }],
+    ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], []], params: { email: { in: 'body', type: 'string' } } } }],
+    ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], ['emial']], params: { email: { in: 'body', type: 'string' } } } }],
+    ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], ['phone']], params: { email: { in: 'body', type: 'string' }, phone: { in: 'body', type: 'string', required: true } } } }],
   ] as const).map(([rule, operations]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], operations })]),
   ...([
     ["no `webhook.prefix` beside `webhook.part`", { kind: 'hmac', header: 'stripe-signature', part: 'v1', prefix: 'v1=' }],
@@ -659,6 +719,10 @@ test.each<[Rule, Entry]>([
     operations: { 'request.create': { method: 'POST', path: '/requests' } } }],
   ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { ...key, auth: [{ kind: 'key' }], fields: [secret],
     operations: { then: { path: '/then' } } }],
+  ...[{ defaultWaitMs: 30_000, maxWaitMs: 10_000 }, { defaultWaitMs: 90_000 }, { maxWaitMs: 500 }].map((retry): [Rule, Entry] => [RETRY_DEFAULT,
+    defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, retry } })]),
+  [RETRY_ONLY_STATED, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
+    http: { ...key.http, retry: { onlyStated: true, defaultWaitMs: 5000 } } })],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
 test.each([
@@ -770,7 +834,9 @@ test.each<[string, Record<string, unknown>]>([
   ['a delivery id header', { webhook: { kind: 'standard', deliveryId: { header: 'Webhook-Id' } } }],
   ["a condition's header", { errors: { rules: [{ when: { header: 'X-Error' }, code: 'rejected' }] } }],
   ['a header the entry sends on every call', { http: { ...key.http, headers: { 'X-Api-Version': '2' } } }],
-  ["a rate limit's reset header", { http: { ...key.http, rateLimit: { when: [{ status: 403, resetAt: { header: 'x reset', unit: 'epochSeconds' } }] } } }],
+  ["a rate limit's wait header", { http: { ...key.http, rateLimit: { when: [{ status: 403, wait: { header: 'x reset', unit: 'epochSeconds' } }] } } }],
+  ["a retry's wait header", { http: { ...key.http, retry: { wait: { header: 'RateLimit-Reset', unit: 's' } } } }],
+  ["one of a retry's wait headers", { http: { ...key.http, retry: { wait: { header: ['ratelimit-reset', 'RateLimit-User-Reset'], unit: 's' } } } }],
 ])('%s that is no lowercase HTTP token fails the schema, with what to fix', (_, parts) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], ...parts };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([headerMessage]);
@@ -783,6 +849,18 @@ test.each<[string, Record<string, unknown>, string]>([
     'a `challenge.when` compares the body value: give `equals` or `in`'],
 ])('%s fails the schema, with what to fix', (_, parts, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], ...parts };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+});
+
+test.each<[string, Record<string, unknown>, string]>([
+  ['`retry.waitFromBody`', { retry: { waitFromBody: { path: 'wait', unit: 'ms' } } }, 'Unrecognized key: "waitFromBody"'],
+  ["a rate-limit rule's `resetAt`", { rateLimit: { when: [{ status: 403, resetAt: { header: 'x-reset', unit: 'epochSeconds' } }] } },
+    'Unrecognized key: "resetAt"'],
+  ['a wait with both a header and a path', { retry: { wait: { header: 'x-reset', path: 'wait', unit: 's' } } },
+    'a `wait` reads one `header` (or a list of headers) or one `path`'],
+  ['a wait in minutes', { retry: { wait: { header: 'x-reset', unit: 'min' } } }, "a wait's `unit` is 's', 'ms', 'epochSeconds' or 'epochMs'"],
+])('%s fails the schema, with what to fix', (_, http, message) => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, ...http } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
 
@@ -843,6 +921,8 @@ test('an entry whose operations keep every rule passes them all', () => {
       'requests.create': { docs: 'https://k.test/docs/requests', method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
         state: { in: 'query', type: 'string', enum: ['open'] }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
       'then.later': { docs: 'https://k.test/docs/later', path: '/later' },
+      'people.get': { docs: 'https://k.test/docs/people', method: 'POST', path: '/people', anyOf: [['email'], ['person.name', 'person.company.domain']],
+        params: { email: { in: 'body', type: 'string' }, person: { in: 'body', type: { 'name?': 'string', 'company?': { domain: 'string' } }, required: true } } },
       me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);

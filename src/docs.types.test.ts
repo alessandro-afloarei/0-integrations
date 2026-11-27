@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, signInWith, type Webhook } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Values, type Webhook } from './catalogue.js';
 import { attio } from './catalogue/attio.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { stripe } from './catalogue/stripe.js';
@@ -203,6 +203,13 @@ async function connectToken(password: string, host: string, username: string) {
   return [handler, account];
 }
 
+// docs/modules/oauth.md: a wrapper generic over the entry, as one over `startConnect`.
+function oauthWrapper(client: OAuthClient, refreshToken: string, clientId: string, state: string) {
+  const renew = (entry: Entry, values: Values) => refreshGrant(entry, client, refreshToken, { values });
+  const start = (entry: Entry, values: Values) => startConnect(entry, { clientId, redirectUri: 'https://app.test/cb', state, values });
+  return [renew, start];
+}
+
 // docs/modules/oauth.md › A `token` entry.
 function oauthTokenSource(secret: { clientSecret: string }, values: { accountId: string; clientId: string }) {
   // One source per connection, built outside any request handler and kept for the process's life.
@@ -259,7 +266,7 @@ function webhooksReceiveCalls(request: Request, signingSecret: string, publicKey
   return [webhooksReceive(slack.webhook, request, signingSecret, handle), webhooksReceive(discord.webhook, request, publicKey, handle)];
 }
 
-// docs/modules/testing.md › A fake derived from an entry (its three examples).
+// docs/modules/testing.md › A fake derived from an entry (its four examples).
 async function testingDerivedFake() {
   // An app's test, for an entry with no module:
   const { fetch } = fakeFetch(fakeProvider(trello, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
@@ -280,12 +287,21 @@ async function testingDerivedToken() {
   const { account } = await finishConnect(zoom, { secret: { clientSecret: 'kit-secret' }, values, fetch });
   return account;
 }
+async function testingDerivedOAuth() {
+  // An OAuth 2 entry: the kit's client and code connect, and the grant holds `key` as its access token.
+  const redirectUri = 'https://app.example.test/callback';
+  const start = await startConnect(linear, { clientId: 'kit-client', redirectUri, state: 'kit-state' });
+  const { fetch } = fakeFetch(fakeProvider(linear, { key: 'kit-token' }));
+  const { account } = await finishConnect(linear, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' },
+    code: 'kit-code', redirectUri, codeVerifier: start.codeVerifier, fetch, onRevokeFailed: () => undefined });
+  return account;
+}
 
 test('every docs example compiles', () => {
   expect([readmeConnectKey, readmeConnectOAuth, readmeCall, catalogueEntry, clientOAuthToken, clientOwnEntry, connectKey,
-    connectTwoSignIns, connectOwnServer, connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, connectToken, webhooksReceive,
+    connectTwoSignIns, connectOwnServer, connectOtherScopes, hubspotFakeConnect, designClient, clientGuarded, oauthTokenSource, oauthWrapper, connectToken, webhooksReceive,
     webhooksReceiveCalls, webhooksDeclared, testingDerivedFake, testingDerivedOperation,
-    testingDerivedToken].every(example => typeof example === 'function')).toBe(true);
+    testingDerivedToken, testingDerivedOAuth].every(example => typeof example === 'function')).toBe(true);
 });
 
 test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {
@@ -298,4 +314,5 @@ test("testing.md's derived-fake examples run", async () => {
   await expect(testingDerivedFake()).resolves.toEqual({ id: 'kit-account', name: 'kit-name' });
   await expect(testingDerivedOperation()).resolves.toEqual({ markdown: '# Page p1', truncated: false });
   await expect(testingDerivedToken()).resolves.toEqual({ id: 'kit-account', name: 'kit-account' });
+  await expect(testingDerivedOAuth()).resolves.toEqual({ id: 'kit-account', name: 'kit-name' });
 });

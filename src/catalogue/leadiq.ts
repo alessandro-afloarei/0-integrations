@@ -32,7 +32,7 @@ export const leadiq = defineProvider({
       params: { input: { in: 'variables', required: true,
         type: { 'email?': 'string', 'linkedinUrl?': 'string', 'id?': 'string', 'firstName?': 'string', 'lastName?': 'string',
           'company?': { 'name?': 'string', 'domain?': 'string' } },
-        description: 'The person, by identifying information (name, company, social profiles, email): give at least one of linkedinUrl (the most precise), email, id, or firstName and lastName with company.domain or company.name.' } },
+        description: 'The person, by identifying information (name, company, social profiles, email); linkedinUrl is the most precise.' } },
       result: { data: { searchPeople: { totalResults: 'integer', hasMore: 'boolean', results: [{ id: 'string',
         name: { fullName: 'string' }, 'linkedin?': { 'linkedinUrl?': 'string' },
         currentPositions: [{ companyId: 'string', 'title?': 'string' }], 'updatedAt?': 'unknown' }] } } } },
@@ -44,7 +44,7 @@ export const leadiq = defineProvider({
       graphql: 'query SearchCompany($input: SearchCompanyInput!) { searchCompany(input: $input) { totalResults hasMore results { id name domain industry numberOfEmployees linkedinUrl updatedDate } } }',
       params: { input: { in: 'variables', required: true,
         type: { 'domain?': 'string', 'name?': 'string', 'id?': 'string', 'linkedinUrl?': 'string' },
-        description: 'The company, found by domain, name, LinkedIn URL, or LeadIQ company id: give at least one.' } },
+        description: 'The company, by identifying information.' } },
       result: { data: { searchCompany: { totalResults: 'integer', hasMore: 'boolean', results: [companyInfo] } } } },
   },
 });

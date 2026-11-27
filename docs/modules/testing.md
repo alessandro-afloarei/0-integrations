@@ -7,21 +7,44 @@ pin its exact requests. `respondFrom(routes)` answers a request from routes or r
 
 ## A fake derived from an entry
 
-Any entry, with no module, gives an app a fake: `fakeProvider(entry, { key, values?, account?, operations? })` returns
-routes for `fakeFetch`. They answer for one credential, `key`, sent as the entry sends it (a header, Basic or the query,
-the base filled from `values` with the engine's own rules): a request without it is 401 `{ "error": "unauthorized" }`.
-For a `token` entry, `key` is the value of its secret field (a client secret, a password).
+Any entry, with no module, gives an app a fake: `fakeProvider(entry, { key, values?, account?, client?, code?,
+operations? })` returns routes for `fakeFetch`. They answer for one credential, `key`, sent as the entry sends it (a
+header, Basic or the query, the base filled from `values` with the engine's own rules): a request without it is 401
+`{ "error": "unauthorized" }`. For a `token` entry, `key` is the value of its secret field (a client secret, a
+password); for an OAuth 2 entry, the access token its token URL gives.
 
 - Identify's request answers `account`, or by default `kit-account` at the answer paths of `identify.id` and
   `kit-name` at those of `name`: every path a template reads (`'{org.id}/{user.id}'`), else the first of a list.
-- A `token` entry's token request answers `kit-token` (at its `token` path), `expires_in: 3600` and `kit-<path>` at
-  every `tokenAnswer.<path>` the entry reads (never over the token or `expires_in`). One whose Basic or body differs
+- A `token` entry's token request answers `kit-token` (at its `token` path), `expires_in: 3600` and, at every
+  `tokenAnswer.<path>` the entry reads, `kit-<path>` or the value `values` gives the `save` key that reads it (never
+  over the token or `expires_in`). One whose Basic or body differs
   from the request the engine sends for `key` is 400 `{ "error": "invalid_client" }`. Its calls then carry `kit-token`.
+- An OAuth 2 entry's token, refresh and RFC 7009 revoke URLs, filled from `values`, take a form body, or a JSON one
+  with `json`, and check the client authentication `clientAuth` declares (a Basic header and no `client_secret` in the
+  body, else `client_id` and `client_secret` in the body and no Basic header) against `client`, by default
+  `{ clientId: 'kit-client', clientSecret: 'kit-secret' }`: another is 401 `{ "error": "invalid_client" }`.
+  - A grant whose `content-type` is not the entry's encoding (`application/x-www-form-urlencoded`, or
+    `application/json` with `json`) is 400 `{ "error": "invalid_request" }`, before its client is checked.
+  - The token URL answers an `authorization_code` grant of `code` (by default `kit-code`) with a `redirect_uri`, and a
+    `code_verifier` that is not blank unless `pkce: false`. The refresh URL (the token URL unless the entry names one)
+    answers a `refresh_token` grant of `kit-refresh`. Any other grant is 400 `{ "error": "invalid_grant" }`. The fake
+    checks only that a `redirect_uri` and a `code_verifier` are there: it never sees the authorize request, so it cannot
+    compare either with what that request sent.
+  - Both answer `{ access_token: key, token_type: 'bearer', refresh_token: 'kit-refresh', expires_in: 3600 }`, with
+    every `tokenAnswer.<path>` the entry reads, as a `token` entry's answer holds them, and, with `requireGranted`, the
+    default scopes as `scope`.
+  - The revoke URL answers 200 to a request naming a `token`, and 400 `{ "error": "invalid_request" }` to one naming
+    none; on a revoke URL that is also the token or refresh URL, a request with a `grant_type` is that grant. A revoke
+    the entry sends as a request (Slack's) carries the credential, as identify does, and is answered `{}`.
 - Each operation the app answers is routed by its method and path (each `{name}` one segment, decoded into
   `call.path`), or for GraphQL by its query. When two paths match a request, the one whose first differing segment is
-  literal answers: `/items/recent` before `/items/{id}`, and `/a/b/{y}` before `/a/{x}/c`. Its function gets
-  `{ path, query, body }` and returns the JSON answered with 200, `undefined` for a 404, or a `Response` answered as it
-  is. Paging is the function's: it answers each page as it likes.
+  literal answers: `/items/recent` before `/items/{id}`, and `/a/b/{y}` before `/a/{x}/c`. Of two operations on the
+  same method and path (folk's `people.list` and `people.search`), the one whose required query and body parameters
+  the request all carries answers, the most such first, the first declared on a tie; when none carries its own, the
+  first declared answers. Its function gets `{ path, query, body }` and returns the JSON answered with 200,
+  `undefined` for a 404, or a `Response` answered as it is. Paging is the function's: it answers each page as it likes.
+  On a route two operations share, every request is routed afresh: a next page whose request drops the filter is
+  answered by the other operation.
 - The fake owns a GraphQL URL: a query it has no answer for throws
   `fakeProvider: no answer for this GraphQL query at POST <url>`. An app's own route for another query on that URL goes
   before the fake's routes, or into `operations`.
@@ -49,6 +72,15 @@ const page = await client(notion, { token: 'kit-token', fetch }).pages.markdown(
 const values = { accountId: 'kit-account', clientId: 'kit-client' };
 const { fetch } = fakeFetch(fakeProvider(zoom, { key: 'kit-secret', values }));
 const { account } = await finishConnect(zoom, { secret: { clientSecret: 'kit-secret' }, values, fetch });
+```
+
+```ts
+// An OAuth 2 entry: the kit's client and code connect, and the grant holds `key` as its access token.
+const redirectUri = 'https://app.example.test/callback';
+const start = await startConnect(linear, { clientId: 'kit-client', redirectUri, state: 'kit-state' });
+const { fetch } = fakeFetch(fakeProvider(linear, { key: 'kit-token' }));
+const { account } = await finishConnect(linear, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' },
+  code: 'kit-code', redirectUri, codeVerifier: start.codeVerifier, fetch, onRevokeFailed: () => undefined });
 ```
 
 Run `checkCredentialStore` against each real store adapter in the app's database test tier, using an
@@ -97,8 +129,9 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   with `synthetic: false`, replacing any recording of that name, so the table test replays it with the kit's key and
   values and the entry's tier is `recorded`.
 
-**What is written.** Each exchange is its method, its URL, its request body, its status, its `retry-after` header (no
-other header), and from the answer only the paths the entry reads:
+**What is written.** Each exchange is its method, its URL, its request body, its status, its `retry-after` header and
+the wait headers the entry declares, each only when it holds the decimal number the engine reads (no other header), and
+from the answer only the paths the entry reads:
 
 - identify's `id` and `name` paths and every `save` path (a `tokenAnswer.` path is read in the token answer), a token
   answer's token and `expires_in`, and a body wait's path;
@@ -114,7 +147,7 @@ answer that is not JSON is written as `null`. Nothing else in an answer is writt
 number.
 
 **What is swapped.** The key becomes `kit-good-key`, each plain value given its kit value, and every token at the
-entry's `token` path `kit-token`: inside the URL, the request body and `retry-after` (as written, JSON-escaped,
+entry's `token` path `kit-token`: inside the URL, the request body and the headers kept (as written, JSON-escaped,
 percent- or form-encoded), and in the answers where they are a whole value. In the answers, the account's id and name
 become `kit-account` and `kit-name` (read in identify's answer or the token answer), and each `save` value
 `kit-<name>` (its key's name). A blank string at an identity or `save` path is written as the provider answered it:

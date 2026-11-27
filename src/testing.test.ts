@@ -3,16 +3,20 @@ import { defineProvider, signInWith } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
+import { folk } from './catalogue/folk.js';
 import { gitlab as gitlabEntry } from './catalogue/gitlab.js';
+import { lemlist } from './catalogue/lemlist.js';
 import { metabase } from './catalogue/metabase.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
+import { slack } from './catalogue/slack.js';
 import { trello } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
-import { finishConnect } from './connect.js';
+import { finishConnect, startConnect } from './connect.js';
+import { GrantRevoked } from './errors.js';
 import { kitValues } from './kit.test-support.js';
-import { requestToken, tokenSource } from './oauth.js';
+import { exchangeCode, refreshGrant, requestToken, revokeGrant, tokenSource } from './oauth.js';
 import { checkCredentialStore, fakeFetch, fakeProvider, memoryStores, respondFrom, sequence, type FakeCall } from './testing.js';
 import type { Sealed } from './vault.js';
 
@@ -250,6 +254,147 @@ describe('fakeProvider', () => {
   test('a literal path segment that is not ASCII matches its percent-encoded request', async () => {
     const { fetch } = fakeFetch(fakeProvider(items, { key: 'k', operations: { 'menu.get': call => call.path } }));
     await expect(client(items, { token: 'k', fetch }).menu.get({ id: 'crème' })).resolves.toEqual({ id: 'crème' });
+  });
+
+  test("folk's list and search share a route: the search answers a call carrying its required filter", async () => {
+    const person = (id: string) => ({ id, fullName: 'A', firstName: 'A', lastName: 'B', emails: [], companies: [] });
+    const { fetch } = fakeFetch(fakeProvider(folk, { key: 'k', operations: {
+      'people.list': () => ({ data: { items: [person('listed')] } }), 'people.search': () => ({ data: { items: [person('found')] } }) } }));
+    const api = client(folk, { token: 'k', fetch });
+    const ids = async (people: AsyncIterable<{ id: string }>) => { const seen = []; for await (const { id } of people) seen.push(id); return seen; };
+    expect(await ids(api.people.list())).toEqual(['listed']);
+    expect(await ids(api.people.search({ 'filter[emails][eq]': 'a@example.test' }))).toEqual(['found']);
+  });
+
+  test("lemlist's create and update share a route: the update answers a body carrying its required contactId", async () => {
+    const { fetch } = fakeFetch(fakeProvider(lemlist, { key: 'k', operations: {
+      'contacts.create': () => ({ data: { _id: 'created' } }), 'contacts.update': () => ({ data: { _id: 'updated' } }) } }));
+    const api = client(lemlist, { token: 'k', fetch });
+    await expect(api.contacts.create({ email: 'a@example.test' })).resolves.toEqual({ data: { _id: 'created' } });
+    await expect(api.contacts.update({ contactId: 'c1' })).resolves.toEqual({ data: { _id: 'updated' } });
+  });
+
+  /** Basic client authentication, a JSON token body and no PKCE: the three shapes that differ from the defaults. */
+  const basicJson = defineProvider({ id: 'basicjson', name: 'Basic JSON', http: { baseUrl: 'https://api.basicjson.test' },
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize', tokenUrl: 'https://basicjson.test/token',
+      refreshUrl: 'https://basicjson.test/refresh', clientAuth: 'basic', json: true, pkce: false, scopeSeparator: ',' }],
+    scopes: { default: ['read', 'write'], requireGranted: true }, revoke: { url: 'https://basicjson.test/revoke', token: ['refresh'] },
+    identify: { request: { path: '/me' }, id: 'id', name: 'tokenAnswer.workspace.name' } });
+  const kitClient = { clientId: 'kit-client', clientSecret: 'kit-secret' };
+  const redirectUri = 'https://app.test/callback';
+
+  test('an OAuth 2 entry with Basic client authentication, a JSON body and no PKCE connects on its fake', async () => {
+    const { fetch, calls } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
+    const start = await startConnect(basicJson, { clientId: 'kit-client', redirectUri, state: 's' });
+    await expect(finishConnect(basicJson, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
+      .resolves.toMatchObject({ secret: { accessToken: 'k', refreshToken: 'kit-refresh' }, account: { id: 'kit-account', name: 'kit-workspace.name' } });
+    expect(start.codeVerifier).toBeUndefined();
+    expect(calls[0]).toMatchObject({ url: 'https://basicjson.test/token', body: JSON.stringify({ code: 'kit-code', redirect_uri: redirectUri, grant_type: 'authorization_code' }) });
+    await expect(exchangeCode(basicJson, kitClient, { code: 'kit-code', redirectUri, fetch })).resolves.toMatchObject({ extras: { scope: 'read,write' } });
+    await expect(exchangeCode(basicJson, kitClient, { code: 'other', redirectUri, fetch })).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(refreshGrant(basicJson, kitClient, 'kit-refresh', { fetch })).resolves.toMatchObject({ accessToken: 'k' });
+    await expect(refreshGrant(basicJson, kitClient, 'old', { fetch })).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(revokeGrant(basicJson, { refreshToken: 'kit-refresh', client: kitClient, fetch })).resolves.toBeUndefined();
+  });
+
+  test('a wrong client is refused 401 invalid_client, at the token, refresh and revoke URLs alike', async () => {
+    const { fetch } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
+    const wrong = { clientId: 'kit-client', clientSecret: 'other' };
+    const refused = { code: 'request_failed', status: 401, detail: 'invalid_client' };
+    await expect(exchangeCode(basicJson, wrong, { code: 'kit-code', redirectUri, fetch })).rejects.toMatchObject(refused);
+    await expect(refreshGrant(basicJson, wrong, 'kit-refresh', { fetch })).rejects.toMatchObject(refused);
+    await expect(revokeGrant(basicJson, { refreshToken: 'kit-refresh', client: wrong, fetch })).rejects.toMatchObject(refused);
+    // The client in the body, where the entry declares Basic, is no client either.
+    const body = JSON.stringify({ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri, client_id: 'kit-client', client_secret: 'kit-secret' });
+    expect((await fetch('https://basicjson.test/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status).toBe(401);
+  });
+
+  test('a PKCE entry is answered only with a code verifier, its client in the form body, and a given code and client', async () => {
+    const pkce = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize', tokenUrl: 'https://basicjson.test/token' }] });
+    const client = { clientId: 'app', clientSecret: 'secret' };
+    const { fetch } = fakeFetch(fakeProvider(pkce, { key: 'k', client, code: 'c1' }));
+    const form = (parts: Record<string, string>) => fetch('https://basicjson.test/token', { method: 'POST',
+      body: new URLSearchParams({ grant_type: 'authorization_code', code: 'c1', redirect_uri: redirectUri, client_id: 'app', client_secret: 'secret', ...parts }) });
+    expect(await answer(await form({}))).toEqual({ status: 400, body: { error: 'invalid_grant' } });
+    for (const blank of ['', '  ']) expect(await answer(await form({ code_verifier: blank }))).toEqual({ status: 400, body: { error: 'invalid_grant' } });
+    expect((await form({ code_verifier: 'v' })).status).toBe(200);
+    await expect(exchangeCode(pkce, client, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).resolves.toMatchObject({ grant: { accessToken: 'k' } });
+    await expect(exchangeCode(pkce, kitClient, { code: 'c1', redirectUri, codeVerifier: 'v', fetch })).rejects.toMatchObject({ status: 401 });
+  });
+
+  test("a token or refresh request in another encoding than the entry's is 400 invalid_request", async () => {
+    const basic = `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}`;
+    const code = { grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri };
+    const refresh = { grant_type: 'refresh_token', refresh_token: 'kit-refresh' };
+    const form = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize',
+      tokenUrl: 'https://basicjson.test/token', refreshUrl: 'https://basicjson.test/refresh', clientAuth: 'basic', pkce: false }] });
+    for (const [entry, right, wrong] of [[basicJson, 'application/json', 'application/x-www-form-urlencoded'],
+      [form, 'application/x-www-form-urlencoded;charset=UTF-8', 'application/json']] as const) {
+      const { fetch } = fakeFetch(fakeProvider(entry, { key: 'k' }));
+      for (const [url, grant] of [['https://basicjson.test/token', code], ['https://basicjson.test/refresh', refresh]] as const) {
+        const body = entry === basicJson ? JSON.stringify(grant) : new URLSearchParams(grant).toString();
+        const sent = (type?: string) => fetch(url, { method: 'POST', headers: { authorization: basic, ...type ? { 'content-type': type } : {} }, body });
+        expect((await sent(right)).status).toBe(200);
+        for (const type of [wrong, 'text/plain', undefined]) expect(await answer(await sent(type))).toEqual({ status: 400, body: { error: 'invalid_request' } });
+      }
+    }
+    // Checked before the body is read: a JSON grant to a form entry that authenticates in the body finds no client there.
+    const post = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize', tokenUrl: 'https://basicjson.test/token', pkce: false }] });
+    const { fetch } = fakeFetch(fakeProvider(post, { key: 'k' }));
+    const json = JSON.stringify({ ...code, client_id: 'kit-client', client_secret: 'kit-secret' });
+    expect(await answer(await fetch('https://basicjson.test/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: json })))
+      .toEqual({ status: 400, body: { error: 'invalid_request' } });
+  });
+
+  test('a revoke with no token is 400 invalid_request', async () => {
+    const { fetch } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
+    const revoke = (body: Record<string, string>) => fetch('https://basicjson.test/revoke', { method: 'POST',
+      headers: { authorization: `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}` }, body: JSON.stringify(body) });
+    expect(await answer(await revoke({ token_type_hint: 'refresh_token' }))).toEqual({ status: 400, body: { error: 'invalid_request' } });
+    expect((await revoke({ token: 'kit-refresh' })).status).toBe(200);
+  });
+
+  test('an entry whose revoke URL is its token URL still connects, refreshes and revokes there', async () => {
+    const shared = defineProvider({ ...basicJson, revoke: { url: 'https://basicjson.test/token', token: ['refresh'] } });
+    const { fetch } = fakeFetch(fakeProvider(shared, { key: 'k' }));
+    await expect(finishConnect(shared, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
+      .resolves.toMatchObject({ secret: { accessToken: 'k' } });
+    await expect(refreshGrant(shared, kitClient, 'kit-refresh', { fetch })).resolves.toMatchObject({ accessToken: 'k' });
+    await expect(revokeGrant(shared, { refreshToken: 'kit-refresh', client: kitClient, fetch })).resolves.toBeUndefined();
+  });
+
+  test('with Basic client authentication, a client secret in the body as well is refused', async () => {
+    const { fetch } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
+    const sent = (body: Record<string, string>) => fetch('https://basicjson.test/token', { method: 'POST',
+      headers: { authorization: `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri, ...body }) });
+    expect((await sent({})).status).toBe(200);
+    expect(await answer(await sent({ client_id: 'kit-client', client_secret: 'kit-secret' }))).toEqual({ status: 401, body: { error: 'invalid_client' } });
+  });
+
+  const twoOnOne = defineProvider({ id: 'twoonone', name: 'Two on one', fields: [{ name: 'apiKey', title: 'API key', secret: true }],
+    auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.twoonone.test' },
+    operations: { 'items.byA': { path: '/items', params: { a: { in: 'query', type: 'string', required: true } } },
+      'items.byB': { path: '/items', params: { b: { in: 'query', type: 'string', required: true } } } } });
+  test.each([['both carried, one parameter each: a tie', '?a=1&b=2'], ['none carried', '?c=3']])(
+    'of two operations on one route with %s, the first declared answers', async (_, query) => {
+      const { fetch } = fakeFetch(fakeProvider(twoOnOne, { key: 'k', operations: { 'items.byA': () => ({ by: 'a' }), 'items.byB': () => ({ by: 'b' }) } }));
+      expect(await answer(await fetch(`https://api.twoonone.test/items${query}`, { headers: { authorization: 'Bearer k' } })))
+        .toEqual({ status: 200, body: { by: 'a' } });
+      expect(await answer(await fetch('https://api.twoonone.test/items?b=2', { headers: { authorization: 'Bearer k' } })))
+        .toEqual({ status: 200, body: { by: 'b' } });
+    });
+
+  test("Slack's token answer holds the value given for the `save` key that reads it, and its kit values elsewhere", async () => {
+    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { botUserId: 'U1' } }));
+    await expect(finishConnect(slack, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
+      .resolves.toMatchObject({ values: { botUserId: 'U1' }, account: { id: 'kit-team.id', name: 'kit-team.name' } });
+  });
+
+  test("Slack's revoke, a request, is answered to the connection's token and refused to another", async () => {
+    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k' }));
+    await expect(revokeGrant(slack, { accessToken: 'k', fetch })).resolves.toBeUndefined();
+    await expect(revokeGrant(slack, { accessToken: 'x', fetch })).rejects.toMatchObject({ code: 'rejected' });
   });
 
   test("a `tokenAnswer.*` kit value never replaces the token or `expires_in`", async () => {
