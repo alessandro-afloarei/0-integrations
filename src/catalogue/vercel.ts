@@ -16,7 +16,7 @@ export const vercel = defineProvider({
   fields: [{ name: 'accessToken', title: 'Access token', secret: true,
     help: 'Create it on the Account Tokens page with the Full Account scope: a project-scoped token cannot read your user, so sign-in fails. It expires on the date you choose when you create it.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.vercel.com', retry: {} },
+  http: { baseUrl: 'https://api.vercel.com', retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/v2/user' }, id: 'user.id', name: ['user.name', 'user.username', 'user.email'],
     rejectWhen: [{ status: 403, path: 'error.invalidToken', equals: true }] },
   errors: { detail: 'error.code' },

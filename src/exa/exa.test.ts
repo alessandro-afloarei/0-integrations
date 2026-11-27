@@ -23,7 +23,7 @@ test('drops a result without text and titles an untitled one by its address', as
     .toEqual({ hits: [{ url: 'https://b.test', title: 'https://b.test', text: 't', publishedDate: null }], costUsd: 0 });
 });
 
-test('waits out a 429 three times, then throws rate_limited', async () => {
+test('waits out a 429 once, then throws rate_limited', async () => {
   vi.useFakeTimers();
   try {
     const fake = answering({ error: 'slow down' }, 429);
@@ -32,7 +32,7 @@ test('waits out a 429 three times, then throws rate_limited', async () => {
     const error = await pending;
     expect(error).toBeInstanceOf(ProviderHttpError);
     expect(error).toMatchObject({ code: 'rate_limited' });
-    expect(fake.calls).toHaveLength(4);
+    expect(fake.calls).toHaveLength(2);
     expect(new Set(fake.calls.map(call => call.body)).size).toBe(1);
   } finally {
     vi.useRealTimers();

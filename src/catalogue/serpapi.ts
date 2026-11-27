@@ -6,6 +6,6 @@ export const serpapi = defineProvider({
   categories: ['search'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true }],
   auth: [{ kind: 'key', send: { query: { api_key: '{token}' } } }],
-  http: { baseUrl: 'https://serpapi.com' },
+  http: { baseUrl: 'https://serpapi.com', retry: {} },
   identify: { request: { path: '/account' }, id: 'account_id', name: 'account_email' },
 });

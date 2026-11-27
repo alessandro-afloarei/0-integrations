@@ -95,7 +95,9 @@ describe('Fireflies retry hints', () => {
   ] as const)('keeps code precedence on HTTP %i / %j and carries the selected error timestamp', async (status, code, expected) => {
     const fake = scripted(() => Response.json({ errors: [{ code, message: 'fixture-private-message',
       extensions: { code, metadata: { retryAfter: NOW + 4000, token: 'fixture-private-token' } } }] }, { status }));
-    const error: unknown = await firefliesClient({ apiKey: 'fixture-key', fetch: fake.fetch }).user().catch((failure: unknown) => failure);
+    // A caller's signal: a call with one is never retried, so the case tests the error alone, whatever the entry's retry.
+    const signal = new AbortController().signal;
+    const error: unknown = await firefliesClient({ apiKey: 'fixture-key', fetch: fake.fetch, signal }).user().catch((failure: unknown) => failure);
     expect(error).toBeInstanceOf(ProviderHttpError);
     expect(error).toMatchObject({ code: expected, status, detail: code ?? null, retryAfterMs: 4000 });
     expect(JSON.stringify(error)).not.toContain('fixture-private');

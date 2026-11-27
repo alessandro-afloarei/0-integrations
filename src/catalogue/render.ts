@@ -15,7 +15,7 @@ export const render = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'Create it in Account Settings for the workspace the app works on, with Read on services and Run on deploys. Your member role caps what the key can do: a Viewer or Billing member cannot trigger deploys.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.render.com/v1', retry: {} },
+  http: { baseUrl: 'https://api.render.com/v1', retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/users' }, id: 'id', name: ['name', 'email'] },
   errors: { detail: 'code' },
   webhook: { kind: 'standard', deliveryId: { header: 'webhook-id' } },

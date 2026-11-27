@@ -83,7 +83,7 @@ test('reads a page as it loads when its render could not finish, never after a 4
 
   const down = fakeFetch([{ url: SCRAPE, respond: () => new Response(null, { status: 503 }) }]);
   await expect(client(down).scrape('https://x.test/faq', WAIT)).rejects.toMatchObject({ code: 'unavailable' });
-  expect(bodies(down).map(body => 'actions' in body)).toEqual([true, false, false, false, false]);
+  expect(bodies(down).map(body => 'actions' in body)).toEqual([true, false, false]);
 });
 
 test('a scrape that runs a script is sent once: never after a dropped connection, and its 429 carries the wait', async () => {

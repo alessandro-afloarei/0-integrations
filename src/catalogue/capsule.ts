@@ -2,8 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Capsule: OAuth 2, then a personal API token. A party is a person or an organisation: no separate list of companies.
  * Paging by `Link`: https://developer.capsulecrm.com/v2/overview/reading-from-the-api. Identify:
- * https://developer.capsulecrm.com/v2/operations/User. A 429 past 4,000 requests an hour per user; no retry, as Capsule
- * asks to wait for `X-RateLimit-Reset` (https://developer.capsulecrm.com/v2/overview/handling-api-responses). */
+ * https://developer.capsulecrm.com/v2/operations/User. A 429 past 4,000 requests an hour per user; Capsule asks to
+ * wait until `X-RateLimit-Reset` (https://developer.capsulecrm.com/v2/overview/handling-api-responses). */
 const party = { id: 'integer', 'type?': 'string', 'firstName?': 'string', 'lastName?': 'string', 'name?': 'string',
   'emailAddresses?': [{ 'address?': 'string', 'type?': 'string' }], 'organisation?': { 'id?': 'integer', 'name?': 'string' },
   'updatedAt?': 'string' } as const;
@@ -22,7 +22,8 @@ export const capsule = defineProvider({
     pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: ['read', 'write'] },
   revoke: { url: 'https://api.capsulecrm.com/oauth/token/revoke', token: ['refresh', 'access'] },
-  http: { baseUrl: 'https://api.capsulecrm.com/api/v2' },
+  http: { baseUrl: 'https://api.capsulecrm.com/api/v2',
+    retry: { onlyStated: true, wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   identify: { request: { path: '/users/current' }, id: 'user.id', name: 'user.name' },
   paging: { link: { kind: 'linkHeader' } },
   operations: {

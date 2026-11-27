@@ -9,6 +9,6 @@ export const zoom = defineProvider({
     { name: 'clientSecret', title: 'Client secret', secret: true }],
   auth: [{ kind: 'token', request: { url: 'https://zoom.us/oauth/token',
     body: { grant_type: 'account_credentials', account_id: '{accountId}' }, basic: ['{clientId}', '{clientSecret}'] } }],
-  http: { baseUrl: 'https://api.zoom.us/v2' },
+  http: { baseUrl: 'https://api.zoom.us/v2', retry: {} },
   identify: { id: '{connection.accountId}' },
 });

@@ -24,6 +24,84 @@ Nothing here is released yet.
 - The refresh URL is filled and checked only when a refresh is sent (the consent URL, the exchange and a revoke no
   longer fill it), and it alone of the OAuth 2 URLs may name a host the token answer names.
 - New entry: Wrike (tasks; OAuth 2, on the data centre its token answer names). Every entry is `declared`.
+- Every entry's `retry` was read against its provider's rate-limit page: an entry whose pages state no limit status
+  declares none, and a number no page states is gone. A positive `Retry-After` still wins wherever one is sent. The
+  engine retries an operation of `kind: 'read'` (or a GET with no `kind`), a raw GET or a raw call marked idempotent,
+  and identify's request when it is a GET (a POST or GraphQL identify is sent once); a call given the caller's own
+  `signal` is never retried. A read below is one of these, and a 5xx one the engine retries, a 500, 502, 503 or 504
+  (a 501 or a 505 is reported at once). A rate-limited read now:
+  - Affinity: waits its `x-ratelimit-limit-user-reset` header, not one second.
+  - Attio: waits a `Retry-After` up to the engine's 60-second cap, no longer 10 seconds.
+  - Azure DevOps: waits its `X-RateLimit-Reset` header, not one second.
+  - Bitbucket: is retried after its `Retry-After`, else one second, and a 408, a 5xx or a dropped connection on a read
+    is now retried once; it was not retried.
+  - Breakcold: waits a minute when it names no wait; it retried at once.
+  - Capsule: is retried only when its answer states a wait, and waits its `X-RateLimit-Reset` header; it was not
+    retried.
+  - Chatwork: waits its `x-ratelimit-reset` header, not one second.
+  - ClickUp: waits its `X-RateLimit-Reset` header, not one second.
+  - Cognism: identify and a raw read wait its `x-rate-limit-reset` header, else a minute, not one second; its four
+    typed operations are POSTs, never retried.
+  - Discord: is retried only when its answer states a wait, and waits its `retry_after` body field when no
+    `Retry-After` is sent; it was not retried.
+  - Exa: is retried once, after its `Retry-After` or one second, no longer three times 30 seconds apart, and a 5xx or a
+    dropped connection once, not three times; `exaClient`'s search too.
+  - Fathom: waits its 60-second window when it names no wait (was five seconds); `fathomClient` too.
+  - Figma: is retried after its `Retry-After`, else one second, and a 408, a 5xx or a dropped connection on a read is
+    now retried once; it was not retried.
+  - Fireflies: is retried only when its answer states a wait, in `Retry-After` or the error's `retryAfter`; it was
+    never retried. Only `user()` is such a read, `firefliesClient`'s too when called without a `signal`; every other
+    Fireflies call is a GraphQL POST, never retried. The body wait drives a retry on a 429 (or a 408 or a 5xx); a
+    GraphQL error that arrives with HTTP 200 is reported at once, its wait carried on the error.
+  - Firecrawl: waits a minute when it names no wait (was 30 seconds), and a 429, a 5xx or a dropped connection is
+    retried once, not three times; `firecrawlClient`'s map and plain scrape too.
+  - Freshsales: waits a minute when it names no wait, not one second.
+  - GitBook: waits its `X-RateLimit-Reset` header, not one second.
+  - GitHub: is retried only on a 408, 429, 500, 502, 503 or 504 that names a positive `Retry-After` of at most 60
+    seconds: such a read is waited and tried once more, `githubClient`'s reads too; it was not retried. Every other
+    error status (a 403, a 505) is reported at once, with its wait where it names one, and so are a primary limit with
+    no `Retry-After` and a longer wait.
+  - GitLab: is retried after its `Retry-After`, else one second, and a 408, a 5xx or a dropped connection on a read is
+    now retried once; it was not retried.
+  - Google: is retried once, after its `Retry-After` or one second, up to the engine's 60-second cap, and a 5xx or a
+    dropped connection once, not twice: no page states the two retries, the 30-second cap or the 5-second wait.
+    `googleMailbox`'s Gmail and Calendar reads too.
+  - HubSpot: waits its 10-second window when it names no wait (was one second), and waits a stated `Retry-After` up to
+    the engine's minute (was reported past 10 seconds); `hubspotClient` too.
+  - Instantly: waits a minute when it names no wait, not one second.
+  - Intercom: waits its `X-RateLimit-Reset` header, else its 10-second window.
+  - LeadIQ: waits a minute when it names no wait, not one second; only a raw GET or a raw call marked idempotent is
+    retried (every typed call is a POST).
+  - Microsoft: is retried once, after its `Retry-After` (up to the engine's 60-second cap) or one second, and a 5xx or
+    a dropped connection once, not twice: no page states the two retries, the 30-second cap or the 5-second wait.
+    `graphMailbox`'s reads too.
+  - monday.com: is retried only when its answer states a wait, in `Retry-After` or the error's `retry_in_seconds`;
+    it was retried after one second without one, and a 5xx that names no wait is no longer retried. The body wait
+    drives a retry on a 429 (or a 408 or a 5xx); a GraphQL error that arrives with HTTP 200 is reported at once, its
+    wait carried on the error.
+  - PayPal: is retried only when its answer names `Retry-After`; it was not retried.
+  - People Data Labs: identify and a raw read are retried only when the answer states a wait; its 429's reset is an
+    ISO 8601 time, so it is reported, not retried after one second, and a 5xx that names no wait is no longer retried.
+    Its typed operations are writes (searches by POST, enrichments that spend credits), never retried.
+  - Render: waits a minute when it names no wait, not one second.
+  - Rollbar: waits its `X-Rate-Limit-Remaining-Seconds` header, not one second.
+  - Salesloft: waits a minute when it names no wait, and a 408, a 5xx or a dropped connection on a read is now retried
+    once; it was not retried.
+  - SerpApi: is retried once, after its `Retry-After` or one second (its page names no wait), and a 408, a 5xx or a
+    dropped connection on a read is now retried once; it was not retried.
+  - Shortcut: waits a minute when it names no wait, not one second.
+  - Superhuman Docs: waits its 6-second window when it names no wait, not one second.
+  - Teamleader Focus: waits a minute when it names no wait, not one second.
+  - Trello: is retried after its 10-second window, and a 408, a 5xx or a dropped connection on a read is now retried
+    once; it was not retried.
+  - Unipile: is retried only when its answer states a wait: Unipile's own 429 waits its `retry-after` once; a
+    provider's 429 with no stated wait is no longer retried (its page: going past a provider's limit "may temporarily
+    block the account"), nor is a 5xx that names none (was three retries 30 seconds apart, or a backoff).
+    `unipileClient` and `unipileMailbox` too; `deleteAccount()`, an idempotent DELETE, is sent once on a 503 that
+    names no wait (it was sent four times, with backoff), and still retried after a short `Retry-After`.
+  - Vercel: waits a minute when it names no wait, not one second.
+  - Zoom: is retried once, after its `Retry-After` or one second (its page names no wait), and a 408, a 5xx or a
+    dropped connection on a read is now retried once; it was not retried.
 - New: an operation may declare `anyOf`, sets of arguments of which a call must give one whole. `client()` refuses a
   call that gives none (`param_group_missing: <id>`) before anything is sent, and an `anyOf` path that names no declared
   argument, or an empty set, when the client is built (`param_group_unknown: <id> <path>`). Freshsales, Hunter,
@@ -39,7 +117,7 @@ Nothing here is released yet.
 - New: `retry.wait` reads a wait from a header (seconds, milliseconds or an epoch time; of several headers, the longest
   present; counted on a 429 only) or a body field (on any answer that holds it), and `retry.onlyStated` retries only an
   answer that states its wait, and no network failure. A wait already past, or 0, counts as none (Breakcold's body 0
-  now waits the default second).
+  now waits its default minute).
 - Breaking: `retry.waitFromBody` and a rate-limit rule's `resetAt` are gone. An app's own entry writes
   `retry: { wait: { path, unit } }` and the rule's `wait: { header, unit }`.
 - Buildkite and PagerDuty wait their reset headers (PagerDuty a minute when a 429 comes without one); Todoist waits its
@@ -79,15 +157,14 @@ Nothing here is released yet.
 - Intercom's calls send `Accept: application/json`, without which Intercom may answer 404 or 406.
 - PayPal sends `Accept: application/json` on every call and on its token request.
 - Slack identifies an org-level install by its organization (`enterprise.id`); it failed with `missing_fields`.
-- Breakcold waits before retrying a 429 that names no wait (one second); it retried at once.
 - Aircall, Apollo, Attio, Fathom, GitHub, Granola, HubSpot, Lusha and Notion no longer declare `minIntervalMs`: each
   limit depends on the plan or is shared by the account, workspace or the person's other keys and tokens (their
   modules still take one).
 - Granola, Intercom, Slack and Stripe declare a retry. An idempotent call (a GET unless the caller marks it otherwise,
   or a call marked idempotent) made without the caller's own abort signal is sent once more after a 429, a 408, 500,
   502, 503 or 504, or a network failure. It waits the answer's `Retry-After` when it gives a valid, positive delay;
-  else, after a 429, the entry's default wait (Granola 5 seconds, Intercom 10 seconds, Slack and Stripe 1 second),
-  and after any other, at most one second; never more than 60 seconds.
+  else, after a 429, the entry's own wait (Granola 5 seconds, Intercom its `X-RateLimit-Reset`, else 10 seconds,
+  Slack and Stripe 1 second), and after any other, at most one second; never more than 60 seconds.
 - `finishConnect` over a union of key or token entries takes each member's own secret fields; it asked for every
   member's at once (HubSpot's `accessToken` beside Attio's `apiKey`). An OAuth 2 member adds no form input.
 - `FirefliesUser`'s `email` and `name` are `string | null` (they were `string`): a Fireflies user without one no longer
@@ -161,7 +238,9 @@ Nothing here is released yet.
 - An entry with `retry` now also retries 408, 500, 502, 503 and 504 answers and network failures on reads, with
   full-jitter backoff from one second: the n-th retry waits a random share of at most 1, 2, 4 seconds and so on, capped
   by `maxWaitMs`, or a positive `Retry-After` (Microsoft, Google, Attio, HubSpot, Notion, Aircall, Breakcold and the
-  other entries that declare `retry`). A timeout is not retried.
+  other entries that declare `retry`). A timeout is not retried. An entry with `retry.onlyStated` (Capsule, Discord,
+  Fireflies, GitHub, Jira, monday.com, PayPal, People Data Labs, Unipile) retries only an answer that states its wait,
+  and no network failure.
 - A Firecrawl scrape that runs a script (`actions`) skips the automatic retries: a 5xx or a dropped connection goes
   straight to the plain read, and a 429 fails with the wait Firecrawl names (before, its 429 was retried). A plain
   scrape and a map are retried as reads.

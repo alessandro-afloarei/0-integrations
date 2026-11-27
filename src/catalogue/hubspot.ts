@@ -11,7 +11,7 @@ export const hubspot = defineProvider({
   scopes: { default: ['oauth', 'crm.objects.companies.read', 'crm.objects.contacts.read', 'crm.objects.deals.read', 'crm.objects.owners.read'] },
   // Only a refresh token is revoked: a grant with an access token alone expires on its own.
   revoke: { url: 'https://api.hubapi.com/oauth/2026-03/token/revoke', token: ['refresh'] },
-  http: { baseUrl: 'https://api.hubapi.com', retry: { maxWaitMs: 10_000 } },
+  http: { baseUrl: 'https://api.hubapi.com', retry: { defaultWaitMs: 10_000 } },
   // Known categories only: a credential can also look like a short error code.
   errors: { detail: 'category', allow: ['MISSING_SCOPES', 'VALIDATION_ERROR'] },
   identify: { request: { path: '/account-info/2026-09/details' }, id: ['tokenAnswer.hub_id', 'portalId'], name: 'Portal {id}' },

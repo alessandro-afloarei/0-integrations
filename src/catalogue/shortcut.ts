@@ -17,7 +17,7 @@ export const shortcut = defineProvider({
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
     help: 'A Read + Write token, made by a member who can change data: an Observer cannot through the API. Tokens may expire.' }],
   auth: [{ kind: 'key', send: { header: 'shortcut-token' } }],
-  http: { baseUrl: 'https://api.app.shortcut.com', headers: { 'content-type': 'application/json' }, retry: {} },
+  http: { baseUrl: 'https://api.app.shortcut.com', headers: { 'content-type': 'application/json' }, retry: { defaultWaitMs: 60_000 } },
   errors: { detail: 'error' },
   identify: { request: { path: '/api/v3/member' }, id: 'id', name: ['name', 'mention_name'] },
   paging: { next: { kind: 'nextUrl', next: 'next' } },
