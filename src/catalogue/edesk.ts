@@ -11,6 +11,7 @@ const message = { id: 'number', 'ticket_id?': 'number', 'type?': 'string', 'dire
   'from_consumer_id?': 'integer', 'delivered?': 'boolean', 'created_at?': 'integer' } as const;
 const ticketId = { ticketId: { in: 'path', type: 'integer', required: true } } as const;
 const statuses = ['Scheduled', 'Spam', 'Archived', 'Open', 'Pending', 'Closed'];
+const settable = ['Scheduled', 'Archived', 'Open', 'Pending', 'Closed'];
 const perPage = { itemsPerPage: { in: 'query', type: 'integer', description: '20 by default, at most 1000.' } } as const;
 const written = { subject: { in: 'body', type: 'string' }, contact_id: { in: 'body', type: 'integer' },
   tag_ids: { in: 'body', type: ['integer'], description: 'Tag ids, as GET /tags lists them.' } } as const;
@@ -43,7 +44,7 @@ export const edesk = defineProvider({
         external_order_id: { in: 'body', type: 'string', description: 'The marketplace order id, when you do not have the sales_order_id.' } },
       result: { data: ticket } },
     'tickets.update': { docs: `${ref}/updateticket`, method: 'PUT', path: '/tickets/{ticketId}',
-      params: { ...ticketId, ...written, status: { in: 'body', type: 'string', enum: statuses },
+      params: { ...ticketId, ...written, status: { in: 'body', type: 'string', enum: settable },
         owner_user_id: { in: 'body', type: 'integer', description: 'The user it is assigned to.' } },
       result: { data: ticket } },
     'messages.list': { docs: `${ref}/listticketmessages`, path: '/tickets/{ticketId}/messages', paging: 'page', records: 'data',
@@ -54,9 +55,10 @@ export const edesk = defineProvider({
           description: 'Message: a reply to the buyer; Note: an internal note, never sent.' },
         send: { in: 'body', type: 'boolean', description: 'true queues a Message for delivery to the channel.' },
         subject: { in: 'body', type: 'string' },
-        status: { in: 'body', type: 'string', enum: ['Open', 'Pending', 'Closed', 'Spam', 'Archived'],
+        status: { in: 'body', type: 'string', enum: ['Open', 'Pending', 'Closed', 'Archived'],
           description: 'The ticket\'s status once it is added.' } },
       result: { data: message } },
+    // A searched walk may return again contacts sharing the last one's name: deduplicate on id and channel_id.
     'contacts.list': { docs: `${ref}/contacts_list`, path: '/contacts', paging: 'cursor', records: 'data',
       params: { ...perPage, email: { in: 'query', type: 'string' }, name: { in: 'query', type: 'string' },
         fsf_query: { in: 'query', type: 'string', description: 'Searches the contacts\' name and email.' },
