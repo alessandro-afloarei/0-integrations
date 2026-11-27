@@ -1,15 +1,12 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Webex: OAuth 2, an integration made alone; Meetings needs a Webex Meetings account on Common Identity, and a create
- * or update emails the host and invitees unless sendEmail is false: https://developer.webex.com/meeting/docs/meetings
+ * emails the host and invitees unless sendEmail is false: https://developer.webex.com/meeting/docs/meetings
  * Link paging and a 429's Retry-After: https://developer.webex.com/docs/basics; the webhook checks X-Webex-Signature's
  * SHA-256 pair, not X-Spark-Signature: https://developer.webex.com/docs/receive-and-verify-webhooks */
 const meeting = { id: 'string', 'meetingSeriesId?': 'string', title: 'string', meetingType: 'string', state: 'string',
   start: 'string', 'end?': 'string', webLink: 'string' } as const;
 const meetingId = { meetingId: { in: 'path', type: 'string', required: true } } as const;
-const fields = { agenda: { in: 'body', type: 'string' }, timezone: { in: 'body', type: 'string', description: 'An IANA time zone.' },
-  recurrence: { in: 'body', type: 'string', description: 'An RFC 2445 rule, for a meeting series.' },
-  sendEmail: { in: 'body', type: 'boolean', description: 'false sends no email to the host and invitees; true by default.' } } as const;
 const when = { from: { in: 'query', type: 'string', description: 'ISO 8601, inclusive.' },
   to: { in: 'query', type: 'string', description: 'ISO 8601, exclusive.' } } as const;
 const ref = 'https://developer.webex.com/meeting/docs/api/v1';
@@ -42,12 +39,11 @@ export const webex = defineProvider({
     'meetings.create': { docs: `${ref}/meetings/create-a-meeting`, method: 'POST', path: '/meetings', kind: 'write',
       params: { title: { in: 'body', type: 'string', required: true },
         start: { in: 'body', type: 'string', required: true, description: 'ISO 8601; 10 minutes to 23 hours 59 before end.' },
-        end: { in: 'body', type: 'string', required: true, description: 'ISO 8601.' }, ...fields,
+        end: { in: 'body', type: 'string', required: true, description: 'ISO 8601.' }, agenda: { in: 'body', type: 'string' },
+        timezone: { in: 'body', type: 'string', description: 'An IANA time zone.' },
+        recurrence: { in: 'body', type: 'string', description: 'An RFC 2445 rule, for a meeting series.' },
+        sendEmail: { in: 'body', type: 'boolean', description: 'false sends no email to the host and invitees; true by default.' },
         invitees: { in: 'body', type: [{ email: 'string', 'displayName?': 'string', 'coHost?': 'boolean' }], description: 'At most 1000.' } },
-      result: meeting },
-    'meetings.update': { docs: `${ref}/meetings/update-a-meeting`, method: 'PUT', path: '/meetings/{meetingId}', kind: 'write',
-      params: { ...meetingId, title: { in: 'body', type: 'string' }, start: { in: 'body', type: 'string', description: 'ISO 8601.' },
-        end: { in: 'body', type: 'string', description: 'ISO 8601.' }, ...fields },
       result: meeting },
   },
 });
