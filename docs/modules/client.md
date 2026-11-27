@@ -131,7 +131,8 @@ An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pag
 - Each argument is checked by its declared type before anything is sent: `TypeError('param_missing: <name>')` or
   `TypeError('param_invalid: <name>')`. An argument that is not declared, or is `undefined`, is not sent. An operation
   with no required parameter may be called with no argument. An operation that declares body parameters sends a JSON
-  object, `{}` when no body argument is given.
+  object, `{}` when no body argument is given; one that declares form parameters sends a form-encoded body, each value
+  a scalar as its string (an object or a list is `param_invalid`), with the form's `content-type` over any other.
 - The answer is read by the operation's `result`: undeclared keys are dropped, and an answer that does not fit is
   `invalid_response`. With no `result` the answer is `unknown`, and a 204 answers `null`; any other answer without JSON
   is `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
@@ -145,7 +146,8 @@ of them by `client` as `TypeError('operation_clash: <id>')` for an app's own ent
 
 A wrong entry throws when its client is built: a URL that is not a well-formed template or hosts that split
 (`base_host_refused`, `host_split`, both before the token is read, and first in `finishConnect` too), a clashing id, a
-parameter with no place in the request, such as a body parameter on a GET (`param_unplaced: <id> <name>`), a paging
+parameter with no place in the request, such as a body or form parameter on a GET, or the two in one operation
+(`param_unplaced: <id> <name>`), a paging
 shape the entry does not declare (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
 to no list in the `result` (`records_unshaped: <id>`), an operation on a `page` or `offset` shape whose `records` is
 not the shape's `list` (`records_unpaged: <id>`), and a parameter (or a literal query in its path) in the place its

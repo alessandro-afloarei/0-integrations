@@ -39,10 +39,10 @@ password); for an OAuth 2 entry, the access token its token URL gives.
 - Each operation the app answers is routed by its method and path (each `{name}` one segment, decoded into
   `call.path`), or for GraphQL by its query. When two paths match a request, the one whose first differing segment is
   literal answers: `/items/recent` before `/items/{id}`, and `/a/b/{y}` before `/a/{x}/c`. Of two operations on the
-  same method and path (folk's `people.list` and `people.search`), the one whose required query and body parameters
-  the request all carries answers, the most such first, the first declared on a tie; when none carries its own, the
-  first declared answers. Its function gets `{ path, query, body }` and returns the JSON answered with 200,
-  `undefined` for a 404, or a `Response` answered as it is. Paging is the function's: it answers each page as it likes.
+  same method and path (folk's `people.list` and `people.search`), the one whose required query, body and form
+  parameters the request all carries answers, the most such first, the first declared on a tie; when none carries its
+  own, the first declared answers. Its function gets `{ path, query, body }` (a form body as its fields, each a
+  string) and returns the JSON answered with 200, `undefined` for a 404, or a `Response` answered as it is. Paging is the function's: it answers each page as it likes.
   On a route two operations share, every request is routed afresh: a next page whose request drops the filter is
   answered by the other operation.
 - The fake owns a GraphQL URL: a query it has no answer for throws

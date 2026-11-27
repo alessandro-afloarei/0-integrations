@@ -602,7 +602,7 @@ provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft 
 type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Record<string, Param>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null'; base?: string; anyOf?: readonly (readonly Path[])[] };
-type Param = { in: 'path' | 'query' | 'body' | 'variables'; type: Shape; required?: true; nullable?: true;
+type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables'; type: Shape; required?: true; nullable?: true;
   enum?: readonly string[]; description?: string };
 type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
 ```
@@ -626,10 +626,15 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
 - At run time each argument is checked by its declared type (and `enum`) before anything is sent; one that does not fit
   is a `TypeError` naming it (`param_missing: <name>`, `param_invalid: <name>`). An argument that is not declared, or is
   `undefined`, is not sent; `null` is sent only for a `nullable` one (a JSON body or variable), else it counts as left
-  out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path` and `query` values are
-  strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
+  out. A `path` value is one percent-encoded segment and cannot be empty, `.` or `..`; `path`, `query` and `form` values
+  are strings, finite numbers or booleans, never `nullable`, and an `enum` is on a `string` parameter only. `body`
   parameters are sent as one JSON object, `{}` when none is given, `variables` as GraphQL's variables (`{}` when none),
-  posted with the query to the base.
+  posted with the query to the base. `form` parameters are sent as an `application/x-www-form-urlencoded` body, each
+  value as its string (`true`, `25`), an empty form when none is given, with the form's `content-type`, which wins over
+  one the entry or the app sets (Chatwork, Zulip and Agile CRM take one).
+- A parameter has a place in its request or the entry is refused (the table test, and `client()` with
+  `param_unplaced: <id> <name>` when it is built): a `path` one only where the path names it, `body` and `form` ones
+  never on a GET and never in one operation together, and on a GraphQL operation only `variables`.
 - `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
   creates one record by any of several equal inputs (`[['email'], ['phone', 'last_name']]`). A path names a parameter
   or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read
