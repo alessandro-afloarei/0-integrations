@@ -16,7 +16,7 @@ const written = { subject: { in: 'body', type: 'string' }, contact_id: { in: 'bo
   tag_ids: { in: 'body', type: ['integer'], description: 'Tag ids, as GET /tags lists them.' } } as const;
 
 export const edesk = defineProvider({
-  id: 'edesk', name: 'eDesk', docs: `${ref}/authentication`,
+  id: 'edesk', name: 'eDesk', docs: `${ref}/whoami`,
   categories: ['support'],
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
     help: 'Create it at dashboard.edesk.com/api-token, with full access to Tickets and Messages and read access to Contacts and Channels. The API is the paid eDesk Connector add-on.' }],
