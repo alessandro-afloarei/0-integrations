@@ -10,7 +10,8 @@ export const notion = defineProvider({
   auth: [{ kind: 'key' }],
   // The latest API version: it names a trashed page `in_trash` (`archived` is gone).
   http: { baseUrl: 'https://api.notion.com/v1', headers: { 'notion-version': '2026-03-11', 'content-type': 'application/json' },
-    retry: {} },
+    // A 529 `service_overload` is retried as a 429: https://developers.notion.com/reference/request-limits
+    retry: {}, rateLimit: { when: [{ status: 529, path: 'code', equals: 'service_overload' }] } },
   identify: { request: { path: '/users/me' }, id: 'id', name: 'bot.workspace_name' },
   paging: { cursor: { kind: 'cursor', next: 'next_cursor', more: 'has_more', send: { body: 'start_cursor' } } },
   operations: { 'pages.markdown': { docs: 'https://developers.notion.com/reference/retrieve-page-markdown',

@@ -25,6 +25,8 @@ Nothing here is released yet.
 - A read whose answer a `rateLimit` rule marks is retried as a 429 is, after its `Retry-After` (else the entry's
   `retry.wait`, else `retry.defaultWaitMs`), never past `maxWaitMs`: Google's 403 `rateLimitExceeded`,
   `userRateLimitExceeded` and `quotaExceeded` after a second, GitHub's secondary-limit 403 after its `retry-after`.
+- Notion's 529 `service_overload` is a rate limit: `rate_limited` where it was `unavailable`, and a read is retried
+  after its `Retry-After`, else a second, as a 429 is.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
