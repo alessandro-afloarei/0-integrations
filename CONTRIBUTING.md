@@ -107,9 +107,9 @@ entry:
   names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's
   `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id
   is a client call or a dotted prefix of another;
-- has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields,
-  and whose URLs, base and `http.bases` share one host when any of them is typed: a token goes only to the host that
-  issued it.
+- has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields
+  (the refresh URL may also name a host the token answer names), and whose URLs, base and `http.bases` share one host
+  when any of them is typed: a token goes only to the host that issued it.
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
 the test signs in once with a good key and once with a bad one (a `token` entry's token request, then identify's when a

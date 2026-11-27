@@ -7,9 +7,10 @@ default); none asked sends no `scope` parameter. `exchangeCode` returns only the
 (`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
 condition marks is refused with the entry's own code.
 
-Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` and
-checked as a base is, and a URL that names a value not given is `template_missing` before anything is sent. Each
-function types `values` by the entry, as `startConnect` and `finishConnect` do. `authorizeUrl(entry, { …, values })`
+Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` (the
+refresh URL also from a host the token answer named, below) and checked as a base is, and a URL that names a value not
+given is `template_missing` before anything is sent. Each function types `values` by the entry, as `startConnect` and
+`finishConnect` do. `authorizeUrl(entry, { …, values })`
 and `exchangeCode(entry, client, { …, values })` take the plain fields, since nothing is saved before the exchange;
 `refreshGrant(entry, client, refreshToken, { values, fetch? })`, `revokeGrant(entry, { …, values })` and `tokenSource`
 take the connection's `values` as `finishConnect` returned them, plain and saved. `values` is required when the entry

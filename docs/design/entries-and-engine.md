@@ -649,11 +649,11 @@ out: a smaller true entry beats a larger guessed one. What the engine cannot say
 wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
 
 **Sign-in.** Every sign-in the provider documents, in one pass: its self-serve OAuth 2 authorization code grant
-(`oauth2`) first, when it reaches the key's base and `identify` and its hosts keep the host rule, then its personal key or token
-(`key`, its `send` as the docs show it); a documented one-request token (`token`) takes the key's place when there is
-no key. [Sign-in alternatives](#sign-in-alternatives) gives the rules. When the provider's own rules say an app for
-other people must use OAuth, the key's `help` says the key is for the person's own account, and a provider whose OAuth
-2 cannot be declared yet is not declared with a key alone: it goes on the waiting list.
+(`oauth2`) first, when its hosts keep the host rule, then its personal key or token (`key`, its `send` as the docs show
+it; its own fields, base and `identify` when they differ from OAuth 2's); a documented one-request token (`token`) takes
+the key's place when there is no key. [Sign-in alternatives](#sign-in-alternatives) gives the rules. When the provider's
+own rules say an app for other people must use OAuth, the key's `help` says the key is for the person's own account, and
+a provider whose OAuth 2 cannot be declared yet is not declared with a key alone: it goes on the waiting list.
 
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
