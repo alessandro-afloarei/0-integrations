@@ -7,6 +7,7 @@ import { exa } from './catalogue/exa.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
 import { gitlab as gitlabEntry } from './catalogue/gitlab.js';
+import { honeybadger } from './catalogue/honeybadger.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
@@ -791,6 +792,20 @@ test.each(['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu', '
     const fake = filled(smartsheet, { apiHost });
     await fake.client.json('/users/me');
     expect(fake.calls.map(call => call.url)).toEqual([`https://${apiHost}/2.0/users/me`]);
+  });
+
+/** Where a client of `entry` on its `apiHost` sends `path`: the URL or the refusal, how often the token was read and a
+ * request sent. */
+async function regionTaken(entry: Entry, apiHost: string, path: string) {
+  const fake = filled(entry, { apiHost });
+  const sent = await fake.client.json(path).then(() => fake.calls[0]?.url, (error: unknown) => error);
+  return { sent, tokenRead: fake.token.mock.calls.length, requests: fake.calls.length };
+}
+
+test.each([['app.honeybadger.io', true], ['eu-app.honeybadger.io', true], ['x.honeybadger.io', false], ['127.0.0.1', false]] as const)(
+  "Honeybadger's client takes %s: %s (a refusal before the token is read or anything is sent)", async (apiHost, accepted) => {
+    expect(await regionTaken(honeybadger, apiHost, '/token')).toEqual(accepted ? { sent: `https://${apiHost}/v3/token`, tokenRead: 1, requests: 1 }
+      : { sent: new TypeError('base_host_refused: honeybadger'), tokenRead: 0, requests: 0 });
   });
 
 test("a stored Smartsheet connection without `apiHost` is template_missing before anything is sent; a connect fills the default", async () => {
