@@ -37,7 +37,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [Fathom](https://developers.fathom.ai/quickstart) | meetings | key | — | — | declared |
 | [Fellow](https://developers.fellow.ai/reference/authentication-1) | meetings | key | recordings.list, recordings.get | — | declared |
 | [Figma](https://developers.figma.com/docs/rest-api/oauth-apps/) | design | OAuth 2, key | — | — | declared |
-| [Firecrawl](https://docs.firecrawl.dev/api-reference/v2-introduction) | search | key | — | — | declared |
+| [Firecrawl](https://docs.firecrawl.dev/api-reference/v2-introduction) | search | OAuth 2, key | — | — | declared |
 | [Fireflies](https://docs.fireflies.ai/fundamentals/authorization) | meetings | key | user | hmac | declared |
 | [folk](https://developer.folk.app/api-reference/authentication) | crm | key | people.list, people.search, people.get, people.create, people.update, companies.list, deals.list | standard | declared |
 | [Freshsales](https://developers.freshworks.com/crm/api/#authentication) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, accounts.list, deals.list | — | declared |
