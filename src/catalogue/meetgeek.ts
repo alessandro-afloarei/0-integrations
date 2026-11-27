@@ -5,7 +5,8 @@ const hosts = ['api.meetgeek.ai', 'api-eu.meetgeek.ai', 'api-us.meetgeek.ai'] as
 
 /** MeetGeek: an API key on its region's host; its sign-in checks the key on the user's teams, naming no account. A 429
  * waits Business's one-minute window (Free and Pro: 100 a day): https://docs.meetgeek.ai/api/getting-started/limits
- * Webhooks: https://docs.meetgeek.ai/api/api-reference/v1/appendix-webhooks */
+ * Webhooks: https://docs.meetgeek.ai/api/api-reference/v1/appendix-webhooks
+ * Identify: https://docs.meetgeek.ai/api/api-reference/v1/teams */
 const cursor = { limit: { in: 'query', type: 'integer', description: 'From 1 to 500.' } } as const;
 const meetingId = { meetingId: { in: 'path', type: 'string', required: true } } as const;
 const ref = 'https://docs.meetgeek.ai/api/api-reference/v1';
