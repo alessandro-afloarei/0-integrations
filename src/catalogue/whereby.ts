@@ -1,7 +1,7 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Whereby Embedded: an API key; its sign-in checks the key on a one-meeting list, naming no account. A meeting is a
- * transient room with an end date, and no API call updates it. A 429 waits Retry-After or the body's data.msLeft:
+ * transient room with an end date, and no API call updates it. A 429 waits Retry-After or data.msLeft, else a minute:
  * https://docs.whereby.com/reference/whereby-rest-api-reference; webhooks, set up in the dashboard, sign `t.body`:
  * https://docs.whereby.com/whereby-product-features/insights-suite-and-api/webhooks */
 const meeting = { meetingId: 'string', 'roomName?': 'string', roomUrl: 'string', 'startDate?': 'string', endDate: 'string',
@@ -15,7 +15,7 @@ export const whereby = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'A Whereby Embedded key (Configure, API, Generate key; it may expire after 7, 30 or 90 days): Whereby Meetings has no API.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.whereby.dev/v1', retry: { wait: { path: 'data.msLeft', unit: 'ms' } } },
+  http: { baseUrl: 'https://api.whereby.dev/v1', retry: { defaultWaitMs: 60_000, wait: { path: 'data.msLeft', unit: 'ms' } } },
   identify: { request: { path: '/meetings', query: { limit: '1' } } },
   webhook: { kind: 'hmac', header: 'whereby-signature', signed: '{timestamp}.{body}', part: 'v1', timestamp: { part: 't' },
     deliveryId: { body: ['id'] } },
