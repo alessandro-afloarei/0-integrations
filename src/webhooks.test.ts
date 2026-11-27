@@ -1,6 +1,7 @@
 import { createHmac, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Webhook } from './catalogue.js';
+import { airtable } from './catalogue/airtable.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
@@ -298,6 +299,14 @@ test('a Standard Webhooks secret is decoded as strictly: loose base64 after `whs
   for (const loose of [`whsec_${standardKey.toString('base64')} `, `whsec_${standardKey.toString('base64url')}-`, `whsec_${standardKey.toString('base64').slice(0, -1)}`]) {
     expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.from(loose.slice(6), 'base64'))), loose)).toBe(false);
   }
+});
+
+// The three pages give no secret, body and signature together, so each vector is computed from the page's recipe.
+test("verifies Airtable's `X-Airtable-Content-MAC`: `hmac-sha256=` and the hex HMAC of the body, keyed with `macSecretBase64` decoded", () => {
+  const macSecretBase64 = keyBytes.toString('base64');
+  expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': `hmac-sha256=${hmacHex(keyBytes)}` }), macSecretBase64)).toBe(true);
+  expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': `hmac-sha256=${hmacHex(macSecretBase64)}` }), macSecretBase64)).toBe(false);
+  expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': hmacHex(keyBytes) }), macSecretBase64)).toBe(false);
 });
 
 test('an empty secret accepts nothing, whatever the kind', () => {

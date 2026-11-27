@@ -20,6 +20,7 @@ export const airtable = defineProvider({
   http: { baseUrl: 'https://api.airtable.com/v0', retry: { defaultWaitMs: 30_000 } },
   identify: { request: { path: '/meta/whoami' }, id: 'id', name: 'email' },
   errors: { detail: ['error.type', 'error'] },
+  webhook: { kind: 'hmac', header: 'x-airtable-content-mac', prefix: 'hmac-sha256=', secret: 'base64' },
   paging: { offset: { kind: 'cursor', next: 'offset', send: { query: 'offset' } } },
   operations: {
     'records.list': { docs: `${api}/list-records.md`, path: '/{baseId}/{tableIdOrName}', paging: 'offset', records: 'records',
