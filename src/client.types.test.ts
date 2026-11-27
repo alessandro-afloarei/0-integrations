@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, type Entry } from './catalogue.js';
+import { defineProvider, signInWith, type Entry } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { attio } from './catalogue/attio.js';
 import { intercom } from './catalogue/intercom.js';
@@ -140,13 +140,13 @@ function typed() {
 
 // A plain field with a default may be left out of `values`; the result still holds it, as a string.
 async function defaults(accessToken: string) {
-  const { values } = await finishConnect(intercom, { secret: { accessToken }, fetch });
+  const { values } = await finishConnect(signInWith(intercom, 'key'), { secret: { accessToken }, fetch });
   expectTypeOf(values.apiHost).toEqualTypeOf<string>();
-  await finishConnect(intercom, { secret: { accessToken }, values: { apiHost: 'api.eu.intercom.io' }, fetch });
+  await finishConnect(signInWith(intercom, 'key'), { secret: { accessToken }, values: { apiHost: 'api.eu.intercom.io' }, fetch });
   // @ts-expect-error a plain field without a default (Aircall's apiId) still requires `values`
   await finishConnect(aircall, { secret: { apiToken: accessToken }, fetch });
   // @ts-expect-error a misspelt field is no plain field of Intercom
-  await finishConnect(intercom, { secret: { accessToken }, values: { apiHots: 'x' }, fetch });
+  await finishConnect(signInWith(intercom, 'key'), { secret: { accessToken }, values: { apiHots: 'x' }, fetch });
 }
 
 // A token entry's finish is a form's: its secret fields, its plain fields unless each has a default, `fetch` optional.
