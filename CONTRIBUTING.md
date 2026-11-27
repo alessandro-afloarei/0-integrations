@@ -53,8 +53,10 @@ one takes five steps:
    - a write that reaches people (a message sent, a reply a customer receives, an event or a meeting whose create
      invites its guests) says so in its leading comment and declares the provider's parameter to send no notification,
      or to keep a reply internal, optional unless the page requires it (Intercom's `message_type`). A reply, a note and
-     an update never take a sender; a create may name the customer as its first message's author where the page asks
-     for it, its description saying so (Zammad, Dixa), and an entry may leave such a create out;
+     an update declare no field that chooses their author: the credential's own identity speaks. Where the page requires
+     the request to name the agent who sends (Atlas's `agentId`), that field is declared, its description saying so. A
+     create may name the customer as its first message's author where the page asks for it (Zammad, Dixa), and an entry
+     may leave such a create out. An update declares no path or status that sends, deletes or marks spam;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;

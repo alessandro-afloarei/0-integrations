@@ -806,12 +806,14 @@ it got, and the other is a row under [Declared in part](../waiting-list.md#decla
 a message to one ticket; a reply the customer receives (an email, a chat message) is `kind: 'write'`, and its leading
 comment says it reaches the customer. Where the same endpoint also posts an internal note (Chatwoot's `private`,
 Intercom's `message_type`), that parameter is declared, optional unless the page requires it (Intercom's
-`message_type`), its description saying it keeps the message internal. A reply, a note and an update never take a
-sender; a create may name the customer as its first message's author where the page asks for it, its description
-saying so (Zammad, Dixa), and an entry may leave such a create out. Where a reply is only a field of the ticket's
-create and update (Zendesk's `comment`, with its `public`), those declare it, and there is no `<messages>.create`. A
-note on its own endpoint (Freshdesk's notes, Front's comments) is `<notes>.create`, a write too: it may notify agents
-(Freshdesk's `notify_emails`).
+`message_type`), its description saying it keeps the message internal. A reply, a note and an update declare no
+field that chooses their author: the credential's own identity speaks. Where the page requires the request to name
+the agent who sends (Atlas's `agentId`), that field is declared, its description saying so. A create may name the
+customer as its first message's author where the page asks for it (Zammad, Dixa), and an entry may leave such a create
+out. An update declares no path or status that sends, deletes or marks spam. Where a reply is only a field of the
+ticket's create and update (Zendesk's `comment`, with its `public`), those declare it, and there is no
+`<messages>.create`. A note on its own endpoint (Freshdesk's notes, Front's comments) is `<notes>.create`, a write too:
+it may notify agents (Freshdesk's `notify_emails`).
 
 A `<tickets>.create` that emails the customer or notifies agents declares the page's parameter to send none, where
 there is one (Help Scout's `imported`, LiveAgent's `do_not_send_mail`), optional, and its leading comment says so.
