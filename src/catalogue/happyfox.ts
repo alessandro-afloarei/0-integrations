@@ -26,7 +26,9 @@ export const happyfox = defineProvider({
   categories: ['support'],
   fields: [{ name: 'host', title: 'HappyFox host',
     help: 'Your HappyFox account\'s host, such as acme.happyfox.com, or acme.happyfox.net for an account hosted in the EU.' },
-  { name: 'apiKey', title: 'API key', help: 'The API key HappyFox shows with its auth code.' },
+  // Where a key is made: https://support.happyfox.com/kb/article/476/
+  { name: 'apiKey', title: 'API key',
+    help: 'Made under Apps, Goodies, API, with its auth code; an account signed up recently may need HappyFox support to open the API settings.' },
   { name: 'authCode', title: 'Auth code', secret: true }],
   auth: [{ kind: 'key', send: { basic: ['{apiKey}', '{token}'] } }],
   http: { baseUrl: 'https://{host}/api/1.1/json', host: ['*.happyfox.com', '*.happyfox.net'], retry: { onlyStated: true } },
