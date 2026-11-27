@@ -21,7 +21,7 @@ Nothing here is released yet.
 - Cal.com lists event types and bookings (`eventTypes.list`, `bookings.list`, paged by its cursor), each sending the
   `cal-api-version` its own page fixes in place of the entry's.
 - New: a wait may be an ISO 8601 time (`unit: 'iso8601'`: `2021-06-15T10:51:23.035+0100`, its zone required), waited
-  until that instant.
+  until that instant. Teamleader waits until its `x-ratelimit-reset`, where it waited a minute.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
