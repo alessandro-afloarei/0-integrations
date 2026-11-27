@@ -16,6 +16,13 @@ are ignored. A timestamp outside its tolerance (five minutes by default) and a s
 table test refuses an entry that breaks either, and `verifyWebhook` is `false` for an app's own declaration whose
 `signed` lacks `{body}`, or lacks `{timestamp}` beside a declared timestamp.
 
+`secret: 'base64'` or `'hex'` keys the HMAC with the secret's decoding instead of its text: pass the secret as the
+provider gives it, never decoded. The decoding is strict: base64 must encode back to exactly the secret (the `+` and `/`
+alphabet, its padding, no whitespace), and hex must be pairs of hex digits, in either case. A secret that does not
+decode exactly, or decodes to nothing, is `false`, never read another way. Airtable passes the webhook's
+`macSecretBase64` (base64), Chatwork the webhook's token (base64), Close the subscription's `signature_key` (hex).
+Close signs `close-sig-timestamp` and the body; it states no tolerance, so five minutes applies.
+
 `kind: 'ed25519'` (Discord) checks a hex Ed25519 signature of the filled `signed` (`'{timestamp}{body}'`) against the
 provider's public key, passed as `secret` in 64 hex characters, as the provider's dashboard shows it. A signature that is
 not 128 hex characters, a key that is not 64, a key that is no Ed25519 point and a wrong signature are all `false`; the
@@ -31,8 +38,8 @@ nothing; a missing header is `false`.
 `kind: 'standard'` follows [Standard Webhooks](https://www.standardwebhooks.com/) (GitLab's signing token). It reads
 `webhook-id`, `webhook-timestamp` (seconds, five minutes of tolerance) and `webhook-signature`, a space-separated list of
 `v1,<base64>` of which any may match (other versions are ignored), over `<webhook-id>.<webhook-timestamp>.<raw body>`.
-The secret is the base64 key, with or without its `whsec_` prefix; one that decodes to nothing is `false`, as is an empty
-secret of any HMAC scheme. GitLab's entry declares `webhook-id`, the same across retries, as its delivery id. A GitLab
+The secret is the base64 key, with or without its `whsec_` prefix, decoded as strictly as `secret: 'base64'`; one that
+decodes loosely or to nothing is `false`, as is an empty secret of any HMAC scheme. GitLab's entry declares `webhook-id`, the same across retries, as its delivery id. A GitLab
 hook set up with only the older secret token (`X-Gitlab-Token`) sends no signature, and this entry refuses it. An id
 holding a `.` is `false`: the specification says the message id must "not be allowed to include any `.`", since the
 signed content joins id, timestamp and body with dots (GitLab's ids are UUIDs).
@@ -58,6 +65,9 @@ const signedWithKey: Webhook = { kind: 'ed25519', header: 'x-signature-ed25519',
   timestamp: { header: 'x-signature-timestamp' } };
 // `token`: the header is the secret itself (Google Calendar push)
 const sharedToken: Webhook = { kind: 'token', header: 'x-goog-channel-token' };
+// `hmac` keyed with the secret's hex decoding, over the timestamp header's text and the body (Close)
+const decoded: Webhook = { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
+  timestamp: { header: 'close-sig-timestamp' } };
 // `standard`: Standard Webhooks fixes the headers and what is signed (GitLab)
 const standard: Webhook = { kind: 'standard', deliveryId: { header: 'webhook-id' } };
 // A `challenge` beside any kind: echo the body's `challenge` when its `type` is `url_verification` (Slack)

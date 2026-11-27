@@ -549,7 +549,7 @@ repeated-cursor guard.
 type Timestamp = { header: string; toleranceSeconds?: number };
 type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
-      part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+      secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
@@ -562,7 +562,10 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 `deliveryId` is what an app dedupes on; several body paths are joined with `:`.
 
 1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
-   (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`).
+   (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`). The key is the secret's bytes, or
+   with `secret: 'base64'` or `'hex'` its decoding (Airtable and Chatwork base64, Close hex), which must encode back to
+   exactly the secret (hex in either case): loose base64 (another alphabet, whitespace, missing or extra padding), hex
+   of odd length or with another character, and an empty decoding are `false`, never the secret's text.
 2. `hmac` with `part` (Stripe's `t=…,v1=…,v1=…`): the header is split on `,`, each piece on its first `=`. Every value
    whose name is `part` is a signature, the other pieces (another scheme, debug entries) are ignored, and the request
    passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
@@ -580,16 +583,17 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 6. `standard` (Standard Webhooks, GitLab): `webhook-id`, `webhook-timestamp`
    (seconds, 300 seconds of tolerance) and `webhook-signature` (space-separated `v1,<base64>`, other versions ignored)
    over `<webhook-id>.<webhook-timestamp>.<raw body>`, keyed with the base64 decoding of the secret after an optional
-   `whsec_`. An id holding a `.` is `false`, as the specification bars it.
+   `whsec_`, as strict as `secret: 'base64'`. An id holding a `.` is `false`, as the specification bars it.
 7. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
 8. `challengeAnswer(webhook, request)`, called only after `verifyWebhook` accepted the request, answers a handshake: a
    JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
    string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
 
-In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom) and `part` (Stripe), `ed25519` and
-`Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge` (Slack, Discord). A secret that keys
-nothing (empty, or a `standard` secret whose base64 decodes to nothing) is `false`. The table test also refuses a
-`challenge.when` with a `status`, `header` or `detail` or without a `path`, and an `echo` holding a `.`.
+In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
+Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge`
+(Slack, Discord). A secret that keys nothing (empty, or one that does not decode exactly or decodes to nothing) is
+`false`. The table test also refuses a `challenge.when` with a `status`, `header` or `detail` or without a `path`, and
+an `echo` holding a `.`.
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a

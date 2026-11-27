@@ -2,6 +2,7 @@ import { expect, expectTypeOf, test } from 'vitest';
 import { defineProvider, signInWith, type Entry, type Values, type Webhook } from './catalogue.js';
 import { attio } from './catalogue/attio.js';
 import { breakcold } from './catalogue/breakcold.js';
+import { close } from './catalogue/close.js';
 import { stripe } from './catalogue/stripe.js';
 import { discord } from './catalogue/discord.js';
 import { slack } from './catalogue/slack.js';
@@ -241,13 +242,16 @@ function webhooksDeclared() {
     timestamp: { header: 'x-signature-timestamp' } };
   // `token`: the header is the secret itself (Google Calendar push)
   const sharedToken: Webhook = { kind: 'token', header: 'x-goog-channel-token' };
+  // `hmac` keyed with the secret's hex decoding, over the timestamp header's text and the body (Close)
+  const decoded: Webhook = { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
+    timestamp: { header: 'close-sig-timestamp' } };
   // `standard`: Standard Webhooks fixes the headers and what is signed (GitLab)
   const standard: Webhook = { kind: 'standard', deliveryId: { header: 'webhook-id' } };
   // A `challenge` beside any kind: echo the body's `challenge` when its `type` is `url_verification` (Slack)
   const challenged: Webhook = { kind: 'hmac', header: 'x-slack-signature', signed: 'v0:{timestamp}:{body}', prefix: 'v0=',
     timestamp: { header: 'x-slack-request-timestamp' },
     challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge' } };
-  return [timestamped, pieces, signedWithKey, sharedToken, standard, challenged];
+  return [timestamped, pieces, signedWithKey, sharedToken, decoded, standard, challenged];
 }
 
 // docs/modules/webhooks.md › Receiving a delivery (its last line, a comment there, is the two calls below).
@@ -307,7 +311,7 @@ test('every docs example compiles', () => {
 test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {
   // `toEqual` reads a property set to undefined as missing.
   expect(webhooksDeclared()).toEqual([breakcold.webhook, stripe.webhook, { ...discord.webhook, challenge: undefined }, google.webhook,
-    gitlab.webhook, slack.webhook]);
+    close.webhook, gitlab.webhook, slack.webhook]);
 });
 
 test("testing.md's derived-fake examples run", async () => {

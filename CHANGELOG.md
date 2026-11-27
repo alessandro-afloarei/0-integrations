@@ -8,6 +8,9 @@ Nothing here is released yet.
 - New: `in: 'form'` parameters, sent as a form body; Chatwork and Zulip post messages, Agile CRM lists companies.
 - Chatwork's OAuth 2 sign-in asks `rooms.messages:write` as well: a client registered with the earlier scopes is
   registered again with the declared ones, or its authorize fails with 5003.
+- New: `webhook.secret` decodes a base64 or hex secret before it keys the HMAC; Airtable, Chatwork and Close declare
+  their webhooks. The decoding is strict, and a `standard` secret now goes through it: a secret that does not encode
+  back to itself (whitespace, the URL-safe alphabet, missing padding, odd hex) is `false`.
 - New: a sign-in after the first may declare its own `fields`, base and host (`http: { baseUrl, host }`, nothing else
   of `http`) and `identify`; `signInWith` puts them in place of the entry's. The engine refuses an app's entry whose
   first sign-in declares one, before anything is sent (`sign_in_own_first: <entry id>`), and `startConnect` now runs
