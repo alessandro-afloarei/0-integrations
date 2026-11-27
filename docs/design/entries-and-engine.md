@@ -93,7 +93,7 @@ export const attio = defineProvider({
   ],
   scopes: { default: [] },
   revoke: { url: 'https://app.attio.com/oauth/revoke', token: ['access'] },
-  http: { baseUrl: 'https://api.attio.com/v2', retry: { maxWaitMs: 10_000 } },
+  http: { baseUrl: 'https://api.attio.com/v2', retry: {} },
   identify: { request: { path: '/self' }, id: 'workspace_id', name: 'workspace_name',
     rejectWhen: [{ path: 'active', equals: false, detail: 'token_inactive' }, { status: 400 }] },
 });
@@ -427,7 +427,7 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 - Otherwise a 429 waits its stated wait, else `retry.defaultWaitMs`, with no jitter. The others wait a positive
   `Retry-After`; without one, the n-th retry (n from 0) waits a full-jitter backoff: a random share of
   `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. No wait is longer than `maxWaitMs`.
-  The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (30 seconds for Firecrawl).
+  The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (a minute for Firecrawl).
 - Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
   retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
   the OAuth token endpoint, a `token` entry's request and an RFC 7009 revoke. An answer that step 3 reclassifies is

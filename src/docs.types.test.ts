@@ -70,7 +70,7 @@ function catalogueEntry() {
     ],
     scopes: { default: [] },
     revoke: { url: 'https://app.attio.com/oauth/revoke', token: ['access'] },
-    http: { baseUrl: 'https://api.attio.com/v2', retry: { maxWaitMs: 10_000 } },
+    http: { baseUrl: 'https://api.attio.com/v2', retry: {} },
     identify: { request: { path: '/self' }, id: 'workspace_id', name: 'workspace_name',
       rejectWhen: [{ path: 'active', equals: false, detail: 'token_inactive' }, { status: 400 }] },
   });
