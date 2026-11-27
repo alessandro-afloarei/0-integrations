@@ -7,8 +7,8 @@ Nothing here is released yet.
 - Breaking: `challengeAnswer(webhook, request, secret)` verifies the request itself, unless the entry marks its
   challenge `unsigned`; call it before `verifyWebhook`. Slack's `url_verification` and Discord's PING are now answered
   only under a valid signature. A value is answered only as 1 to 512 printable ASCII characters with no space, `<` or
-  `>` (or a finite number as JSON). New: a challenge may be read from a header or a query and answered as text
-  (`text/plain`, `nosniff`); Nylas declares its `GET ?challenge=`, unsigned.
+  `>` (or a finite number as JSON). New: a challenge may be read from a header or a query, answered only as text
+  (`text/plain`, `nosniff`, its `content-length`); Nylas declares its `GET ?challenge=`, unsigned.
 - New: `basic` webhooks, checked by HTTP Basic credentials (`authorization: Basic <base64 of user:password>`, the secret
   `user:password`; one with no `:` or an empty password accepts nothing). Mailjet declares its webhook.
 - New: a `standard` webhook request with no `webhook-signature` is read under Svix's names, `svix-id`, `svix-timestamp`

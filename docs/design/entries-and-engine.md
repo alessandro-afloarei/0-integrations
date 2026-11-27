@@ -556,7 +556,8 @@ type Webhook = (
   | { kind: 'standard' }
   | { kind: 'basic' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] };
-  challenge?: { when?: When; echo: Path | { header: string } | { query: string }; text?: true; unsigned?: true } };
+  challenge?: { when?: When; unsigned?: true }
+    & ({ echo: Path; text?: true } | { echo: { header: string } | { query: string }; text: true }) };
 ```
 
 `verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
@@ -603,16 +604,17 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    parameter (Nylas' `challenge`, on a GET with no body). It answers when `when` holds (a body path needs one; a header
    or a query may leave it out, the value's presence then deciding) and the value is a string of 1 to 512 printable
    ASCII characters without a space, `<` or `>`, or for a JSON answer also a finite number: as JSON `{ [echo]: value }`
-   (a header's or a query parameter's name for `echo`), or with `text` as the value alone, `content-type: text/plain;
-   charset=utf-8` and `x-content-type-options: nosniff`. A challenge answer changes nothing and holds nothing secret;
-   an app calls it first, and verifies every other request.
+   (a header or a query is answered only as `text`), or with `text` as the value alone, `content-type: text/plain;
+   charset=utf-8`, its `content-length` (Nylas refuses a chunked answer) and `x-content-type-options: nosniff`. A
+   challenge answer changes nothing and holds nothing secret; an app calls it first, and verifies every other request.
 
 In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
 Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab; Svix's names:
-AgentMail), `basic` (Mailjet) and `challenge` (Slack, Discord; from a query, as text and `unsigned`: Nylas). A secret that keys nothing (one that does not decode
-exactly, a key of only zero bytes, or a Basic secret without a password) is `false`. The table test also refuses a
-`challenge.when` with a `status` or `detail`, a body `echo` without a `when` that reads a body `path`, an `echo` path
-holding a `.`, a header `echo` that is no lowercase token and an empty query name.
+AgentMail), `basic` (Mailjet) and `challenge` (Slack, Discord; from a query, as text and `unsigned`: Nylas). A secret
+that keys nothing (one that does not decode exactly, a key of only zero bytes, or a Basic secret without a password) is
+`false`. The table test also refuses a `challenge.when` with a `status` or `detail`, a body `echo` without a `when`
+that reads a body `path`, an `echo` path holding a `.`, a header `echo` that is no lowercase token, an empty query name
+and a header or query `echo` without `text`.
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a

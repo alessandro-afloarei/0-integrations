@@ -380,24 +380,30 @@ test('an empty secret accepts nothing, whatever the kind', () => {
 
 /** A request with this body and no signature. */
 const posted = (json: string) => request({}, Buffer.from(json));
-/** Slack's `url_verification`, or any body, signed as Slack signs it (with `key`). */
-const slackSigned = (json: string, key = secret) => request({ 'x-slack-request-timestamp': t,
-  'x-slack-signature': `v0=${createHmac('sha256', key).update(`v0:${t}:${json}`).digest('hex')}` }, Buffer.from(json));
+/** Slack's `url_verification`, or any body, signed as Slack signs it (with `key`, at `at`). */
+const slackSigned = (json: string, key = secret, at = t) => request({ 'x-slack-request-timestamp': at,
+  'x-slack-signature': `v0=${createHmac('sha256', key).update(`v0:${at}:${json}`).digest('hex')}` }, Buffer.from(json));
 /** Discord's interaction, signed as Discord signs it. */
 const discordPing = (json: string) => request({ 'x-signature-timestamp': t,
   'x-signature-ed25519': sign(null, Buffer.from(t + json), pair.privateKey).toString('hex') }, Buffer.from(json));
 /** Nylas' verification: a GET to the registered URL with `query`, and no body. */
 const nylasGet = (query: string) => ({ method: 'GET', url: `https://app.test/webhook${query}`, headers: new Headers(), rawBody: Buffer.alloc(0) });
 const answered = async (answer: Response | null) => (answer === null ? null : { status: answer.status,
-  type: answer.headers.get('content-type'), nosniff: answer.headers.get('x-content-type-options'), body: await answer.text() });
-const asJson = (body: unknown) => ({ status: 200, type: 'application/json', nosniff: null, body: JSON.stringify(body) });
-const asText = (body: string) => ({ status: 200, type: 'text/plain; charset=utf-8', nosniff: 'nosniff', body });
+  type: answer.headers.get('content-type'), nosniff: answer.headers.get('x-content-type-options'),
+  length: answer.headers.get('content-length'), body: await answer.text() });
+const asJson = (body: unknown) => ({ status: 200, type: 'application/json', nosniff: null, length: null, body: JSON.stringify(body) });
+/** Nylas refuses a chunked answer: a text answer states its length, so an adapter that streams it sends no chunks. */
+const asText = (body: string) => ({ status: 200, type: 'text/plain; charset=utf-8', nosniff: 'nosniff', length: String(body.length), body });
 
 test("answers Slack's `url_verification` with its challenge only when it is signed with the app's secret", async () => {
   const challenge = '3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P';
   const json = JSON.stringify({ token: 'Jhj5dZrVaK7ZwHHjRyZWjbDl', challenge, type: 'url_verification' });
   expect(await answered(challengeAnswer(slack.webhook, slackSigned(json), secret))).toEqual(asJson({ challenge }));
   expect(challengeAnswer(slack.webhook, slackSigned(json), 'another-secret')).toBeNull();
+  // Verified as every delivery is: a stale timestamp, or the signature of another body replayed, answers nothing.
+  expect(challengeAnswer(slack.webhook, slackSigned(json, secret, String(now - 301)), secret)).toBeNull();
+  const replayed = slackSigned(JSON.stringify({ type: 'url_verification', challenge: 'other' }));
+  expect(challengeAnswer(slack.webhook, { ...replayed, rawBody: Buffer.from(json) }, secret)).toBeNull();
   expect(challengeAnswer(slack.webhook, slackSigned(json, 'another-secret'), secret)).toBeNull();
   expect(challengeAnswer(slack.webhook, posted(json), secret)).toBeNull();
   expect(challengeAnswer(slack.webhook, slackSigned(JSON.stringify({ type: 'event_callback', challenge, event: {} })), secret)).toBeNull();
@@ -420,7 +426,7 @@ test("answers Nylas' GET `?challenge=` with the value alone, as text, unsigned",
   for (const key of ['', 'any-secret']) expect(await answered(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${value}`), key))).toEqual(asText(value));
   expect(await answered(challengeAnswer(nylas.webhook, nylasGet('?a=1&challenge=abc'), ''))).toEqual(asText('abc'));
   expect(await answered(challengeAnswer(nylas.webhook, { ...nylasGet('?challenge=abc'), url: '/webhook?challenge=abc' }, ''))).toEqual(asText('abc'));
-  for (const query of ['', '?', '?challenge=', '?challenge', '?Challenge=abc', '?other=abc', '#challenge=abc']) {
+  for (const query of ['', '?', '?challenge=', '?challenge', '?Challenge=abc', '?other=abc', '#challenge=abc', '#x?challenge=abc']) {
     expect(challengeAnswer(nylas.webhook, nylasGet(query), '')).toBeNull();
   }
   // A notification is no handshake: its body is never read for a value.
@@ -448,11 +454,8 @@ test('a header challenge echoes the header alone, after the request is verified 
   expect(await answered(challengeAnswer(front, sent({ 'x-token': secret, 'x-front-challenge': 'abc' }), secret))).toEqual(asText('abc'));
   expect(challengeAnswer(front, sent({ 'x-token': 'wrong', 'x-front-challenge': 'abc' }), secret)).toBeNull();
   expect(challengeAnswer(front, sent({ 'x-token': secret }), secret)).toBeNull();
-  const unsigned: Webhook = { ...front, challenge: { ...front.challenge, echo: { header: 'x-front-challenge' }, unsigned: true } };
+  const unsigned: Webhook = { ...front, challenge: { echo: { header: 'x-front-challenge' }, text: true, unsigned: true } };
   expect(await answered(challengeAnswer(unsigned, sent({ 'x-front-challenge': 'abc' }), ''))).toEqual(asText('abc'));
-  // A JSON answer names the header it read.
-  const json: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: { header: 'x-front-challenge' }, unsigned: true } };
-  expect(await answered(challengeAnswer(json, sent({ 'x-front-challenge': 'abc' }), ''))).toEqual(asJson({ 'x-front-challenge': 'abc' }));
 });
 
 test('a text answer is a string: a number at a body path is not answered as text', async () => {

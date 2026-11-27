@@ -97,14 +97,15 @@ export function challengeAnswer(webhook: Webhook, request: WebhookRequest, secre
   const body = parseJson(Buffer.from(request.rawBody).toString('utf8'));
   const name = typeof echo === 'string' ? echo : 'header' in echo ? echo.header : echo.query;
   const value = typeof echo === 'string' ? readPath(body, echo) : 'header' in echo ? request.headers.get(name)
-    : new URLSearchParams(/\?([^#]*)/u.exec(request.url)?.[1]).get(name);
+    : new URLSearchParams(/^[^#?]*\?([^#]*)/u.exec(request.url)?.[1]).get(name);
   // A body path answers only where `when` holds; a header or a query parameter, wherever it is present.
   const asked = when === undefined ? typeof echo !== 'string' : holds(when, { status: 200, headers: request.headers, body });
   const safe = typeof value === 'string' ? /^[!-;=?-~]{1,512}$/u.test(value) : !text && typeof value === 'number' && Number.isFinite(value);
   // Verified last, so a delivery that is no handshake is verified once, by the app's own `verifyWebhook`.
   if (!asked || !safe || !(challenge.unsigned ?? verifyWebhook(webhook, request, secret))) return null;
-  return text ? new Response(String(value), { headers: { 'content-type': 'text/plain; charset=utf-8', 'x-content-type-options': 'nosniff' } })
-    : Response.json({ [name]: value });
+  // ASCII, so its length is its byte count: stated, an adapter that streams the answer sends no chunks (Nylas refuses them).
+  return text ? new Response(String(value), { headers: { 'content-type': 'text/plain; charset=utf-8',
+    'content-length': String(String(value).length), 'x-content-type-options': 'nosniff' } }) : Response.json({ [name]: value });
 }
 
 export async function readCappedBody(request: Request, maxBytes: number): Promise<Buffer | null> {

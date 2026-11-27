@@ -109,10 +109,11 @@ with `verifyWebhook` first, unless the entry marks the challenge `unsigned`: Sla
 `{ "challenge": … }` and Discord's PING `{ "type": 1 }`, each a JSON `200`, only under a valid signature (Discord also
 sends PINGs with invalid signatures, and expects the `401`). Nylas' check is a `GET` with `?challenge=…`, sent before
 Nylas makes the webhook's secret, so it is unsigned; it is answered with the value alone, as
-`text/plain; charset=utf-8` with `x-content-type-options: nosniff`. Nylas refuses an answer sent with chunked encoding.
+`text/plain; charset=utf-8` with `x-content-type-options: nosniff` and its `content-length`: Nylas refuses an answer
+sent with chunked encoding, so keep that header when your server sends the `Response`.
 
 A challenge read from the body is answered only where its `when` holds; one read from a header or a query parameter
-wherever the value is present. The value comes from whoever sent the request, so it is answered only when it is 1 to
+wherever the value is present, and only as text (`text: true`). The value comes from whoever sent the request, so it is answered only when it is 1 to
 512 printable ASCII characters with no space, `<` or `>` (in a JSON answer, a finite number too): never markup, never
 a header. The answer copies nothing else of the request, changes nothing and holds nothing secret; anyone may receive
 one for an unsigned challenge. Verify every request it does not answer.
