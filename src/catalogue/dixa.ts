@@ -50,7 +50,7 @@ export const dixa = defineProvider({
       result: { data: { 'messageId?': 'string', direction: 'string', authorId: 'string', 'createdAt?': 'string', content: 'unknown' } } },
     'notes.create': { docs: `${ref}/internal-notes/postconversationsconversationidnotes`, method: 'POST',
       path: '/v1/conversations/{conversationId}/notes',
-      params: { ...conversationId, message: { in: 'body', type: 'string', required: true }, agentId: { in: 'body', type: 'string' } },
+      params: { ...conversationId, message: { in: 'body', type: 'string', required: true } },
       result: { data: { id: 'string', authorId: 'string', createdAt: 'string', csid: 'integer', message: 'string' } } },
     'endUsers.list': { docs: `${ref}/end-users/getendusers`, path: '/v1/endusers', paging: 'next', records: 'data',
       params: { ...pageLimit, email: { in: 'query', type: 'string', description: 'Not with phone: the two together are an error.' },
