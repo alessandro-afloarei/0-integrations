@@ -39,7 +39,7 @@ export const edesk = defineProvider({
     'tickets.create': { docs: `${ref}/createticket`, method: 'POST', path: '/tickets',
       params: { ...written, subject: { in: 'body', type: 'string', required: true },
         channel_id: { in: 'body', type: 'integer', required: true, description: 'The channel to open it on, as GET /channels lists them.' },
-        status: { in: 'body', type: 'string', required: true, enum: statuses },
+        status: { in: 'body', type: 'string', required: true, enum: settable },
         sales_order_id: { in: 'body', type: 'integer', description: 'Required when the channel is Kaufland, Fnac, Veepee or Mirakl.' },
         external_order_id: { in: 'body', type: 'string', description: 'The marketplace order id, when you do not have the sales_order_id.' } },
       result: { data: ticket } },
