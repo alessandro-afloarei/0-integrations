@@ -17,6 +17,9 @@ export const krisp = defineProvider({
   http: { baseUrl: 'https://meeting-api.krisp.ai/v1', retry: { defaultWaitMs: 5_000 } },
   identify: { request: { path: '/me' }, id: 'id', name: 'email' },
   paging: { cursor: { kind: 'cursor', next: 'next_cursor', send: { query: 'cursor' } } },
+  // The webhook is set up in Krisp's settings: its Request Headers must hold `Authorization` with the app's secret as
+  // the whole value, which the app then passes as the secret.
+  webhook: { kind: 'token', header: 'authorization' },
   operations: {
     'meetings.list': { docs: `${ref}/get_meetings`, path: '/meetings', paging: 'cursor', records: 'meetings',
       params: { ownership: { in: 'query', type: 'string', enum: ['all', 'mine', 'shared'], description: 'all by default.' },
