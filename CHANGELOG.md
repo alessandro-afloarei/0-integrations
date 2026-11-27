@@ -14,7 +14,8 @@ Nothing here is released yet.
   connects a key with `signInWith(firecrawl, 'key')`. A stored key's calls send the same `Authorization: Bearer`.
 - New entry: Brevo (`mail`), `emails.list`, `emails.get`, `domains.list` and `emails.create`: OAuth 2 first, a public
   client whose app Brevo reviews before other accounts authorize it, and its API key second, for your own Brevo
-  account, `signInWith(brevo, 'key')`. `declared`.
+  account, `signInWith(brevo, 'key')`. `declared`. A send takes an HTML or a plain-text body, one of them; the list
+  takes `startDate` and `endDate`; the domains list returns its `count`, `current_page` and `total_pages`.
 - An OAuth 2 error detail never echoes the client's Basic value, also from a request that sent the client in the body.
   The client's secret, the code and the verifier are each read once, so a getter cannot send one value and redact
   another. A public client beside `pkce: false` is also refused before a revoke sent as a request.
