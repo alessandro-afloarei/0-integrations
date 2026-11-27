@@ -187,7 +187,7 @@ Wrike keeps each account in one of its data centres, and its token answer names 
 asks for nothing and fills nothing on it; `finishConnect(wrike, …)` reads it from the token answer before identify,
 which goes there, and returns it in `values` (`{ host: 'app-eu.wrike.com' }`). Keep those `values` with the sealed
 grant and pass them to `client`, `refreshGrant` and `revokeGrant`, as for a host the person types. The host is checked
-against the hosts the entry declares (Wrike's three API servers) before identify, before every call and before every
+against the hosts the entry declares (Wrike's four data centres) before identify, before every call and before every
 refresh, never read from the callback or from the `values` an app passes to `finishConnect`. A token answer naming
 another host is refused (`base_host_refused`, or `base_value_invalid` for one that is no host name) and one naming
 none is `invalid_response` (`missing_fields`); either way the fresh grant is revoked. A refresh answer's host is not

@@ -198,27 +198,30 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   with no placeholder is used as written. The refresh URL alone may also name a host the token answer names (below),
   and is filled and checked when a refresh is sent.
 - **On a typed host, a credential goes only to that host.** When the base, an `http.bases` value, an OAuth 2 URL or a
-  token request's URL takes its host from a value, every one of them has exactly the same host part (`https://{host}`):
-  on a person's own server the registration, the sign-in and the calls all belong to that server. So a cloud's fixed
-  token URL never pairs with a typed base (a cloud token would go to any host), nor a typed token URL with a fixed base,
-  nor a key on a typed host with a fixed second base, nor a fixed token request with a typed base. `hostSplit(entry)` is
-  the check: the engine refuses such an entry with `TypeError('host_split: <entry id>')` in `authorizeUrl`, before every
-  exchange, refresh, revoke and token request, and where a call chooses a named base, before anything is built or sent,
-  and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed (a value only in the base's path)
-  is unaffected. No value is ever read from the callback's query: the callback is the person's browser.
-- **A host the token answer names.** A placeholder in the base's host that names a `save` key whose value is one
-  `tokenAnswer.*` path, and no field, is a *named* host: the token endpoint that issued the grant chose it (Wrike's
-  data centre: `baseUrl: 'https://{host}/api/v4'`, `save: { host: 'tokenAnswer.host' }`). A token is then sent only to
-  the host that issued it, or to a host its issuer named inside a domain the entry declares:
+  token request's URL takes its host from a value the person types, every one of them has exactly the same host part
+  (`https://{host}`): on a person's own server the registration, the sign-in and the calls all belong to that server. So
+  a cloud's fixed token URL never pairs with a typed base (a cloud token would go to any host), nor a typed token URL
+  with a fixed base, nor a key on a typed host with a fixed second base, nor a fixed token request with a typed base.
+  `hostSplit(entry)` is the check: the engine refuses such an entry with `TypeError('host_split: <entry id>')` in
+  `authorizeUrl`, before every exchange, refresh, revoke and token request, and where a call chooses a named base,
+  before anything is built or sent, and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed
+  (a value only in the base's path) is unaffected. No value is ever read from the callback's query: the callback is the
+  person's browser.
+- **A host the token answer names.** On an OAuth 2 sign-in alone (on a key or token sign-in it is a typed host), a
+  placeholder in the base's host that names a `save` key whose value is one `tokenAnswer.*` path, and no field, is a
+  *named* host: the token endpoint that issued the grant chose it (Wrike's data centre: `baseUrl:
+  'https://{host}/api/v4'`, `save: { host: 'tokenAnswer.host' }`). A token is then sent only to the host that issued it,
+  or to a host its issuer named inside a domain the entry declares:
   - it needs an `http.host` with a domain (a name, `*.` and a domain, or a list), never `*`, else `base_host_refused`
     before anything is sent (`checkHosts`), and the table refuses it;
   - its value is checked as a typed host's is (`filledBase`), and may be an https origin (Pipedrive's `api_domain`):
     `https://`, the host and at most a `/`, whose host is used; a port, a path, a query, a fragment, userinfo or
     `http:` is `base_value_invalid`;
   - it is no typed host: beside fixed OAuth 2 URLs it is no split, but a typed host beside it is `host_split`;
-  - `finishConnect` reads it from the token answer before identify, whose base it fills, and never from the caller's
-    `values`; a token answer without one (or with one that is no string or number) is `invalid_response`
-    (`missing_fields`), and the fresh grant is revoked as after any failed identify;
+  - `finishConnect` reads it from the token answer and checks it before identify, whether or not identify sends a
+    request, and never from the caller's `values`; a token answer without one (or with one that is no string or
+    number) is `invalid_response` (`missing_fields`), a refused one is refused as a typed host is, and either way the
+    fresh grant is revoked as after any failed identify;
   - a client, a request revoke and a refresh read it from the connection's `values`, checked before the token is read
     or the refresh token sent; none is `template_missing`. Only the refresh URL among the OAuth 2 URLs may name it
     (Wrike refreshes on its data centre); a refresh answer's host is not read, so an account that moves reconnects.
