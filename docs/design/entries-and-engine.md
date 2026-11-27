@@ -158,12 +158,12 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 A placeholder in `http.baseUrl` names a plain field or a `save` key (in the host, one read from the token answer is a
 named host, below). In the host (between `https://` and the next `/`)
 it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
-and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those when the hosts are on
-several domains (the filled host matches one), or `*` (any). Intercom's region is the first: `baseUrl:
-'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts; Smartsheet's
-products are the first list, `host: ['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu',
-'api.smartsheet.au']`. In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as
-`a%2Fb`; a value that is `.` or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no
+and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those (the filled host
+matches one), or `*` (any). Intercom's region is the first: its access token's `baseUrl: 'https://{apiHost}'`, with
+`apiHost` a field whose `choices` are its three API hosts and `host` those three names; Smartsheet's products are the
+first list, `host: ['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu', 'api.smartsheet.au']`.
+In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as `a%2Fb`; a value that is `.`
+or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no
 placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
 'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value its `save` keeps.
 
@@ -684,9 +684,10 @@ a provider whose OAuth 2 cannot be declared yet is not declared with a key alone
 
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
-  scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host` with `http.host: '*'`; a documented list of regional
-  hosts on one domain is `choices` with `http.host: '*.<domain>'`, on several domains `choices` with `http.host`
-  those names. A host the token answer names is no field but a `save` key, `http.host` the narrowest the pages support.
+  scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host`, `http.host` the domains its pages name (Freshsales'
+  two), else `'*'`; a documented list of regional hosts is `choices` with `http.host` those names (Intercom's three),
+  never the wider domain. A host the token answer names is no field but a `save` key, `http.host` the narrowest the
+  pages support.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
 - `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
   authorization, the refresh token goes first.
