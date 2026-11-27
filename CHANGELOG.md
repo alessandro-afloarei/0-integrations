@@ -4,6 +4,51 @@
 
 Nothing here is released yet.
 
+- Every entry's `retry` is checked against its provider's rate-limit page, and a number no page states is gone. A
+  positive `Retry-After` still wins wherever one is sent. A rate-limited read now:
+  - Affinity: waits its `x-ratelimit-limit-user-reset` header, not one second.
+  - Attio: waits a `Retry-After` up to the engine's 60-second cap, no longer 10 seconds.
+  - Azure DevOps: waits its `X-RateLimit-Reset` header, not one second.
+  - Breakcold: waits a minute when it names no wait; it retried at once.
+  - Capsule: is retried only when its answer states a wait, and waits its `X-RateLimit-Reset` header; it was not
+    retried.
+  - Chatwork: waits its `x-ratelimit-reset` header, not one second.
+  - ClickUp: waits its `X-RateLimit-Reset` header, not one second.
+  - Cognism: waits its `x-rate-limit-reset` header, else a minute, not one second.
+  - Exa: is retried once, after its `Retry-After` or one second, no longer three times 30 seconds apart, and a 5xx
+    once, not three times; `exaClient`'s search too.
+  - Figma: is retried after its `Retry-After`, else one second; it was not retried.
+  - Firecrawl: waits a minute when it names no wait (was 30 seconds), and a 429 or a 5xx is retried once, not three
+    times; `firecrawlClient`'s map and plain scrape too.
+  - Freshsales: waits a minute when it names no wait, not one second.
+  - GitBook: waits its `X-RateLimit-Reset` header, not one second.
+  - GitLab: is retried after its `Retry-After`, else one second; it was not retried.
+  - Google: is retried once, after its `Retry-After` or one second, up to the engine's 60-second cap, and a 5xx once,
+    not twice: no page states the two retries, the 30-second cap or the 5-second wait.
+  - HubSpot: waits its 10-second window when it names no wait (was one second), and waits a stated `Retry-After` up to
+    the engine's minute (was reported past 10 seconds); `hubspotClient` too.
+  - Instantly: waits a minute when it names no wait, not one second.
+  - Intercom: waits its `X-RateLimit-Reset` header, else its 10-second window.
+  - LeadIQ: waits a minute when it names no wait, not one second; only a raw request marked idempotent is retried
+    (every typed call is a POST).
+  - Microsoft: is retried once, after its `Retry-After` (up to the engine's 60-second cap) or one
+    second, and a 5xx once, not twice: no page states the two retries, the 30-second cap or the 5-second wait.
+  - monday.com: is retried only when its answer states a wait, in `Retry-After` or the error's `retry_in_seconds`;
+    it was retried after one second without one, and a 5xx that names no wait is no longer retried.
+  - PayPal: is retried only when its answer names `Retry-After`; it was not retried.
+  - People Data Labs: is retried only when its answer states a wait; its 429's reset is an ISO 8601 time, so it is
+    reported, not retried after one second, and a 5xx that names no wait is no longer retried.
+  - Render: waits a minute when it names no wait, not one second.
+  - Rollbar: waits its `X-Rate-Limit-Remaining-Seconds` header, not one second.
+  - Shortcut: waits a minute when it names no wait, not one second.
+  - Superhuman Docs: waits its 6-second window when it names no wait, not one second.
+  - Teamleader Focus: waits a minute when it names no wait, not one second.
+  - Trello: is retried after its 10-second window; it was not retried.
+  - Unipile: is retried only when its answer states a wait: Unipile's own 429 waits its `retry-after` once; a
+    provider's 429 with no stated wait is no longer retried (its page: going past a provider's limit "may temporarily
+    block the account"), nor is a 5xx that names none (was three retries 30 seconds apart, or a backoff).
+    `unipileClient` and `unipileMailbox` too.
+  - Vercel: waits a minute when it names no wait, not one second.
 - New: an operation may declare `anyOf`, sets of arguments of which a call must give one whole. `client()` refuses a
   call that gives none (`param_group_missing: <id>`) before anything is sent, and an `anyOf` path that names no declared
   argument, or an empty set, when the client is built (`param_group_unknown: <id> <path>`). Freshsales, Hunter,
@@ -19,7 +64,7 @@ Nothing here is released yet.
 - New: `retry.wait` reads a wait from a header (seconds, milliseconds or an epoch time; of several headers, the longest
   present; counted on a 429 only) or a body field (on any answer that holds it), and `retry.onlyStated` retries only an
   answer that states its wait, and no network failure. A wait already past, or 0, counts as none (Breakcold's body 0
-  now waits the default second).
+  now waits its default minute).
 - Breaking: `retry.waitFromBody` and a rate-limit rule's `resetAt` are gone. An app's own entry writes
   `retry: { wait: { path, unit } }` and the rule's `wait: { header, unit }`.
 - Buildkite and PagerDuty wait their reset headers (PagerDuty a minute when a 429 comes without one); Todoist waits its
@@ -59,7 +104,6 @@ Nothing here is released yet.
 - Intercom's calls send `Accept: application/json`, without which Intercom may answer 404 or 406.
 - PayPal sends `Accept: application/json` on every call and on its token request.
 - Slack identifies an org-level install by its organization (`enterprise.id`); it failed with `missing_fields`.
-- Breakcold waits before retrying a 429 that names no wait (one second); it retried at once.
 - Aircall, Apollo, Attio, Fathom, GitHub, Granola, HubSpot, Lusha and Notion no longer declare `minIntervalMs`: each
   limit depends on the plan or is shared by the account, workspace or the person's other keys and tokens (their
   modules still take one).
