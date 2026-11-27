@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers: 106 declared, 0 recorded;
-359 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
+361 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -20,7 +20,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [Bitbucket](https://developer.atlassian.com/cloud/bitbucket/rest/intro/#authentication) | code | OAuth 2, key | repositories.list, repositories.get, pullRequests.list, pullRequests.get, pullRequests.create | hmac | declared |
 | [Breakcold](https://docs.breakcold.com/api/authentication) | crm | key | — | hmac | declared |
 | [Buildkite](https://buildkite.com/docs/apis/rest-api#authentication) | code | key | builds.list, builds.get, builds.create, pipelines.list | hmac | declared |
-| [Cal.com](https://cal.com/docs/api-reference/v2/introduction) | calendar | key | bookings.get, bookings.create | hmac | declared |
+| [Cal.com](https://cal.com/docs/api-reference/v2/introduction) | calendar | key | eventTypes.list, bookings.list, bookings.get, bookings.create | hmac | declared |
 | [Calendly](https://developer.calendly.com/docs/authentication/creating-an-oauth-app) | calendar | OAuth 2, key | eventTypes.list, scheduledEvents.list, scheduledEvents.get, invitees.create | hmac | declared |
 | [Capsule](https://developer.capsulecrm.com/v2/overview/authentication) | crm | OAuth 2, key | parties.list, parties.get, parties.create, parties.update, parties.search, opportunities.list | — | declared |
 | [Chatwork](https://developer.chatwork.com/docs/endpoints) | chat | OAuth 2, key | rooms.list, messages.list, messages.create, contacts.list | hmac | declared |

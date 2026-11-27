@@ -18,6 +18,8 @@ Nothing here is released yet.
 - PagerDuty creates and updates incidents (`incidents.create`, `incidents.update`) with the `From` header the page
   requires. Its OAuth 2 sign-in asks `write` in place of `read`, which the writes need: a connection made before this
   change holds `read`, and its writes are refused until the person connects again.
+- Cal.com lists event types and bookings (`eventTypes.list`, `bookings.list`, paged by its cursor), each sending the
+  `cal-api-version` its own page fixes in place of the entry's.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
