@@ -19,7 +19,7 @@ export const calendly = defineProvider({
   fields: [{ name: 'accessToken', title: 'Personal access token', secret: true,
     help: 'For your own or your company\'s Calendly account: an app for other Calendly users connects with the OAuth 2 sign-in, as Calendly asks. Give it the scopes users:read, event_types:read and scheduled_events:write. An organization admin\'s token reaches everyone in the organization.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://auth.calendly.com/oauth/authorize', tokenUrl: 'https://auth.calendly.com/oauth/token',
-    clientAuth: { exchange: 'basic', refresh: 'basic' }, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
+    clientAuth: 'basic', authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: ['users:read', 'event_types:read', 'scheduled_events:write'] },
   http: { baseUrl: 'https://api.calendly.com', retry: { onlyStated: true, wait: { header: 'x-ratelimit-reset', unit: 's' } } },
   identify: { request: { path: '/users/me' }, id: 'resource.uri', name: ['resource.name', 'resource.email'] },
