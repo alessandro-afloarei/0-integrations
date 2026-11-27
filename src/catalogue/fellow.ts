@@ -3,7 +3,7 @@ import { defineProvider } from '../catalogue.js';
 /** Fellow: a person's API key on the workspace's host; the API is on paid plans, enabled by an admin:
  * https://help.fellow.ai/en/articles/11817206-developer-api. 3 requests a second and 10,000 a day per key:
  * https://developers.fellow.ai/reference/request-limits. A cursor in the body's `pagination`: one page a call; the
- * transcript is the recording's. No webhook (Svix's header names): https://developers.fellow.ai/reference/webhooks */
+ * transcript is the recording's. Webhooks: https://developers.fellow.ai/reference/webhooks */
 const recording = { id: 'string', 'title?': 'string', 'created_at?': 'string', 'updated_at?': 'string', 'started_at?': 'string',
   'ended_at?': 'string', 'note_id?': 'string', 'transcript?': 'unknown' } as const;
 const ref = 'https://developers.fellow.ai/reference';
@@ -17,6 +17,10 @@ export const fellow = defineProvider({
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: { baseUrl: 'https://{subdomain}.fellow.app', host: '*.fellow.app', retry: { defaultWaitMs: 1_000 } },
   identify: { request: { path: '/api/v1/me' }, id: 'user.id', name: ['user.full_name', 'user.email'] },
+  // Svix's `svix-*` headers, the webhook's `whsec_` secret, 5 minutes; dedupe on `svix-id`. The URL verification echoes
+  // `challenge` as plain text and is not signed.
+  webhook: { kind: 'standard', deliveryId: { header: 'svix-id' },
+    challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge', text: true, unsigned: true } },
   operations: {
     'recordings.list': { docs: `${ref}/apps_developer_api_api_get_recordings`, method: 'POST', path: '/api/v1/recordings', kind: 'read',
       params: { pagination: { in: 'body', type: { 'cursor?': 'string', 'page_size?': 'integer' },
