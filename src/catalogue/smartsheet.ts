@@ -1,7 +1,7 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Smartsheet on its product's host, each with its own tokens: an access token as Bearer; 300 requests a minute per
- * token, after a 429 wait at least 60 seconds (https://developers.smartsheet.com/api/smartsheet/guides/advanced-topics/scalability-options.md).
+/** Smartsheet, on its product's host: an access token as Bearer; 300 requests a minute per token, after a 429 wait at
+ * least 60 seconds: https://developers.smartsheet.com/api/smartsheet/guides/advanced-topics/scalability-options.md
  * A page past the last answers the last page again: page `sheets.list` by `totalPages`, `rows.list` (a sheet's rows,
  * 100 a page unless `pageSize` says otherwise) by `totalRowCount`. */
 const reference = 'https://developers.smartsheet.com/api/smartsheet/openapi';
@@ -11,17 +11,19 @@ const sheetId = { in: 'path', type: 'number', required: true } as const;
 const written = { cells: { in: 'body', type: [{ columnId: 'number', value: 'unknown' }],
   description: 'Each cell names its column and its value (Smartsheet also takes a formula or an objectValue instead).' },
   parentId: { in: 'body', type: 'number' } } as const;
-/** Each product's host (https://developers.smartsheet.com/api/smartsheet/guides/basics/base-url.md). */
+/** Each product's host, each with its own tokens:
+ * https://developers.smartsheet.com/api/smartsheet/guides/basics/base-url.md
+ * https://developers.smartsheet.com/api/smartsheet/guides/getting-started.md */
 const hosts = ['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu', 'api.smartsheet.au'] as const;
 const outcome = { 'message?': 'string', 'resultCode?': 'number' } as const;
 
 export const smartsheet = defineProvider({
   id: 'smartsheet', name: 'Smartsheet', docs: 'https://developers.smartsheet.com/api/smartsheet/guides/basics/authentication.md',
   categories: ['tasks'],
-  fields: [{ name: 'apiHost', title: 'Region', choices: hosts, default: 'api.smartsheet.com',
-    help: 'Where the account is: Smartsheet, Smartsheet Gov, Smartsheet Regions Europe or Smartsheet Regions Australia.' },
+  fields: [{ name: 'apiHost', title: 'Smartsheet product', choices: hosts, default: 'api.smartsheet.com',
+    help: 'Each product has its own host: api.smartsheet.com for Smartsheet, api.smartsheetgov.com for Smartsheet Gov, api.smartsheet.eu for Smartsheet Regions Europe, api.smartsheet.au for Smartsheet Regions Australia.' },
   { name: 'accessToken', title: 'API access token', secret: true,
-    help: 'For your own Smartsheet account, made in the region you picked (a token works there alone): Smartsheet recommends OAuth for apps acting for other people. The API needs a Business or Enterprise plan, and a viewer cannot write to a sheet.' }],
+    help: 'For your own Smartsheet account, made in the product you picked (a token works there alone): Smartsheet recommends OAuth for apps acting for other people. The API needs a Business or Enterprise plan, and a viewer cannot write to a sheet.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{apiHost}/2.0', host: hosts, minIntervalMs: 200, retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/users/me' }, id: 'id', name: 'email' },
