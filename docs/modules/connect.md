@@ -150,8 +150,9 @@ callback is the person's browser, which can carry anything. Every OAuth 2 URL is
 host name with no port, never a blocked address), and the exchange, refresh, revoke and calls all go to the host the
 `values` name.
 The values and the grant are one record. At connect the engine reads the host from the person's entry (or, for a
-named host, from the issuer's token answer); on every later call, refresh and revoke it is given the connection's
-kept `values` by the app and checks them against the entry's declared pattern again. It does not, and cannot, verify
+named host, from the issuer's token answer); afterwards the app gives it the connection's kept `values`, and a kept
+host is checked against the entry's declared pattern again whenever a request's destination uses it (every call on
+the base, and a refresh or revoke whose URL names it; one whose URL is fixed goes to its literal host). It does not, and cannot, verify
 that a kept value is the one that connection was issued with (the library keeps no state): store a connection's
 values with its tokens and pass them back unchanged.
 

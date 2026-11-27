@@ -212,10 +212,12 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   person's browser.
 - **A host the token answer names.** On an OAuth 2 sign-in alone (on a key or token sign-in it is a typed host), a
   placeholder that is the base's whole host (`https://{host}/…`) and names a `save` key whose value is one
-  `tokenAnswer.*` path, and no field, is a *named* host: the token endpoint that issued the grant chose it (Wrike's data centre: `baseUrl:
-  'https://{host}/api/v4'`, `save: { host: 'tokenAnswer.host' }`). At connect the engine reads that host from the
-  issuer's token answer; on every later call, refresh and revoke it is given the connection's kept `values` by the app
-  and checks them against the entry's declared pattern again. It does not, and cannot, verify that a kept value is the
+  `tokenAnswer.*` path, and no field, is a *named* host: the token endpoint that issued the grant chose it (Wrike's
+  data centre: `baseUrl: 'https://{host}/api/v4'`, `save: { host: 'tokenAnswer.host' }`). At connect the engine reads
+  that host from the issuer's token answer; afterwards the app gives it the connection's kept `values`, and the kept
+  host is checked against the entry's declared pattern again whenever a request's destination uses it: every call on
+  the base, a revoke sent as a request on the base, and a refresh whose URL names it. A refresh or revoke whose URL is
+  fixed goes to its literal host and does not read it. It does not, and cannot, verify that a kept value is the
   one that connection was issued with (the library keeps no state): an app stores a connection's values with its
   tokens and passes them back unchanged. The rules:
   - it needs an `http.host` with a domain (a name, `*.` and a domain, or a list), never `*` (nor an app's `[]`, `['*']`
@@ -227,12 +229,16 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
     the placeholder composed into another host (`https://api-{host}.example.com`), which is then typed;
   - `finishConnect` reads it from the token answer and checks it before identify, whether or not identify sends a
     request, and never from the caller's `values`; a token answer without one (or with one that is no string or
-    number) is `invalid_response` (`missing_fields`), a refused one is refused as a typed host is, and either way the
-    fresh grant is revoked as after any failed identify when the entry declares a revoke URL on a fixed host; a revoke
-    that is a request on the base cannot revoke a grant whose host was refused (`onRevokeFailed` reports it);
+    number) is `invalid_response` (`missing_fields`), and a refused one is refused as a typed host is. Either way, as
+    after any failure once the code is exchanged, the engine attempts to revoke the fresh grant, unless the entry
+    marks its grants `reusesGrant` (re-consent may return a live connection's grant, which only the app may revoke).
+    The attempt reaches the provider only through a revoke URL on a fixed host: a revoke sent as a request on the base
+    cannot reach a refused or missing host. A failed attempt goes to `onRevokeFailed`, and the original refusal is
+    thrown, never the revoke's error;
   - a client, a request revoke and a refresh read it from the connection's `values`, checked before the token is read
     or the refresh token sent; none is `template_missing`. Only the refresh URL among the OAuth 2 URLs may name it, as
-    its whole host, so calls and the refresh share one checked host (Wrike refreshes on its data centre); a refresh answer's host is not read, so an account that moves reconnects.
+    its whole host, so calls and the refresh share one checked host (Wrike refreshes on its data centre); a refresh
+    answer's host is not read, so an account that moves reconnects.
 
 #### The address guard
 

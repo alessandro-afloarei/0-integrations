@@ -17,19 +17,22 @@ Nothing here is released yet.
   with its `host` (`client(outline, { token, values: { host } })`) is now refused (`value_undeclared: outline host`),
   never sent to app.getoutline.com; an app narrows it with `signInWith(outline, 'key')` for every call.
 - A key or token `finishConnect` checks its typed host before it reads a secret from its input, whether or not identify
-  sends a request: a host outside `http.host`, or an address under `'*'` (`address_blocked`), is refused and nothing is
-  returned to store; before, a connection whose identify sent nothing kept the host unchecked.
+  sends a request: a host outside `http.host`, or an IPv4 literal under `'*'` in a range the address guard blocks
+  (`address_blocked`), or any IPv6 literal (`base_value_invalid`), is refused and nothing is returned to store; before,
+  a connection whose identify sent nothing kept the host unchecked.
 - New: `http.host` may list several patterns; the filled host must match one. `'*'` stays alone.
 - Smartsheet takes its product's host in `apiHost` (`api.smartsheet.com` by default; `api.smartsheetgov.com`,
   `api.smartsheet.eu`, `api.smartsheet.au`). Breaking: a client never applies the default, so an existing connection
   passes `values: { apiHost: 'api.smartsheet.com' }`; without it, its calls are `template_missing`.
 - New: an OAuth 2 entry's base may be the host its token answer names, kept by `save` and checked against a declared
-  domain at connect (whether or not identify sends a request), before every call and before every refresh. The host may
-  come as an https origin (`https://x.example.com`, read as its host); a token answer without one is `invalid_response`
-  (`missing_fields`), and the fresh grant is revoked where the entry declares a revoke URL on a fixed host (a revoke
-  that is a request on the base cannot reach a refused host; `onRevokeFailed` reports it). Such a host beside one the
-  person types is `host_split`, and with `http.host: '*'`, none, or a list with no domain (`[]`, `['*']`), it is refused
-  (`base_host_refused`) before anything is sent.
+  domain at connect (whether or not identify sends a request), before every call and before a refresh whose URL names
+  it. The host may come as an https origin (`https://x.example.com`, read as its host); a token answer without one is
+  `invalid_response` (`missing_fields`), and one outside the domain is refused; either way the engine attempts to revoke
+  the fresh grant (not for an entry marked `reusesGrant`), which reaches the provider only through a revoke URL on a
+  fixed host (a revoke sent as a request on the base cannot reach a refused host), reports a failed attempt to
+  `onRevokeFailed` and throws the original refusal. Such a host beside one the person types is `host_split`, and with
+  `http.host: '*'`, none, or a list with no domain (`[]`, `['*']`), it is refused (`base_host_refused`) before anything
+  is sent.
 - The refresh URL is filled and checked only when a refresh is sent (the consent URL, the exchange and a revoke no
   longer fill it), and it alone of the OAuth 2 URLs may name a host the token answer names.
 - New entry: Wrike (tasks; OAuth 2, on the data centre its token answer names). Every entry is `declared`.
