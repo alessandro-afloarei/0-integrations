@@ -807,7 +807,7 @@ test.each(['api.intercom.io:8443', 'api.intercom.\u212Aio', 'api.intercom.io\u01
   "Intercom's client refuses %j before the token is read or anything is sent", async apiHost => {
     const fake = fakeFetch([{ url: /https:/, respond: ok }]);
     const token = vi.fn<() => Promise<string>>().mockResolvedValue('t');
-    await expect(client(intercom, { token, values: { apiHost }, fetch: fake.fetch }).json('/me'))
+    await expect(client(signInWith(intercom, 'key'), { token, values: { apiHost }, fetch: fake.fetch }).json('/me'))
       .rejects.toThrow(new TypeError('base_value_invalid: intercom {apiHost}'));
     expect(token).not.toHaveBeenCalled();
     expect(fake.calls).toHaveLength(0);
