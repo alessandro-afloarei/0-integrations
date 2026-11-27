@@ -35,10 +35,10 @@ export const sendgrid = defineProvider({
         'valid?': 'boolean', 'default?': 'boolean' }] },
     'emails.create': { docs: `${ref}/mail-send/mail-send`, method: 'POST', path: '/mail/send', kind: 'write',
       params: { personalizations: { in: 'body', type: [{ to: [address], 'subject?': 'string' }], required: true,
-        description: 'One envelope per message, at most 1000; at most 1000 recipients in all.' },
+        description: 'One envelope per message, 1 to 1000; at most 1000 recipients in all.' },
       from: { in: 'body', type: address, required: true, description: 'A verified sender of the account.' },
       subject: { in: 'body', type: 'string', description: 'Required unless every personalization has its own.' },
       content: { in: 'body', type: [{ type: 'string', value: 'string' }], required: true,
-        description: 'The bodies, each a MIME type and its value: text/plain first, then text/html. (A template send is not declared.)' } } },
+        description: 'At least one body, each a MIME type and its value: text/plain first, then text/html. (A template send is not declared.)' } } },
   },
 });
