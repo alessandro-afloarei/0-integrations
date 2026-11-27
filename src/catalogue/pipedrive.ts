@@ -1,14 +1,14 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Pipedrive: OAuth 2, its scopes set on the app (contacts:full, deals:read); a private app installs by its own link, a
- * listing passes Pipedrive's approval: https://pipedrive.readme.io/docs/marketplace-creating-a-proper-app
- * Calls go to the token answer's `api_domain`, /api/v2 (https://pipedrive.readme.io/docs/core-api-concepts-requests)
- * or /api/v1; the revoke ends the refresh token: https://pipedrive.readme.io/docs/app-uninstallation */
+/** Pipedrive OAuth 2 (scopes on the app): an app for commercial distribution, listed or not, is subject to Pipedrive's
+ * approval process; a private app is for non-commercial use: https://www.pipedrive.com/en/developer-agreement
+ * Revoking uninstalls the app for the user: https://pipedrive.readme.io/docs/app-uninstallation; a rate-limited read
+ * waits the 2-second burst window: https://pipedrive.readme.io/docs/core-api-concepts-rate-limiting */
 const person = { id: 'integer', 'name?': 'string', 'emails?': [{ 'value?': 'string', 'primary?': 'boolean' }], 'org_id?': 'integer',
   'owner_id?': 'integer', 'add_time?': 'string', 'update_time?': 'string', 'custom_fields?': 'unknown' } as const;
 const limit = { limit: { in: 'query', type: 'integer', description: '100 by default, at most 500.' } } as const;
 const id = { id: { in: 'path', type: 'integer', required: true } } as const;
-const written = { emails: { in: 'body', type: [{ value: 'string', 'primary?': 'boolean', 'label?': 'string' }] },
+const written = { emails: { in: 'body', type: [{ 'value?': 'string', 'primary?': 'boolean', 'label?': 'string' }] },
   org_id: { in: 'body', type: 'integer' }, owner_id: { in: 'body', type: 'integer' } } as const;
 const ref = 'https://developers.pipedrive.com/docs/api/v1';
 
@@ -16,11 +16,11 @@ export const pipedrive = defineProvider({
   id: 'pipedrive', name: 'Pipedrive', docs: 'https://pipedrive.readme.io/docs/marketplace-oauth-authorization',
   categories: ['crm'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://oauth.pipedrive.com/oauth/authorize', tokenUrl: 'https://oauth.pipedrive.com/oauth/token',
-    pkce: false, clientAuth: 'basic', authorizeParams: { response_type: 'code' } }],
+    clientAuth: 'basic', authorizeParams: { response_type: 'code' } }],
   scopes: { default: [] },
   revoke: { url: 'https://oauth.pipedrive.com/oauth/revoke', token: ['refresh'] },
   save: { apiDomain: 'tokenAnswer.api_domain' },
-  http: { baseUrl: 'https://{apiDomain}/api', host: '*.pipedrive.com', headers: { 'content-type': 'application/json' } },
+  http: { baseUrl: 'https://{apiDomain}/api', host: '*.pipedrive.com', headers: { 'content-type': 'application/json' }, retry: { defaultWaitMs: 2_000 } },
   identify: { request: { path: '/v1/users/me' }, id: '{data.company_id}:{data.id}', name: ['data.name', 'data.email'] },
   errors: { detail: 'code' },
   paging: { cursor: { kind: 'cursor', next: 'additional_data.next_cursor', send: { query: 'cursor' } } },
