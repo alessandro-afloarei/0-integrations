@@ -40,8 +40,9 @@ one takes five steps:
    - read what each page requires, not only what you declare: every parameter it marks required (path, query or body),
      a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
      the list to its one container (a project, a board), are required, and when none of them is its container the list
-     declares the page's sets as `anyOf`; an operation that needs a header whose value changes per call stays out and
-     goes on the [waiting list](docs/waiting-list.md);
+     declares the page's sets as `anyOf`; a header the page requires on one operation is a required `header` parameter
+     (PagerDuty's `From`); a header whose value the page fixes for one operation is a required `header` parameter with
+     that one value as its `enum` (Cal.com's `cal-api-version`);
    - when the page states that at least one of several equal inputs that find or create one record (an email, a LinkedIn
      URL, a domain) is required, none is required and the operation declares the page's sets as `anyOf`
      (`[['email'], ['phone', 'last_name']]`), which the descriptions do not repeat; a rule that reads two ways gives the
@@ -108,10 +109,10 @@ entry:
   path, in `s`, `ms`, `epochSeconds`, `epochMs` or `iso8601`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000
   when left out) and never beside `onlyStated`;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
-  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation
-  names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's
-  `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id
-  is a client call or a dotted prefix of another;
+  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation names
+  a declared shape and no `notFound`, a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's
+  `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id is
+  a client call or a dotted prefix of another;
 - has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields
   (the refresh URL may also name a host the token answer names), and whose URLs, base and `http.bases` share one host
   when any of them is typed: a token goes only to the host that issued it; a public client (`clientAuth: 'none'`)
