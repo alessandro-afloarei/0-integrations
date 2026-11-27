@@ -42,7 +42,8 @@ password); for an OAuth 2 entry, the access token its token URL gives.
   same method and path (folk's `people.list` and `people.search`), the one whose required query, body and form
   parameters the request all carries answers, the most such first, the first declared on a tie; when none carries its
   own, the first declared answers. Its function gets `{ path, query, body }` (a form body as its fields, each a
-  string) and returns the JSON answered with 200, `undefined` for a 404, or a `Response` answered as it is. Paging is the function's: it answers each page as it likes.
+  string) and returns the JSON answered with 200, `undefined` for a 404, or a `Response` answered as it is. Paging is
+  the function's: it answers each page as it likes.
   On a route two operations share, every request is routed afresh: a next page whose request drops the filter is
   answered by the other operation.
 - The fake owns a GraphQL URL: a query it has no answer for throws
@@ -122,9 +123,12 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   `accessToken`. An OAuth entry that reads its account only from the token answer, with no `identify.request`, sends
   nothing to record, and the recorder refuses it.
 - `RECORD_VALUES` holds the test account's plain values, which are not secret. A field left out takes its kit value
-  (its `default`, else its first choice, else `kit-<name>`), except a field in the base's host with neither: it must be
-  given, and the recorder refuses before anything is sent, so a real key never goes to a host the kit made up. Each value given is written as its kit value, so a
-  recording made on a sandbox or another region is written with the default host.
+  (its `default`, else its first choice, else, for a field that is the base's whole host, the first host its
+  `http.host` allows, such as `kit.myfreshworks.com`, else `kit-<name>`). Every value in the base's host must be given
+  but a field's with a default or a choice: a field with neither, or a host the token answer names (Pipedrive's
+  `apiDomain`). Without it the recorder refuses before anything is sent, so a real key never goes to a host the kit
+  made up. Each value given is written as its kit value, so a recording made on a sandbox or another region is written
+  with the default host.
 - A module's scenario of that name is recorded first. A provider with a module but no such scenario is refused before
   anything is sent. Otherwise the recorder signs in to the entry (a `token` entry's token request, then identify) with
   the key, then with a bad key, which must be refused as `rejected`. It writes `src/catalogue/<id>.recording.json`

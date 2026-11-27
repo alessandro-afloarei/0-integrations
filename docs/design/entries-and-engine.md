@@ -684,10 +684,10 @@ a provider whose OAuth 2 cannot be declared yet is not declared with a key alone
 
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
-  scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host`, `http.host` the domains its pages name (Freshsales'
-  two), else `'*'`; a documented list of regional hosts is `choices` with `http.host` those names (Intercom's three),
-  never the wider domain. A host the token answer names is no field but a `save` key, `http.host` the narrowest the
-  pages support.
+  scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host`,
+  `http.host` the domains its pages name (Freshsales' two), else `'*'`; a documented list of regional hosts is
+  `choices` with `http.host` those names (Intercom's three), never the wider domain. A host the token answer names is
+  no field but a `save` key, `http.host` the narrowest the pages support.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
 - `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
   authorization, the refresh token goes first.
