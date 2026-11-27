@@ -138,7 +138,8 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   values and the entry's tier is `recorded`.
 
 **What is written.** Each exchange is its method, its URL, its request body, its status, its `retry-after` header and
-the wait headers the entry declares, each only when it holds the decimal number the engine reads (no other header), and
+the wait headers the entry declares, each only when it holds a decimal number or an ISO 8601 instant the engine reads
+(no other header), and
 from the answer only the paths the entry reads:
 
 - identify's `id` and `name` paths and every `save` path (a `tokenAnswer.` path is read in the token answer), a token

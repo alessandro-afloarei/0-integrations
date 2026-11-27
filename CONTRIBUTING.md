@@ -135,8 +135,8 @@ signs in, and, before anything is sent, a value in the base's host (a field's, e
 host the token answer names) that `RECORD_VALUES` does not give as the host alone (an `https://` origin is refused).
 Otherwise it signs in with the key and with a bad key, and writes `src/catalogue/<id>.recording.json`, replacing any
 recording of that name. Each exchange keeps its method, URL, request body, status, `retry-after` and the entry's
-declared wait headers (no other header), and from the answer only the paths the entry reads; at an error or condition
-path, only a provider code, a number or a boolean. It swaps the key, the plain values, the tokens issued, the account's
+declared wait headers, each only as a number or an ISO 8601 instant the engine reads (no other header), and from the
+answer only the paths the entry reads; at an error or condition path, only a provider code, a number or a boolean. It swaps the key, the plain values, the tokens issued, the account's
 id and name and the saved values for the kit's stand-ins. It refuses to write when a sign-in was redirected, when a
 value is too short to swap or a real value is still in an exchange, and when the file, replayed before it is written,
 fails the table test's own replay check ([testing](docs/modules/testing.md#recording-an-entry-with-no-module) says

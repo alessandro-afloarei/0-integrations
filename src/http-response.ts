@@ -53,7 +53,7 @@ export function codeOf(errors: Errors | undefined, body: unknown): string | unde
 
 /** An ISO 8601 instant with its zone (Teamleader's `2021-06-15T10:51:23.035+0100`) in epoch milliseconds, read by its
  * own pattern, never `Date.parse`'s wider grammar; a time the calendar lacks (30 February, 24:00) is none. */
-function instantMs(value: unknown): number | undefined {
+export function instantMs(value: unknown): number | undefined {
   const [, time = '', fraction = '', sign, hours = '', minutes = ''] = typeof value === 'string'
     ? /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(?:Z|([+-])([01]\d|2[0-3]):?([0-5]\d))$/u.exec(value) ?? [] : [];
   const local = Date.parse(`${time}Z`);

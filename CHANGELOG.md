@@ -95,6 +95,8 @@ Nothing here is released yet.
     `unavailable`, with no wait.
   - Google's 403 `quotaExceeded` (Calendar's usage limits, which last hours) is still `rate_limited` but never retried,
     and its error carries only a wait the answer states (it carried a minute no page states).
+  - For contributors: a recording keeps a declared wait header holding an ISO 8601 instant the engine reads, as it
+    keeps one holding a number; a header holding any other text is still dropped.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
