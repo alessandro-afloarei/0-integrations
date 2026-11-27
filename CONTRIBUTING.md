@@ -123,8 +123,9 @@ To record an entry with no module from a test account, read the key at a prompt 
 `printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
 For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test account with your app's own OAuth client.
 An entry with OAuth 2 and a key is recorded with its key: a recording is of the key or token sign-in when there is one.
-The recorder refuses a provider with a module but no kit scenario of that name, and an entry that sends no request
-when it signs in. Otherwise it signs in with the key and with a bad key, and writes
+The recorder refuses a provider with a module but no kit scenario of that name, an entry that sends no request
+when it signs in, and, before anything is sent, a host field (in the base's host, with no default or choice) that
+`RECORD_VALUES` does not give. Otherwise it signs in with the key and with a bad key, and writes
 `src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request
 body, status, `retry-after` and the entry's declared wait headers (no other header), and from the answer only the
 paths the entry reads; at an error or condition path, only a provider code, a number or a boolean. It swaps the key,

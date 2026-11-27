@@ -1,6 +1,7 @@
 import { expect, expectTypeOf, test } from 'vitest';
 import { defineProvider, signInWith, type Entry, type Own, type SignIn } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
+import { jira } from './catalogue/jira.js';
 import { linear } from './catalogue/linear.js';
 import { azuredevops } from './catalogue/azuredevops.js';
 import { mattermost } from './catalogue/mattermost.js';
@@ -145,13 +146,17 @@ async function valuesByEntry(own: OAuthClient, refreshToken: string, host: strin
   await refreshGrant(linear, own, refreshToken, { values: { host } });
   // @ts-expect-error Linear has no value
   authorizeUrl(linear, { ...start, values: { host } });
-  // Slack keeps only what `save` read: optional on a connection, none before the exchange.
-  await refreshGrant(slack, own, refreshToken);
-  await revokeGrant(slack, { accessToken: 'a', values: { botUserId: 'U1' } });
-  // @ts-expect-error a key the entry does not declare
-  await revokeGrant(slack, { accessToken: 'a', values: { host } });
+  // Jira keeps only what `save` read: optional on a connection, none before the exchange.
+  await refreshGrant(jira, own, refreshToken);
+  await revokeGrant(jira, { accessToken: 'a', values: { cloudId: 'c1' } });
   // @ts-expect-error nothing is saved before the exchange
-  await exchangeCode(slack, own, { ...exchange, values: { botUserId: 'U1' } });
+  await exchangeCode(jira, own, { ...exchange, values: { cloudId: 'c1' } });
+  // Slack's plain `domain` is required on a connection, beside what `save` read.
+  await revokeGrant(slack, { accessToken: 'a', values: { domain: 'slack.com', botUserId: 'U1' } });
+  // @ts-expect-error the domain is required
+  await refreshGrant(slack, own, refreshToken);
+  // @ts-expect-error a key the entry does not declare
+  await revokeGrant(slack, { accessToken: 'a', values: { domain: 'slack.com', host } });
   // Zoom's token request reads its plain values.
   // @ts-expect-error the account and client ids are required
   tokenSource(zoom, { secret: { clientSecret: 's' } });

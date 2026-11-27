@@ -122,7 +122,8 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   `accessToken`. An OAuth entry that reads its account only from the token answer, with no `identify.request`, sends
   nothing to record, and the recorder refuses it.
 - `RECORD_VALUES` holds the test account's plain values, which are not secret. A field left out takes its kit value
-  (its `default`, else its first choice, else `kit-<name>`). Each value given is written as its kit value, so a
+  (its `default`, else its first choice, else `kit-<name>`), except a field in the base's host with neither: it must be
+  given, and the recorder refuses before anything is sent, so a real key never goes to a host the kit made up. Each value given is written as its kit value, so a
   recording made on a sandbox or another region is written with the default host.
 - A module's scenario of that name is recorded first. A provider with a module but no such scenario is refused before
   anything is sent. Otherwise the recorder signs in to the entry (a `token` entry's token request, then identify) with

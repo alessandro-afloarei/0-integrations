@@ -12,7 +12,7 @@ import { classify } from './http-response.js';
 import { defaultFetch, filledBase } from './http.js';
 import { answerReads, BAD_KEY, GOOD_KEY, kitValues, onlyRead, playScenario, recordedSignIn, recorder, replay, replayProblem, scrub, signIn, type Exchange,
   type KitScenario, type Recording, type Swap, waitHeaders } from './kit.test-support.js';
-import { parseJson, readPath } from './rules.js';
+import { parseJson, placeholders, readPath } from './rules.js';
 import { fakeFetch, fakeProvider } from './testing.js';
 import { tierOf } from './tier.js';
 
@@ -84,6 +84,11 @@ const identityPaths = (value: Value | undefined) => (value === undefined ? [] : 
  * result is replayed as the table test replays it, and written only when both sign-ins end as they did live. */
 async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
   const entry = recordedSignIn(whole);
+  // A host the kit fills in (no default, no choice) may be a real one: a real key goes only to the host the owner names.
+  const typed = placeholders(/^https:\/\/[^/]*/u.exec(entry.http.baseUrl)?.[0] ?? '');
+  const unnamed = (entry.fields ?? []).find(field => typed.includes(field.name) && field.default === undefined && field.choices === undefined
+    && given[field.name] === undefined);
+  if (unnamed) throw new Error(`recording refused: give the host field ${unnamed.name} in RECORD_VALUES`);
   const [auth] = entry.auth;
   if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
   const kit = kitValues(entry);
@@ -222,6 +227,21 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(recording?.exchanges[0]?.headers).toEqual({ 'retry-after': expect.stringContaining(`&auth=${sent}&encoded=${encodeURIComponent(sent)}`) as unknown });
     for (const real of ['real a/1', encodeURIComponent('real a/1'), 'real-key-1', 'ana-lopez']) expect(text).not.toContain(real);
     expect(await replayed(trello, recording)).toMatchObject([{ account: { id: 'kit-account', name: 'kit-name' } }, { code: 'rejected' }]);
+  });
+
+  test('a typed host the kit would fill is refused before any request, until RECORD_VALUES names it', async () => {
+    const typedHost = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs', fields: [{ name: 'host', title: 'Host' },
+      { name: 'apiKey', title: 'API key', secret: true }], auth: [{ kind: 'key' }],
+      http: { baseUrl: 'https://{host}/api', host: ['*.acme.test', '*.acme.example'] }, identify: { request: { path: '/me' }, id: 'id' } });
+    const sent: string[] = [];
+    const counting: Wrap = fetch => async (input, init) => { sent.push(new Request(input, init).url); return fetch(input, init); };
+    expect((await recordOnFake(typedHost, { key: 'real-key-1', wrap: counting })).refused)
+      .toBe('recording refused: give the host field host in RECORD_VALUES');
+    expect(sent).toEqual([]);
+    const { recording, refused } = await recordOnFake(typedHost, { key: 'real-key-1', values: { host: 'eu.acme.example' }, account: { id: 'u-real-881' }, wrap: counting });
+    expect(refused).toBeUndefined();
+    expect(sent[0]).toBe('https://eu.acme.example/api/me');
+    expect(recording?.exchanges[0]?.url).toBe('https://kit.acme.test/api/me');
   });
 
   test('a declared wait header is kept beside `retry-after`, and no other header the answer carries', async () => {

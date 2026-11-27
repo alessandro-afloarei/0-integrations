@@ -418,15 +418,15 @@ describe('fakeProvider', () => {
     });
 
   test("Slack's token answer holds the value given for the `save` key that reads it, and its kit values elsewhere", async () => {
-    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { botUserId: 'U1' } }));
+    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { domain: 'slack.com', botUserId: 'U1' } }));
     await expect(finishConnect(slack, { client: kitClient, code: 'kit-code', redirectUri, fetch, onRevokeFailed: () => undefined }))
       .resolves.toMatchObject({ values: { botUserId: 'U1' }, account: { id: 'kit-team.id', name: 'kit-team.name' } });
   });
 
   test("Slack's revoke, a request, is answered to the connection's token and refused to another", async () => {
-    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k' }));
-    await expect(revokeGrant(slack, { accessToken: 'k', fetch })).resolves.toBeUndefined();
-    await expect(revokeGrant(slack, { accessToken: 'x', fetch })).rejects.toMatchObject({ code: 'rejected' });
+    const { fetch } = fakeFetch(fakeProvider(slack, { key: 'k', values: { domain: 'slack.com' } }));
+    await expect(revokeGrant(slack, { accessToken: 'k', fetch, values: { domain: 'slack.com' } })).resolves.toBeUndefined();
+    await expect(revokeGrant(slack, { accessToken: 'x', fetch, values: { domain: 'slack.com' } })).rejects.toMatchObject({ code: 'rejected' });
   });
 
   test("a `tokenAnswer.*` kit value never replaces the token or `expires_in`", async () => {

@@ -1,7 +1,7 @@
 # Providers
 
-Generated from `src/catalogue/` by `pnpm providers`: do not edit. 81 providers: 81 declared, 0 recorded;
-255 typed operations; webhooks: ed25519 1, hmac 23, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
+Generated from `src/catalogue/` by `pnpm providers`: do not edit. 82 providers: 82 declared, 0 recorded;
+262 typed operations; webhooks: ed25519 1, hmac 23, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -64,6 +64,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 81 providers: 
 | [PagerDuty](https://docs.pagerduty.com/developer/authentication) | monitoring | OAuth 2, key | incidents.list, incidents.get, services.list | hmac | declared |
 | [PayPal](https://developer.paypal.com/api/rest/authentication/) | finance | token | — | — | declared |
 | [People Data Labs](https://docs.peopledatalabs.com/docs/authentication) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
+| [Pipedrive](https://pipedrive.readme.io/docs/marketplace-oauth-authorization) | crm | OAuth 2 | persons.list, persons.search, persons.get, persons.create, persons.update, organizations.list, deals.list | — | declared |
 | [Render](https://api-docs.render.com/reference/authentication) | code | key | deploys.list, deploys.get, deploys.create, services.list | standard | declared |
 | [Reply.io](https://docs.reply.io/api-reference/authentication) | sales | key | sequences.list, contacts.list, contacts.get, contacts.create, contacts.update, contactLinks.create | — | declared |
 | [RocketReach](https://docs.rocketreach.co/reference/rocketreach-api-account) | sales | key | people.search, people.get, companies.search, companies.get | hmac | declared |
