@@ -57,7 +57,8 @@ Nothing here is released yet.
   answer with no OAuth body at those statuses are no longer `request_failed`; Slack's `ok: false` is `rejected` with no
   detail (its own codes, such as `invalid_code`, are none of RFC 6749's). Any other refusal of the exchange is
   classified as a call's answer is: a 404 is `not_found`, a 429 `rate_limited` with its wait, a 408 `unavailable`, each
-  `request_failed` before. A refresh and a revoke are classified as before.
+  `request_failed` before (or `GrantRevoked` before, for `invalid_grant` or a code the entry lists as revoked). A
+  refresh and a revoke are classified as before.
 - Breaking: an OAuth refusal that carries a `WWW-Authenticate` challenge (Doorkeeper sends one on every error, RFC 6749
   asks for one beside a 401 `invalid_client`) is read from its body as any other refusal is. A refresh refused with
   `invalid_grant` that way is `GrantRevoked`, no longer `request_failed`; a revoke refused with `invalid_grant` that way

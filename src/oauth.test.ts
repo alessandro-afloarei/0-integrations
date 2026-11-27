@@ -145,6 +145,11 @@ test('a code exchange the server refuses is classified as a `token` sign-in\'s f
     .rejects.toEqual(new ProviderHttpError('rejected', 200, null));
   await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_grant' }).fetch, values: { domain: 'slack.com' } }))
     .rejects.toEqual(new ProviderHttpError('rejected', 200, 'invalid_grant'));
+  // Never a revoked grant, though the entry lists the code as revoked: no grant existed.
+  for (const status of [404, 409, 429]) {
+    await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_grant' }, status).fetch, values: { domain: 'slack.com' } }))
+      .rejects.toBeInstanceOf(ProviderHttpError);
+  }
   // A refresh still ends a grant that existed.
   await expect(refreshGrant(slack, client, 'old', { fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch, values: { domain: 'slack.com' } }))
     .rejects.toBeInstanceOf(GrantRevoked);

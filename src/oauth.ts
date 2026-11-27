@@ -243,11 +243,12 @@ const RFC6749_ERRORS = ['invalid_request', 'invalid_client', 'invalid_grant', 'u
 const rfcDetail = (code: unknown, secrets: readonly string[]) => (typeof code === 'string' && RFC6749_ERRORS.includes(code) ? safeDetail(code, secrets) : null);
 
 /** A first token request's answer (a code exchange, a `token` sign-in) as its error, or null: RFC 6749 §5.2's 400, 401
- * and 403 are a refused client or grant, `rejected`; any other is classified as a call's answer is. */
+ * and 403 are a refused client or grant, `rejected`; any other is classified as a call's answer is, but no code reads
+ * as a revoked grant: none existed. */
 function firstTokenError(entry: Entry, response: ProviderResponse, secrets: readonly string[]): Error | null {
   const { status } = response;
   if (status === 400 || status === 401 || status === 403) return new ProviderHttpError('rejected', status, rfcDetail(readPath(response.data, 'error'), secrets));
-  return status >= 200 && status < 300 ? null : classify(entry, response);
+  return status >= 200 && status < 300 ? null : classify({ http: entry.http, errors: { ...entry.errors, revoked: [] } }, response);
 }
 type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; fetch?: typeof fetch };
 
