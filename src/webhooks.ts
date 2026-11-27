@@ -17,10 +17,13 @@ const STANDARD: Extract<Webhook, { kind: 'hmac' }> = { kind: 'hmac', header: 'we
 export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret: string): boolean {
   const standard = webhook.kind === 'standard';
   const scheme = standard ? STANDARD : webhook;
-  const received = request.headers.get(scheme.header);
+  const received = request.headers.get(scheme.kind === 'basic' ? 'authorization' : scheme.header);
   if (!received || received.length > MAX_HEADER_BYTES) return false;
   // Compared as digests of equal length, so the token's length leaks nothing.
   if (scheme.kind === 'token') return timingSafeEqual(sha256(received), sha256(secret));
+  // RFC 7617: `Basic`, one space, the base64 of `user:password`; a secret with no password keys nothing.
+  if (scheme.kind === 'basic') return /^[^:]*:./su.test(secret) && /^basic /iu.test(received)
+    && timingSafeEqual(sha256(received.slice(6)), sha256(Buffer.from(secret).toString('base64')));
   // With `part`, the header is `name=value` pieces split on `,` (Standard Webhooks: `name,value` on spaces). A name holds
   // neither separator (the table's rule), so a piece is that name's exactly when it starts with the name and `assign`.
   const [between, assign] = standard ? [' ', ','] : [',', '='];

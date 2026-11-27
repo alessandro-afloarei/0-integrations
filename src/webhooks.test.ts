@@ -1,4 +1,4 @@
-import { createHmac, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import { createHmac, generateKeyPairSync, sign, timingSafeEqual, type KeyObject } from 'node:crypto';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Webhook } from './catalogue.js';
 import { airtable } from './catalogue/airtable.js';
@@ -10,9 +10,16 @@ import { fireflies } from './catalogue/fireflies.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
+import { mailjet } from './catalogue/mailjet.js';
 import { slack } from './catalogue/slack.js';
 import { stripe } from './catalogue/stripe.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook, type WebhookRequest } from './webhooks.js';
+
+// The real comparison, watched: the Basic test reads what reached it.
+vi.mock('node:crypto', async original => {
+  const crypto = await original<typeof import('node:crypto')>();
+  return { ...crypto, timingSafeEqual: vi.fn(crypto.timingSafeEqual) };
+});
 
 const now = 1730000000;
 const secret = 'webhook-secret';
@@ -419,4 +426,48 @@ test('deliveryId reads the declared header or the body paths', () => {
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('not json')))).toBeNull();
+});
+
+/** A delivery carrying this `authorization` header, as Mailjet sends the user and password of the URL it calls. */
+const basic = (authorization?: string) => request(authorization === undefined ? {} : { authorization });
+
+test("verifies Mailjet's Basic credentials: the scheme in any case, one space, the exact base64 of `user:password`", () => {
+  expect(verifyWebhook(mailjet.webhook, basic('Basic dXNlcjpwYXNz'), 'user:pass')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic('basic dXNlcjpwYXNz'), 'user:pass')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic('BASIC dXNlcjpwYXNz'), 'user:pass')).toBe(true);
+  // `user:pas` encodes with one `=`, which the header must keep.
+  expect(verifyWebhook(mailjet.webhook, basic('Basic dXNlcjpwYXM='), 'user:pas')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic('Basic dXNlcjpwYXM'), 'user:pas')).toBe(false);
+  // The password runs from the first `:`, so it may hold one; the secret's UTF-8 bytes are encoded.
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from('user:pa:ss').toString('base64')}`), 'user:pa:ss')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from('usér:pâss').toString('base64')}`), 'usér:pâss')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from('usér:pâss', 'latin1').toString('base64')}`), 'usér:pâss')).toBe(false);
+  for (const header of ['Basic  dXNlcjpwYXNz', 'BasicdXNlcjpwYXNz', 'Bearer dXNlcjpwYXNz', 'dXNlcjpwYXNz', 'Basic dXNlcjpwYXNz,',
+    `Basic ${Buffer.from('user:wrong').toString('base64')}`, `Basic ${Buffer.from('other:pass').toString('base64')}`, undefined]) {
+    expect(verifyWebhook(mailjet.webhook, basic(header), 'user:pass')).toBe(false);
+  }
+});
+
+test('a Basic secret with no `:`, or an empty password, keys nothing', () => {
+  for (const key of ['user', 'user:', '', ':']) {
+    expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from(key).toString('base64')}`), key)).toBe(false);
+  }
+  // An empty user is the provider's to refuse: the password alone still keys the check.
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from(':pass').toString('base64')}`), ':pass')).toBe(true);
+});
+
+test('a Basic header over 8 KiB is false before it is read, and the secret in clear is no credential', () => {
+  const long = `user:${'p'.repeat(7 * 1024)}`;
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from(long).toString('base64')}`), long)).toBe(false);
+  expect(verifyWebhook(mailjet.webhook, basic('Basic user:pass'), 'user:pass')).toBe(false);
+  expect(verifyWebhook(mailjet.webhook, basic('user:pass'), 'user:pass')).toBe(false);
+});
+
+test('a Basic header is compared as a digest: every length reaches the comparison as 32 bytes', () => {
+  const compared = vi.mocked(timingSafeEqual);
+  for (const header of ['Basic d', 'Basic dXNlcjpwYXNz', `Basic ${'A'.repeat(4096)}`]) {
+    compared.mockClear();
+    verifyWebhook(mailjet.webhook, basic(header), 'user:pass');
+    expect(compared.mock.calls.map(([a, b]) => [a.byteLength, b.byteLength])).toEqual([[32, 32]]);
+  }
 });

@@ -58,16 +58,18 @@ type Timestamp = { header: string; toleranceSeconds?: number };
 /** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `secret`: the key is the secret's
  * exact `base64` or `hex` decoding (else its bytes); `part`: the header is a comma-separated list of `name=value`
  * pieces, each piece named `part` a signature, any of which may match; `timestamp.part` reads the timestamp from the
- * same list. `ed25519`: the header is the hex signature of `signed`, the
- * secret the provider's public key in hex. `token`: the header is the secret itself. `standard`: Standard Webhooks, the
- * secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on. `challenge`: a handshake whose body
- * `when` holds is answered `{ [echo]: <the body's value> }` (Slack's `url_verification`, Discord's PING). */
+ * same list. `ed25519`: the header is the hex signature of `signed`, the secret the provider's public key in hex.
+ * `token`: the header is the secret itself. `basic`: `authorization` is HTTP Basic of the secret, `user:password`.
+ * `standard`: Standard Webhooks, the secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on.
+ * `challenge`: a handshake whose body `when` holds is answered `{ [echo]: <the body's value> }` (Slack's
+ * `url_verification`, Discord's PING). */
 export type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
     secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
+  | { kind: 'basic' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 export type Where = { query: string } | { body: string };
 /** `page`: no number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the

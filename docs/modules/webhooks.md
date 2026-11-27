@@ -1,6 +1,6 @@
 # `webhooks`
 
-`webhooks` verifies HMAC and Ed25519 signatures, shared tokens and Standard Webhooks with
+`webhooks` verifies HMAC and Ed25519 signatures, shared tokens, HTTP Basic credentials and Standard Webhooks with
 `verifyWebhook(entry.webhook, request, secret)` over the exact raw body bytes, and answers URL challenges with
 `challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification.
 `deliveryId(entry.webhook, request)` reads what the entry declares an app dedupes on: a header, or body paths joined
@@ -50,6 +50,12 @@ only the older secret token (`X-Gitlab-Token`) sends no signature, and this entr
 holding a `.` is `false`: the specification says the message id must "not be allowed to include any `.`", since the
 signed content joins id, timestamp and body with dots (GitLab's ids are UUIDs).
 
+`kind: 'basic'` (Mailjet) signs nothing either: the provider calls the URL the app registered with a user and password
+in it (`https://user:password@…`) and sends them as HTTP Basic. Pass `user:password` as the secret. The request passes
+when `authorization` is `Basic` (in any case), one space and exactly the base64 of the secret's UTF-8 bytes, compared as
+SHA-256 digests as `token` is; the password runs from the first `:`. A secret with no `:` or an empty password, a
+missing header, two spaces, base64 without its `=` padding and the credentials in clear are all `false`.
+
 [Fireflies](fireflies.md) and [Breakcold](breakcold.md) declare a delivery id; Fireflies' module also parses the event.
 Stripe's entry declares the event's `id` as its delivery id.
 
@@ -74,6 +80,8 @@ const sharedToken: Webhook = { kind: 'token', header: 'x-goog-channel-token' };
 // `hmac` keyed with the secret's hex decoding, over the timestamp header's text and the body (Close)
 const decoded: Webhook = { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
   timestamp: { header: 'close-sig-timestamp' } };
+// `basic`: `authorization` holds HTTP Basic of the secret, `user:password` (Mailjet)
+const credentials: Webhook = { kind: 'basic' };
 // `standard`: Standard Webhooks fixes the headers and what is signed (GitLab)
 const standard: Webhook = { kind: 'standard', deliveryId: { header: 'webhook-id' } };
 // A `challenge` beside any kind: echo the body's `challenge` when its `type` is `url_verification` (Slack)

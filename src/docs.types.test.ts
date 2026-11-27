@@ -9,6 +9,7 @@ import { slack } from './catalogue/slack.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { linear } from './catalogue/linear.js';
+import { mailjet } from './catalogue/mailjet.js';
 import { mattermost } from './catalogue/mattermost.js';
 import { notion } from './catalogue/notion.js';
 import { aircall } from './catalogue/aircall.js';
@@ -245,13 +246,15 @@ function webhooksDeclared() {
   // `hmac` keyed with the secret's hex decoding, over the timestamp header's text and the body (Close)
   const decoded: Webhook = { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
     timestamp: { header: 'close-sig-timestamp' } };
+  // `basic`: `authorization` holds HTTP Basic of the secret, `user:password` (Mailjet)
+  const credentials: Webhook = { kind: 'basic' };
   // `standard`: Standard Webhooks fixes the headers and what is signed (GitLab)
   const standard: Webhook = { kind: 'standard', deliveryId: { header: 'webhook-id' } };
   // A `challenge` beside any kind: echo the body's `challenge` when its `type` is `url_verification` (Slack)
   const challenged: Webhook = { kind: 'hmac', header: 'x-slack-signature', signed: 'v0:{timestamp}:{body}', prefix: 'v0=',
     timestamp: { header: 'x-slack-request-timestamp' },
     challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge' } };
-  return [timestamped, pieces, signedWithKey, sharedToken, decoded, standard, challenged];
+  return [timestamped, pieces, signedWithKey, sharedToken, decoded, credentials, standard, challenged];
 }
 
 // docs/modules/webhooks.md › Receiving a delivery (its last line, a comment there, is the two calls below).
@@ -312,7 +315,7 @@ test('every docs example compiles', () => {
 test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {
   // `toEqual` reads a property set to undefined as missing.
   expect(webhooksDeclared()).toEqual([breakcold.webhook, stripe.webhook, { ...discord.webhook, challenge: undefined }, google.webhook,
-    close.webhook, gitlab.webhook, slack.webhook]);
+    close.webhook, mailjet.webhook, gitlab.webhook, slack.webhook]);
 });
 
 test("testing.md's derived-fake examples run", async () => {

@@ -138,6 +138,9 @@ const entrySchema = z.strictObject({
     // The header is compared whole: nothing is signed, so nothing to fill, prefix or time.
     z.strictObject({ kind: z.literal('token'), header: headerName, ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
       ? 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out' : undefined) }),
+    // The header is `authorization`, and nothing is signed.
+    z.strictObject({ kind: z.literal('basic'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
+      ? 'a `basic` webhook takes only `deliveryId` and `challenge`: its header is `authorization`, leave the rest out' : undefined) }),
     // The scheme fixes its headers, its signed content and its timestamp.
     z.strictObject({ kind: z.literal('standard'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys' && issue.keys.every(name => ['header', 'signed', 'timestamp', 'prefix', 'secret'].includes(name))
       ? 'a `standard` webhook takes no `header`, `signed`, `timestamp`, `prefix` or `secret`: Standard Webhooks fixes them' : undefined) }),
@@ -997,6 +1000,9 @@ test.each<[string, Record<string, unknown>, string]>([
   ['token', {}, 'Invalid input: expected string, received undefined'],
   ['token', { header: 'x-goog-channel-token', secret: 'hex' }, 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out'],
   ['ed25519', { header: 'x-signature-ed25519', secret: 'hex' }, 'Unrecognized key: "secret"'],
+  ...([{ header: 'authorization' }, { prefix: 'Basic ' }, { signed: '{body}' }, { timestamp: { header: 'x-t' } }, { secret: 'base64' },
+    { deliveryld: { header: 'x-id' } }] as const).map((parts): [string, Record<string, unknown>, string] => ['basic', parts,
+      'a `basic` webhook takes only `deliveryId` and `challenge`: its header is `authorization`, leave the rest out']),
   ['standard', { deliveryld: { header: 'webhook-id' } }, 'Unrecognized key: "deliveryld"'],
   ...['header', 'signed', 'timestamp', 'prefix', 'secret'].map((part): [string, Record<string, unknown>, string] => ['standard',
     { [part]: part === 'timestamp' ? { header: 'webhook-timestamp' } : 'x' },

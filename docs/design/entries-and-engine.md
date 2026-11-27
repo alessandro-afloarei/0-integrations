@@ -554,6 +554,7 @@ type Webhook = (
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
+  | { kind: 'basic' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
 ```
 
@@ -586,16 +587,20 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    (seconds, 300 seconds of tolerance) and `webhook-signature` (space-separated `v1,<base64>`, other versions ignored)
    over `<webhook-id>.<webhook-timestamp>.<raw body>`, keyed with the base64 decoding of the secret after an optional
    `whsec_`, as strict as `secret: 'base64'`. An id holding a `.` is `false`, as the specification bars it.
-7. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
-8. `challengeAnswer(webhook, request)`, called only after `verifyWebhook` accepted the request, answers a handshake: a
+7. `basic` (Pipedrive, Postmark, Mailjet: the user and password the app puts on the subscription; nothing is signed):
+   the secret is `user:password`; the request passes when its `authorization` header is the scheme `Basic` (any case),
+   one space, and the base64 of the secret's UTF-8 bytes, compared over the SHA-256 digests of both, as `token`
+   compares. A secret with no `:`, or with an empty password, keys nothing (`false`).
+8. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
+9. `challengeAnswer(webhook, request)`, called only after `verifyWebhook` accepted the request, answers a handshake: a
    JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
    string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
 
 In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
-Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge`
-(Slack, Discord). A secret that keys nothing (one that does not decode exactly, or a key of only zero bytes) is
-`false`. The table test also refuses a `challenge.when` with a `status`, `header` or `detail` or without a `path`, and
-an `echo` holding a `.`.
+Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab), `basic`
+(Mailjet) and `challenge` (Slack, Discord). A secret that keys nothing (one that does not decode exactly, a key of only
+zero bytes, or a Basic secret without a password) is `false`. The table test also refuses a `challenge.when` with a
+`status`, `header` or `detail` or without a `path`, and an `echo` holding a `.`.
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a

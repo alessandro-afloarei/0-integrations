@@ -4,6 +4,8 @@
 
 Nothing here is released yet.
 
+- New: `basic` webhooks, checked by HTTP Basic credentials (`authorization: Basic <base64 of user:password>`, the secret
+  `user:password`; one with no `:` or an empty password accepts nothing). Mailjet declares its webhook.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.

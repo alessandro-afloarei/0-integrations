@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers: 106 declared, 0 recorded;
-356 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
+356 typed operations; webhooks: basic 1, ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -65,7 +65,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [LINE](https://developers.line.biz/en/reference/messaging-api/#get-bot-info) | chat | key | messages.create, followers.list | hmac | declared |
 | [Linear](https://linear.app/developers/graphql#authentication) | tasks | OAuth 2, key | issues.list, issues.get, issues.create, issues.update, teams.list | hmac | declared |
 | [Lusha](https://docs.lusha.com/authentication) | sales | key | — | — | declared |
-| [Mailjet](https://dev.mailjet.com/openapi/openapi-mailjet/settings/get_v3_user) | mail | key | messages.list, messages.get, dns.list, messages.create | — | declared |
+| [Mailjet](https://dev.mailjet.com/openapi/openapi-mailjet/settings/get_v3_user) | mail | key | messages.list, messages.get, dns.list, messages.create | basic | declared |
 | [Mattermost](https://docs.mattermost.com/api/reference/mattermost-api) | chat | OAuth 2, key | channels.list, posts.list, posts.create, users.list | — | declared |
 | [MeetGeek](https://docs.meetgeek.ai/api/getting-started/authorization) | meetings | key | meetings.list, meetings.get, transcripts.get | hmac | declared |
 | [Metabase](https://www.metabase.com/articles/set-up-metabase-from-code-with-the-api) | analytics | token | — | — | declared |
