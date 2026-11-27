@@ -48,6 +48,13 @@ Nothing here is released yet.
 - Smartsheet takes its product's host in `apiHost` (`api.smartsheet.com` by default; `.eu`, `.au`, Smartsheet Gov's
   `api.smartsheetgov.com`). Breaking: a client never applies the default, so an existing connection is
   `template_missing` until it passes `values: { apiHost }`.
+- New: an OAuth 2 entry's base may be the host its token answer names, kept by `save` and checked against a declared
+  domain before identify, every call and every refresh. The host may come as an https origin (`https://x.example.com`,
+  read as its host); a token answer without one is `invalid_response` (`missing_fields`) and the fresh grant is
+  revoked. The refresh URL alone may name it, and is now filled and checked when a refresh is sent, no longer at the
+  start. Such a host beside one the person types is `host_split`, and with `http.host: '*'`, or none, it is refused
+  (`base_host_refused`) before anything is sent.
+- New entry: Wrike (tasks; OAuth 2).
 - GitHub lists OAuth 2 first; its personal access token is `signInWith(github, 'key')`.
 - GitLab lists OAuth 2 first, on the host the person types; its personal access token is `signInWith(gitlab, 'key')`.
   `client(gitlab, …)` on the whole entry now sends `Authorization: Bearer`; it sent `private-token`, as the key still

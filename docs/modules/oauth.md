@@ -25,7 +25,10 @@ refresh and an RFC 7009 revoke never follow a redirect (a 3xx is `request_failed
 call, which follows a redirect only on the same origin, never to another host.
 
 `refreshGrant` posts to the entry's `refreshUrl` when it names one (Figma), else to `tokenUrl`; a refresh answer
-without a `refresh_token` keeps the one sent. With `json: true` (Atlassian) the exchange, the refresh and an RFC 7009
+without a `refresh_token` keeps the one sent. The refresh URL alone may be on the host the token answer named (Wrike's
+data centre, `https://{host}/oauth2/token`): it is filled from the connection's `values` and checked as the base is
+when the refresh is sent, before the refresh token is, and a refresh answer's host is never read. The other OAuth 2
+URLs never name one, since no token answer exists before them (`template_missing`). With `json: true` (Atlassian) the exchange, the refresh and an RFC 7009
 revoke send their parameters as one JSON object (`content-type: application/json`); Basic client authentication stays a
 header.
 

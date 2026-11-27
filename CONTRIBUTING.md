@@ -89,7 +89,8 @@ entry:
   OAuth 2 or token sign-in), and neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
   the token itself from `tokenAnswer.*`; a value read from identify's answer has a request to read it from; no `save`
   key is a field's name; each placeholder in the base names a plain field or a `save` key, either in its host, with
-  `http.host` declared (`'*'` only when the whole host is one placeholder), or as one segment of its path; `http.bases`
+  `http.host` declared (`'*'` only when the whole host is one placeholder a person types, never a host the token
+  answer names, which only the refresh URL among the OAuth 2 URLs may also name), or as one segment of its path; `http.bases`
   hold no placeholder, and a call's `base` names one of them; a token request names only the entry's fields (a plain
   one in its `url`, whose host placeholder needs `http.host`), sends the secret field in its body or Basic, and its
   `send` names no secret field; a field's `choices` are a non-empty list of unique values holding its `default`, each

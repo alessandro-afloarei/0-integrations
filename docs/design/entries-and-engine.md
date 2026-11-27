@@ -155,7 +155,8 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 #### A base filled from a value
 
-A placeholder in `http.baseUrl` names a plain field or a `save` key. In the host (between `https://` and the next `/`)
+A placeholder in `http.baseUrl` names a plain field or a `save` key (in the host, one read from the token answer is a
+named host, below). In the host (between `https://` and the next `/`)
 it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
 and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those when the hosts are on
 several domains (the filled host matches one), or `*` (any). Intercom's region is the first: `baseUrl:
@@ -193,7 +194,8 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   is the provider's own.
 - Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled by this rule, from the plain fields alone:
   a secret field or a `save` key named there is `template_missing`, since neither exists before the exchange. A URL
-  with no placeholder is used as written.
+  with no placeholder is used as written. The refresh URL alone may also name a host the token answer names (below),
+  and is filled and checked when a refresh is sent.
 - **On a typed host, a credential goes only to that host.** When the base, an `http.bases` value, an OAuth 2 URL or a
   token request's URL takes its host from a value, every one of them has exactly the same host part (`https://{host}`):
   on a person's own server the registration, the sign-in and the calls all belong to that server. So a cloud's fixed
@@ -203,6 +205,22 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   exchange, refresh, revoke and token request, and where a call chooses a named base, before anything is built or sent,
   and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed (a value only in the base's path)
   is unaffected. No value is ever read from the callback's query: the callback is the person's browser.
+- **A host the token answer names.** A placeholder in the base's host that names a `save` key whose value is one
+  `tokenAnswer.*` path, and no field, is a *named* host: the token endpoint that issued the grant chose it (Wrike's
+  data centre: `baseUrl: 'https://{host}/api/v4'`, `save: { host: 'tokenAnswer.host' }`). A token is then sent only to
+  the host that issued it, or to a host its issuer named inside a domain the entry declares:
+  - it needs an `http.host` with a domain (a name, `*.` and a domain, or a list), never `*`, else `base_host_refused`
+    before anything is sent (`checkHosts`), and the table refuses it;
+  - its value is checked as a typed host's is (`filledBase`), and may be an https origin (Pipedrive's `api_domain`):
+    `https://`, the host and at most a `/`, whose host is used; a port, a path, a query, a fragment, userinfo or
+    `http:` is `base_value_invalid`;
+  - it is no typed host: beside fixed OAuth 2 URLs it is no split, but a typed host beside it is `host_split`;
+  - `finishConnect` reads it from the token answer before identify, whose base it fills, and never from the caller's
+    `values`; a token answer without one (or with one that is no string or number) is `invalid_response`
+    (`missing_fields`), and the fresh grant is revoked as after any failed identify;
+  - a client, a request revoke and a refresh read it from the connection's `values`, checked before the token is read
+    or the refresh token sent; none is `template_missing`. Only the refresh URL among the OAuth 2 URLs may name it
+    (Wrike refreshes on its data centre); a refresh answer's host is not read, so an account that moves reconnects.
 
 #### The address guard
 
@@ -637,7 +655,7 @@ other people must use OAuth, the key's `help` says the key is for the person's o
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
   scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host` with `http.host: '*'`; a documented list of regional
   hosts on one domain is `choices` with `http.host: '*.<domain>'`, on several domains `choices` with `http.host`
-  those names.
+  those names. A host the token answer names is no field but a `save` key, `http.host` the narrowest the pages support.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
 - `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
   authorization, the refresh token goes first.
