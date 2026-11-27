@@ -2,8 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Re:amaze: each user's API token with their login email, HTTP Basic, on the brand's host; identify only checks it on
  * https://www.reamaze.com/api/get_channels. A 429 states no wait. Lists answer one page (`page`, `page_count`).
- * `messages.create` reaches the customer unless `visibility` is 1 or `suppress_notifications`; `conversations.create`
- * sends Re:amaze's email notifications unless `message.suppress_notifications`. */
+ * `messages.create` reaches the customer unless `visibility` is 1; `suppress_notifications` (on a message, or in
+ * `conversations.create`'s `message`) stops its email and integration notifications, not the message itself. */
 const conversation = { slug: 'string', 'subject?': 'string', 'status?': 'integer', 'created_at?': 'string',
   'tag_list?': ['string'], 'category?': { 'slug?': 'string', 'name?': 'string' }, 'author?': { 'name?': 'string', 'email?': 'string' },
   'assignee?': 'unknown' } as const;
@@ -40,7 +40,7 @@ export const reamaze = defineProvider({
       params: { conversation: { in: 'body', required: true, type: { 'subject?': 'string', 'category?': 'string', 'status?': 'integer',
         'tag_list?': ['string'], 'assignee?': 'string', 'user?': { 'name?': 'string', 'email?': 'string' },
         'message?': { 'body?': 'string', 'recipients?': ['string'], 'suppress_notifications?': 'boolean' } },
-      description: `A conversation made on behalf of a customer (user): category is the slug of its channel; assignee a staff email; status a number (${statuses}); message.suppress_notifications true sends no email or integration notification.` } },
+      description: `A conversation made on behalf of a customer (user): category should be set to the slug of the channel to create it in; assignee a staff email; status a number (${statuses}); message.suppress_notifications true sends no email or integration notification.` } },
       result: conversation },
     'conversations.update': { docs: `${ref}/put_conversations`, method: 'PUT', path: '/conversations/{slug}',
       params: { ...slug, conversation: { in: 'body', required: true, type: { 'status?': 'integer', 'tag_list?': ['string'],
