@@ -4,9 +4,9 @@
 
 Nothing here is released yet.
 
-- New entries: 25 mail, calendar and meetings providers (acuity, agentmail, avoma, brevo, calcom, calendly, circleback,
-  daily, fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend,
-  savvycal, sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
+- New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
+  fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
+  sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
 - New: `errors.detail` reads a numeric code as its digits (a non-negative whole number: `allow`, `revoked` and
   `failed` compare `'2001'`, and a rule's `detail: true` now holds for it); PagerDuty, Smartsheet and Cognism report
   theirs. A path that holds the HTTP status as a number now reads as the code and hides a later path: an app's own
