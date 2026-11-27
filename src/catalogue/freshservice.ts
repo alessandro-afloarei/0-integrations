@@ -33,6 +33,7 @@ export const freshservice = defineProvider({
   auth: [{ kind: 'key', send: { basic: ['{token}', 'X'] } }],
   http: { baseUrl: 'https://{domain}.freshservice.com/api/v2', host: '*.freshservice.com', retry: {} },
   identify: { request: { path: '/tickets', query: { per_page: '1' } } },
+  errors: { detail: 'errors.0.code' },
   paging: { link: { kind: 'linkHeader' } },
   operations: {
     'tickets.list': { docs: `${ref}view_all_ticket`, path: '/tickets', paging: 'link', records: 'tickets',
