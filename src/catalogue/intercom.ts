@@ -24,14 +24,15 @@ export const intercom = defineProvider({
   { kind: 'key', fields: [{ name: 'apiHost', title: 'Region', choices: hosts,
     default: 'api.intercom.io', help: 'Where the workspace is hosted: the US, the EU or Australia.' },
   { name: 'accessToken', title: 'Access token', secret: true,
-    help: 'For your own Intercom workspace: the Access Token in your app\'s Configure > Authentication section in the Developer Hub. Intercom requires OAuth for an app that reaches other people\'s workspaces.' }],
+    help: 'For your own Intercom workspace: the Access Token in your app\'s Configure > Authentication section in the Developer Hub, the app with the Read one admin, Read conversations, Write conversations and Read and list users and companies permissions. It reaches the conversations of the teammate who installed the app. Intercom requires OAuth for an app that reaches other people\'s workspaces.' }],
   http: { baseUrl: 'https://{apiHost}', host: hosts } }],
   // No scope is sent: the app also ticks Read conversations, Write conversations and Read and list users and companies:
   // https://developers.intercom.com/docs/build-an-integration/learn-more/authentication/oauth-scopes
   scopes: { default: [] },
-  // `api.intercom.io` attempts to route a call to the workspace's region:
-  // https://developers.intercom.com/docs/build-an-integration/learn-more/rest-apis
-  http: { baseUrl: 'https://api.intercom.io', headers: { accept: 'application/json' },
+  // `api.intercom.io` attempts to route a call to the workspace's region; every request names the API version the entry
+  // reads, which overrides the app's: https://developers.intercom.com/docs/build-an-integration/learn-more/rest-apis
+  // https://developers.intercom.com/docs/build-an-integration/learn-more/rest-apis/update-your-api-version
+  http: { baseUrl: 'https://api.intercom.io', headers: { accept: 'application/json', 'intercom-version': '2.18' },
     retry: { defaultWaitMs: 10_000, wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   errors: { detail: 'errors.0.code' },
   identify: { request: { path: '/me' }, id: 'app.id_code', name: 'app.name' },
