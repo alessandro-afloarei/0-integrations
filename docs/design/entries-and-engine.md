@@ -711,6 +711,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | (string &
   never on a GET and never in one operation together, on a GraphQL operation only `variables`, and a `header` one
   only as a scalar, never `nullable`, never named `content-type`, `host` or the credential's header of any sign-in
   (`authorization` unless its `send` names another).
+- A parameter the page requires only when another argument has a given value, or only in some configurations, is
+  declared optional, its description naming the condition; the provider's answer is the check.
 - `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
   creates one record by any of several equal inputs (`[['email'], ['phone', 'last_name']]`). A path names a parameter
   or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read

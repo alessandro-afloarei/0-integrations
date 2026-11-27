@@ -36,7 +36,8 @@ one takes five steps:
    - a result key is required only when the docs explicitly mark it required (a `required` list, words saying so, a
      non-null `!` in a published GraphQL schema), or it is the record's id; a non-nullable type or an example value is
      not enough; the envelope a list is read from stays required;
-   - a parameter the docs' prose calls required is required;
+   - a parameter the docs' prose calls required is required; one they require only when another argument has a given
+     value, or only in some configurations, is optional, its description naming the condition;
    - read what each page requires, not only what you declare: every parameter it marks required (path, query or body),
      a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
      the list to its one container (a project, a board), are required, and when none of them is its container the list
