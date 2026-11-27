@@ -6,8 +6,9 @@ Nothing here is released yet.
 
 - New: `basic` webhooks, checked by HTTP Basic credentials (`authorization: Basic <base64 of user:password>`, the secret
   `user:password`; one with no `:` or an empty password accepts nothing). Mailjet declares its webhook.
-- New: a `standard` webhook request with no `webhook-signature` is read under Svix's names, `svix-id`, `svix-timestamp`
-  and `svix-signature`, one set whole (it was `false`). AgentMail declares its webhook, deduplicated on `event_id`.
+- New: a `standard` webhook request with no `webhook-*` header is read under Svix's names, `svix-id`, `svix-timestamp`
+  and `svix-signature` (it was `false`); one carrying headers of both sets is `false`. AgentMail declares its webhook,
+  deduplicated on `event_id`.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.

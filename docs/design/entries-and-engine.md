@@ -587,9 +587,9 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    (seconds, 300 seconds of tolerance) and `webhook-signature` (space-separated `v1,<base64>`, other versions ignored)
    over `<webhook-id>.<webhook-timestamp>.<raw body>`, keyed with the base64 decoding of the secret after an optional
    `whsec_`, as strict as `secret: 'base64'`. An id holding a `.` is `false`, as the specification bars it. When a
-   request has no `webhook-signature` it reads `svix-id`, `svix-timestamp` and `svix-signature` instead (Svix, the
-   reference implementation, sends these; AgentMail). One set is read whole: a request is never checked with an id or
-   timestamp of one set and a signature of the other.
+   request has no `webhook-*` header it reads `svix-id`, `svix-timestamp` and `svix-signature` instead (Svix, the
+   reference implementation, sends these; AgentMail). One set is read whole, and a request carrying any header of both
+   sets (`-id`, `-timestamp` or `-signature`) is refused, so the only id header present is the one signed.
 7. `basic` (Pipedrive, Postmark, Mailjet: the user and password the app puts on the subscription; nothing is signed):
    the secret is `user:password`; the request passes when its `authorization` header is the scheme `Basic` (any case),
    one space, and the base64 of the secret's UTF-8 bytes, compared over the SHA-256 digests of both, as `token`

@@ -449,6 +449,20 @@ test('a request is checked with one set of Standard Webhooks headers whole, neve
     'svix-signature': good, 'webhook-signature': 'v1,x' }) }, standardSecret)).toBe(false);
 });
 
+test('a request carrying headers of both sets is false: a replay cannot add a fresh id beside the signed one', () => {
+  const good = standardSignature('msg_1', t);
+  // A `webhook-*` delivery resent under Svix's names, with another `webhook-id` for an app that dedupes on it; and the mirror.
+  expect(verifyWebhook(gitlab.webhook, request({ 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good, 'webhook-id': 'msg_2' }), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good, 'svix-id': 'msg_2' }), standardSecret)).toBe(false);
+  expect(verifyWebhook(gitlab.webhook, { ...standardSigned(good), headers: new Headers({ 'webhook-id': 'msg_1', 'webhook-timestamp': t,
+    'webhook-signature': good, 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good }) }, standardSecret)).toBe(false);
+  expect(verifyWebhook(gitlab.webhook, { ...standardSigned(good), headers: new Headers({ 'webhook-id': 'msg_1', 'webhook-timestamp': t,
+    'webhook-signature': good, 'svix-timestamp': t }) }, standardSecret)).toBe(false);
+  // Either set alone still passes.
+  expect(verifyWebhook(gitlab.webhook, standardSigned(good), standardSecret)).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(good), standardSecret)).toBe(true);
+});
+
 test('refuses a Svix-named request that is stale, altered or signed for another id', () => {
   expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', String(now - 301)), String(now - 301)), standardSecret)).toBe(false);
   expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', String(now - 300)), String(now - 300)), standardSecret)).toBe(true);
