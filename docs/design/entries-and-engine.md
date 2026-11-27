@@ -453,10 +453,12 @@ classified in this order, and the first step that decides wins:
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
 
-- `errors.detail` is where the provider's own error code sits. A code counts only when it is a non-empty string: an
-  empty one is skipped and the next path read. A `/` in it becomes `.`, and it must then pass the library's strict
-  pattern, so no provider text or secret reaches an error. `allow` keeps only the listed codes. It checks the first
-  code found, so a refused one hides a later path.
+- `errors.detail` is where the provider's own error code sits. A code counts only when it is a non-empty string or a
+  non-negative safe integer, read as its decimal digits (`2001` is `'2001'`, which `allow`, `revoked`, `rules`,
+  `failed` and `goneErrors` compare); anything else (an empty string, a fraction, a negative, a boolean) is skipped
+  and the next path read. A `/` in it becomes `.`, and it must then pass the library's strict pattern, so no provider
+  text or secret reaches an error. `allow` keeps only the listed codes. It checks the first code found, so a refused
+  one hides a later path.
 - Only a call marked idempotent is retried: a GET unless the caller says `idempotent: false`, or any call the caller
   marks `idempotent: true` (an operation of `kind: 'read'`, an idempotent DELETE), never with a caller's `signal`. It is
   retried after a 429, a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was

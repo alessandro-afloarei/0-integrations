@@ -4,6 +4,7 @@
 
 Nothing here is released yet.
 
+- `errors.detail` reads a numeric code as its digits; PagerDuty, Smartsheet and Cognism report theirs.
 - New: a sign-in after the first may declare its own `fields`, base and host (`http: { baseUrl, host }`, nothing else
   of `http`) and `identify`; `signInWith` puts them in place of the entry's. The engine refuses an app's entry whose
   first sign-in declares one, before anything is sent (`sign_in_own_first: <entry id>`), and `startConnect` now runs
