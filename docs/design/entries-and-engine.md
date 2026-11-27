@@ -783,7 +783,7 @@ way to list it). No `delete`.
 | `mail` | mailbox: `<messages>.list` (or `.search`), `<messages>.get`, `<folders>.list`, `<drafts>.create`, `<messages>.create` (sends the message); sending service: `<emails>.list`, `<emails>.get`, `<domains>.list`, `<emails>.create` (sends the email) (a mailbox's messages: messages, conversations, threads; folders: folders, labels, mailboxes, inboxes; a sending service's emails: emails, messages; domains: domains, sender domains) |
 | `calendar` | calendars: `<calendars>.list`, `<events>.list`, `<events>.get`, `<events>.create`, `<events>.update`; scheduling: `<eventTypes>.list`, `<bookings>.list`, `<bookings>.get`, `<bookings>.create` (event types: event types, booking types, appointment types, links; bookings: bookings, scheduled events, events, appointments, meetings) |
 | `meetings` | conferencing: `<meetings>.list`, `<meetings>.get`, `<recordings>.list`, `<meetings>.create`, `<meetings>.update`; note-takers: `<meetings>.list` (or `<transcripts>.list` when the transcript is the object), `<meetings>.get`, `<transcripts>.get` (a conference's meetings: meetings, rooms, sessions, webinars, events; a note-taker's meetings: meetings, calls, recordings, conversations; transcripts: transcripts, transcriptions) |
-| `support` | `<tickets>.list` (or `.search`), `<tickets>.get`, `<tickets>.create`, `<tickets>.update`, `<messages>.list`, `<messages>.create`, `<notes>.create` (where notes have their own endpoint), `<customers>.list` (or `.search`), `<inboxes>.list` (where a list or a create requires an inbox) (tickets: tickets, conversations, chats, issues, threads, works; messages: messages, comments, threads, articles, timeline entries, Freshdesk's conversations; notes: notes, Front's comments; customers: customers, contacts, users, end users, requesters, people; inboxes: inboxes, mailboxes, channels) |
+| `support` | `<tickets>.list` (or `.search`), `<tickets>.get`, `<tickets>.create`, `<tickets>.update`, `<messages>.list`, `<messages>.create`, `<notes>.create` (where notes have their own endpoint), `<customers>.list` (or `.search`), `<inboxes>.list` (where a list or a create requires an inbox) (tickets: tickets, conversations, chats, issues, threads, works; messages: messages, comments, threads, articles, timeline entries, Freshdesk's and Freshservice's conversations; notes: notes, Front's comments; customers: customers, contacts, users, end users, requesters, people, DevRev's Rev users; inboxes: inboxes, mailboxes, channels, HelpCrunch's applications) |
 
 A category gains its template with the batch that first writes it; its entries written before then (Google, Microsoft,
 Unipile, Fathom, Fireflies, Granola and Zoom for `mail`, `calendar` and `meetings`) are not reshaped to it.
@@ -805,16 +805,19 @@ two such objects (Intercom's conversations and tickets) declares every slot on o
 it got, and the other is a row under [Declared in part](../waiting-list.md#declared-in-part). `<messages>.create` adds
 a message to one ticket; a reply the customer receives (an email, a chat message) is `kind: 'write'`, and its leading
 comment says it reaches the customer. Where the same endpoint also posts an internal note (Chatwoot's `private`,
-Intercom's `message_type`), that parameter is declared, optional, its description saying it keeps the message
-internal. Where a reply is only a field of the ticket's create and update (Zendesk's `comment`, with its `public`),
-those declare it, and there is no `<messages>.create`. A note on its own endpoint (Freshdesk's notes, Front's
-comments) is `<notes>.create`, a write too: it may notify agents (Freshdesk's `notify_emails`).
+Intercom's `message_type`), that parameter is declared, optional unless the page requires it (Intercom's
+`message_type`), its description saying it keeps the message internal. A reply, a note and an update never take a
+sender; a create may name the customer as its first message's author where the page asks for it, its description
+saying so (Zammad, Dixa), and an entry may leave such a create out. Where a reply is only a field of the ticket's
+create and update (Zendesk's `comment`, with its `public`), those declare it, and there is no `<messages>.create`. A
+note on its own endpoint (Freshdesk's notes, Front's comments) is `<notes>.create`, a write too: it may notify agents
+(Freshdesk's `notify_emails`).
 
 A `<tickets>.create` that emails the customer or notifies agents declares the page's parameter to send none, where
 there is one (Help Scout's `imported`, LiveAgent's `do_not_send_mail`), optional, and its leading comment says so.
 `<tickets>.update` declares the fields its page lists as writable (a status, an assignee, a priority, tags); an update
 that replaces the object is not declared with optional fields. `<inboxes>.list` is declared only as the list a
-required parameter is chosen from (Help Scout's `mailboxId` on a create, Helpwise's `inboxIds` on a list). Outside the
+required parameter is chosen from (Help Scout's `mailboxId` on a create, Hiver's `inbox_id` on a list). Outside the
 row: delete, merge, spam, bulk changes, macros and automations, SLAs, reports, agents and admin settings, webhook
 management, knowledge-base articles (the `docs` category) and a message sent as the customer (a reply declares the
 agent's form). A shared inbox that is also a mailbox (Front, Help Scout, Missive) lists both categories, the one its
