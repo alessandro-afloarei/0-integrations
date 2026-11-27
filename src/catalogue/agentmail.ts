@@ -2,7 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** AgentMail: an API key as Bearer, on the default or the EU host; `messages.create` emails people and counts against
  * the plan's emails a day. A 429 waits `Retry-After`: https://agentmail.to/docs/knowledge-base/rate-limits
- * Errors carry a machine `code`: https://agentmail.to/docs/errors */
+ * Errors carry a machine `code`: https://agentmail.to/docs/errors. The EU host is the Enterprise plan's:
+ * https://agentmail.to/docs/knowledge-base/security-compliance */
 const hosts = ['api.agentmail.to', 'api.agentmail.eu'] as const;
 const message = { message_id: 'string', thread_id: 'string', inbox_id: 'string', labels: ['string'], timestamp: 'string',
   from: 'string', to: ['string'], 'subject?': 'string' } as const;
@@ -16,7 +17,7 @@ export const agentmail = defineProvider({
   id: 'agentmail', name: 'AgentMail', docs: 'https://agentmail.to/docs/api-reference/auth/me',
   categories: ['mail'],
   fields: [{ name: 'apiHost', title: 'AgentMail host', choices: hosts, default: 'api.agentmail.to',
-    help: 'api.agentmail.to, or api.agentmail.eu for an EU organization.' },
+    help: 'api.agentmail.to, or api.agentmail.eu for an EU organization (the Enterprise plan).' },
   { name: 'apiKey', title: 'API key', secret: true,
     help: 'Create it in the AgentMail Console under API Keys (it starts with am_ and is shown once). An organization key reaches every inbox; a pod or inbox key only its own. Each email sent counts against your plan (Free: 100 a day).' }],
   auth: [{ kind: 'key' }],
