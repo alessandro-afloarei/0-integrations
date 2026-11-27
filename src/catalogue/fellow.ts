@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Fellow: a person's API key on the workspace's host; the API is on paid plans, enabled by an admin. 3 requests a
- * second and 10,000 a day per key: https://developers.fellow.ai/reference/request-limits. A list's cursor goes inside
- * the body's `pagination`, so each call answers one page. The transcript is the recording's. Webhooks are not checked
- * here (Svix's header names): https://developers.fellow.ai/reference/webhooks */
+/** Fellow: a person's API key on the workspace's host; the API is on paid plans, enabled by an admin:
+ * https://help.fellow.ai/en/articles/11817206-developer-api. 3 requests a second and 10,000 a day per key:
+ * https://developers.fellow.ai/reference/request-limits. A cursor in the body's `pagination`: one page a call; the
+ * transcript is the recording's. No webhook (Svix's header names): https://developers.fellow.ai/reference/webhooks */
 const recording = { id: 'string', 'title?': 'string', 'created_at?': 'string', 'updated_at?': 'string', 'started_at?': 'string',
   'ended_at?': 'string', 'note_id?': 'string', 'transcript?': 'unknown' } as const;
 const ref = 'https://developers.fellow.ai/reference';
