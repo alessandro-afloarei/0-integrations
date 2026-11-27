@@ -14,7 +14,7 @@ const limit = { limit: { in: 'query', type: 'integer', description: '100 by defa
 const order = { in: 'query', type: 'string', enum: ['asc', 'desc'] } as const;
 const search = { filter: { in: 'body', type: [{ field: 'string', operator: 'string', value: 'unknown' }] },
   comparison: { in: 'body', type: 'string', enum: ['AND', 'OR'] }, sort: { in: 'body', type: 'string' },
-  order: { in: 'body', type: 'string', enum: ['ASC', 'DESC'] }, limit: { in: 'body', type: 'integer', description: '100 by default.' } } as const;
+  order: { in: 'body', type: 'string', description: 'ASC or DESC; the examples use either case.' }, limit: { in: 'body', type: 'integer', description: '100 by default.' } } as const;
 const chatId = { chat_id: { in: 'path', type: 'integer', required: true } } as const;
 const ref = 'https://docs.helpcrunch.com/en/rest-api-v1';
 
@@ -39,7 +39,8 @@ export const helpcrunch = defineProvider({
       records: 'data', params: search, result: { data: [chat] } },
     'chats.get': { docs: `${ref}/get-chat-v1`, path: '/chats/{chat_id}', notFound: 'null', params: chatId, result: chat },
     'chats.create': { docs: `${ref}/create-chat-v1`, method: 'POST', path: '/chats',
-      params: { customer: { in: 'body', type: 'integer', required: true }, application: { in: 'body', type: 'integer', required: true },
+      params: { customer: { in: 'body', type: 'integer', required: true },
+        application: { in: 'body', type: 'integer', required: true, description: 'An id from applications.list.' },
         assignee: { in: 'body', type: 'integer' }, department: { in: 'body', type: 'integer' } }, result: chat },
     'chats.update': { docs: `${ref}/update-chat-status-v1`, method: 'PUT', path: '/chats/status',
       params: { id: { in: 'body', type: 'integer', required: true }, status: { in: 'body', type: 'string', required: true,
@@ -52,6 +53,8 @@ export const helpcrunch = defineProvider({
         type: { in: 'body', type: 'string', required: true, enum: ['message', 'private'],
           description: '`private` keeps the message an internal note, visible to agents only.' } },
       result: message },
+    'applications.list': { docs: `${ref}/get-applications-v1`, path: '/applications',
+      result: { data: [{ id: 'integer', 'name?': 'string', 'type?': 'string', 'active?': 'boolean' }] } },
     'customers.list': { docs: `${ref}/get-customers-v1`, path: '/customers', paging: 'offset', records: 'data',
       params: { sort: { in: 'query', type: 'string', enum: ['customers.firstSeen', 'customers.lastSeen'] }, order, ...limit },
       result: { data: [customer] } },
