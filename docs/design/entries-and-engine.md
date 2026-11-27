@@ -328,7 +328,9 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   401 or 403, and a 200 the entry's `failed` marks, are `rejected`, their detail the answer's `error` only when that is
   one of RFC 6749's codes (`invalid_grant`, `invalid_client`, …) and holds nothing sent; any other answer is classified
   as a call's is (a 404 `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`, the rest
-  `request_failed`). `GrantRevoked` means a grant that existed (a refresh, a call).
+  `request_failed`). `GrantRevoked` means a grant that existed (a refresh, a call). A refusal of the exchange, a refresh
+  or a revoke is read from its body even beside a `WWW-Authenticate` challenge (Doorkeeper sends one on every error;
+  RFC 6749 §5.2 asks for one beside a 401 `invalid_client`).
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
   (Atlassian) with `content-type: application/json`, the client's parameters in it as `clientAuth` says (Basic stays a
   header). The answer is read as a form-bodied one is.

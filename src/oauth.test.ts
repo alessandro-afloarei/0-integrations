@@ -150,6 +150,41 @@ test('a code exchange the server refuses is classified as a `token` sign-in\'s f
     .rejects.toBeInstanceOf(GrantRevoked);
 });
 
+test('a refusal that carries a `WWW-Authenticate` challenge is read from its body, as any other refusal is', async () => {
+  // Doorkeeper sends the header on every token error; RFC 6749 §5.2 asks for it beside a 401 `invalid_client`.
+  const codeVerifier = 'private-code-verifier-0123456789';
+  const refreshToken = 'private-refresh-token-0123456789';
+  const challenged = (body: string, status: number, scheme = 'Bearer') => fakeFetch([{ url: /https:/, respond: () => new Response(body,
+    { status, headers: { 'content-type': 'application/json', 'www-authenticate': `${scheme} realm="Doorkeeper", error="invalid_grant"` } }) }]).fetch;
+  const exchanged = (fetch: typeof globalThis.fetch) => exchangeCode(pkced, client, { ...exchange, codeVerifier, fetch });
+  const refreshed = (fetch: typeof globalThis.fetch) => refreshGrant(pkced, client, refreshToken, { fetch });
+  const grantError = JSON.stringify({ error: 'invalid_grant', error_description: 'The provided authorization grant is invalid.' });
+  await expect(exchanged(challenged(grantError, 400))).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
+  await expect(refreshed(challenged(grantError, 400))).rejects.toEqual(new GrantRevoked('invalid_grant'));
+  const clientError = JSON.stringify({ error: 'invalid_client' });
+  await expect(exchanged(challenged(clientError, 401, 'Basic'))).rejects.toEqual(new ProviderHttpError('rejected', 401, 'invalid_client'));
+  await expect(refreshed(challenged(clientError, 401, 'Basic'))).rejects.toEqual(new ProviderHttpError('request_failed', 401, 'invalid_client'));
+  // A revoke reads it the same way: `invalid_grant` there is a grant already gone, so the revoke is done.
+  const revoking = challenged(grantError, 400);
+  await expect(revokeGrant(bodied, { accessToken: 'private-access-token-0123456789', client, fetch: revoking })).resolves.toBeUndefined();
+  await expect(revokeGrant(bodied, { accessToken: 'private-access-token-0123456789', client, fetch: challenged(clientError, 401, 'Basic') }))
+    .rejects.toEqual(new ProviderHttpError('request_failed', 401, 'invalid_client'));
+  // Hostile: a body that is not JSON, an `error` that is no short token or echoes what was sent; and a 200 beside the header.
+  // Each request's own secrets: the exchange sends the code and the verifier, the refresh the refresh token.
+  for (const [run, code, sent] of [[exchanged, 'rejected', [client.clientSecret, exchange.code, codeVerifier]],
+    [refreshed, 'request_failed', [client.clientSecret, refreshToken]]] as const) {
+    for (const body of ['<html>denied</html>', JSON.stringify({ error: 'a long sentence, not a code' }), ...sent.map(value => JSON.stringify({ error: value }))]) {
+      const error: unknown = await run(challenged(body, 400)).catch((thrown: unknown) => thrown);
+      expect(error).toEqual(new ProviderHttpError(code, 400, null));
+      const serialized = JSON.stringify({ fields: { ...(error as object) }, message: (error as Error).message, cause: (error as Error).cause });
+      for (const value of [body, ...sent]) expect(serialized).not.toContain(value);
+    }
+  }
+  const granted = fakeFetch([{ url: /https:/, respond: () => Response.json(token, { headers: { 'www-authenticate': 'Bearer realm="x"' } }) }]).fetch;
+  await expect(exchanged(granted)).resolves.toMatchObject({ grant: { accessToken: 'a', refreshToken: 'r' } });
+  await expect(refreshed(granted)).resolves.toMatchObject({ accessToken: 'a', refreshToken: 'r' });
+});
+
 test("a refused exchange's detail never echoes the code, the verifier or the client's secret", async () => {
   const verifier = 'private-code-verifier-0123456789';
   for (const echoed of [exchange.code, verifier, client.clientSecret]) {
