@@ -26,6 +26,7 @@ export const smartsheet = defineProvider({
     help: 'For your own Smartsheet account, made in the product you picked (a token works there alone): Smartsheet recommends OAuth for apps acting for other people. The API needs a Business or Enterprise plan, and a viewer cannot write to a sheet.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{apiHost}/2.0', host: hosts, minIntervalMs: 200, retry: { defaultWaitMs: 60_000 } },
+  errors: { detail: 'errorCode' },
   identify: { request: { path: '/users/me' }, id: 'id', name: 'email' },
   operations: {
     'rows.list': { docs: `${reference}/sheets/getsheet.md`, path: '/sheets/{sheetId}',
