@@ -52,7 +52,7 @@ export const helpscout = defineProvider({
         status: { in: 'body', type: 'string', required: true, enum: ['active', 'closed', 'pending'] },
         customer: { in: 'body', type: customer, required: true },
         threads: { in: 'body', type: [{ type: 'reply', draft: true, text: 'string', customer }], required: true,
-          description: 'One reply thread, a draft: nothing is sent until someone sends it in Help Scout.' },
+          description: 'One reply thread, a draft: Help Scout sends the reply only when someone sends it; automatic workflows still run on new conversations.' },
         assignTo: { in: 'body', type: 'integer' }, tags: { in: 'body', type: ['string'] } },
       anyOf: [['customer.id'], ['customer.email']], result: { 'threadIds?': ['integer'] } },
     'conversations.update': { docs: `${ref}/conversations/update/`, method: 'PATCH', path: '/v2/conversations/{conversationId}',

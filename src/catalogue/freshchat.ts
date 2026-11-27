@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Freshchat: an API key an admin generates, Bearer, on the account's host; a 429 past the plan's hourly limit. A
- * message an agent sends reaches the user, a new conversation's too (each an agent's). No list holds every
- * conversation: `conversations.list` names one user's; `messages.list` answers one page. Webhooks are RSA-signed:
+ * message an agent sends reaches the user, a new conversation's too (the agent's normal message). No list holds
+ * every conversation: `conversations.list` names one user's; `messages.list` answers one page. Signed webhooks (RSA):
  * https://crmsupport.freshworks.com/support/solutions/articles/50000004461-freshchat-webhooks-payload-structure-and-authentication */
 const conversation = { conversation_id: 'string', 'status?': 'string', 'channel_id?': 'string', 'assigned_agent_id?': 'string',
   'assigned_group_id?': 'string', 'app_id?': 'string', 'properties?': 'unknown' } as const;
@@ -39,8 +39,8 @@ export const freshchat = defineProvider({
     'conversations.create': { docs: `${ref}/#create_a_conversation`, method: 'POST', path: '/conversations',
       params: { channel_id: { in: 'body', type: 'string', required: true, description: 'The topic the conversation is created under: an id from channels.list.' },
         messages: { in: 'body', required: true,
-          type: [{ actor_type: 'agent', actor_id: 'string', 'message_parts?': [{ text: { content: 'string' } }], 'message_type?': 'string' }],
-          description: 'Each an agent\'s: actor_id is the agent the page requires. message_type is normal by default, which the user sees, or private, kept internal (the entry does not check the value).' },
+          type: [{ actor_type: 'agent', actor_id: 'string', 'message_parts?': [{ text: { content: 'string' } }] }],
+          description: 'Each an agent\'s: actor_id is the agent the page requires.' },
         users: { in: 'body', type: [{ id: 'string' }], required: true, description: 'The user the conversation is with.' },
         status, ...assigned, assigned_agent_id: { in: 'body', type: 'string' } },
       result: conversation },
