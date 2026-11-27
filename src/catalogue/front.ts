@@ -32,8 +32,8 @@ export const front = defineProvider({
   http: { baseUrl: 'https://api2.frontapp.com', retry: {} },
   identify: { request: { path: '/me' }, id: 'id', name: 'name' },
   // An application webhook: the base64 HMAC-SHA256 of the millisecond timestamp, a `:` and the raw body, keyed with the
-  // webhook's token. Front states no window: the library's 300 seconds apply. Saving the URL sends a signed `type: 'sync'`
-  // request, answered with `x-front-challenge` as text: https://dev.frontapp.com/docs/application-webhooks
+  // app's signing key (the page's `token`). Front states no window: the library's 300 seconds apply. Saving the URL sends
+  // a signed `type: 'sync'` request, answered with `x-front-challenge` as text: https://dev.frontapp.com/docs/application-webhooks
   webhook: { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', encoding: 'base64',
     timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
     challenge: { when: { path: 'type', equals: 'sync' }, echo: { header: 'x-front-challenge' }, text: true } },
