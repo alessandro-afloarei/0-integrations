@@ -137,12 +137,17 @@ export function declaredUrls(entry: Entry): string[] {
     ...auth.kind === 'token' ? [auth.request.url] : []];
 }
 
+/** The authorize URL's parameters the engine writes itself: an entry's `authorizeParams` never replace one. */
+export const ENGINE_PARAMS: readonly string[] = ['client_id', 'scope', 'redirect_uri', 'state', 'code_challenge', 'code_challenge_method'];
+
 /** The one refusal every send runs first: a first sign-in that declares its own part (`sign_in_own_first`: an app's entry
- * built without the types), a declared URL that is not a well-formed template or a named host with no domain to match
- * (`base_host_refused`), hosts that split (`host_split`), then a value that is neither a field nor a `save` key
- * (`value_undeclared`: a connection kept from another sign-in), each before a credential is read or anything is sent. */
+ * built without the types), a public client without PKCE (`pkce_required`), a declared URL that is not a well-formed
+ * template or a named host with no domain to match (`base_host_refused`), hosts that split (`host_split`), then a value
+ * that is neither a field nor a `save` key (`value_undeclared`: a connection kept from another sign-in), each before a
+ * credential is read or anything is sent. */
 export function checkHosts(entry: Entry, values: Values = {}): void {
   if (['fields', 'http', 'identify'].some(name => name in entry.auth[0])) throw new TypeError(`sign_in_own_first: ${entry.id}`);
+  if (entry.auth[0].kind === 'oauth2' && entry.auth[0].clientAuth === 'none' && entry.auth[0].pkce === false) throw new TypeError(`pkce_required: ${entry.id}`);
   if (declaredUrls(entry).some(url => hostPart(url) === undefined)) throw new TypeError(`base_host_refused: ${entry.id}`);
   const domainless = [entry.http.host ?? '*'].flat().every(host => host === '*' || host === ''); // an app's `[]` or `['*']` too
   if (Object.keys(namedHosts(entry)).length > 0 && domainless) throw new TypeError(`base_host_refused: ${entry.id}`);

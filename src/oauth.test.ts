@@ -281,6 +281,86 @@ test('an error never carries the Basic client credential the request sent, form-
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(`Basic ${sent}`));
 });
 
+/** The client in the body (no `clientAuth`), an RFC 7009 revoke, no PKCE. */
+const bodied = defineProvider({ id: 'bodied', name: 'Bodied', auth: [{ kind: 'oauth2', authorizeUrl: 'https://bodied.test/authorize',
+  tokenUrl: 'https://bodied.test/token', pkce: false }], scopes: { default: [] },
+  revoke: { url: 'https://bodied.test/revoke', token: ['access'] }, http: { baseUrl: 'https://api.bodied.test' } });
+
+test('a client in the body: the exchange, the refresh and the revoke each send its id and secret in the body, no Basic', async () => {
+  const fake = endpoint(token);
+  await exchangeCode(bodied, client, { ...exchange, fetch: fake.fetch });
+  await refreshGrant(bodied, client, 'r', { fetch: fake.fetch });
+  await revokeGrant(bodied, { accessToken: 'a', client, fetch: fake.fetch });
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(undefined));
+  expect(fake.calls.map(call => Object.fromEntries(new URLSearchParams(call.body)))).toEqual([
+    { code: exchange.code, redirect_uri: exchange.redirectUri, grant_type: 'authorization_code', client_id: 'id', client_secret: client.clientSecret },
+    { refresh_token: 'r', grant_type: 'refresh_token', client_id: 'id', client_secret: client.clientSecret },
+    { token: 'a', client_id: 'id', client_secret: client.clientSecret },
+  ]);
+});
+
+test("no error detail echoes the client's Basic value, even from a request that sent its client in the body", async () => {
+  // `id:abcdef` encodes to base64 without padding, so an echo of it would pass the detail pattern.
+  const sent = Buffer.from('id:abcdef').toString('base64');
+  const echoing = { clientId: 'id', clientSecret: 'abcdef' };
+  const echo = endpoint({ error: sent }, 400);
+  for (const run of [
+    () => exchangeCode(bodied, echoing, { ...exchange, fetch: echo.fetch }),
+    () => refreshGrant(bodied, echoing, 'r', { fetch: echo.fetch }),
+    () => revokeGrant(bodied, { accessToken: 'a', client: echoing, fetch: echo.fetch }),
+  ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(undefined));
+});
+
+/** A public client (RFC 6749 §2.1): its id in the body, no secret, PKCE on (Firecrawl's shape). */
+const publicClient = defineProvider({ id: 'publicclient', name: 'Public', auth: [{ kind: 'oauth2', authorizeUrl: 'https://public.test/authorize',
+  tokenUrl: 'https://public.test/token', clientAuth: 'none' }], scopes: { default: [] },
+  revoke: { url: 'https://public.test/revoke', token: ['refresh'] }, http: { baseUrl: 'https://api.public.test' } });
+
+test("clientAuth 'none': the exchange, the refresh and the revoke send the client's id, and no secret or authorization", async () => {
+  const fake = endpoint(token);
+  await exchangeCode(publicClient, { clientId: 'id' }, { ...exchange, codeVerifier: 'v', fetch: fake.fetch });
+  await refreshGrant(publicClient, { clientId: 'id' }, 'r', { fetch: fake.fetch });
+  await revokeGrant(publicClient, { refreshToken: 'r', client: { clientId: 'id' }, fetch: fake.fetch });
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual([undefined, undefined, undefined]);
+  expect(fake.calls.map(call => Object.fromEntries(new URLSearchParams(call.body)))).toEqual([
+    { code: exchange.code, redirect_uri: exchange.redirectUri, code_verifier: 'v', grant_type: 'authorization_code', client_id: 'id' },
+    { refresh_token: 'r', grant_type: 'refresh_token', client_id: 'id' },
+    { token: 'r', client_id: 'id' },
+  ]);
+});
+
+test("clientAuth 'none': a secret an untyped caller passes anyway is never sent", async () => {
+  const untyped = client as unknown as { clientId: string };
+  const fake = endpoint(token);
+  await exchangeCode(publicClient, untyped, { ...exchange, codeVerifier: 'v', fetch: fake.fetch });
+  await refreshGrant(publicClient, untyped, 'r', { fetch: fake.fetch });
+  await revokeGrant(publicClient, { refreshToken: 'r', client: untyped, fetch: fake.fetch });
+  // Basic would carry it base64-encoded: no call has an `authorization` header, and no body holds it raw.
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual([undefined, undefined, undefined]);
+  for (const call of fake.calls) expect(JSON.stringify(call)).not.toContain(client.clientSecret);
+});
+
+test("clientAuth 'none': an untyped caller's secret that is no string still fails as the provider's refusal", async () => {
+  const odd = { clientId: 'id', clientSecret: 123 } as unknown as { clientId: string };
+  const refused = endpoint({ error: 'invalid_request' }, 400);
+  await expect(refreshGrant(publicClient, odd, 'old-refresh', { fetch: refused.fetch })).rejects.toMatchObject({ code: 'request_failed', detail: 'invalid_request' });
+  expect(refused.calls.map(call => call.body)).toEqual(['refresh_token=old-refresh&grant_type=refresh_token&client_id=id']);
+});
+
+test("clientAuth 'none' beside `pkce: false` is refused before anything is sent: a public client needs PKCE", async () => {
+  const bare = defineProvider({ ...publicClient, auth: [{ ...publicClient.auth[0], pkce: false }] });
+  const fake = endpoint(token);
+  expect(() => authorizeUrl(bare, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's' })).toThrow('pkce_required: publicclient');
+  await expect(exchangeCode(bare, { clientId: 'id' }, { ...exchange, fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
+  await expect(refreshGrant(bare, { clientId: 'id' }, 'r', { fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
+  await expect(revokeGrant(bare, { refreshToken: 'r', client: { clientId: 'id' }, fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
+  // A revoke sent as a request reaches no token URL, and is refused all the same.
+  const byRequest = defineProvider({ ...bare, revoke: { request: { method: 'POST', path: '/revoke' } } });
+  await expect(revokeGrant(byRequest, { accessToken: 'a', fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
+  expect(fake.calls).toEqual([]);
+});
+
 /** A token endpoint that takes JSON, the client id and secret in the body, no PKCE (Atlassian's shape). */
 const jsonBodied = defineProvider({ id: 'jsonbodied', name: 'JSON', auth: [{ kind: 'oauth2', authorizeUrl: 'https://json.test/authorize',
   tokenUrl: 'https://json.test/token', json: true, pkce: false }], scopes: { default: [] },
@@ -703,3 +783,53 @@ test.each([['authorizeUrl', 'https://{host}/authorize'], ['tokenUrl', 'https://{
       .rejects.toThrow(new TypeError('template_missing: named {host}'));
     expect(fake.calls).toEqual([]);
   });
+
+/** A client whose secret answers another value on each read, as a getter may. */
+const shifting = () => {
+  const secrets = ['abcdef', 'ghijkl', 'mnopqr', 'stuvwx'];
+  let reads = 0;
+  return { client: { clientId: 'id', get clientSecret() { return secrets[reads++ % secrets.length] ?? ''; } }, reads: () => reads };
+};
+/** A token endpoint that answers 400 with the client's credential it was sent, its Basic value or its body secret. */
+const echoing = () => fakeFetch([{ url: /https:\/\//, respond: async (sent: Request) => Response.json({ error: sent.headers.get('authorization')
+  ?.slice('Basic '.length) ?? (JSON.parse(await sent.text()) as { client_secret?: string }).client_secret }, { status: 400 }) }]);
+
+test.each([['basic', pkced], ['post', jsonBodied]] as const)('a %s secret is read once: the value sent is the value no error detail echoes', async (_, entry) => {
+  const { client: changing, reads } = shifting();
+  const echo = echoing();
+  await expect(refreshGrant(entry, changing, 'old-refresh', { fetch: echo.fetch })).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(reads()).toBe(1);
+});
+
+test("a public client's secret is never read", async () => {
+  const { client: changing, reads } = shifting();
+  await refreshGrant(publicClient, changing, 'old-refresh', { fetch: endpoint(token).fetch });
+  expect(reads()).toBe(0);
+});
+
+test('the code and the verifier are read once: validated, sent and redacted as the same values', async () => {
+  let verifierReads = 0;
+  let codeReads = 0;
+  const fake = endpoint(token);
+  // Getters, never spread: a spread would read each once before the engine does.
+  const input = { redirectUri: exchange.redirectUri, fetch: fake.fetch, get codeVerifier() { return verifierReads++ === 0 ? 'v'.repeat(43) : ''; },
+    get code() { return codeReads++ === 0 ? 'first-code' : 'other-code'; } };
+  await exchangeCode(publicClient, { clientId: 'id' }, input);
+  expect(new URLSearchParams(fake.calls[0]?.body).get('code_verifier')).toBe('v'.repeat(43));
+  expect([verifierReads, codeReads]).toEqual([1, 1]);
+});
+
+test("an entry's authorizeParams never replace the parameters the engine sends", () => {
+  const own = { client_id: 'evil', redirect_uri: 'https://evil.test', state: 'x', scope: 'all', code_challenge: 'c', code_challenge_method: 'plain' };
+  const overriding = defineProvider({ ...pkced, auth: [{ ...pkced.auth[0], authorizeParams: { response_type: 'code', ...own } }] });
+  const url = authorizeUrl(overriding, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: ['read'], state: 's', codeChallenge: 'challenge' });
+  expect(Object.fromEntries(url.searchParams)).toEqual({ client_id: 'id', scope: 'read', redirect_uri: exchange.redirectUri, state: 's',
+    code_challenge: 'challenge', code_challenge_method: 'S256', response_type: 'code' });
+});
+
+test("an entry's authorizeParams still replace a parameter its authorize URL carries", () => {
+  const prompted = defineProvider({ ...pkced, auth: [{ ...pkced.auth[0], authorizeUrl: 'https://auth.test/authorize?prompt=none',
+    authorizeParams: { prompt: 'consent' } }] });
+  const url = authorizeUrl(prompted, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's', codeChallenge: 'challenge' });
+  expect(url.searchParams.getAll('prompt')).toEqual(['consent']);
+});

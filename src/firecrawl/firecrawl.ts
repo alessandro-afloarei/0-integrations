@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { signInWith } from '../catalogue.js';
 import { ProviderHttpError } from '../errors.js';
 import { createClient } from '../http.js';
 import { parseAnswer } from '../parse.js';
@@ -29,7 +30,7 @@ const renderFailed = (error: unknown) => error instanceof ProviderHttpError && (
   || error.code === 'invalid_response' || (error.code === 'request_failed' && error.status !== 402));
 
 export function firecrawlClient(input: { apiKey: string; fetch: typeof fetch }): FirecrawlClient {
-  const http = createClient(firecrawl, { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
+  const http = createClient(signInWith(firecrawl, 'key'), { token: () => Promise.resolve(input.apiKey), fetch: input.fetch });
   // A map or a plain scrape changes nothing, so it is retried like a GET. A scrape that runs a script may already have
   // acted on the page: it is sent once, and a 429 fails with the wait Firecrawl names.
   const post = (path: string, json: unknown, idempotent = true) => http.json(path, { method: 'POST', json, idempotent });

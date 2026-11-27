@@ -5,7 +5,9 @@ on `oauth4webapi`, each driven by a catalogue entry whose sign-in is OAuth 2. `p
 uses it. The app owns the state nonce. The scopes asked are joined by the entry's `scopeSeparator` (a space by
 default); none asked sends no `scope` parameter. `exchangeCode` returns only the token-answer fields the entry reads
 (`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
-condition marks is refused with the entry's own code.
+condition marks is refused with the entry's own code. An entry's `authorizeParams` never replace a parameter the
+engine sends (`client_id`, `scope`, `redirect_uri`, `state`, `code_challenge`, `code_challenge_method`). The client's
+secret, the code and the verifier are each read once, so the value checked is the value sent and redacted.
 
 Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` (the
 refresh URL also from a host the token answer named, below) and checked as a base is, and a URL that names a value not
@@ -34,6 +36,17 @@ keeps no state): an app passes back the `values` it stored with the grant, uncha
 URLs never name one, since no token answer exists before them (`template_missing`). With `json: true` (Atlassian) the exchange, the refresh and an RFC 7009
 revoke send their parameters as one JSON object (`content-type: application/json`); Basic client authentication stays a
 header.
+
+The client sends its id and secret in the body unless the entry's `clientAuth` says otherwise: `'basic'` sends them by
+HTTP Basic on every request. No error detail echoes the secret or its Basic value, whichever a request sent.
+
+`clientAuth: 'none'` is a public client (Firecrawl's): the exchange, the refresh and an RFC 7009 revoke send its
+`client_id` in the body and no secret, even one an untyped caller passes. The app obtains its `client_id` itself (Dynamic
+Client Registration, or the URL of a client ID metadata document); nothing here registers one. Each function types its
+client by the entry, `OAuthClient<typeof firecrawl>` being `{ clientId }`, so a typed caller is never asked for a secret
+(one passed anyway is not sent), and a confidential entry's client must have one (`OAuthClient` alone, for an entry
+typed `Entry`, has one too). A public client needs PKCE: an entry that declares `'none'` beside `pkce: false` is refused
+before anything is built or sent, a revoke by request included (`TypeError('pkce_required: <entry id>')`).
 
 `revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke: an RFC 7009 revoke of the
 first token the entry's `revoke.token` names (it needs `client`, else `oauth_client_required`), or the entry's

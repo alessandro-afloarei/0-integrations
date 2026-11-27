@@ -121,9 +121,10 @@ const answerPaths = (value: Value | undefined) => {
  * at the entry's id and name paths), a token request for a `token` entry, an OAuth 2 entry's token, refresh and revoke
  * URLs for `client` and `code`, and each declared operation the app answers. A request without the credential the entry
  * sends is 401. Of two routes that match, the one whose first differing segment is literal answers. */
-export function fakeProvider<const E extends Entry>(entry: E, data: { key: string; values?: Values; account?: unknown; client?: OAuthClient; code?: string;
+export function fakeProvider<const E extends Entry>(entry: E, data: { key: string; values?: Values; account?: unknown; client?: OAuthClient<E>; code?: string;
   operations?: E extends { operations: infer O } ? { [K in keyof O]?: Answer } : Record<string, never> }): Route[] {
-  const { key, values = {}, code = 'kit-code', client: { clientId, clientSecret } = { clientId: 'kit-client', clientSecret: 'kit-secret' } } = data;
+  const { key, values = {}, code = 'kit-code' } = data;
+  const { clientId, clientSecret = 'kit-secret' }: { clientId: string; clientSecret?: string } = data.client ?? { clientId: 'kit-client' };
   const operations = (data.operations ?? {}) as Readonly<Record<string, Answer | undefined>>;
   const [auth] = entry.auth;
   // The engine's own rules fill the base and the credential, so the fake and the engine never disagree.
@@ -215,9 +216,11 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
   }
   const urls = oauthUrls(entry);
   if (auth.kind === 'oauth2' && urls !== undefined) {
-    // The client authentication the entry declares, encoded as RFC 6749 §2.3.1 says: a Basic header, or the body's pair.
+    // The client authentication the entry declares, encoded as RFC 6749 §2.3.1 says: a Basic header, the body's pair, or
+    // a public client's id alone.
     const client = { headers: new Headers(), body: new URLSearchParams() };
-    void (auth.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(clientSecret)({ issuer: '' }, { client_id: clientId }, client.body, client.headers);
+    void (auth.clientAuth === 'none' ? oauth.None() : (auth.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(clientSecret))(
+      { issuer: '' }, { client_id: clientId }, client.body, client.headers);
     for (const url of new Set([urls.token, urls.refresh, urls.revoke ?? urls.token])) {
       routes.push(route('POST', target(new URL(filledBase(entry, values, url))), '', async (_call, sent) => {
         // A grant comes in the encoding the entry declares, as the engine sends it: checked before its body is read.
@@ -225,9 +228,9 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
         const revokeOnly = url === urls.revoke && url !== urls.token && url !== urls.refresh;
         if (!revokeOnly && type !== (auth.json ? 'application/json' : 'application/x-www-form-urlencoded')) return Response.json({ error: 'invalid_request' }, { status: 400 });
         const body = new URLSearchParams(auth.json ? parseJson(await sent.text()) as Record<string, string> : await sent.text());
-        // One method per request (RFC 6749 §2.3.1): with Basic, no client secret in the body.
+        // One method per request (RFC 6749 §2.3.1): a client secret in the body only where the method puts it there.
         const sameClient = sent.headers.get('authorization') === client.headers.get('authorization') && [...client.body].every(([name, value]) => body.get(name) === value)
-          && (auth.clientAuth !== 'basic' || !body.has('client_secret'));
+          && body.has('client_secret') === client.body.has('client_secret');
         if (!sameClient) return Response.json({ error: 'invalid_client' }, { status: 401 });
         // A revoke names its token (RFC 7009 §2.1); on a URL it shares with a grant, a request with a `grant_type` is that grant.
         if (url === urls.revoke && !body.has('grant_type')) {
