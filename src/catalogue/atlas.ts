@@ -2,7 +2,7 @@ import { defineProvider } from '../catalogue.js';
 
 /** Atlas: an admin's API key as Bearer, on Atlas's one paid plan (https://www.atlas.so/pricing). No endpoint names the
  * account, so identify only checks the key, as the authentication page does. Lists answer one page: no page says what
- * the answer's `cursor` is. `messages.create` sends an agent's message to the customer. No rate limit is stated; the
+ * the answer's `cursor` is. `messages.create` sends an agent's message to the customer. No limit status is stated; the
  * webhook's hash is not (https://help.atlas.so/articles/890811-webhook-events). */
 const ref = 'https://developers.atlas.so/reference';
 const conversation = { id: 'string', customerId: 'string', 'number?': 'integer', 'subject?': 'string', 'status?': 'string',
