@@ -551,9 +551,11 @@ a shape's `send` writes: the walk sends it.
   read, a skipped record included (`{ entries }`), reach the number at that path in that page's answer. The number is
   read from each answer, never carried from an earlier one. It counts what the walk read, never the page number it
   sent, so `zeroBased` changes nothing. A `total` that is missing, or not a non-negative safe integer, is
-  `invalid_response` (`missing_fields`): a malformed answer never reads as an end. An empty list still ends the walk,
-  a falsy `more` still ends it, and `page_repeated` still applies, so a total larger than what the pages hold ends
-  there, loudly. Declare `total` where a page past the last answers the last page again, or where no page states what
+  `invalid_response` (`missing_fields`): a malformed answer never reads as an end. A falsy `more` still ends the
+  walk, and `page_repeated` still applies. An empty list ends it only once the count is reached: before, it is
+  `invalid_response` (`missing_fields`), so the walk never ends short of the count. A total larger than what the pages
+  hold ends loudly (`page_repeated`, `missing_fields`, or the provider's own error), unless a declared `more` ends the
+  walk first. Declare `total` where a page past the last answers the last page again, or where no page states what
   it answers; cite the field's meaning. Pages counted from 1 are cited as for any `page` shape.
 - `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
   request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the

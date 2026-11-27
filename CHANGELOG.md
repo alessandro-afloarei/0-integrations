@@ -7,9 +7,9 @@ Nothing here is released yet.
 - A `page`, `offset` or `last` walk whose page equals its first page is `page_repeated`, as one equal to the page before
   is: a provider that answers its first page again past the end no longer yields it a second time, or walks on forever.
 - Breaking: a `page` walk may stop at the answer's count (`total: { pages }` or `{ entries }`, read from each answer;
-  one missing or not a non-negative whole number is `invalid_response`). Smartsheet's `sheets.list` and `rows.list`
-  return an async iterator of records, not one page (`for await (const sheet of api.sheets.list())`), walked to
-  `totalPages` and `totalRowCount`. Their `page` argument is gone: an app that paged by hand drops its loop.
+  one missing or not a non-negative whole number, or an empty page before it is reached, is `invalid_response`).
+  Smartsheet's `sheets.list` and `rows.list` return an async iterator of records, not one page (`for await (const sheet
+  of api.sheets.list())`), walked to `totalPages` and `totalRowCount`. Their `page` argument is gone: an app that paged by hand drops its loop.
 - Breaking: GraphQL lists page through their variables (`send: { variables }`). Linear's `issues.list` and
   `teams.list` return an async iterator of records, not one page (`for await (const issue of api.issues.list({ teamId
   }))`). Their `after` variable is gone, and `first` is the page size.

@@ -73,7 +73,8 @@ function withCursor(where: Where, options: RequestOptions, cursor: string | numb
  * the answer's own last entry, so a skipped record still gives it. A missing list, or one that is no list, is
  * `invalid_response`: a malformed answer never reads as an empty list. A list equal to the page before's or the first
  * page's is `page_repeated`: the provider ignores the value, or answers its first page past the end, and would never end. A `page` list with `total` also ends once the
- * pages, or the entries (a skipped record included), it read reach the number each answer names. */
+ * pages, or the entries (a skipped record included), it read reach the number each answer names; an empty page before
+ * then is `invalid_response`. */
 function listed(http: HttpClient, shape: Listed, path: string, options: RequestOptions) {
   let previous: string | undefined;
   let first: string | undefined;
@@ -90,8 +91,9 @@ function listed(http: HttpClient, shape: Listed, path: string, options: RequestO
     if (shape.kind === 'last') return { items: [answer], skipped: [], cursor: list.length === 0 ? null : nextCursor(shape, answer, list.at(-1)) };
     const total = shape.kind === 'page' ? shape.total : undefined;
     const count = total && readPath(answer, 'pages' in total ? total.pages : total.entries);
-    if (total && !(Number.isSafeInteger(count) && Number(count) >= 0)) throw new ProviderHttpError('invalid_response', null, 'missing_fields');
     read += total && 'pages' in total ? 1 : list.length;
+    // A count that is no count, or an empty page before it is reached, would end the walk short.
+    if (total && !(Number.isSafeInteger(count) && Number(count) >= 0 && (list.length > 0 || read >= Number(count)))) throw new ProviderHttpError('invalid_response', null, 'missing_fields');
     const end = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more)) || (total !== undefined && read >= Number(count));
     const next = shape.kind === 'offset' ? Number(page ?? 0) + list.length
       : Number(page ?? (shape.zeroBased ? 0 : 1)) + 1;

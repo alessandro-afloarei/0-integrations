@@ -281,11 +281,25 @@ test('page with total: a total that is missing or no non-negative safe integer i
   const later = await pageWalk(entries, [{ data: [1], total: 5 }, { data: [2] }, { data: [3], total: 5 }]);
   expect([later.urls.length, later.pages.length, later.error]).toEqual([2, 1, expect.objectContaining({ detail: 'missing_fields' })]);
 });
-test('page with total: a total larger than the pages hold ends on page_repeated, or on the empty list', async () => {
+test('page with total: a total larger than the pages hold ends on page_repeated, or on an empty page as missing_fields', async () => {
   const repeated = await pageWalk(entries, [{ data: [1], total: 99 }, { data: [2], total: 99 }, { data: [2], total: 99 }]);
   expect([repeated.urls.length, repeated.error]).toEqual([3, expect.objectContaining({ code: 'invalid_response', detail: 'page_repeated' })]);
-  const emptied = await pageWalk(entries, [{ data: [1], total: 99 }, { data: [], total: 99 }, { data: [], total: 99 }]);
-  expect([emptied.urls.length, emptied.error]).toEqual([2, undefined]);
+  const short: unknown = expect.objectContaining({ code: 'invalid_response', detail: 'missing_fields' });
+  const entriesShort = await pageWalk(entries, [{ data: [1, 2], total: 7 }, { data: [3, 4], total: 7 }, { data: [], total: 7 }, { data: [], total: 7 }]);
+  expect([entriesShort.urls.length, entriesShort.pages.length, entriesShort.error]).toEqual([3, 2, short]);
+  const pagesShort = await pageWalk(pages, [{ data: [1], totalPages: 4 }, { data: [2], totalPages: 4 }, { data: [], totalPages: 4 }, { data: [], totalPages: 4 }]);
+  expect([pagesShort.urls.length, pagesShort.pages.length, pagesShort.error]).toEqual([3, 2, short]);
+  for (const [shape, first] of [[entries, { data: [], total: 3 }], [pages, { data: [], totalPages: 2 }]] as const) {
+    const empty = await pageWalk(shape, [first, first]);
+    expect([empty.urls.length, empty.pages, empty.error]).toEqual([1, [], short]);
+  }
+  // An empty first page with a count of 0, or a last counted page that is empty, ends cleanly; so does any empty page
+  // of a shape without `total`.
+  for (const [shape, answers] of [[entries, [{ data: [], total: 0 }]], [pages, [{ data: [], totalPages: 0 }]], [pages, [{ data: [], totalPages: 1 }]],
+    [pages, [{ data: [1], totalPages: 2 }, { data: [], totalPages: 2 }]], [{ kind: 'page', send: { query: 'page' }, list: 'data' }, [{ data: [1], total: 99 }, { data: [] }]]] as const) {
+    const ended = await pageWalk(shape, [...answers, { data: [9] }]);
+    expect([ended.urls.length, ended.error]).toEqual([answers.length, undefined]);
+  }
 });
 test('page with total: a record the parser skips still counts toward the entries', async () => {
   const things = defineProvider({ id: 'things', name: 'Things', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' },

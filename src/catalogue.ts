@@ -79,7 +79,7 @@ export type Webhook = (
 export type Where = { query: string } | { body: Path } | { variables: string };
 /** `page`: no number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy, `list` (the
  * answer when absent) is empty, or the pages or entries read (a skipped record counted) reach each answer's `total`; a
- * missing or non-list `list`, or a `total` that is no non-negative safe integer, is `invalid_response`. `offset`: as
+ * missing or non-list `list`, or a `total` that is no non-negative safe integer, or an empty page before it, is `invalid_response`. `offset`: as
  * `page`, the next value the offset sent (0 first) plus the entries in `list`. `last`: as `page`, the next value read at `next` in the
  * list's last record, by the cursor's rules. `linkHeader`, `nextUrl`: the `Link` header's `rel="next"`, or
  * the value at `next`, read on the base's origin when a path, and kept under the base's path and `pathPrefix`. */
