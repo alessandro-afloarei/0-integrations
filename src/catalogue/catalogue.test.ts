@@ -75,7 +75,10 @@ const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName 
     echo: z.union([z.string().min(1), z.strictObject({ query: z.string().min(1, 'a challenge `query` names its parameter: give the name') })]),
     text: z.literal(true).optional(), unsigned: z.literal(true).optional() })
     .refine(item => typeof item.echo === 'string' || item.text === true, 'a challenge read from a query is answered as text: give `text: true`').optional() };
-const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() }),
+/** A body place's path: no empty segment, none that names a prototype. */
+const bodyPath = z.string().refine(path => path.split('.').every(segment => segment !== '' && !['__proto__', 'constructor', 'prototype'].includes(segment)),
+  'a `body` place is a dotted path of keys: no empty segment, and no `__proto__`, `constructor` or `prototype`');
+const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: bodyPath }),
   z.strictObject({ variables: z.string().min(1, 'a `variables` place names the GraphQL variable: give the name') })]);
 /** A `page` shape's count: of pages or of entries, one path to it. */
 const countPath = z.string().min(1, "a `total` is a path to the answer's count: give it");
@@ -793,11 +796,16 @@ test.each<[Rule, Entry]>([
       result: { data: [{ id: 'string' }], items: [{ id: 'string' }] } } } })],
   ...([[{ kind: 'page', send: { query: 'page' } }, 'page', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'cursor', 'body'],
     [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'q', 'form'],
-    [{ kind: 'last', next: 'id', send: { query: 'after' } }, 'after', 'query'], [{ kind: 'last', next: 'id', send: { body: 'after' } }, 'q', 'form']] as const)
+    [{ kind: 'last', next: 'id', send: { query: 'after' } }, 'after', 'query'], [{ kind: 'last', next: 'id', send: { body: 'after' } }, 'q', 'form'],
+    [{ kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } }, 'pagination', 'body']] as const)
     .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
           params: { [name]: { in: place, type: 'integer' } } } } })]),
+  ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`",
+    defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: { kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } } },
+      operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
+        params: { pagination: { in: 'body', type: { 'cursor?': 'string', 'page_size?': 'integer' } } } } } })],
   ...([[{ kind: 'cursor', next: 'next', send: { query: 'after' } }, { graphql: 'query T($after: String) { t(after: $after) { id } }' }],
     [{ kind: 'nextUrl', next: 'next' }, { graphql: 'query T { t { id } }' }],
     [{ kind: 'cursor', next: 'next', send: { variables: 'after' } }, { method: 'POST', path: '/items' }]] as const)
@@ -1082,6 +1090,8 @@ test.each<[Record<string, unknown>, string]>([
   [{ kind: 'last', next: '', send: { query: 'cursor' } }, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"],
   [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
   [{ kind: 'cursor', next: 'next', send: { variables: '' } }, 'a `variables` place names the GraphQL variable: give the name'],
+  ...['a.__proto__.x', 'constructor', 'page.prototype', 'page..number', '', 'page.'].map((body): [Record<string, unknown>, string] => [{ kind: 'cursor', next: 'next', send: { body } },
+    'a `body` place is a dotted path of keys: no empty segment, and no `__proto__`, `constructor` or `prototype`']),
   [{ kind: 'cursor', next: 'next', send: { query: 'cursor' }, total: { pages: 'pages' } }, 'Unrecognized key: "total"'],
   [{ kind: 'offset', send: { query: 'offset' }, total: { entries: 'total' } }, 'Unrecognized key: "total"'],
   [{ kind: 'page', send: { query: 'page' }, total: { pages: 'pages', entries: 'total' } }, 'a `total` counts `pages` or `entries`: give one of them'],

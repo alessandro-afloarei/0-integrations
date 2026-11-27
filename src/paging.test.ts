@@ -3,6 +3,7 @@ import { defineProvider, type Paging } from './catalogue.js';
 import { createClient, type RequestOptions } from './http.js';
 import { followed, nextCursor, ownPath, walk } from './paging.js';
 import { clickup } from './catalogue/clickup.js';
+import { fellow } from './catalogue/fellow.js';
 import { linear } from './catalogue/linear.js';
 import { smartsheet } from './catalogue/smartsheet.js';
 import { client, type Client } from './client.js';
@@ -464,6 +465,44 @@ test('variables: a raw paginate writes into the body\'s variables, made when mis
     const none = fakeFetch([{ url: /https:/, respond: () => Response.json({ next: 'c2' }) }]);
     await expect(walk(createClient(acme, { token, fetch: none.fetch }), shape, '', { method: 'POST', json }).next())
       .rejects.toMatchObject({ code: 'request_failed' });
+    expect(none.calls).toEqual([]);
+  }
+});
+
+test("body path: Fellow's recordings.list sends no cursor first, then pagination.cursor beside the caller's page_size; a null cursor ends", async () => {
+  const answer = (id: string, cursor: string | null) => Response.json({ recordings: { page_info: { cursor, page_size: 1 }, data: [{ id }] } });
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => answer('a', 'c2'), () => answer('b', null)) }]);
+  const ids: string[] = [];
+  for await (const recording of client(fellow, { token: 'k', fetch: fake.fetch, values: { subdomain: 'acme' } })
+    .recordings.list({ pagination: { page_size: 20 } })) ids.push(recording.id);
+  expect(ids).toEqual(['a', 'b']);
+  expect(fake.calls.map(call => call.body)).toEqual(['{"pagination":{"page_size":20}}', '{"pagination":{"page_size":20,"cursor":"c2"}}']);
+});
+
+test("body path: the walk copies each object on the way, so the caller's are never changed; a page number there is a number", async () => {
+  const pagination = { page_size: 20 };
+  const json = { q: 'x', pagination };
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'c2' }), () => Response.json({})) }]);
+  for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), { kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } },
+    '/x', { method: 'POST', json })) expect(page).toBeTypeOf('object');
+  expect(json).toEqual({ q: 'x', pagination: { page_size: 20 } });
+  expect(json.pagination).toBe(pagination);
+  const teamleader = await pageWalk({ kind: 'page', send: { body: 'page.number' }, list: 'data' }, [{ data: [1] }, { data: [] }],
+    { method: 'POST', json: { page: { size: 50 } } });
+  expect(teamleader.bodies).toEqual(['{"page":{"size":50}}', '{"page":{"size":50,"number":2}}']);
+  const made = await pageWalk({ kind: 'page', send: { body: 'page.number' }, list: 'data' }, [{ data: [1] }, { data: [] }], { method: 'POST' });
+  expect(made.bodies).toEqual(['', '{"page":{"number":2}}']);
+});
+
+test('hostile: a body path never writes to a prototype, and a value on the way that is no object is request_failed, nothing sent', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'c2' }), () => Response.json({})) }]);
+  for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), { kind: 'cursor', next: 'next', send: { body: '__proto__.polluted' } },
+    '/x', { method: 'POST', json: {} })) expect(page).toBeTypeOf('object');
+  expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  for (const json of [{ pagination: 'x' }, { pagination: ['x'] }, { pagination: 5 }]) {
+    const none = fakeFetch([{ url: /https:/, respond: () => Response.json({ next: 'c2' }) }]);
+    await expect(walk(createClient(acme, { token, fetch: none.fetch }), { kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } },
+      '/x', { method: 'POST', json }).next()).rejects.toMatchObject({ code: 'request_failed' });
     expect(none.calls).toEqual([]);
   }
 });

@@ -527,7 +527,7 @@ type Paging =
   | { kind: 'last'; next: Path; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
-type Where = { query: string } | { body: string } | { variables: string };
+type Where = { query: string } | { body: Path } | { variables: string };
 type Size = { send: Where; value?: number };
 ```
 
@@ -571,6 +571,11 @@ a shape's `send` writes: the walk sends it.
   a blank value ends it. The value follows the cursor's rule, and one that comes back is `cursor_repeated`, through the
   one `paginate` guard. The last element is read from the answer itself, so a record the parser skips still gives the
   value. An operation on a `last` shape names the shape's `list` as its `records`.
+- A `body` place is a path. The walk writes its value at that path, copying each object along it and creating the
+  ones missing, so the caller's arguments are never changed. No body place declared before paths holds a dot, so none
+  changed meaning. An operation is also `param_paged` when a body parameter is named the path's first segment and its
+  object type declares the rest (with or without `?`), or its type is not an object: the walk would overwrite it. The
+  table refuses an empty segment and a segment `__proto__`, `constructor` or `prototype`.
 - A `variables` place writes the value into the GraphQL request's `variables`, beside the caller's: a cursor as a
   string, a page number or an offset as a number, as a body place does. `cursor`, `page`, `offset` and `last` take it,
   and their stop rules do not change. A GraphQL operation pages only on a shape whose `send` is `variables`, and an

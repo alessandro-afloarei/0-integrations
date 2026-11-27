@@ -8,6 +8,8 @@ Nothing here is released yet.
   `sheets.list` and `rows.list` page to their end and lose their `page` parameter.
 - Breaking: GraphQL lists page through their variables (`send: { variables }`); Linear's `issues.list` and
   `teams.list` page to their end and lose their `after` variable.
+- Breaking: a body paging value may sit at a path (`send: { body: 'pagination.cursor' }`); Fellow's
+  `recordings.list` pages to its end and its `pagination` lost `cursor`.
 - New entries: 25 support providers (atlas, chatwoot, crisp, customerly, devrev, dixa, edesk, freshchat, freshdesk,
   freshservice, gist, groove, happyfox, helpcrunch, helpwise, hiver, liveagent, plain, pylon, reamaze, thena, trengo,
   unthread, zammad, zendesk), each with its category's operations (Plain its reads only). Every entry is `declared`.

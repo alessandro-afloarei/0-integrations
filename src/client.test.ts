@@ -364,6 +364,16 @@ test("an app's GraphQL operation pages only on a `variables` shape, and a path o
   expect(fake.calls).toEqual([]);
 });
 
+test("an app's operation whose body parameter holds, or is no object to hold, the body path its paging writes is refused when built", () => {
+  const entry = (type: object | string) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { list: { kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } } },
+    operations: { 'things.list': { method: 'POST', kind: 'read', path: '/things', paging: 'list', params: { pagination: { in: 'body', type } } } } }) as Entry;
+  for (const type of [{ 'cursor?': 'string' }, { cursor: 'string' }, 'unknown', 'string', ['string']]) {
+    expect(() => client(entry(type), { token: 'k' })).toThrow(new TypeError('param_paged: things.list pagination'));
+  }
+  expect(() => client(entry({ 'page_size?': 'integer' }), { token: 'k' })).not.toThrow();
+});
+
 test('client() refuses an entry checkHosts refuses when it is built, before it reads the token it is given', () => {
   let reads = 0;
   const bent = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: 'https:///api.acme.test' } } as Entry;

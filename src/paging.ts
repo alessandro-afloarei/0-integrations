@@ -64,7 +64,7 @@ function withCursor(where: Where, options: RequestOptions, cursor: string | numb
   if ('query' in where) return { ...options, query: { ...options.query, [where.query]: String(cursor) } };
   // A form holds no body cursor: its next page would carry a JSON body as well.
   if (options.form) throw new ProviderHttpError('request_failed', null);
-  return { ...options, json: written(options.json, 'body' in where ? [where.body] : ['variables', where.variables], cursor) };
+  return { ...options, json: written(options.json, 'body' in where ? where.body.split('.') : ['variables', where.variables], cursor) };
 }
 
 /** A page-number, offset or last-record list's loader: nothing first, then each next value, until the list is empty or
