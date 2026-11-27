@@ -17,8 +17,11 @@ export const google = defineProvider({
   http: { baseUrl: 'https://gmail.googleapis.com/gmail/v1', bases: { calendar: 'https://www.googleapis.com/calendar/v3' },
     headers: { accept: 'application/json' }, retry: {},
     rateLimit: { defaultWaitMs: 60_000, when: [{ status: 429 }, { status: 403, detail: 'rateLimitExceeded' },
-      { status: 403, detail: 'userRateLimitExceeded' }, { status: 403, detail: 'quotaExceeded' }] } },
-  errors: { detail: ['error.errors.0.reason', 'error.status'] },
+      { status: 403, detail: 'userRateLimitExceeded' }] } },
+  // Calendar's usage limits (`quotaExceeded`) stop an action for hours or longer: a rate limit, never retried
+  // (https://support.google.com/a/answer/2905486).
+  errors: { detail: ['error.errors.0.reason', 'error.status'],
+    rules: [{ when: { status: 403, detail: 'quotaExceeded' }, code: 'rate_limited' }] },
   identify: { request: { path: '/users/me/profile' }, id: 'emailAddress', name: 'emailAddress', lowercase: true },
   paging: { pageToken: { kind: 'cursor', next: 'nextPageToken', send: { query: 'pageToken' } } },
   // Calendar push sends no signature: the channel's own `token` comes back on every notification
