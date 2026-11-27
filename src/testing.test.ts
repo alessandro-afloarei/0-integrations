@@ -10,7 +10,7 @@ import { metabase } from './catalogue/metabase.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { slack } from './catalogue/slack.js';
-import { trello } from './catalogue/trello.js';
+import { trello as trelloEntry } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
@@ -22,6 +22,7 @@ import type { Sealed } from './vault.js';
 
 /** GitLab's personal access token sign-in: these tests send `private-token`. */
 const gitlab = signInWith(gitlabEntry, 'key');
+const trello = signInWith(trelloEntry, 'key');
 
 describe('fakeProvider', () => {
   const unauthorized = { status: 401, body: { error: 'unauthorized' } };
