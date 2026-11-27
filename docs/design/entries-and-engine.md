@@ -190,8 +190,9 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
   placeholder, never in a list (the table refuses it there, and the engine matches no host with it), and the entry is
   reached through the address guard below. A filled host that is a blocked address (`127.0.0.1`, `2130706433`) is
-  refused before the token is read, whatever `fetch` the app passes. A list keeps the global `fetch`: every name in it
-  is the provider's own.
+  refused before the token is read, whatever `fetch` the app passes. A name and a list keep the global `fetch`: each
+  name in them is the provider's own, a domain name whose last label holds a letter, never an address (the table
+  refuses `127.0.0.1` and `*.0.1`). A public suffix (`*.co.uk`) is not refused: that needs a suffix list.
 - Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled by this rule, from the plain fields alone:
   a secret field or a `save` key named there is `template_missing`, since neither exists before the exchange. A URL
   with no placeholder is used as written. The refresh URL alone may also name a host the token answer names (below),

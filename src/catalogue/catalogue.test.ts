@@ -200,7 +200,7 @@ const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.s
 const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
 const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (1 000 and 60 000 when left out): the cap would cut a longer default';
 const RETRY_ONLY_STATED = "no `http.retry.defaultWaitMs` beside `onlyStated`: an answer that states no wait is not retried, so the default is never read";
-const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, a non-empty list of those, or `*` alone) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
+const HOST_PATTERN = "an `http.host` pattern (a domain name, never an address; `*.` and a domain; a non-empty list of those; or `*` alone) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
 const ANY_HOST = "`http.host: '*'` only on a base whose whole host is one placeholder a person types: a host the token answer names needs a domain";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
@@ -231,11 +231,11 @@ const runnable = {
   [RETRY_DEFAULT]: ({ http: { retry } }: Entry) => { const { defaultWaitMs, maxWaitMs } = retryPolicy(retry); return defaultWaitMs <= maxWaitMs; },
   [RETRY_ONLY_STATED]: ({ http: { retry } }: Entry) => retry?.onlyStated !== true || retry.defaultWaitMs === undefined,
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
-  // `*` stays alone: in a list it would take any host without the address guard.
+  // `*` stays alone, and a name's last label holds a letter: a list or a name takes the plain fetch, never the address guard.
   [HOST_PATTERN]: (entry: Entry) => {
     const patterns = [entry.http.host ?? []].flat();
     return declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
-      ? entry.http.host === '*' || (patterns.length > 0 && patterns.every(host => /^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/u.test(host)))
+      ? entry.http.host === '*' || (patterns.length > 0 && patterns.every(host => /^(\*\.)?([a-z0-9-]+\.)+[a-z0-9-]*[a-z][a-z0-9-]*$/u.test(host)))
       : entry.http.host === undefined;
   },
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
@@ -622,6 +622,10 @@ test.each<[Rule, Entry]>([
     [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['api.k.test', '*.com'] }],
     [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['api.k.test', 'API.K.EU'] }],
     [HOST_PATTERN, { baseUrl: 'https://api.k.test', host: ['api.k.test'] }],
+    // An address is no name: a list keeps the plain fetch, so the address guard would never see it.
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: '127.0.0.1' }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['127.0.0.1'] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['*.0.1'] }],
     [ANY_HOST, { baseUrl: 'https://{region}.example.com', host: '*' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://api.k.test/{zone}' }],
