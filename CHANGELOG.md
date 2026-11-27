@@ -4,6 +4,26 @@
 
 Nothing here is released yet.
 
+- New: a sign-in after the first may declare its own `fields`, base and host (`http: { baseUrl, host }`, nothing else
+  of `http`) and `identify`; `signInWith` puts them in place of the entry's. The engine refuses an app's entry whose
+  first sign-in declares one, before anything is sent (`sign_in_own_first: <entry id>`), and `startConnect` now runs
+  the host checks for a form too.
+- Outline lists OAuth 2 first, on app.getoutline.com, and its OAuth 2 revokes the refresh token; its API key, on the
+  host the person types, is `signInWith(outline, 'key')`. Breaking: `client(outline, …)` on the whole entry now goes
+  to app.getoutline.com whatever `values.host` says, so an app narrows a key connection with
+  `signInWith(outline, 'key')` for every call.
+- New: `http.host` may list several patterns; the filled host must match one. `'*'` stays alone.
+- Smartsheet takes its product's host in `apiHost` (`api.smartsheet.com` by default; `api.smartsheetgov.com`,
+  `api.smartsheet.eu`, `api.smartsheet.au`). Breaking: a client never applies the default, so an existing connection
+  passes `values: { apiHost: 'api.smartsheet.com' }`; without it, its calls are `template_missing`.
+- New: an OAuth 2 entry's base may be the host its token answer names, kept by `save` and checked against a declared
+  domain at connect (whether or not identify sends a request), before every call and before every refresh. The host may
+  come as an https origin (`https://x.example.com`, read as its host); a token answer without one is `invalid_response`
+  (`missing_fields`) and the fresh grant is revoked. Such a host beside one the person types is `host_split`, and with
+  `http.host: '*'`, or none, it is refused (`base_host_refused`) before anything is sent.
+- The refresh URL is filled and checked only when a refresh is sent (the consent URL, the exchange and a revoke no
+  longer fill it), and it alone of the OAuth 2 URLs may name a host the token answer names.
+- New entry: Wrike (tasks; OAuth 2, on the data centre its token answer names). Every entry is `declared`.
 - New: an operation may declare `anyOf`, sets of arguments of which a call must give one whole. `client()` refuses a
   call that gives none (`param_group_missing: <id>`) before anything is sent, and an `anyOf` path that names no declared
   argument, or an empty set, when the client is built (`param_group_unknown: <id> <path>`). Freshsales, Hunter,
@@ -38,23 +58,6 @@ Nothing here is released yet.
   their providers' pages.
 - Exa's and Firecrawl's `docs` links point to their current pages.
 - Attio lists OAuth 2 first; its API key is `signInWith(attio, 'key')`.
-- New: a sign-in after the first may declare its own `fields`, base and host, and `identify`; `signInWith` puts them in
-  place of the entry's. The engine refuses an app's entry whose first sign-in declares one, before anything is sent
-  (`sign_in_own_first: <entry id>`), and `startConnect` now runs the host checks for a form too.
-- Outline lists OAuth 2 first, on app.getoutline.com, and its OAuth 2 revokes the refresh token; its API key, on the
-  host you type, is `signInWith(outline, 'key')`. Breaking: `client(outline, …)` on the whole entry now goes to
-  app.getoutline.com whatever `values.host` says; a key connection narrows with `signInWith(outline, 'key')`.
-- New: `http.host` may list several patterns; the filled host must match one. `'*'` stays alone.
-- Smartsheet takes its product's host in `apiHost` (`api.smartsheet.com` by default; `.eu`, `.au`, Smartsheet Gov's
-  `api.smartsheetgov.com`). Breaking: a client never applies the default, so an existing connection is
-  `template_missing` until it passes `values: { apiHost }`.
-- New: an OAuth 2 entry's base may be the host its token answer names, kept by `save` and checked against a declared
-  domain at connect (whether or not identify sends a request), before every call and before every refresh. The host may
-  come as an https origin (`https://x.example.com`, read as its host); a token answer without one is `invalid_response`
-  (`missing_fields`) and the fresh grant is revoked. The refresh URL alone may name it, and is now filled and checked
-  when a refresh is sent, no longer at the start. Such a host beside one the person types is `host_split`, and with
-  `http.host: '*'`, or none, it is refused (`base_host_refused`) before anything is sent.
-- New entry: Wrike (tasks; OAuth 2).
 - GitHub lists OAuth 2 first; its personal access token is `signInWith(github, 'key')`.
 - GitLab lists OAuth 2 first, on the host the person types; its personal access token is `signInWith(gitlab, 'key')`.
   `client(gitlab, …)` on the whole entry now sends `Authorization: Bearer`; it sent `private-token`, as the key still
