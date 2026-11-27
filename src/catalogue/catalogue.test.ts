@@ -66,7 +66,10 @@ const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional(),
   anyOf: z.array(z.array(z.string())).optional() };
 const toleranceSeconds = z.number().int().positive().optional();
-const timestamp = z.strictObject({ header: headerName, toleranceSeconds });
+/** A refinement, not an enum, so a union of the two timestamp forms names this message rather than its own. */
+const unit = z.string().refine(value => ['epochMs', 'iso8601'].includes(value),
+  "a webhook timestamp's `unit` is 'epochMs' or 'iso8601', or left out (epoch seconds)").optional();
+const timestamp = z.strictObject({ header: headerName, unit, toleranceSeconds });
 /** A piece's name in a `name=value,…` header: what splits the pieces never sits in it. */
 const partName = z.string().regex(/^[^\s,=]+$/u, 'a `part` names one `name=value` piece: give it a name with no `,`, `=` or space');
 /** What every webhook kind may declare. */
@@ -138,7 +141,7 @@ const entrySchema = z.strictObject({
       encoding: z.literal('base64').optional(), hash: z.literal('sha1', "`hash` is 'sha1' or left out (SHA-256)").optional(),
       secret: z.enum(['base64', 'hex'], "`secret` is 'base64', 'hex' or left out (the key is the secret's own bytes)").optional(),
       part: partName.optional(),
-      timestamp: z.union([timestamp, z.strictObject({ part: partName, toleranceSeconds })]).optional(),
+      timestamp: z.union([timestamp, z.strictObject({ part: partName, unit, toleranceSeconds })]).optional(),
       ...webhookParts }),
     // A signature checked with a public key: no digest to prefix, encode, hash or pick from a list.
     z.strictObject({ kind: z.literal('ed25519'), header: headerName, signed: template.optional(), timestamp: timestamp.optional(),
@@ -992,6 +995,16 @@ test.each(['base64url', 'utf8', ''])("a webhook `secret` of %j fails the schema,
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'hmac', header: 'x-signature', secret: value } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
     .toEqual(["`secret` is 'base64', 'hex' or left out (the key is the secret's own bytes)"]);
+});
+
+test.each<[string, Record<string, unknown>]>([
+  ['hmac', { header: 'x-signature', signed: '{timestamp}{body}', timestamp: { header: 'x-t', unit: 'ms' } }],
+  ['hmac', { header: 'stripe-signature', signed: '{timestamp}.{body}', part: 'v1', timestamp: { part: 't', unit: 'epochSeconds' } }],
+  ['ed25519', { header: 'x-signature-ed25519', signed: '{timestamp}{body}', timestamp: { header: 'x-t', unit: 'iso' } }],
+])('a `%s` webhook timestamp in a unit the engine does not read (%j) fails the schema, with what to fix', (kind, parts) => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind, ...parts } };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
+    .toEqual(["a webhook timestamp's `unit` is 'epochMs' or 'iso8601', or left out (epoch seconds)"]);
 });
 
 test.each(['prefix', 'encoding', 'hash', 'part'])('an `ed25519` webhook with `%s` fails the schema, with what to fix', part => {

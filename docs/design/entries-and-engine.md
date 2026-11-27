@@ -580,10 +580,11 @@ repeated-cursor guard.
 ### `webhook`
 
 ```ts
-type Timestamp = { header: string; toleranceSeconds?: number };
+type Timestamp = { header: string; unit?: 'epochMs' | 'iso8601'; toleranceSeconds?: number };
 type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
-      secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+      secret?: 'base64' | 'hex'; part?: string;
+      timestamp?: Timestamp | { part: string; unit?: 'epochMs' | 'iso8601'; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
@@ -594,8 +595,8 @@ type Webhook = (
 ```
 
 `verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
-request. Every comparison is constant time over buffers of equal length, a timestamp is plain seconds inside its
-tolerance (300 seconds by default), and a signature header longer than 8 KiB is `false` before it is parsed.
+request. Every comparison is constant time over buffers of equal length, a timestamp is inside its tolerance (item 3),
+and a signature header longer than 8 KiB is `false` before it is parsed.
 `deliveryId` is what an app dedupes on; several body paths are joined with `:`.
 
 1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
@@ -609,7 +610,11 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
    beside it (an app's own entry with both compares `prefix` and the digest inside the piece) and a `part` name holding
    a `,`, `=` or whitespace.
-3. `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in
+3. A timestamp is plain epoch seconds by default; `unit: 'epochMs'` reads whole epoch milliseconds, and
+   `unit: 'iso8601'` an ISO 8601 instant with its zone, read as a `Wait` reads one (a fraction, `Z` or an offset; a date
+   alone, no zone or a time the calendar lacks is none). Each is checked within `toleranceSeconds` (300 by default) of
+   now. The header's text, as received, is what is signed. Seconds are compared in whole seconds.
+   `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in
    `signed` is that value. `timestamp.part` needs `part`, and `{timestamp}` is in `signed` exactly when there is a
    `timestamp`: a tolerance on a timestamp that is not signed would let a replay pass with a fresh one. `verifyWebhook`
    is `false` for an app's own declaration whose `signed` lacks `{body}`, or lacks `{timestamp}` beside a timestamp;

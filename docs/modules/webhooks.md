@@ -14,7 +14,10 @@ that holds the timestamp (`timestamp: { part }`). Any `v1` may match, so Stripe'
 are ignored. A timestamp outside its tolerance (five minutes by default) and a signature header over 8 KiB are
 `false`. `{timestamp}` is signed exactly when a timestamp is declared, and `{body}` is always signed: the catalogue's
 table test refuses an entry that breaks either, and `verifyWebhook` is `false` for an app's own declaration whose
-`signed` lacks `{body}`, or lacks `{timestamp}` beside a declared timestamp.
+`signed` lacks `{body}`, or lacks `{timestamp}` beside a declared timestamp. A timestamp is epoch seconds unless its
+`unit` says `epochMs` (whole milliseconds) or `iso8601` (an instant with its zone, as Zendesk's
+`2021-03-25T05:09:27Z`, read as a `Wait` reads one); a value in another unit, a date alone or an instant with no zone
+is `false`, and the header's text as sent is what is signed. Zendesk states no window, so the five minutes apply.
 
 `secret: 'base64'` or `'hex'` keys the HMAC with the secret's decoding instead of its text: pass the secret as the
 provider gives it, never decoded. The decoding is strict: base64 must encode back to exactly the secret (the `+` and `/`
@@ -89,6 +92,9 @@ const signedWithKey: Webhook = { kind: 'ed25519', header: 'x-signature-ed25519',
   timestamp: { header: 'x-signature-timestamp' } };
 // `token`: the header is the secret itself (Google Calendar push)
 const sharedToken: Webhook = { kind: 'token', header: 'x-goog-channel-token' };
+// `hmac` over an ISO 8601 timestamp header and the body, base64 (Zendesk)
+const instant: Webhook = { kind: 'hmac', header: 'x-zendesk-webhook-signature', signed: '{timestamp}{body}', encoding: 'base64',
+  timestamp: { header: 'x-zendesk-webhook-signature-timestamp', unit: 'iso8601' } };
 // `hmac` keyed with the secret's hex decoding, over the timestamp header's text and the body (Close)
 const decoded: Webhook = { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
   timestamp: { header: 'close-sig-timestamp' } };

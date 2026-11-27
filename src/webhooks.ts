@@ -1,6 +1,7 @@
 import { createHash, createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { Webhook } from './catalogue.js';
+import { instantMs } from './http-response.js';
 import { holds, parseJson, readPath } from './rules.js';
 
 export type WebhookRequest = { method: string; url: string; headers: Headers; rawBody: Uint8Array };
@@ -36,8 +37,12 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   const named = (name: string) => received.split(between).filter(piece => piece.startsWith(name + assign)).map(piece => piece.slice(name.length + 1));
   const stamp = scheme.timestamp;
   const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
-  // Plain seconds within the tolerance of now. The header's text is what is signed, so a long one loses nothing.
-  if (stamp && !(/^\d+$/.test(timestamp) && Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) <= (stamp.toleranceSeconds ?? 300))) return false;
+  // Whole seconds, whole milliseconds or an ISO 8601 instant (as a `Wait` reads one) within the tolerance of now; the
+  // header's text is what is signed, so a long one loses nothing.
+  const at = stamp?.unit === 'iso8601' ? instantMs(timestamp)
+    : /^\d+$/.test(timestamp) ? Number(timestamp) * (stamp?.unit === 'epochMs' ? 1 : 1000) : undefined;
+  const now = stamp?.unit === undefined ? Math.floor(Date.now() / 1000) * 1000 : Date.now();
+  if (stamp && !(at !== undefined && Math.abs(now - at) <= (stamp.toleranceSeconds ?? 300) * 1000)) return false;
   // A declaration that does not sign the body, or the timestamp it checks, can verify nothing safely.
   const signed = scheme.signed ?? '{body}';
   if (!signed.includes('{body}') || (stamp !== undefined && !signed.includes('{timestamp}'))) return false;

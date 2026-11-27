@@ -18,6 +18,7 @@ import { nylas } from './catalogue/nylas.js';
 import { pipedrive } from './catalogue/pipedrive.js';
 import { slack } from './catalogue/slack.js';
 import { stripe } from './catalogue/stripe.js';
+import { zendesk } from './catalogue/zendesk.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook, type WebhookRequest } from './webhooks.js';
 
 // The real comparison, watched: the Basic test reads what reached it.
@@ -64,6 +65,105 @@ test('refuses a timestamp that is not plain seconds', () => {
   for (const timestamp of ['+1730000000', '1730000000.5', '1730000000000', '']) {
     expect(verifyWebhook(breakcold.webhook, signed(timestamp), secret)).toBe(false);
   }
+});
+
+test('a timestamp in plain seconds keeps its edges on both sides of now', () => {
+  for (const [at, verdict] of [[now - 300, true], [now + 300, true], [now - 301, false], [now + 301, false]] as const) {
+    expect(verifyWebhook(breakcold.webhook, signed(String(at)), secret)).toBe(verdict);
+  }
+  // An instant in another unit is no number of seconds near now.
+  for (const timestamp of [String(now * 1000), new Date(now * 1000).toISOString()]) {
+    expect(verifyWebhook(breakcold.webhook, signed(timestamp), secret)).toBe(false);
+  }
+});
+
+/** The secret of Zendesk's own verification sample, used as its text, as the sample's `createHmac` takes it. */
+const zendeskSecret = 'dGhpc19zZWNyZXRfaXNfZm9yX3Rlc3Rpbmdfb25seQ==';
+/** An instant written as Zendesk's header writes one: `2021-03-25T05:09:27Z`. */
+const iso = (ms: number) => new Date(ms).toISOString().replace('.000Z', 'Z');
+/** Zendesk's recipe, `base64(HMACSHA256(TIMESTAMP + BODY))`, the timestamp header's text as sent. */
+const zendeskSigned = (timestamp: string, rawBody: Uint8Array = body, key = zendeskSecret) => request({
+  'x-zendesk-webhook-signature': createHmac('sha256', key).update(timestamp).update(rawBody).digest('base64'),
+  'x-zendesk-webhook-signature-timestamp': timestamp }, rawBody);
+
+test("verifies Zendesk's base64 signature of its ISO 8601 timestamp and the body, within five minutes", () => {
+  expect(verifyWebhook(zendesk.webhook, zendeskSigned(iso(now * 1000)), zendeskSecret)).toBe(true);
+  for (const [offset, verdict] of [[-300_000, true], [300_000, true], [-301_000, false], [301_000, false]] as const) {
+    expect(verifyWebhook(zendesk.webhook, zendeskSigned(iso(now * 1000 + offset)), zendeskSecret)).toBe(verdict);
+  }
+  // A request with no body (a trigger's GET or DELETE) signs the timestamp alone.
+  expect(verifyWebhook(zendesk.webhook, zendeskSigned(iso(now * 1000), new Uint8Array()), zendeskSecret)).toBe(true);
+  // The same instant with a fraction or an offset, signed as written.
+  for (const timestamp of ['2024-10-27T03:33:20.250Z', '2024-10-27T04:33:20+01:00', '2024-10-27T03:33:20+0000']) {
+    expect(verifyWebhook(zendesk.webhook, zendeskSigned(timestamp), zendeskSecret)).toBe(true);
+  }
+  const good = zendeskSigned(iso(now * 1000));
+  const changed = Buffer.from(body);
+  changed[0] = 1;
+  expect(verifyWebhook(zendesk.webhook, { ...good, rawBody: changed }, zendeskSecret)).toBe(false);
+  expect(verifyWebhook(zendesk.webhook, good, 'another-secret')).toBe(false);
+  expect(verifyWebhook(zendesk.webhook, zendeskSigned(iso(now * 1000), body, 'another-secret'), zendeskSecret)).toBe(false);
+  // The timestamp is signed: a fresh one beside the signature of an old one fails.
+  const old = zendeskSigned(iso((now - 3600) * 1000));
+  old.headers.set('x-zendesk-webhook-signature-timestamp', iso(now * 1000));
+  expect(verifyWebhook(zendesk.webhook, old, zendeskSecret)).toBe(false);
+});
+
+test.each([
+  '2024-10-27', '2024-10-27T03:33:20', '2024-10-27t03:33:20Z', '2024-10-27T03:33:20z', '2024-10-27 03:33:20Z',
+  '2021-02-30T00:00:00Z', '2024-10-27T24:00:00Z', '2024-10-27T03:33:60Z', 'Sun, 27 Oct 2024 03:33:20 GMT',
+  '1730000000', '1730000000000', '+002024-10-27T03:33:20Z', '02024-10-27T03:33:20Z', '-002024-10-27T03:33:20Z', '',
+])('an ISO 8601 timestamp header %j that is no instant with its zone is false, though signed and read loosely as now', timestamp => {
+  // Now is where a looser reader (`Date.parse`) puts it, so only the strict reading refuses it.
+  const loose = Date.parse(timestamp);
+  vi.setSystemTime(Number.isNaN(loose) ? now * 1000 : loose);
+  expect(verifyWebhook(zendesk.webhook, zendeskSigned(timestamp), zendeskSecret)).toBe(false);
+});
+
+/** An app's own declaration of a timestamp in epoch milliseconds, signed before the body with a `.`. */
+const millis: Webhook = { kind: 'hmac', header: 'x-signature', signed: '{timestamp}.{body}', timestamp: { header: 'x-t', unit: 'epochMs' } };
+const millisSigned = (timestamp: string, rawBody: Uint8Array = body) =>
+  request({ 'x-signature': createHmac('sha256', secret).update(`${timestamp}.`).update(rawBody).digest('hex'), 'x-t': timestamp }, rawBody);
+
+test('an `epochMs` timestamp is whole milliseconds within the tolerance of now, to the millisecond', () => {
+  expect(verifyWebhook(millis, millisSigned(String(now * 1000)), secret)).toBe(true);
+  for (const [offset, verdict] of [[-300_000, true], [300_000, true], [-300_001, false], [300_001, false]] as const) {
+    expect(verifyWebhook(millis, millisSigned(String(now * 1000 + offset)), secret)).toBe(verdict);
+  }
+  expect(verifyWebhook({ ...millis, timestamp: { header: 'x-t', unit: 'epochMs', toleranceSeconds: 60 } }, millisSigned(String(now * 1000 - 60_001)), secret)).toBe(false);
+});
+
+test.each(['+1730000000000', '-1730000000000', '1730000000000.0', '1730000000 000', '1730000000\t000', '1.73e12', '0x192c6e0d800', '',
+  String(now), String(now * 1_000_000), '9'.repeat(400), iso(now * 1000)])('an `epochMs` timestamp %j is false, though signed', timestamp => {
+  expect(verifyWebhook(millis, millisSigned(timestamp), secret)).toBe(false);
+});
+
+test('a timestamp and body that sign the same bytes with the boundary moved by one byte are false', () => {
+  // Zendesk signs `{timestamp}{body}` with nothing between: the body's first byte joins the timestamp, or the
+  // timestamp's last byte the body.
+  const stamp = iso(now * 1000);
+  const moved = (timestamp: string, rawBody: Buffer) => ({ ...zendeskSigned(stamp), rawBody,
+    headers: new Headers({ 'x-zendesk-webhook-signature': zendeskSigned(stamp).headers.get('x-zendesk-webhook-signature') ?? '',
+      'x-zendesk-webhook-signature-timestamp': timestamp }) });
+  expect(verifyWebhook(zendesk.webhook, moved(stamp, body), zendeskSecret)).toBe(true);
+  expect(verifyWebhook(zendesk.webhook, moved(stamp + body.toString().slice(0, 1), body.subarray(1)), zendeskSecret)).toBe(false);
+  expect(verifyWebhook(zendesk.webhook, moved(stamp.slice(0, -1), Buffer.concat([Buffer.from('Z'), body])), zendeskSecret)).toBe(false);
+  // The same with milliseconds and a body that starts with a digit.
+  const joined: Webhook = { ...millis, signed: '{timestamp}{body}' };
+  const digits = Buffer.from('1{"event":"created"}');
+  const signature = createHmac('sha256', secret).update(String(now * 1000)).update(digits).digest('hex');
+  const sent = (timestamp: string, rawBody: Buffer) => request({ 'x-signature': signature, 'x-t': timestamp }, rawBody);
+  expect(verifyWebhook(joined, sent(String(now * 1000), digits), secret)).toBe(true);
+  expect(verifyWebhook(joined, sent(String(now * 1000) + '1', digits.subarray(1)), secret)).toBe(false);
+  expect(verifyWebhook(joined, sent(String(now * 100), Buffer.concat([Buffer.from('0'), digits])), secret)).toBe(false);
+});
+
+test('a valid delivery replayed past its tolerance is false, in every unit', () => {
+  const deliveries = [[breakcold.webhook, signed(t), secret], [millis, millisSigned(String(now * 1000)), secret],
+    [zendesk.webhook, zendeskSigned(iso(now * 1000)), zendeskSecret]] as const;
+  for (const [webhook, delivery, key] of deliveries) expect(verifyWebhook(webhook, delivery, key)).toBe(true);
+  vi.setSystemTime(now * 1000 + 301_000);
+  for (const [webhook, delivery, key] of deliveries) expect(verifyWebhook(webhook, delivery, key)).toBe(false);
 });
 
 test('a signature of another length is false, not a throw', () => {

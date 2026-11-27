@@ -51,6 +51,8 @@ Nothing here is released yet.
   `state`, `code_challenge`, `code_challenge_method`): an app's own entry that named one sent its value in place of the
   engine's, and now sends the engine's. No catalogue entry names one, and the table refuses it.
 - Webhooks:
+  - New: a webhook timestamp may be epoch milliseconds or an ISO 8601 instant (`timestamp.unit`); Zendesk verifies its
+    webhooks.
   - Breaking: `challengeAnswer(webhook, request, secret)` verifies the request itself unless the entry marks its
     challenge `unsigned`; call it before `verifyWebhook`. Slack's `url_verification` and Discord's PING are answered
     only under a valid signature: with a wrong secret they were answered, and are now null. A value is answered only as

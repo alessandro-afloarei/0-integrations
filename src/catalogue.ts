@@ -56,7 +56,8 @@ export type Http = { baseUrl: Template;
   timeoutMs?: number; minIntervalMs?: number; retry?: Retry; rateLimit?: RateLimit };
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
-type Timestamp = { header: string; toleranceSeconds?: number };
+/** A webhook's timestamp: plain epoch seconds unless `unit` says epoch milliseconds or an ISO 8601 instant. */
+type Timestamp = { header: string; unit?: 'epochMs' | 'iso8601'; toleranceSeconds?: number };
 /** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `secret`: the key is the secret's
  * exact `base64` or `hex` decoding (else its bytes); `part`: the header is a comma-separated list of `name=value`
  * pieces, each piece named `part` a signature, any of which may match; `timestamp.part` reads the timestamp from the
@@ -68,7 +69,7 @@ type Timestamp = { header: string; toleranceSeconds?: number };
  * Discord's PING, Nylas' GET); `unsigned`: the handshake carries no signature. */
 export type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
-    secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+    secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; unit?: 'epochMs' | 'iso8601'; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
