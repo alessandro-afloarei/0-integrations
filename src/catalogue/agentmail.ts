@@ -22,7 +22,7 @@ export const agentmail = defineProvider({
     help: 'Create it in the AgentMail Console under API Keys (it starts with am_ and is shown once). An organization key reaches every inbox; a pod or inbox key only its own. Each email sent counts against your plan (Free: 100 a day).' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{apiHost}/v0', host: hosts, retry: {} },
-  identify: { request: { path: '/auth/me' }, id: 'organization_id' },
+  identify: { request: { path: '/auth/me' }, id: '{organization_id}:{scope_id}' },
   errors: { detail: 'code' },
   paging: { cursor: { kind: 'cursor', next: 'next_page_token', send: { query: 'page_token' } } },
   operations: {
