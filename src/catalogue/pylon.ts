@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Pylon: an Admin's API token on its region's host; the REST API is on every plan (https://www.usepylon.com/pricing).
- * A reply reaches the customer, and so does a created issue given a `destination_metadata`; a note posted to an internal
- * email thread is sent as email. */
+ * A reply reaches the customer, and so does a created issue given a `destination_metadata`; a note posted to an
+ * internal email thread is sent as email. */
 const issue = { id: 'string', title: 'string', state: 'string', link: 'string', 'account?': { id: 'string' },
   'requester?': { id: 'string', 'email?': 'string' }, created_at: 'string', updated_at: 'string' } as const;
 const contact = { id: 'string', name: 'string', 'email?': 'string', 'emails?': ['string'], 'primary_phone_number?': 'string',
@@ -52,7 +52,7 @@ export const pylon = defineProvider({
         requester_name: { in: 'body', type: 'string' }, assignee_id: { in: 'body', type: 'string' }, team_id: { in: 'body', type: 'string' },
         priority: { in: 'body', type: 'string', enum: ['urgent', 'high', 'medium', 'low'] }, tags: { in: 'body', type: ['string'] },
         destination_metadata: { in: 'body', type: { destination: 'string', 'email?': 'string', 'slack_channel_id?': 'string', 'chat_widget_app_id?': 'string' },
-          description: 'Delivers the first message to the requester: `email`, `slack`, `in_app_chat` or `customer_portal` (`sms` and `whatsapp` need fields this entry does not declare). Left out, or `internal`, the first message is an internal note and no customer is contacted.' } },
+          description: '`email`, `slack` or `in_app_chat` deliver the first message to the requester; `customer_portal` makes it customer-visible with no external delivery (`sms` and `whatsapp` need fields this entry does not declare). Left out, or `internal`, the first message is an internal note and no customer is contacted.' } },
       anyOf: [['account_id'], ['requester_id'], ['requester_email']], result: { data: issue } },
     'issues.update': { docs: `${ref}/issues#patch-issues-id`, method: 'PATCH', path: '/issues/{id}',
       params: { ...id, title: { in: 'body', type: 'string' },
