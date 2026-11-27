@@ -591,7 +591,7 @@ type Webhook = (
   | { kind: 'basic' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] };
   challenge?: { unsigned?: true }
-    & ({ when: When; echo: Path; text?: true } | { when?: When; echo: { query: string }; text: true }) };
+    & ({ when: When; echo: Path; text?: true } | { when?: When; echo: { query: string } | { header: string }; text: true }) };
 ```
 
 `verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
@@ -639,21 +639,25 @@ and a signature header longer than 8 KiB is `false` before it is parsed.
 9. `challengeAnswer(webhook, request, secret)` answers a handshake, or is null. It checks the request first with
    `verifyWebhook`, unless the challenge is `unsigned` (Fellow's and Nylas' verification requests carry no signature).
    The value is read at `echo`: a body path (Slack, Discord, Fellow) or a query parameter (Nylas' `challenge`, on a GET
-   with no body; a request with a body is no query handshake). It answers when `when` holds (a body path needs one; a
-   query may leave it out, the value's presence then deciding) and the value is a string of 1 to 512 printable ASCII
-   characters without a space, `<` or `>`, or for a JSON answer also a finite number: as JSON `{ [echo]: value }` (a
-   query is answered only as `text`), or with `text` as the value alone, `content-type: text/plain; charset=utf-8`, its
+   with no body; a request with a body is no query handshake). The value may be read from a request header
+   (`echo: { header }`, Front's `x-front-challenge`), answered only as `text`, after the request verifies, where `when`
+   holds when given. It answers when `when` holds (a body path needs one; a query or a header may leave it out, the
+   value's presence then deciding) and the value is a string of 1 to 512 printable ASCII characters without a space,
+   `<` or `>`, or for a JSON answer also a finite number: as JSON `{ [echo]: value }` (a value read from a query or a
+   header is answered only as `text`), or with `text` as the value alone, `content-type: text/plain; charset=utf-8`, its
    `content-length` (Nylas refuses a chunked answer) and `x-content-type-options: nosniff`. A challenge answer changes
    nothing and holds nothing secret; an app calls it first, and verifies every other request.
 
 In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
 Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google; on `authorization`: Krisp),
 `standard` (GitLab; Svix's names: AgentMail, Resend, Fellow, Recall.ai's older accounts), `basic` (Mailjet, Pipedrive,
-Postmark) and `challenge` (Slack, Discord; as text and `unsigned`: Fellow from the body, Nylas from a query). A secret
+Postmark) and `challenge` (Slack, Discord; as text: Front from a header, and `unsigned`, Fellow from the body and Nylas
+from a query). Timestamps are seconds but for Zendesk (`iso8601`) and Front (`epochMs`). A secret
 that keys nothing (one that does not decode exactly, a key of only zero bytes, or a Basic secret without a password) is
 `false`. The table test also refuses a `challenge.when` with a `status` or `detail`, a body `echo` whose `when` reads no
-body `path`, an `echo` path holding a `.`, an empty query name and a query `echo` without `text` (a body `echo` without
-a `when` does not compile). Front's challenge, read from its `x-front-challenge` header, is not declared yet.
+body `path`, an `echo` path holding a `.`, an empty query name, a query or header `echo` without `text`, a header `echo`
+that is no lowercase token or that names the webhook's signature or timestamp header, and a timestamp `unit` other than
+`epochMs` and `iso8601` (a body `echo` without a `when` does not compile).
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a

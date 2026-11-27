@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
-import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
+import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value, type Webhook } from '../catalogue.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked } from '../errors.js';
 import { callBase, createClient, credentialOf, filledBase } from '../http.js';
@@ -75,9 +75,10 @@ const partName = z.string().regex(/^[^\s,=]+$/u, 'a `part` names one `name=value
 /** What every webhook kind may declare. */
 const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional(),
   challenge: z.strictObject({ when: when.refine(item => item.equals !== undefined || item.in !== undefined, 'a `challenge.when` compares a value: give `equals` or `in`').optional(),
-    echo: z.union([z.string().min(1), z.strictObject({ query: z.string().min(1, 'a challenge `query` names its parameter: give the name') })]),
+    echo: z.union([z.string().min(1), z.strictObject({ query: z.string().min(1, 'a challenge `query` names its parameter: give the name') }),
+      z.strictObject({ header: headerName })]),
     text: z.literal(true).optional(), unsigned: z.literal(true).optional() })
-    .refine(item => typeof item.echo === 'string' || item.text === true, 'a challenge read from a query is answered as text: give `text: true`').optional() };
+    .refine(item => typeof item.echo === 'string' || item.text === true, 'a challenge read from a query or a header is answered as text: give `text: true`').optional() };
 const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]);
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
@@ -400,6 +401,16 @@ const runnable = {
     const echo = entry.webhook?.challenge?.echo;
     return typeof echo !== 'string' || !echo.includes('.');
   },
+  // A value read from the signature's or the timestamp's own header would echo the signature, or a time.
+  "a `webhook.challenge.echo` header apart from the webhook's signature and timestamp headers": (entry: Entry) => {
+    const webhook = entry.webhook;
+    const echo = webhook?.challenge?.echo;
+    if (webhook === undefined || echo === undefined || typeof echo === 'string' || !('header' in echo)) return true;
+    const stamp = 'timestamp' in webhook ? webhook.timestamp : undefined;
+    const own = webhook.kind === 'standard' ? ['webhook-signature', 'webhook-timestamp', 'svix-signature', 'svix-timestamp']
+      : [webhook.kind === 'basic' ? 'authorization' : webhook.header, stamp !== undefined && 'header' in stamp ? stamp.header : undefined];
+    return !own.includes(echo.header);
+  },
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
@@ -577,7 +588,8 @@ test('a challenge from a query or the body, answered as text and unsigned beside
   for (const webhook of [{ kind: 'standard', challenge: { echo: { query: 'challenge' }, text: true } },
     { kind: 'basic', challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } },
     { kind: 'standard', challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge', text: true, unsigned: true } },
-    { kind: 'token', header: 'x-token', challenge: { when: { header: 'x-kind', equals: 'check' }, echo: { query: 'check' }, text: true } }] as const) {
+    { kind: 'token', header: 'x-token', challenge: { when: { header: 'x-kind', equals: 'check' }, echo: { query: 'check' }, text: true } },
+    { kind: 'hmac', header: 'x-signature', challenge: { echo: { header: 'x-challenge' }, text: true } }] as const) {
     const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook });
     expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
     expect(entrySchema.safeParse(good).error).toBeUndefined();
@@ -758,6 +770,14 @@ test.each<[Rule, Entry]>([
       signed: '{body}', timestamp: { header: 'x-t' } }],
     ['a `webhook.challenge.echo` with no `.` (a top-level key of the body)', { kind: 'ed25519', header: 'x-signature-ed25519',
       challenge: { when: { path: 'type', equals: 1 }, echo: 'a.b' } }],
+    ...([{ kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
+      challenge: { echo: { header: 'x-front-signature' }, text: true } },
+    { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
+      challenge: { echo: { header: 'x-front-request-timestamp' }, text: true } },
+    { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { echo: { header: 'x-signature-ed25519' }, text: true } },
+    { kind: 'basic', challenge: { echo: { header: 'authorization' }, text: true } },
+    { kind: 'standard', challenge: { echo: { header: 'svix-timestamp' }, text: true } }] as const)
+      .map((webhook): [Rule, Webhook] => ["a `webhook.challenge.echo` header apart from the webhook's signature and timestamp headers", webhook]),
   ] as const).map(([rule, webhook]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook })]),
   ...([{ status: 200, path: 'type', equals: 1 }, { header: 'x-type', equals: '1' }, { path: 'type', detail: 'ping' }, { equals: 1 }] as const)
     .map((when): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query may leave `when` out)",
@@ -1019,6 +1039,8 @@ test.each<[string, Record<string, unknown>]>([
   ["a webhook's header", { webhook: { kind: 'hmac', header: 'X Signature' } }],
   ['a timestamp header', { webhook: { kind: 'hmac', header: 'x-signature', signed: '{timestamp}{body}', timestamp: { header: 'x-timestamp:' } } }],
   ['a delivery id header', { webhook: { kind: 'standard', deliveryId: { header: 'Webhook-Id' } } }],
+  ...['X-Front-Challenge', 'x front-challenge', 'x-front-challenge:', ''].map((header): [string, Record<string, unknown>] => [`a challenge header ${JSON.stringify(header)}`,
+    { webhook: { kind: 'hmac', header: 'x-signature', challenge: { echo: { header }, text: true } } }]),
   ["a condition's header", { errors: { rules: [{ when: { header: 'X-Error' }, code: 'rejected' }] } }],
   ['a header the entry sends on every call', { http: { ...key.http, headers: { 'X-Api-Version': '2' } } }],
   ["a rate limit's wait header", { http: { ...key.http, rateLimit: { when: [{ status: 403, wait: { header: 'x reset', unit: 'epochSeconds' } }] } } }],
@@ -1036,8 +1058,10 @@ test.each<[string, Record<string, unknown>, string]>([
     'a `challenge.when` compares a value: give `equals` or `in`'],
   ['a challenge from an empty query name', { webhook: { kind: 'hmac', header: 'x-signature', challenge: { echo: { query: '' }, text: true, unsigned: true } } },
     'a challenge `query` names its parameter: give the name'],
+  ['a challenge from a header answered as JSON', { webhook: { kind: 'hmac', header: 'x-signature', challenge: { when: { path: 'type', equals: 'sync' },
+    echo: { header: 'x-challenge' } } } }, 'a challenge read from a query or a header is answered as text: give `text: true`'],
   ['a challenge from a query answered as JSON', { webhook: { kind: 'standard', challenge: { echo: { query: 'challenge' }, unsigned: true } } },
-    'a challenge read from a query is answered as text: give `text: true`'],
+    'a challenge read from a query or a header is answered as text: give `text: true`'],
 ])('%s fails the schema, with what to fix', (_, parts, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], ...parts };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);

@@ -109,6 +109,10 @@ const challenged: Webhook = { kind: 'hmac', header: 'x-slack-signature', signed:
 // A `challenge` read from a GET's query and answered as text, unsigned: the secret comes after it (Nylas)
 const queried: Webhook = { kind: 'hmac', header: 'x-nylas-signature',
   challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
+// A `challenge` read from a request header and answered as text, after the request verifies (Front)
+const headed: Webhook = { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', encoding: 'base64',
+  timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
+  challenge: { when: { path: 'type', equals: 'sync' }, echo: { header: 'x-front-challenge' }, text: true } };
 ```
 
 ## Receiving a delivery
@@ -120,11 +124,14 @@ with `verifyWebhook` first, unless the entry marks the challenge `unsigned`: Sla
 sends PINGs with invalid signatures, and expects the `401`). Nylas' check is a `GET` with `?challenge=…`, sent before
 Nylas makes the webhook's secret, so it is unsigned; it is answered with the value alone, as
 `text/plain; charset=utf-8` with `x-content-type-options: nosniff` and its `content-length`: Nylas refuses an answer
-sent with chunked encoding, so keep that header when your server sends the `Response`.
+sent with chunked encoding, so keep that header when your server sends the `Response`. Front's validation request,
+sent when the app saves its webhook's URL, is signed like a delivery (a millisecond timestamp) with a body whose `type`
+is `sync`; it is answered with its `x-front-challenge` header's value alone, as text.
 
 A challenge read from the body is answered only where its `when` holds; one read from a query parameter only on a
-request with an empty body (a delivery to a URL holding the parameter is an event, verified as one), where its `when`
-holds or, with none, wherever the value is present, and only as text (`text: true`). The value comes from
+request with an empty body (a delivery to a URL holding the parameter is an event, verified as one), and one read from
+a header on any request, where its `when` holds or, with none, wherever the value is present, and both only as text
+(`text: true`). The value comes from
 whoever sent the request, so it is answered only when it is 1 to 512 printable ASCII characters with no space, `<` or
 `>` (in a JSON answer, a finite number too): never markup, never a header. The answer copies nothing else of the
 request, changes nothing and holds nothing secret; anyone may receive one for an unsigned challenge. Verify every

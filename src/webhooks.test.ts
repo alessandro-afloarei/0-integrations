@@ -9,6 +9,7 @@ import { close } from './catalogue/close.js';
 import { discord } from './catalogue/discord.js';
 import { fellow } from './catalogue/fellow.js';
 import { fireflies } from './catalogue/fireflies.js';
+import { front } from './catalogue/front.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
@@ -569,6 +570,59 @@ test('a query challenge echoes the query alone, after the request is verified un
   expect(challengeAnswer(signed, sent({}), secret)).toBeNull();
   const unsigned: Webhook = { ...signed, challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
   expect(await answered(challengeAnswer(unsigned, sent({}), ''))).toEqual(asText('abc'));
+});
+
+/** Front's validation request: its page's body, `x-front-challenge`, and the base64 HMAC of `<timestamp>:<body>`
+ * keyed with the token's text, the timestamp in milliseconds. */
+const frontSync = '{"type":"sync","authorization":{"id":"cmp_abc"}}';
+function frontSigned(json: string, headers: Record<string, string> = {}, at = String(now * 1000), key = secret): WebhookRequest {
+  const signature = createHmac('sha256', key).update(`${at}:`).update(json).digest('base64');
+  return request({ 'x-front-signature': signature, 'x-front-request-timestamp': at, ...headers }, Buffer.from(json));
+}
+
+test("verifies Front's base64 signature of its millisecond timestamp, a `:` and the body", () => {
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString()), secret)).toBe(true);
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString(), {}, String(now * 1000 - 300_001)), secret)).toBe(false);
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString(), {}, String(now * 1000 + 300_001)), secret)).toBe(false);
+  // Seconds where Front writes milliseconds: January 1970, not now.
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString(), {}, String(now)), secret)).toBe(false);
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString(), {}, 'x', 'another-secret'), secret)).toBe(false);
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString()), 'another-secret')).toBe(false);
+  const changed = frontSigned(body.toString());
+  expect(verifyWebhook(front.webhook, { ...changed, rawBody: Buffer.from('{"event":"createe"}') }, secret)).toBe(false);
+});
+
+test("answers Front's validation request with `x-front-challenge` alone, as text, only under its signature", async () => {
+  const value = 'b9f4c2a1-random-string';
+  expect(await answered(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }), secret))).toEqual(asText(value));
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }), 'another-secret')).toBeNull();
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }, String(now * 1000), 'another-secret'), secret)).toBeNull();
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync), secret)).toBeNull();
+  // An event is no handshake, though it carries the header.
+  expect(challengeAnswer(front.webhook, frontSigned('{"type":"inbound_received","authorization":{"id":"cmp_abc"}}', { 'x-front-challenge': value }), secret)).toBeNull();
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }, String(now * 1000 - 301_000)), secret)).toBeNull();
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }, String(now)), secret)).toBeNull();
+  for (const hostile of ['a b', 'a<b', 'a>b', 'é', 'x'.repeat(513)]) {
+    expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': hostile }), secret)).toBeNull();
+  }
+  // What `Headers` would refuse to hold, read through one that does not.
+  const through = (held: string) => {
+    const sent = frontSigned(frontSync);
+    const headers = { get: (name: string) => (name === 'x-front-challenge' ? held : sent.headers.get(name)),
+      has: (name: string) => sent.headers.has(name) } as unknown as Headers;
+    return challengeAnswer(front.webhook, { ...sent, headers }, secret);
+  };
+  expect(await answered(through(value))).toEqual(asText(value));
+  for (const hostile of ['a\nb', 'a\r\nx-evil: 1', 'a\u0000', '€']) expect(through(hostile)).toBeNull();
+});
+
+test('a value read from a header or a query is never answered as JSON, even by a declaration that leaves out `text`', async () => {
+  const value = 'b9f4c2a1';
+  const json = { ...front.webhook, challenge: { ...front.webhook.challenge, text: undefined } } as unknown as Webhook;
+  expect(challengeAnswer(json, frontSigned(frontSync, { 'x-front-challenge': value }), secret)).toBeNull();
+  const query = { kind: 'token', header: 'x-token', challenge: { echo: { query: 'challenge' }, unsigned: true } } as unknown as Webhook;
+  expect(challengeAnswer(query, { ...request({}, Buffer.alloc(0)), url: 'https://app.test/webhook?challenge=abc' }, '')).toBeNull();
+  expect(await answered(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }), secret))).toEqual(asText(value));
 });
 
 test('a text answer is a string: a number at a body path is not answered as text', async () => {

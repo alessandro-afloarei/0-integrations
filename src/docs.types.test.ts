@@ -14,6 +14,7 @@ import { mattermost } from './catalogue/mattermost.js';
 import { notion } from './catalogue/notion.js';
 import { nylas } from './catalogue/nylas.js';
 import { aircall } from './catalogue/aircall.js';
+import { front } from './catalogue/front.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { metabase } from './catalogue/metabase.js';
 import { trello } from './catalogue/trello.js';
@@ -262,7 +263,11 @@ function webhooksDeclared() {
   // A `challenge` read from a GET's query and answered as text, unsigned: the secret comes after it (Nylas)
   const queried: Webhook = { kind: 'hmac', header: 'x-nylas-signature',
     challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
-  return [timestamped, pieces, signedWithKey, sharedToken, instant, decoded, credentials, standard, challenged, queried];
+  // A `challenge` read from a request header and answered as text, after the request verifies (Front)
+  const headed: Webhook = { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', encoding: 'base64',
+    timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
+    challenge: { when: { path: 'type', equals: 'sync' }, echo: { header: 'x-front-challenge' }, text: true } };
+  return [timestamped, pieces, signedWithKey, sharedToken, instant, decoded, credentials, standard, challenged, queried, headed];
 }
 
 // docs/modules/webhooks.md › Receiving a delivery (its last line, a comment there, is the three calls below).
@@ -324,7 +329,7 @@ test('every docs example compiles', () => {
 test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {
   // `toEqual` reads a property set to undefined as missing.
   expect(webhooksDeclared()).toEqual([breakcold.webhook, stripe.webhook, { ...discord.webhook, challenge: undefined }, google.webhook,
-    zendesk.webhook, close.webhook, mailjet.webhook, gitlab.webhook, slack.webhook, nylas.webhook]);
+    zendesk.webhook, close.webhook, mailjet.webhook, gitlab.webhook, slack.webhook, nylas.webhook, front.webhook]);
 });
 
 test("testing.md's derived-fake examples run", async () => {

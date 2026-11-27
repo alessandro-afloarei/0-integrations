@@ -101,13 +101,15 @@ export function challengeAnswer(webhook: Webhook, request: WebhookRequest, secre
   if (challenge === undefined) return null;
   const { when, echo, text } = challenge;
   const body = parseJson(Buffer.from(request.rawBody).toString('utf8'));
-  const name = typeof echo === 'string' ? echo : echo.query;
+  const name = typeof echo === 'string' ? echo : 'query' in echo ? echo.query : echo.header;
   // A query handshake carries no body: a delivery to a URL that holds the parameter is an event, verified as one.
-  const value = typeof echo === 'string' ? readPath(body, echo) : request.rawBody.byteLength > 0 ? null
-    : new URLSearchParams(/^[^#?]*\?([^#]*)/u.exec(request.url)?.[1]).get(name);
-  // A body path answers only where `when` holds; a query parameter, wherever it is present.
+  const value = typeof echo === 'string' ? readPath(body, echo) : 'header' in echo ? request.headers.get(name)
+    : request.rawBody.byteLength > 0 ? null : new URLSearchParams(/^[^#?]*\?([^#]*)/u.exec(request.url)?.[1]).get(name);
+  // A body path answers only where `when` holds; a query parameter or a header, wherever it is present.
   const asked = when === undefined ? typeof echo !== 'string' : holds(when, { status: 200, headers: request.headers, body });
-  const safe = typeof value === 'string' ? /^[!-;=?-~]{1,512}$/u.test(value) : !text && typeof value === 'number' && Number.isFinite(value);
+  // A value from outside the body is answered only as text, never inside JSON.
+  const safe = typeof value === 'string' ? /^[!-;=?-~]{1,512}$/u.test(value) && (text || typeof echo === 'string')
+    : !text && typeof value === 'number' && Number.isFinite(value);
   // Verified last, so a delivery that is no handshake is verified once, by the app's own `verifyWebhook`.
   if (!asked || !safe || !(challenge.unsigned ?? verifyWebhook(webhook, request, secret))) return null;
   // ASCII, so its length is its byte count: stated, an adapter that streams the answer sends no chunks (Nylas refuses them).
