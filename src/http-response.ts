@@ -126,7 +126,7 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   const waited = limit
     ? declaredWait(entry.http.retry?.wait, { ...answer, status: 429 }, now) ?? (limit.own || undefined) ?? entry.http.rateLimit?.defaultWaitMs
     : stated;
-  const own = limit?.own === undefined ? null : retryAfterMs(new Headers(), now, limit.own);
+  const own = limit?.own ? retryAfterMs(new Headers(), now, limit.own) : null;
   const carried = retryAfterMs(headers, now, waited);
   const metadata = { retryAfterMs: own === null ? carried : Math.max(carried ?? 0, own) };
   if (limit) {

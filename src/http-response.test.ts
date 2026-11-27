@@ -258,6 +258,8 @@ test.each(['a b', 'a@b.test', 'error\nprivate', 'x'.repeat(65)])('an unsafe prov
 test('a reset already past states none, so the default; one beyond the safe range the largest; a negative body wait none', () => {
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10), 'Retry-After': '3' })).toMatchObject({ retryAfterMs: 3000 });
+  const noDefault: Rules = { http: { ...BASE, rateLimit: { when: [{ status: 429, wait: { header: 'x-reset', unit: 'epochSeconds' } }] } } };
+  expect(fail(noDefault, 429, {}, { 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(Number.MAX_SAFE_INTEGER) }))
     .toMatchObject({ code: 'rate_limited', retryAfterMs: Number.MAX_SAFE_INTEGER });
   const chat: Rules = { http: { ...BASE, retry: { wait: { path: 'waitMs', unit: 'ms' } } } };
