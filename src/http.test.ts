@@ -117,6 +117,12 @@ test('a POST is retried only when idempotent', async () => {
   expect(twice.calls[1]?.body).toBe('q=x');
 });
 
+test('a raw call with a form and a JSON body sends the JSON, under its own content type', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({}) }]);
+  await createClient(exa, { token: () => Promise.resolve('k'), fetch: fake.fetch }).json('/x', { method: 'POST', json: { b: 2 }, form: { a: '1' } });
+  expect(fake.calls.map(({ body, headers }) => [body, headers['content-type']])).toEqual([['{"b":2}', 'application/json']]);
+});
+
 test("a request with the caller's signal never waits", async () => {
   const fake = script(breakcold, () => Response.json({ error: { retryAfterMs: 1500 } }, { status: 429 }));
   await expect(fake.client.json('/items', { signal: new AbortController().signal }))

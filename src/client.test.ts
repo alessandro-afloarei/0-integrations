@@ -313,7 +313,7 @@ test("an app's entry that would send a wrong request is refused when its client 
 });
 
 test("an app's operation with a parameter in the place its paging shape's `send` writes is refused when built", () => {
-  const entry = (shape: object, place: 'query' | 'body') => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+  const entry = (shape: object, place: 'query' | 'body' | 'form') => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
     paging: { list: shape }, operations: { 'things.list': { method: 'POST', kind: 'read', path: '/things', paging: 'list',
       params: { at: { in: place, type: 'integer' } } } } }) as Entry;
   for (const [shape, place] of [[{ kind: 'page', send: { query: 'at' } }, 'query'], [{ kind: 'offset', send: { body: 'at' } }, 'body'],
@@ -322,6 +322,11 @@ test("an app's operation with a parameter in the place its paging shape's `send`
   }
   // The same name in the other place is the caller's own.
   expect(() => client(entry({ kind: 'offset', send: { body: 'at' } }, 'query'), { token: 'k' })).not.toThrow();
+  // A cursor written into a JSON body would replace a form's body from the second page on.
+  const fake = fakeFetch([]);
+  expect(() => client(entry({ kind: 'cursor', next: 'next', send: { body: 'offset' } }, 'form'), { token: 'k', fetch: fake.fetch }))
+    .toThrow(new TypeError('param_paged: things.list offset'));
+  expect(fake.calls).toEqual([]);
 });
 
 test('client() refuses an entry checkHosts refuses when it is built, before it reads the token it is given', () => {

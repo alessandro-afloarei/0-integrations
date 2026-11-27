@@ -392,7 +392,7 @@ const runnable = {
     operations(entry).every(op => { const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
       return shape === undefined || pagedRecords(op, shape); }),
   // The walk sets that parameter itself on every page after the first.
-  "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)": (entry: Entry) => operations(entry).every(op => {
+  "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`": (entry: Entry) => operations(entry).every(op => {
     const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
     return shape === undefined || pagedParam(op, shape) === undefined;
   }),
@@ -733,8 +733,8 @@ test.each<[Rule, Entry]>([
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' } } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'items', result: { items: [{ id: 'string' }] } } } })],
   ...([[{ kind: 'page', send: { query: 'page' } }, 'page', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'cursor', 'body'],
-    [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query']] as const)
-    .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it)",
+    [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'q', 'form']] as const)
+    .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
           params: { [name]: { in: place, type: 'integer' } } } } })]),

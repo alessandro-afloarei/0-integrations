@@ -251,7 +251,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
       headers = new Headers(entry.http.headers);
       for (const [key, header] of Object.entries(input.headers ?? {})) headers.set(key, header);
       if (credential) headers.set(...credential);
-      if (options.form) headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8'); // over the entry's and the app's
+      // A form's type over the entry's and the app's; with a JSON body as well, the JSON is what is sent.
+      if (options.form && options.json === undefined) headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
     } catch {
       throw new ProviderHttpError('request_failed', null);
     }
