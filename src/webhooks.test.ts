@@ -292,6 +292,15 @@ test.each(['YQ', 'YQ=', 'YQ==', 'YWI', 'YWI='])('a base64 secret %j with its pad
   expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(padded) }), padded)).toBe(false);
 });
 
+test('a key of only zero bytes is the empty key HMAC pads it to: a delivery signed with the empty key is false', () => {
+  const plain: Webhook = { kind: 'hmac', header: 'x-signature' };
+  for (const [webhook, zero] of <[Webhook, string][]>[[decodedHex, '00'], [decodedHex, '0'.repeat(64)], [decodedBase64, 'AAAA'], [plain, '\u0000'], [plain, '\u0000'.repeat(32)]]) {
+    expect(verifyWebhook(webhook, request({ 'x-signature': hmacHex('') }), zero)).toBe(false);
+  }
+  const zeroStandard = `whsec_${Buffer.alloc(32).toString('base64')}`;
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.alloc(0))), zeroStandard)).toBe(false);
+});
+
 test('a decoded secret keeps the signature rules: one header, the whole digest, these bytes', () => {
   const hexSecret = keyBytes.toString('hex');
   const good = hmacHex(keyBytes);
