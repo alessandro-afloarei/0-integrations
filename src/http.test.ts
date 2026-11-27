@@ -773,6 +773,24 @@ test('a host list keeps the global fetch: every name in it is one the entry decl
   expect(defaultFetch({ ...regional, http: { baseUrl: 'https://{sub}', host: ['*', 'x.test'] } })).toBe(globalThis.fetch);
 });
 
+test.each(['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu', 'api.smartsheet.au'])(
+  "Smartsheet's client sends to its region's host %s", async apiHost => {
+    const fake = filled(smartsheet, { apiHost });
+    await fake.client.json('/users/me');
+    expect(fake.calls.map(call => call.url)).toEqual([`https://${apiHost}/2.0/users/me`]);
+  });
+
+test("a stored Smartsheet connection without `apiHost` is template_missing before anything is sent; a connect fills the default", async () => {
+  const fake = filled(smartsheet, {});
+  await expect(fake.client.json('/users/me')).rejects.toThrow(new TypeError('template_missing: smartsheet {apiHost}'));
+  expect(fake.token).not.toHaveBeenCalled();
+  expect(fake.calls).toHaveLength(0);
+  const answer = fakeFetch([{ url: /https:/, respond: () => Response.json({ id: 1, email: 'a@example.test' }) }]);
+  const { values } = await finishConnect(smartsheet, { secret: { accessToken: 't' }, fetch: answer.fetch });
+  expect(values).toEqual({ apiHost: 'api.smartsheet.com' });
+  expect(answer.calls.map(call => call.url)).toEqual(['https://api.smartsheet.com/2.0/users/me']);
+});
+
 test.each(['api.intercom.io:8443', 'api.intercom.\u212Aio', 'api.intercom.io\u017F'])(
   "Intercom's client refuses %j before the token is read or anything is sent", async apiHost => {
     const fake = fakeFetch([{ url: /https:/, respond: ok }]);
