@@ -18,10 +18,10 @@ const written = { requester_id: { in: 'body', type: 'number' },
   status: { in: 'body', type: 'number', description: '2 open, 3 pending, 4 resolved, 5 closed.' },
   priority: { in: 'body', type: 'number', description: '1 low, 2 medium, 3 high, 4 urgent.' },
   responder_id: { in: 'body', type: 'number', description: 'The agent it is assigned to.' }, group_id: { in: 'body', type: 'number' },
-  department_id: { in: 'body', type: 'number' }, tags: { in: 'body', type: ['string'] },
+  department_id: { in: 'body', type: 'number' },
+  tags: { in: 'body', type: ['string'], description: 'An update replaces the ticket\'s tags: send every tag that should stay.' },
   custom_fields: { in: 'body', type: 'unknown', description: 'Custom field names and values.' } } as const;
-const reply = { body: { in: 'body', type: 'string', required: true, description: 'The content, in HTML.' },
-  user_id: { in: 'body', type: 'number' } } as const;
+const reply = { body: { in: 'body', type: 'string', required: true, description: 'The content, in HTML.' } } as const;
 
 export const freshservice = defineProvider({
   id: 'freshservice', name: 'Freshservice', docs: `${ref}authentication`,
@@ -67,8 +67,7 @@ export const freshservice = defineProvider({
     'notes.create': { docs: `${ref}create_a_note`, method: 'POST', path: '/tickets/{ticket_id}/notes',
       params: { ticket_id: { in: 'path', type: 'number', required: true }, ...reply,
         private: { in: 'body', type: 'boolean', description: 'True by default; false makes a public note the requester sees.' },
-        notify_emails: { in: 'body', type: ['string'], description: 'Agents or users to notify about the note.' },
-        incoming: { in: 'body', type: 'boolean' } },
+        notify_emails: { in: 'body', type: ['string'], description: 'Agents or users to notify about the note.' } },
       result: { conversation } },
     'requesters.list': { docs: `${ref}list_all_requesters`, path: '/requesters', paging: 'link', records: 'requesters',
       params: { email: { in: 'query', type: 'string' }, mobile_phone_number: { in: 'query', type: 'string' },
