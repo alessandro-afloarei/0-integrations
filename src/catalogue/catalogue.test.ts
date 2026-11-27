@@ -226,6 +226,7 @@ const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs,
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
+const HEADERS_WRITTEN_OUT = '`http.headers` values written out in full, with no placeholder (none is ever filled: the braces would be sent)';
 const RESULT_LITERAL = "no literal type in an operation's `result` (a record holding another value would be skipped, silently): give the key its type name";
 const PLACED = "a `params[].in` the operation's request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL, a header a scalar, never `nullable`, never named `content-type`, `host` or a sign-in's credential header)";
 const runnable = {
@@ -280,6 +281,8 @@ const runnable = {
   // A named base is used as written: a `{name}` in it would send the token to a host spelt with braces.
   '`http.bases` written out in full, with no placeholder (none is ever filled)': (entry: Entry) =>
     Object.values(entry.http.bases ?? {}).every(base => placeholders(base).length === 0),
+  // A header the entry sends on every call is sent as written: a `{name}` in it would send the braces.
+  [HEADERS_WRITTEN_OUT]: (entry: Entry) => Object.values(entry.http.headers ?? {}).every(value => placeholders(value).length === 0),
   // Otherwise the call is refused, `base_unknown`, when it is made.
   "a call's `base` one of `http.bases`": (entry: Entry) => calls(entry).every(call => call?.base === undefined
     || Object.hasOwn(entry.http.bases ?? {}, call.base)),
@@ -711,6 +714,9 @@ test.each<[Rule, Entry]>([
     revoke: { request: { base: 'api', method: 'POST', path: '/revoke' } } })],
   ['`http.bases` written out in full, with no placeholder (none is ever filled)', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], http: { ...key.http, bases: { api: 'https://{region}.k.test' } } })],
+  [HEADERS_WRITTEN_OUT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region' }],
+    http: { ...key.http, headers: { 'x-region': '{region}' } } })],
+  [HEADERS_WRITTEN_OUT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, headers: { 'x-api-key': 'Key {apiKey}' } } })],
   ["`save` keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([
