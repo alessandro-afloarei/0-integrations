@@ -16,7 +16,7 @@ const event = { id: 'string', 'calendar_id?': 'string', 'title?': 'string', 'whe
   'description?': 'unknown', 'recurrence?': 'unknown', 'conferencing?': 'unknown' } as const;
 const calendarId = { calendar_id: { in: 'query', type: 'string', required: true, description: 'A calendar id, or `primary`.' } } as const;
 const notify = { notify_participants: { in: 'query', type: 'boolean',
-  description: 'True by default; false makes the change without emailing participants (Microsoft refuses false).' } } as const;
+  description: 'True by default; false makes the change without emailing participants, except on iCloud, which always emails them. Microsoft refuses false.' } } as const;
 const eventFields = { title: { in: 'body', type: 'string' }, description: { in: 'body', type: 'string' },
   location: { in: 'body', type: 'string' }, busy: { in: 'body', type: 'boolean' },
   participants: { in: 'body', type: [{ email: 'string', 'name?': 'string' }] },
