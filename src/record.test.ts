@@ -88,7 +88,7 @@ async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<
   // A real key goes only to the host the owner names: one the kit fills in may be another's, and a field's default or
   // first choice another region's than the account's.
   const typed = placeholders(/^https:\/\/[^/]*/u.exec(entry.http.baseUrl)?.[0] ?? '');
-  const unnamed = typed.find(name => given[name] === undefined);
+  const unnamed = typed.find(name => (given[name] ?? '').trim() === '');
   if (unnamed !== undefined) throw new Error(`recording refused: give ${unnamed}, in the base's host, in RECORD_VALUES`);
   // An origin (a token answer's `api_domain`) is sent as its host alone: swapped whole, it leaves no file that replays.
   const origin = typed.find(name => given[name]?.includes('/'));
@@ -279,8 +279,11 @@ describe('recording an entry with no module, on its derived fake standing in for
   });
 
   test('a host field with a default and choices (Intercom\'s region) is refused before any request too', async () => {
+    // A stub that never reaches the network: a blank value is no host, whatever the field's default.
     const sent = vi.fn<typeof fetch>();
-    await expect(recordEntry(intercom, 'real-key-1', {}, sent)).rejects.toThrow('recording refused: give apiHost, in the base\'s host, in RECORD_VALUES');
+    for (const given of [{}, { apiHost: '' }, { apiHost: '  ' }]) {
+      await expect(recordEntry(intercom, 'real-key-1', given, sent)).rejects.toThrow('recording refused: give apiHost, in the base\'s host, in RECORD_VALUES');
+    }
     expect(sent).not.toHaveBeenCalled();
   });
 
