@@ -48,6 +48,8 @@ one takes five steps:
      its descriptions claim one);
    - a call the docs say spends credits is `kind: 'write'`, whatever its method, and its leading comment names the
      credit page;
+   - a write that reaches people (a message sent, an event or a meeting whose create invites its guests) says so in its
+     leading comment and declares the provider's parameter to send no notification, optional;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
