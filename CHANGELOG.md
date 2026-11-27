@@ -41,7 +41,9 @@ Nothing here is released yet.
 - New: a sign-in after the first may declare its own `fields`, base and host, and `identify`; `signInWith` puts them in
   place of the entry's. The engine refuses an app's entry whose first sign-in declares one, before anything is sent
   (`sign_in_own_first: <entry id>`), and `startConnect` now runs the host checks for a form too.
-- Outline lists OAuth 2 first, on app.getoutline.com; its API key, on the host you type, is `signInWith(outline, 'key')`.
+- Outline lists OAuth 2 first, on app.getoutline.com, and its OAuth 2 revokes the refresh token; its API key, on the
+  host you type, is `signInWith(outline, 'key')`. Breaking: `client(outline, …)` on the whole entry now goes to
+  app.getoutline.com whatever `values.host` says; a key connection narrows with `signInWith(outline, 'key')`.
 - New: `http.host` may list several patterns; the filled host must match one. `'*'` stays alone.
 - Smartsheet takes its product's host in `apiHost` (`api.smartsheet.com` by default; `.eu`, `.au`, Smartsheet Gov's
   `api.smartsheetgov.com`). Breaking: a client never applies the default, so an existing connection is

@@ -326,7 +326,7 @@ is not a second sign-in.
    entry with two sign-ins.
 4. A sign-in after the first may declare its own part, `fields`, `http: { baseUrl, host? }` and `identify`, and
    `signInWith` puts it in place of the entry's: its `fields` and `identify` for the entry's, its `baseUrl` and `host`
-   over the entry's `http` (headers, retry and timeouts stay shared), and `auth` the sign-in without it. Outline's
+   over the entry's `http` (headers, bases, retry and timeouts stay shared), and `auth` the sign-in without it. Outline's
    OAuth 2 is on its cloud host, and its key, second, has its own `host` field and base `https://{host}/api`. The first
    sign-in has none: its part is the entry's top level, so the entry used whole and its first narrowing are one.
    `checkHosts`, which every send and `startConnect` run first, refuses a first sign-in that declares one (an app's
@@ -343,7 +343,7 @@ is not a second sign-in.
    per sign-in: an entry with several on `signInWith(entry, kind)`, each test named with its kind, and an entry with
    one as it is. The replay runs on the recorded sign-in only (rule 9).
 7. The schema takes `auth` of one or more sign-ins with unique kinds, not `key` with `token`, and OAuth 2 first when
-   there is one.
+   there is one, and an own part only on a later key or token sign-in, its `http` only `baseUrl` and `host`.
 8. `catalogue.json` holds the entry as declared, every sign-in in its order; the providers page's Sign-in column lists
    their kinds in that order.
 9. A recording is of the entry's key or token sign-in when it has one, else of its first (`recordedSignIn`, in the
