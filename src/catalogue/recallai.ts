@@ -4,9 +4,8 @@ import { defineProvider } from '../catalogue.js';
 const hosts = ['us-east-1.recall.ai', 'us-west-2.recall.ai', 'eu-central-1.recall.ai', 'ap-northeast-1.recall.ai'] as const;
 
 /** Recall.ai: a workspace's API key on its region's host; no endpoint names the account. Bots, billed by active time,
- * are not here. A 429 carries `Retry-After` in seconds: https://docs.recall.ai/reference/errors. Webhooks: `webhook-*`
- * headers and the workspace verification secret; an account made before 15 December 2025 signs its Svix webhooks under
- * `svix-*` with each endpoint's own secret: https://docs.recall.ai/docs/authenticating-requests-from-recallai */
+ * are not here. A 429 carries `Retry-After` in seconds: https://docs.recall.ai/reference/errors. Webhooks, as said
+ * above `webhook`: https://docs.recall.ai/docs/authenticating-requests-from-recallai */
 const status = { code: 'string', 'sub_code?': 'string', updated_at: 'string' } as const;
 const recording = { id: 'string', created_at: 'string', 'started_at?': 'string', 'completed_at?': 'string', 'expires_at?': 'string',
   status, 'bot?': { id: 'string' }, media_shortcuts: { 'transcript?': { id: 'string' } } } as const;
@@ -23,6 +22,8 @@ export const recallai = defineProvider({
   http: { baseUrl: 'https://{apiHost}', host: hosts, retry: {} },
   errors: { detail: 'code' },
   identify: { request: { path: '/api/v1/recording/' } },
+  // `webhook-*` and the workspace verification secret, on every request once that secret exists (read first); before
+  // it, an account made before 15 December 2025 signs its Svix webhooks under `svix-*` with each endpoint's own secret.
   // The 300-second timestamp tolerance is the library's own: Recall.ai's page states none.
   webhook: { kind: 'standard' },
   paging: { next: { kind: 'nextUrl', next: 'next' } },
