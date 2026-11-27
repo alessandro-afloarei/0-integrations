@@ -23,6 +23,7 @@ export const recallai = defineProvider({
   http: { baseUrl: 'https://{apiHost}', host: hosts, retry: {} },
   errors: { detail: 'code' },
   identify: { request: { path: '/api/v1/recording/' } },
+  // The 300-second timestamp tolerance is the library's own: Recall.ai's page states none.
   webhook: { kind: 'standard' },
   paging: { next: { kind: 'nextUrl', next: 'next' } },
   operations: {
