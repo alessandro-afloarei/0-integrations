@@ -8,10 +8,14 @@ Nothing here is released yet.
   of `http`) and `identify`; `signInWith` puts them in place of the entry's. The engine refuses an app's entry whose
   first sign-in declares one, before anything is sent (`sign_in_own_first: <entry id>`), and `startConnect` now runs
   the host checks for a form too.
+- Breaking: a key in `values` that is neither a field of the entry's sign-in nor a `save` key is refused
+  (`TypeError('value_undeclared: <entry id> <key>')`) by `client()`, every connect and OAuth 2 step, a refresh, a
+  revoke and `tokenSource`, before a credential is read or anything is sent; it was ignored. An app that passes extra
+  keys in `values` drops them; the `values` a connection was returned are always accepted.
 - Outline lists OAuth 2 first, on app.getoutline.com, and its OAuth 2 revokes the refresh token; its API key, on the
-  host the person types, is `signInWith(outline, 'key')`. Breaking: `client(outline, …)` on the whole entry now goes
-  to app.getoutline.com whatever `values.host` says, so an app narrows a key connection with
-  `signInWith(outline, 'key')` for every call.
+  host the person types, is `signInWith(outline, 'key')`. Breaking: a key connection that still calls the whole entry
+  with its `host` (`client(outline, { token, values: { host } })`) is now refused (`value_undeclared: outline host`),
+  never sent to app.getoutline.com; an app narrows it with `signInWith(outline, 'key')` for every call.
 - New: `http.host` may list several patterns; the filled host must match one. `'*'` stays alone.
 - Smartsheet takes its product's host in `apiHost` (`api.smartsheet.com` by default; `api.smartsheetgov.com`,
   `api.smartsheet.eu`, `api.smartsheet.au`). Breaking: a client never applies the default, so an existing connection

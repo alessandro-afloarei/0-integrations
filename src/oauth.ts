@@ -17,7 +17,7 @@ function endpoints(entry: Entry, values: Values = {}) {
   const [auth] = entry.auth;
   const urls = oauthUrls(entry);
   if (auth.kind !== 'oauth2' || urls === undefined) throw new TypeError('oauth_unsupported');
-  checkHosts(entry);
+  checkHosts(entry, values);
   const pick = (names: string[]) => Object.fromEntries(names.map(name => [name, values[name]]));
   const plain = pick(plainFields(entry).map(({ name }) => name));
   const url = (template: string, from = plain) => new URL(filledBase(entry, from, template));
@@ -199,7 +199,7 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
 export async function revokeGrant<const E extends Entry>(entry: E, input: { accessToken?: string; refreshToken?: string | null;
   client?: OAuthClient; fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>): Promise<void> {
   const { revoke } = entry;
-  checkHosts(entry);
+  checkHosts(entry, input.values);
   if (revoke === undefined) return;
   try {
     if ('url' in revoke) {
@@ -232,7 +232,7 @@ type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; f
 export async function requestToken(entry: Entry, input: TokenInput): Promise<{ token: string; expiresAt: number | null; extras: Record<string, unknown> }> {
   const [auth] = entry.auth;
   if (auth.kind !== 'token') throw new TypeError('token_unsupported');
-  checkHosts(entry);
+  checkHosts(entry, input.values);
   const { request } = auth;
   const values = { ...input.values }; // own values, each read once, for the URL, the body and Basic
   const secretNames = new Set((entry.fields ?? []).filter(field => field.secret).map(field => field.name));

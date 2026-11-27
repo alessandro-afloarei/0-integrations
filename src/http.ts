@@ -183,7 +183,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
   let base: { url: string; origin: string } | undefined;
   const based = () => {
     if (base) return base;
-    checkHosts(entry); // every declared URL well formed, the hosts one: before an own base or a named one is used
+    checkHosts(entry, input.values); // every declared URL well formed, the hosts one: before an own base or a named one is used
     const url = (input.baseUrl ?? filledBase(entry, input.values ?? {})).replace(/\/+$/u, '');
     // An app's own base passes the same check as the entry's; on a typed host it may move the path, never the origin.
     const origin = sendable(entry, url).origin;

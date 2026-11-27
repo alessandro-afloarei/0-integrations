@@ -130,7 +130,9 @@ entry`, or a branch on the kind kept). Either sign-in's `values` hold its plain 
 A later sign-in may have its own fields and base. Outline's OAuth 2 is on app.getoutline.com; its key,
 `signInWith(outline, 'key')`, asks for the host of the person's own server and goes there. Keep the kind with the
 connection, beside the sealed secret, and narrow with that same kind for every later call: the library cannot tell an
-OAuth 2 token from a key, so a cloud token used with the key's narrowing would go to the host the values name.
+OAuth 2 token from a key, so a cloud token used with the key's narrowing would go to the host the values name. A value
+the entry's sign-in does not declare is refused (`value_undeclared`), so a connection kept from another sign-in never
+reaches the wrong host: a key connection's `host` given to the whole entry, or to its OAuth 2 narrowing, sends nothing.
 
 Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
 The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and

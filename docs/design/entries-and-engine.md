@@ -175,7 +175,9 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   one) is `template_missing`. Only `startConnect` and `finishConnect` apply a field's `default` (and return it in
   `values`): a client, a refresh and a revoke never do, so they need the connection's `values`. A value in the host
   that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only
-  the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
+  the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`. A value the entry's sign-in does not declare
+  (neither a field nor a `save` key) is refused, `TypeError('value_undeclared: <entry id> <name>')`, before a
+  credential is read or anything is sent, so a connection kept from another sign-in never reaches the wrong host.
 - Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 authorize,
   token, refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
   `http.host` (a name only itself, the URL parser's lowercase form, `*.d` only a name under `d`), else

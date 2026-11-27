@@ -50,7 +50,7 @@ const plainOf = (entry: Entry, given: Values): Record<string, string> =>
 export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart<E>], []>):
   Promise<E extends Entry ? ByKind<E, Redirect<E>, Form> : never>;
 export async function startConnect(entry: Entry, options?: OAuthStart): Promise<ConnectStart> {
-  checkHosts(entry); // a form too: its fields are the sign-in's
+  checkHosts(entry, options?.values); // a form too: its fields are the sign-in's
   const [auth] = entry.auth;
   if (auth.kind !== 'oauth2') return { kind: 'form', fields: entry.fields ?? [] };
   if (!options) throw new TypeError('oauth_options_required');
@@ -64,7 +64,7 @@ export async function startConnect(entry: Entry, options?: OAuthStart): Promise<
 
 export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish<E>, FormFinish<E>>): Promise<Connected<E>>;
 export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
-  checkHosts(entry); // before a credential is read, for every kind: identify may send nothing to check it later
+  checkHosts(entry, input.values); // before a credential is read, for every kind: identify may send nothing to check it later
   const [auth] = entry.auth;
   const fetch = input.fetch ?? defaultFetch(entry);
   if (auth.kind !== 'oauth2') {

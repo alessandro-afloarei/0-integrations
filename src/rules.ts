@@ -127,12 +127,15 @@ export function declaredUrls(entry: Entry): string[] {
 
 /** The one refusal every send runs first: a first sign-in that declares its own part (`sign_in_own_first`: an app's entry
  * built without the types), a declared URL that is not a well-formed template or a named host with no domain to match
- * (`base_host_refused`), then hosts that split (`host_split`), each before a host is compared or anything is sent. */
-export function checkHosts(entry: Entry): void {
+ * (`base_host_refused`), hosts that split (`host_split`), then a value that is neither a field nor a `save` key
+ * (`value_undeclared`: a connection kept from another sign-in), each before a credential is read or anything is sent. */
+export function checkHosts(entry: Entry, values: Values = {}): void {
   if (['fields', 'http', 'identify'].some(name => name in entry.auth[0])) throw new TypeError(`sign_in_own_first: ${entry.id}`);
   if (declaredUrls(entry).some(url => hostPart(url) === undefined)) throw new TypeError(`base_host_refused: ${entry.id}`);
   if (Object.keys(namedHosts(entry)).length > 0 && (entry.http.host ?? '*') === '*') throw new TypeError(`base_host_refused: ${entry.id}`);
   if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
+  const undeclared = Object.keys(values).find(name => !entry.fields?.some(field => field.name === name) && !Object.hasOwn(entry.save ?? {}, name));
+  if (undeclared !== undefined) throw new TypeError(`value_undeclared: ${entry.id} ${undeclared}`);
 }
 
 /** Replaces each `{name}` with a string or a finite number; anything else throws, naming `where` and the key. */

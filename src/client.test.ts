@@ -306,8 +306,10 @@ test("client() refuses an app's entry whose first sign-in declares its own part,
   }
   const later = { id: 'later', name: 'Later', http: { baseUrl: BASE }, operations: { me: { path: '/me' } },
     auth: [{ kind: 'oauth2', authorizeUrl: `${BASE}/a`, tokenUrl: `${BASE}/t` }, { kind: 'key', http: { baseUrl: 'https://{host}/api', host: '*' } }] } as Entry;
-  // Used whole, a later sign-in's part is never read: the call goes to the entry's base.
-  await (client(later, { token: 'k', fetch: fake.fetch, values: { host: 'evil.test' } }) as unknown as { me: () => Promise<unknown> }).me();
+  // Used whole, a later sign-in's part is never read: a value only that part declares is refused, and nothing is sent.
+  expect(() => client(later, { get token() { reads++; return 'k'; }, fetch: fake.fetch, values: { host: 'evil.test' } }))
+    .toThrow(new TypeError('value_undeclared: later host'));
+  await (client(later, { token: 'k', fetch: fake.fetch }) as unknown as { me: () => Promise<unknown> }).me();
   expect([reads, fake.calls.map(call => call.url)]).toEqual([0, [`${BASE}/me`]]);
 });
 

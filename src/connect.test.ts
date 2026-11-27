@@ -164,7 +164,10 @@ describe('connect', () => {
 
   it('keeps and sends only the fields the entry declares, each in its own record', async () => {
     const http = fakeFetch([{ url: 'https://api.aircall.io/v1/company', respond: () => Response.json({ company: { name: 'Lumen' } }) }]);
-    const form = { apiId: '12', apiToken: 'plain-copy', note: 'extra' };
+    const form = { apiId: '12', apiToken: 'plain-copy' };
+    // A value no field or `save` key names is refused, unsent.
+    await expect(finishConnect(looseAircall, { secret: { apiToken: 'token' }, values: { ...form, note: 'extra' }, fetch: http.fetch }))
+      .rejects.toThrow(new TypeError('value_undeclared: aircall note'));
     const result = await finishConnect(looseAircall, { secret: { apiToken: 'token', apiId: 'secret-copy', other: 'extra' }, values: form, fetch: http.fetch });
     expect(result).toEqual({ secret: { apiToken: 'token' }, values: { apiId: '12' }, account: { id: '12', name: 'Lumen' } });
     expect(http.calls).toHaveLength(1);
@@ -645,25 +648,55 @@ describe("a sign-in's own part", () => {
     expect(http.calls).toEqual([]);
   });
 
-  it('Outline narrowed to OAuth 2 sends only to app.getoutline.com, whatever host the values name', async () => {
+  it('Outline narrowed to OAuth 2 sends only to app.getoutline.com, and refuses a host in the values, unsent', async () => {
     const oauth = signInWith(outline, 'oauth2');
+    const kit = { clientId: 'kit-client', clientSecret: 'kit-secret' };
     const http = fakeFetch(fakeProvider(oauth, { key: 'kit', code: 'c', operations: { 'documents.get': () => ({ data: { id: 'd' } }) } }));
-    const typed = { values: { host: 'evil.test' } } as object;
-    const started = await startConnect(oauth, { ...start, ...typed });
+    const started = await startConnect(oauth, start);
     expect(new URL(started.url).host).toBe('app.getoutline.com');
-    const { secret } = await finishConnect(oauth, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, code: 'c', redirectUri: callback,
-      codeVerifier: started.codeVerifier, fetch: http.fetch, onRevokeFailed: vi.fn(), ...typed });
-    await refreshGrant(oauth, { clientId: 'kit-client', clientSecret: 'kit-secret' }, secret.refreshToken ?? '', { fetch: http.fetch, ...typed });
-    await revokeGrant(oauth, { ...secret, client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, fetch: http.fetch, ...typed });
-    await apiClient(oauth, { token: 'kit', fetch: http.fetch, ...typed }).documents.get({ id: 'd' });
-    // The whole entry is its first sign-in, the key's own part unseen.
-    await apiClient(outline, { token: 'kit', fetch: http.fetch, ...typed }).documents.get({ id: 'd' });
-    expect((await startConnect(outline, start)).kind).toBe('redirect');
+    const { secret } = await finishConnect(oauth, { client: kit, code: 'c', redirectUri: callback, codeVerifier: started.codeVerifier,
+      fetch: http.fetch, onRevokeFailed: vi.fn() });
+    await refreshGrant(oauth, kit, secret.refreshToken ?? '', { fetch: http.fetch });
+    await revokeGrant(oauth, { ...secret, client: kit, fetch: http.fetch });
+    await apiClient(oauth, { token: 'kit', fetch: http.fetch }).documents.get({ id: 'd' });
     expect(new Set(http.calls.map(call => new URL(call.url).host))).toEqual(new Set(['app.getoutline.com']));
     expect(http.calls.map(call => new URL(call.url).pathname)).toEqual(['/oauth/token', '/api/auth.info', '/oauth/token', '/oauth/revoke',
-      '/api/documents.info', '/api/documents.info']);
+      '/api/documents.info']);
     // The refresh token is the one revoked.
     expect(new URLSearchParams(http.calls[3]?.body).get('token')).toBe(secret.refreshToken);
+    http.calls.length = 0;
+    // A key connection's values, which a call on the whole entry would have sent to the cloud.
+    const typed = { values: { host: 'docs.example.com' } } as object;
+    const refused = new TypeError('value_undeclared: outline host');
+    let reads = 0;
+    const token = () => { reads++; return Promise.resolve('k'); };
+    for (const entry of [outline, oauth]) {
+      expect(() => apiClient(entry, { token, fetch: http.fetch, ...typed })).toThrow(refused);
+      await expect(startConnect(entry, { ...start, ...typed })).rejects.toThrow(refused);
+      await expect(finishConnect(entry, { client: kit, code: 'c', redirectUri: callback, codeVerifier: started.codeVerifier,
+        fetch: http.fetch, onRevokeFailed: vi.fn(), ...typed })).rejects.toThrow(refused);
+      expect(() => consentUrl(entry, { ...start, scopes: [], codeChallenge: 'c', ...typed })).toThrow(refused);
+      await expect(exchangeCode(entry, kit, { code: 'c', redirectUri: callback, codeVerifier: started.codeVerifier, fetch: http.fetch, ...typed }))
+        .rejects.toThrow(refused);
+      await expect(refreshGrant(entry, kit, 'r', { fetch: http.fetch, ...typed })).rejects.toThrow(refused);
+      await expect(revokeGrant(entry, { refreshToken: 'r', client: kit, fetch: http.fetch, ...typed })).rejects.toThrow(refused);
+    }
+    expect([reads, http.calls]).toEqual([0, []]);
+    // The key's narrowing declares the host: there the same values reach the host typed.
+    const key = fakeFetch(fakeProvider(signInWith(outline, 'key'), { key: 'k', values: { host: 'docs.example.com' },
+      operations: { 'documents.get': () => ({ data: { id: 'd' } }) } }));
+    await apiClient(signInWith(outline, 'key'), { token, fetch: key.fetch, values: { host: 'docs.example.com' } }).documents.get({ id: 'd' });
+    expect([reads, key.calls.map(call => call.url)]).toEqual([1, ['https://docs.example.com/api/documents.info']]);
+  });
+
+  it('refuses a token sign-in value it does not declare, before a secret is read or anything is sent', async () => {
+    const http = anything();
+    let reads = 0;
+    const secret = { get clientSecret() { reads++; return 's'; } };
+    const values = { accountId: 'a', clientId: 'c', host: 'evil.test' } as unknown as { accountId: string; clientId: string };
+    await expect(tokenSource(zoom, { secret, values, fetch: http.fetch })()).rejects.toThrow(new TypeError('value_undeclared: zoom host'));
+    await expect(finishConnect(zoom, { secret, values, fetch: http.fetch })).rejects.toThrow(new TypeError('value_undeclared: zoom host'));
+    expect([reads, http.calls]).toEqual([0, []]);
   });
 
   it("Outline narrowed to its key asks for the key's own fields, and refuses a host that is an address before the key is read", async () => {
