@@ -118,7 +118,7 @@ async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<
   // A 2xx token answer is accepted as it is, as `requestToken` takes it; identify's is also read by the entry's rules.
   const tokenUrl = auth.kind === 'token' ? new URL(filledBase(entry, { ...kit, ...given }, auth.request.url)).href : undefined;
   const unaccepted = ({ key: side, method, url, status, headers = {}, response }: Exchange) => side === 'bad' || status < 200 || status >= 300
-    || (!(method === 'POST' && url === tokenUrl) && classify(entry, { status, headers: new Headers(headers), data: response }) !== null);
+    || (!(method === 'POST' && url === tokenUrl) && classify(entry, { status, headers: new Headers(headers), data: response, empty: response === null }) !== null);
   // Sign-in reads no other header but a declared wait's: a `link` or `content-type` may name the account.
   const kept = (exchange: Exchange): Exchange => ({ ...exchange,
     response: onlyRead(exchange.response, [...values, ...codes], unaccepted(exchange) ? [...values, ...codes] : codes) ?? null,

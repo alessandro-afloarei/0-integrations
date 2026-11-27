@@ -119,7 +119,8 @@ one that does not is refused before the token is read, as `TypeError('url_outsid
 host and `TypeError('url_path_relative')` otherwise.
 
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
-- `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
+- `request(path, options?)` answers `{ status, headers, data, empty }` as it came, whatever the status: `data` the
+  body's JSON, else `undefined`, and `empty` true when the body held nothing but whitespace.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
   A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered or offset page that
   repeats the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
@@ -137,8 +138,8 @@ An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pag
   object, `{}` when no body argument is given; one that declares form parameters sends a form-encoded body, each value
   a scalar as its string (an object or a list is `param_invalid`), with the form's `content-type` over any other.
 - The answer is read by the operation's `result`: undeclared keys are dropped, and an answer that does not fit is
-  `invalid_response`. With no `result` the answer is `unknown`, and a 204 answers `null`; any other answer without JSON
-  is `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
+  `invalid_response`. With no `result` the answer is `unknown`, and a 2xx with an empty body (a 202, a 201, a 204)
+  answers `null`; any other answer without JSON is `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
 - A paged operation is read with `for await`. It yields the records at `records`, or, with no `records`, the elements of
   a list `result` (an answer that is a list), page by page; a record that does not fit is skipped, and the `onSkipped(ids)` option hears once from each page that skipped any.
 

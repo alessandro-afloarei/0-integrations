@@ -620,9 +620,9 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   says `kind: 'read'`: the engine retries only a call marked idempotent, a GET by default and an operation of
   `kind: 'read'`.
 - A shape key ending in `?` may be missing or null, and is read as absent.
-- `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 204
-  (the usual answer to DELETE, PUT and PATCH) answers `null`, which `unknown` already covers. Any other answer without
-  JSON, and a 204 to an operation with a `result`, is `invalid_response`.
+- `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 2xx
+  with an empty body (a 202, a 201, a 204) answers `null`, which `unknown` already covers. Any other answer without
+  JSON, and an empty 2xx to an operation with a `result`, is `invalid_response`.
 - A path's `{name}` must be a declared `path` parameter; the compiler refuses the entry otherwise.
 - An operation id's first dot-separated segment is never `json`, `request` or `paginate` (compared for equality, so
   `requests.list` is fine): those are the client's own calls. Nor is an id `then`, which would make the client a

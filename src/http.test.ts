@@ -207,6 +207,17 @@ test("uses the app's baseUrl and headers", async () => {
   expect(fake.calls[0]?.headers).toMatchObject({ 'user-agent': 'integrations-test', 'x-api-key': 'k' });
 });
 
+test('request says whether the body was empty after trimming, on a 2xx and on an error answer alike', async () => {
+  const plain = defineProvider({ id: 'plain', name: 'Plain', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.plain.test' } });
+  const fake = script(plain, () => new Response(null, { status: 202 }), () => new Response(' \n\t'), () => new Response('<html>'),
+    () => Response.json({}), () => new Response(null, { status: 500 }), () => new Response('down', { status: 503 }));
+  const read = [];
+  for (let i = 0; i < 6; i++) read.push(await fake.client.request('/items'));
+  expect(read.map(({ status, data, empty }) => [status, data, empty])).toEqual([[202, undefined, true], [200, undefined, true],
+    [200, undefined, false], [200, {}, false], [500, undefined, true], [503, undefined, false]]);
+  await expect(script(plain, () => new Response(null, { status: 202 })).client.json('/items')).rejects.toMatchObject({ code: 'invalid_response', status: 202 });
+});
+
 test('invalid JSON is unavailable as data and invalid_response through json', async () => {
   const fake = script(exa, () => new Response('<html>no JSON</html>'));
   expect((await fake.client.request('/items')).data).toBeUndefined();

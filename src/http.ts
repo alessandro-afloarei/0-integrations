@@ -14,7 +14,8 @@ export type RequestOptions = {
   idempotent?: boolean;
   signal?: AbortSignal;
 } & ({ json?: unknown; form?: undefined } | { form: Readonly<Record<string, string>>; json?: undefined });
-export type ProviderResponse = { status: number; headers: Headers; data: unknown };
+/** `data` is the body's JSON, else undefined; `empty`, the body held nothing but whitespace. */
+export type ProviderResponse = { status: number; headers: Headers; data: unknown; empty: boolean };
 
 /** The request a declared call makes, with what the caller adds: GraphQL is a POST of the query and its variables to
  * the base. The one rule for every declared call (identify, a request revoke, an operation, a paged operation). */
@@ -280,11 +281,13 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
         },
       });
       const response = await pending;
-      return { status: response.status, headers: response.headers, data: parseJson(await pending.text()) };
+      const text = await pending.text();
+      return { status: response.status, headers: response.headers, data: parseJson(text), empty: text.trim() === '' };
     } catch (error) {
       if (error instanceof HTTPError) {
-        return { status: error.response.status, headers: error.response.headers,
-          data: typeof error.data === 'string' ? parseJson(error.data) : error.data };
+        const data: unknown = error.data;
+        return { status: error.response.status, headers: error.response.headers, data: typeof data === 'string' ? parseJson(data) : data,
+          empty: typeof data === 'string' ? data.trim() === '' : data === undefined };
       }
       if (isNetworkError(error) || isTimeoutError(error) || options.signal?.aborted) throw new ProviderHttpError('unavailable', null);
       throw error;

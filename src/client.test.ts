@@ -134,16 +134,33 @@ test('an answer keeps its declared keys; a key? missing or null is absent; anyth
   await expect(raw.api.issues.raw()).rejects.toEqual(new ProviderHttpError('invalid_response', null));
 });
 
-test('a 204 answers null when the operation declares no result; with a result, or any other 2xx without JSON, it is invalid_response', async () => {
-  const { fake, api } = setup(() => new Response(null, { status: 204 }));
+const answered = (status: number, body: string | null = null) => () => new Response(body, { status });
+
+test('an operation with no result answers null for any 2xx with an empty body: a 202, a 201, whitespace, a 204', async () => {
+  const { fake, api } = setup(sequence(answered(202), answered(201), answered(200, '   \n'), answered(204), answered(204)));
+  expect(await api.issues.create({ title: 'a' })).toBeNull();
+  expect(await api.issues.create({ title: 'b' })).toBeNull();
+  expect(await api.issues.rate({ score: 1 })).toBeNull();
+  expect(await api.requests.list()).toBeNull();
   expect(await api.issues.delete({ id: 'x' })).toBeNull();
+  expect(wire(fake).map(([method]) => method)).toEqual(['POST', 'POST', 'POST', 'GET', 'DELETE']);
+});
+
+test('a body that is no JSON, or an empty 2xx to an operation with a result, is invalid_response; an error status throws', async () => {
+  const { api } = setup(sequence(answered(202, '<html>proxy</html>'), answered(202), answered(204), answered(403)));
+  await expect(api.issues.create({ title: 'a' })).rejects.toMatchObject({ code: 'invalid_response', status: 202 });
+  await expect(api.issues.archive()).rejects.toMatchObject({ code: 'invalid_response', status: 202 });
   await expect(api.issues.archive()).rejects.toMatchObject({ code: 'invalid_response', status: 204 });
-  expect(wire(fake)).toEqual([['DELETE', `${BASE}/issues/x`, ''], ['PUT', `${BASE}/archive`, '']]);
-  const { api: odd } = setup(sequence(() => new Response('', { status: 200 }), () => new Response('<html>proxy</html>', { status: 200 })));
-  await expect(odd.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
-  await expect(odd.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
-  const { api: refused } = setup(() => new Response(null, { status: 403 }));
-  await expect(refused.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'rejected', status: 403 });
+  await expect(api.issues.delete({ id: 'x' })).rejects.toMatchObject({ code: 'rejected', status: 403 });
+});
+
+test("hostile: an empty 2xx the entry's errors.failed marks still throws; a paged list's empty page is invalid_response", async () => {
+  const failing = defineProvider({ id: 'failing', name: 'Failing', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    errors: { failed: { status: 200 } }, operations: { 'mail.send': { method: 'POST', path: '/send' } } });
+  const fake = fakeFetch([{ url: /https:/, respond: answered(200) }]);
+  await expect(client(failing, { token: 'k', fetch: fake.fetch }).mail.send()).rejects.toMatchObject({ code: 'request_failed', status: 200 });
+  const { api } = setup(answered(200));
+  await expect(api.issues.list({ teamId: 'T' }).next()).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
 });
 
 test('notFound: null answers a 404 with null; any other operation keeps not_found', async () => {
