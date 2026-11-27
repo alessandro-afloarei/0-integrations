@@ -41,8 +41,8 @@ one takes five steps:
      a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
      the list to its one container (a project, a board), are required, and when none of them is its container the list
      declares the page's sets as `anyOf`; a header the page requires on one operation is a required `header` parameter
-     (PagerDuty's `From`); a header whose value the page fixes for one operation is a required `header` parameter with
-     that one value as its `enum` (Cal.com's `cal-api-version`);
+     (PagerDuty's `From`); a header whose value the page fixes for one operation is a required `header` parameter
+     whose type is that value (Cal.com's `cal-api-version`); an `enum` lists two or more values;
    - a value the page fixes (a "Must be …", the one value an operation takes) is a literal type: `send: true`,
      `actor_type: 'agent'`, at the top level, inside an object or in each list element, so the call states it; never in
      a `result`;

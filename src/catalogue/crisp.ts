@@ -46,7 +46,7 @@ export const crisp = defineProvider({
     'messages.create': { docs: `${ref}/#send-a-message-in-conversation`, method: 'POST', path: '/conversation/{session_id}/message',
       params: { ...sessionId, type: { in: 'body', type: 'string', required: true, enum: ['text', 'note'],
         description: '`note` is a private note: visible to the team, never to the customer.' },
-      from: { in: 'body', type: 'string', required: true, enum: ['operator'], description: 'operator: your team sends it.' },
+      from: { in: 'body', type: 'operator', required: true, description: 'operator: your team sends it.' },
       origin: { in: 'body', type: 'string', required: true, description: '`chat`, `email` or `urn:` and a channel.' },
       content: { in: 'body', type: 'string', required: true },
       stealth: { in: 'body', type: 'boolean', description: 'true does not send the message to the other party.' } },

@@ -58,7 +58,7 @@ export const reamaze = defineProvider({
     'contacts.list': { docs: `${ref}/get_contacts`, path: '/contacts',
       params: { q: { in: 'query', type: 'string', description: 'Searches contacts by name or email.' },
         type: { in: 'query', type: 'string', enum: ['email', 'mobile'] },
-        sort: { in: 'query', type: 'string', enum: ['date'], description: 'By name by default; date orders newest first.' }, ...page },
+        sort: { in: 'query', type: 'date', description: 'By name by default; date orders newest first.' }, ...page },
       result: { 'page_count?': 'integer', 'total_count?': 'integer', contacts: [{ 'name?': 'string', 'email?': 'string', 'friendly_name?': 'string' }] } },
   },
 });

@@ -61,7 +61,7 @@ export const intercom = defineProvider({
     'replies.create': { docs: `${ref}/conversations/replyconversation`, method: 'POST', path: '/conversations/{conversation_id}/reply',
       params: { ...conversationId, message_type: { in: 'body', type: 'string', required: true, enum: ['comment', 'note'],
         description: 'comment reaches the customer; note keeps the reply internal, for teammates.' },
-      type: { in: 'body', type: 'string', required: true, enum: ['admin'], description: 'admin: a teammate replies.' },
+      type: { in: 'body', type: 'admin', required: true, description: 'admin: a teammate replies.' },
       admin_id: { in: 'body', type: 'string', required: true, description: 'The teammate who replies.' },
       body: { in: 'body', type: 'string', required: true },
       skip_notifications: { in: 'body', type: 'boolean', description: 'true sends no notifications.' } },

@@ -53,7 +53,7 @@ export const chatwoot = defineProvider({
       result: { payload: [message] } },
     'messages.create': { docs: `${ref}/messages/create-new-message`, method: 'POST', path: `${conversations}/{conversation_id}/messages`,
       params: { ...one, content: { in: 'body', type: 'string', required: true },
-        message_type: { in: 'body', type: 'string', enum: ['outgoing'], description: 'The agent\'s message.' },
+        message_type: { in: 'body', type: 'outgoing', description: 'The agent\'s message.' },
         private: { in: 'body', type: 'boolean', description: 'true makes it a private note.' } },
       result: message },
     'contacts.list': { docs: `${ref}/contacts/list-contacts`, path: '/api/v1/accounts/{account_id}/contacts', paging: 'contacts',

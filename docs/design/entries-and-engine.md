@@ -858,7 +858,7 @@ it to its container and the page size; on a write, the body fields the docs mark
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
 A header the page requires on one operation is a required `header` parameter (PagerDuty's `From`). `http.headers` holds
 the value most declared operations share; an operation whose page fixes another ("Must be set to …") declares it as a
-required `header` parameter with that one value as its `enum` (Cal.com's `cal-api-version`).
+required `header` parameter whose type is that value (Cal.com's `cal-api-version`).
 A send that needs a multipart body (attachments) or a raw RFC 5322 message is declared with only the plain fields its
 page lets it take; a multipart body waits.
 When a page states that at least one of several equal inputs is required to find or create one record (in a sentence, a

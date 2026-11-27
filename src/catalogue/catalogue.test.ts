@@ -51,6 +51,7 @@ const value = z.union([z.string(), z.array(z.string())]);
 const method = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const request = z.strictObject({ method: method.optional(), path: template.optional(),
   query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional(), base: z.string().optional() });
+const ONE_VALUE_ENUM = 'an enum lists two or more values: write the one value as the type';
 const EMPTY_LITERAL = 'a literal type is the one value a caller sends: an empty string is none';
 /** A type name, a literal (`true`, `false`, another string), a list or an object. */
 const shape: z.ZodType<Shape> = z.lazy(() =>
@@ -63,7 +64,7 @@ const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true
   storage: true, ecommerce: true, phone: true, design: true, analytics: true, search: true };
 const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 'delete']).optional(),
   params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'form', 'variables', 'header']), type: shape,
-    required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
+    required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).min(2, ONE_VALUE_ENUM).optional(),
     description: z.string().optional() }))
     .refine(params => Object.entries(params).every(([name, param]) => param.in !== 'header' || headerName.safeParse(name).success), headerMessage)
     .optional(),
@@ -735,7 +736,7 @@ test.each<[Rule, Entry]>([
     ['`notFound` only on an operation with no `paging`', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
-    ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],
+    ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1', '2'] } } } }],
     [RESULT_LITERAL, { list: { path: '/items', result: { kind: 'x' } } }],
     [RESULT_LITERAL, { list: { path: '/items', result: { items: [{ 'draft?': true }] } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
@@ -1053,6 +1054,7 @@ test.each<[string, Record<string, unknown>, string]>([
 test.each<[string, object, string]>([
   ['a header parameter named with a capital', { From: { in: 'header', type: 'string' } }, headerMessage],
   ['an empty literal type', { kind: { in: 'body', type: { kind: '' } } }, EMPTY_LITERAL],
+  ['a one-value enum', { state: { in: 'query', type: 'string', enum: ['open'] } }, ONE_VALUE_ENUM],
   ['a header parameter named with a space', { 'x from': { in: 'header', type: 'string' } }, headerMessage],
 ])('%s fails the schema, with what to fix', (_, params, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], operations: { add: { method: 'POST', path: '/items', params } } };
@@ -1122,13 +1124,13 @@ test('an entry whose operations keep every rule passes them all', () => {
         result: { data: { items: [{ id: 'string' }] }, 'next?': 'string' } },
       'pages.events': { docs: 'https://k.test/docs/events', path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
       'requests.create': { docs: 'https://k.test/docs/requests', method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
-        state: { in: 'query', type: 'string', enum: ['open'] }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
+        state: { in: 'query', type: 'open' }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
       'then.later': { docs: 'https://k.test/docs/later', path: '/later' },
       'people.get': { docs: 'https://k.test/docs/people', method: 'POST', path: '/people', anyOf: [['email'], ['person.name', 'person.company.domain']],
         params: { email: { in: 'body', type: 'string' }, person: { in: 'body', type: { 'name?': 'string', 'company?': { domain: 'string' } }, required: true } } },
       me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
       'incidents.create': { docs: 'https://k.test/docs/incidents', method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
-        'x-version': { in: 'header', type: 'string', enum: ['2026-05-01'], required: true, description: 'The version this operation needs.' } } },
+        'x-version': { in: 'header', type: '2026-05-01', required: true, description: 'The version this operation needs.' } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
   expect(entrySchema.safeParse(good).error).toBeUndefined();

@@ -502,7 +502,7 @@ const headed = defineProvider({ id: 'headed', name: 'Headed', auth: [{ kind: 'ke
     'incidents.create': { method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
       title: { in: 'body', type: 'string' } } },
     'items.list': { path: '/items', paging: 'cursor', records: 'items', result: { items: ['string'], 'next?': 'string' },
-      params: { 'x-version': { in: 'header', type: 'string', enum: ['2'], required: true }, 'x-page': { in: 'header', type: 'integer' } } },
+      params: { 'x-version': { in: 'header', type: '2', required: true }, 'x-page': { in: 'header', type: 'integer' } } },
   } });
 
 test('a header parameter is sent as a header: required, given, replacing the entry\'s and the app\'s, never the credential', async () => {
@@ -515,7 +515,7 @@ test('a header parameter is sent as a header: required, given, replacing the ent
     headers: { from: 'ana@acme.test', 'x-app': 'a', 'x-version': '1', accept: 'application/json', authorization: 'Bearer k' } });
 });
 
-test("a required one-value header replaces the entry's and the app's of its name on every page; without it or another, nothing is sent", async () => {
+test("a required literal header replaces the entry's and the app's of its name on every page; without it or another, nothing is sent", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: sequence(json({ items: ['a'], next: 'c2' }), json({ items: ['b'] })) }]);
   const api = client(headed, { token: 'k', fetch: fake.fetch, headers: { 'x-version': 'app' } });
   const list = (args: Record<string, unknown>) => untyped(api.items.list)(args) as AsyncGenerator<string>;

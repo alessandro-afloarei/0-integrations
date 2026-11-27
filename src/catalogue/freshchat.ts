@@ -9,7 +9,7 @@ const conversation = { conversation_id: 'string', 'status?': 'string', 'channel_
 const message = { id: 'string', 'conversation_id?': 'string', 'message_type?': 'string', 'actor_type?': 'string',
   'actor_id?': 'string', 'user_id?': 'string', 'created_time?': 'string', 'message_parts?': 'unknown' } as const;
 const conversationId = { conversation_id: { in: 'path', type: 'string', required: true } } as const;
-const agent = { actor_type: { in: 'body', type: 'string', required: true, enum: ['agent'] },
+const agent = { actor_type: { in: 'body', type: 'agent', required: true },
   actor_id: { in: 'body', type: 'string', required: true, description: 'The agent sending the message.' } } as const;
 const assigned = { assigned_agent_id: { in: 'body', type: 'string', description: 'With status assigned, give this or assigned_group_id.' },
   assigned_group_id: { in: 'body', type: 'string' },

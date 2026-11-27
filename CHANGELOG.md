@@ -6,6 +6,7 @@ Nothing here is released yet.
 
 - New: a parameter's type may be a literal (`true`, `'agent'`), at the top level, inside an object or in each list
   element; an argument fits only that value. Missive sends mail (`messages.create`, `drafts.send: true`).
+- An entry fixes a value with a literal type; the library's one-value enums became literals, requests unchanged.
 - New entries: 25 support providers (atlas, chatwoot, crisp, customerly, devrev, dixa, edesk, freshchat, freshdesk,
   freshservice, gist, groove, happyfox, helpcrunch, helpwise, hiver, liveagent, plain, pylon, reamaze, thena, trengo,
   unthread, zammad, zendesk), each with its category's operations (Plain its reads only). Every entry is `declared`.

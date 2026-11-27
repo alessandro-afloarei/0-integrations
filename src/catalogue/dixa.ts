@@ -45,7 +45,7 @@ export const dixa = defineProvider({
       path: '/v1/conversations/{conversationId}/messages',
       params: { ...conversationId, content: { in: 'body', type: content, required: true, description: 'value, and _type Html, Markdown or Text.' },
         agentId: { in: 'body', type: 'string', required: true, description: 'The agent who sends it to the customer.' },
-        _type: { in: 'body', type: 'string', enum: ['Outbound'] },
+        _type: { in: 'body', type: 'Outbound' },
         cc: { in: 'body', type: ['string'] }, bcc: { in: 'body', type: ['string'] } },
       result: { data: { 'messageId?': 'string', direction: 'string', authorId: 'string', 'createdAt?': 'string', content: 'unknown' } } },
     'notes.create': { docs: `${ref}/internal-notes/postconversationsconversationidnotes`, method: 'POST',
