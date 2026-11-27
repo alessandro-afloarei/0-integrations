@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Outline. OAuth 2 on the cloud, app.getoutline.com, its app registered under Settings, then Applications; the key on
- * app.getoutline.com or the person's own server, a typed host reached only through the address guard unless the app
- * passes its own `fetch`. Every method is a POST with a JSON body; a 429 names its wait in `Retry-After`. Lists page by
- * an `offset` in the body (https://www.getoutline.com/developers). Types: https://www.getoutline.com/openapi.json */
+/** Outline: OAuth 2 on app.getoutline.com, its app registered under Settings, then Applications, and published to
+ * sign in other workspaces (https://app.getoutline.com/.well-known/oauth-authorization-server); or the key, on the
+ * cloud or the person's own server, behind the address guard. Each method is a POST with a JSON body; a 429 waits
+ * `Retry-After`; lists page by a body `offset` (https://www.getoutline.com/developers; types: openapi.json there). */
 const document = { id: 'string', 'title?': 'string', 'collectionId?': 'string', 'parentDocumentId?': 'string',
   'path?': 'string', 'createdAt?': 'string', 'updatedAt?': 'string' } as const;
 const limit = { limit: { in: 'body', type: 'number' } } as const;
@@ -23,6 +23,7 @@ export const outline = defineProvider({
     help: 'Create it under Settings, then API & Apps. If you limit its scopes, give it this space-separated list of endpoints: auth.info documents.list documents.info documents.create documents.update collections.list.' }],
   http: { baseUrl: 'https://{host}/api', host: '*' } }],
   scopes: { default: ['read', 'write'] },
+  revoke: { url: 'https://app.getoutline.com/oauth/revoke', token: ['refresh'] },
   http: { baseUrl: 'https://app.getoutline.com/api', headers: { 'content-type': 'application/json' }, retry: {} },
   identify: { request: { method: 'POST', path: '/auth.info' }, id: 'data.user.id', name: ['data.user.name', 'data.user.email'] },
   errors: { detail: 'error' },

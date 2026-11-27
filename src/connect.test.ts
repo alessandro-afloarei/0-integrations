@@ -653,13 +653,16 @@ describe("a sign-in's own part", () => {
     const { secret } = await finishConnect(oauth, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, code: 'c', redirectUri: callback,
       codeVerifier: started.codeVerifier, fetch: http.fetch, onRevokeFailed: vi.fn(), ...typed });
     await refreshGrant(oauth, { clientId: 'kit-client', clientSecret: 'kit-secret' }, secret.refreshToken ?? '', { fetch: http.fetch, ...typed });
+    await revokeGrant(oauth, { ...secret, client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, fetch: http.fetch, ...typed });
     await apiClient(oauth, { token: 'kit', fetch: http.fetch, ...typed }).documents.get({ id: 'd' });
     // The whole entry is its first sign-in, the key's own part unseen.
     await apiClient(outline, { token: 'kit', fetch: http.fetch, ...typed }).documents.get({ id: 'd' });
     expect((await startConnect(outline, start)).kind).toBe('redirect');
     expect(new Set(http.calls.map(call => new URL(call.url).host))).toEqual(new Set(['app.getoutline.com']));
-    expect(http.calls.map(call => new URL(call.url).pathname)).toEqual(['/oauth/token', '/api/auth.info', '/oauth/token', '/api/documents.info',
-      '/api/documents.info']);
+    expect(http.calls.map(call => new URL(call.url).pathname)).toEqual(['/oauth/token', '/api/auth.info', '/oauth/token', '/oauth/revoke',
+      '/api/documents.info', '/api/documents.info']);
+    // The refresh token is the one revoked.
+    expect(new URLSearchParams(http.calls[3]?.body).get('token')).toBe(secret.refreshToken);
   });
 
   it("Outline narrowed to its key asks for the key's own fields, and refuses a host that is an address before the key is read", async () => {
