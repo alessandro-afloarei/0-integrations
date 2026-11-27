@@ -3,7 +3,7 @@ import { defineProvider } from '../catalogue.js';
 /** Plain, GraphQL: a machine user's API key; its reads only, each list one page (pass `first` and `after` yourself). A
  * mutation reports its failure inside a 2xx, in its own output: https://www.plain.com/docs/graphql/error-handling
  * Webhooks: hex HMAC-SHA256 of the body, once an admin sets a HMAC secret: https://www.plain.com/docs/request-signing;
- * `Plain-Event-Id` repeats across retries: https://www.plain.com/docs/webhooks */
+ * the body's `id` is the event's, the same on every attempt: https://www.plain.com/docs/webhooks */
 const at = '{ iso8601 }';
 const threadFields = `id ref title status priority customer { id } createdAt ${at} updatedAt ${at}`;
 const time = { iso8601: 'string' } as const;
@@ -19,13 +19,15 @@ export const plain = defineProvider({
   id: 'plain', name: 'Plain', docs: 'https://www.plain.com/docs/graphql/authentication',
   categories: ['support'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'A machine user\'s API key (Settings > Machine users & agents > Add API key), with the permissions thread:read and customer:read.' }],
+    help: 'A machine user\'s API key (Settings > Machine users & agents > Add API key), with the permissions thread:read, timeline:read and customer:read.' }],
   auth: [{ kind: 'key' }],
   // Every call is a POST of JSON: https://www.plain.com/docs/graphql/introduction
   // A 429 is a rate limit: https://www.plain.com/docs/graphql/sdk
   http: { baseUrl: 'https://core-api.uk.plain.com/graphql/v1', headers: { 'content-type': 'application/json' }, retry: {} },
   identify: { request: { graphql: 'query MyWorkspace { myWorkspace { id name } }' }, id: 'data.myWorkspace.id', name: 'data.myWorkspace.name' },
-  webhook: { kind: 'hmac', header: 'plain-request-signature', deliveryId: { header: 'plain-event-id' } },
+  // A query's error code is in `extensions.code`: https://www.plain.com/docs/graphql/reporting
+  errors: { detail: 'errors.0.extensions.code', failed: { path: 'errors.0' } },
+  webhook: { kind: 'hmac', header: 'plain-request-signature', deliveryId: { body: ['id'] } },
   operations: {
     'threads.list': { docs: `${reference}/threads`, kind: 'read',
       graphql: `query Threads($filters: ThreadsFilter, $first: Int, $after: String) { threads(filters: $filters, first: $first, after: $after) { edges { node { ${threadFields} } } pageInfo { hasNextPage endCursor } } }`,
