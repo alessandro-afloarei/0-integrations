@@ -4,17 +4,26 @@
 
 Nothing here is released yet.
 
-- Breaking: `challengeAnswer(webhook, request, secret)` verifies the request itself, unless the entry marks its
-  challenge `unsigned`; call it before `verifyWebhook`. Slack's `url_verification` and Discord's PING are now answered
-  only under a valid signature. A value is answered only as 1 to 512 printable ASCII characters with no space, `<` or
-  `>` (or a finite number as JSON). New: a challenge may be read from a header or a query, answered only as text
-  (`text/plain`, `nosniff`, its `content-length`); Nylas declares its `GET ?challenge=`, unsigned.
-- New: `basic` webhooks, checked by HTTP Basic credentials (`authorization: Basic <base64 of user:password>`, the secret
-  `user:password`; one with no `:` or an empty password accepts nothing). Mailjet declares its webhook.
-- New: a `standard` webhook request with no `webhook-signature` is read under Svix's names, `svix-id`, `svix-timestamp`
-  and `svix-signature` (it was `false`), unless the entry dedupes on a header: such an entry reads only that header's
-  set. AgentMail declares its webhook, deduplicated on `event_id`. Breaking: a `standard` entry whose `deliveryId`
-  header is neither `webhook-id` nor `svix-id` accepts nothing.
+- Webhooks:
+  - Breaking: `challengeAnswer(webhook, request, secret)` verifies the request itself unless the entry marks its
+    challenge `unsigned`; call it before `verifyWebhook`. Slack's `url_verification` and Discord's PING are answered
+    only under a valid signature: with a wrong secret they were answered, and are now null. A value is answered only as
+    1 to 512 printable ASCII characters with no space, `<` or `>` (or a finite number as JSON).
+  - New: a challenge may be answered as text (`text/plain`, `nosniff`, its `content-length`), and read from a header or
+    a query, then answered only as text. Nylas declares its `GET ?challenge=` and Fellow its URL verification, both
+    unsigned.
+  - New: `basic` webhooks, checked by HTTP Basic credentials (`authorization: Basic <base64 of user:password>`, the
+    secret `user:password`; one with no `:` or an empty password accepts nothing). Mailjet, Pipedrive and Postmark
+    declare theirs: the app sets the user and password on the webhook (in the URL it registers; Pipedrive's
+    `http_auth_user` and `http_auth_password`). Pipedrive dedupes on the body's `meta.id` (webhooks v2), Postmark on
+    `X-PM-Webhook-Trace-Id`.
+  - New: a `standard` request with no `webhook-signature` is read under Svix's names, `svix-id`, `svix-timestamp` and
+    `svix-signature` (it was `false`); an entry that dedupes on a header reads only that header's set. AgentMail,
+    Resend and Fellow declare theirs (AgentMail deduped on the body's `event_id`, Resend and Fellow on `svix-id`), and
+    Recall.ai's older accounts' Svix webhooks verify with each endpoint's own secret. Breaking: a `standard` entry
+    whose `deliveryId` header is neither `webhook-id` nor `svix-id` accepts nothing (no catalogue entry has one).
+  - Krisp declares its webhook as `token` on `authorization`: the person adds an `Authorization` request header
+    holding the app's secret in Krisp's webhook settings, and the app passes that value as the secret.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.

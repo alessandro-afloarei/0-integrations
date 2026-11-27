@@ -609,8 +609,9 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    challenge answer changes nothing and holds nothing secret; an app calls it first, and verifies every other request.
 
 In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
-Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab; Svix's names:
-AgentMail), `basic` (Mailjet) and `challenge` (Slack, Discord; from a query, as text and `unsigned`: Nylas). A secret
+Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google; on `authorization`: Krisp),
+`standard` (GitLab; Svix's names: AgentMail, Resend, Fellow, Recall.ai's older accounts), `basic` (Mailjet, Pipedrive,
+Postmark) and `challenge` (Slack, Discord; as text and `unsigned`: Fellow from the body, Nylas from a query). A secret
 that keys nothing (one that does not decode exactly, a key of only zero bytes, or a Basic secret without a password) is
 `false`. The table test also refuses a `challenge.when` with a `status` or `detail`, a body `echo` without a `when`
 that reads a body `path`, an `echo` path holding a `.`, a header `echo` that is no lowercase token, an empty query name

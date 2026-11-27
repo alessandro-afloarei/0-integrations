@@ -51,18 +51,22 @@ holding a `.` is `false`: the specification says the message id must "not be all
 signed content joins id, timestamp and body with dots (GitLab's ids are UUIDs).
 
 A request with no `webhook-signature` is read under Svix's names instead, `svix-id`, `svix-timestamp` and
-`svix-signature`: Svix, the reference implementation, sends these, as AgentMail's webhooks do. One set is read whole.
-A `standard` entry that dedupes on a header reads only that header's set and is `false` for the other, so on every
-request it accepts the id header it dedupes on is the one the signature covers: a delivery renamed to the other set's
-names cannot replay without its id, or with a fresh one. An entry that dedupes on the body, or on nothing, reads
-either set. AgentMail's entry declares the body's `event_id` as its delivery id: its `svix-id` differs
-between webhooks registered for the organization, a pod and an inbox, and `event_id` does not.
+`svix-signature`: Svix, the reference implementation, sends these, as AgentMail's, Resend's and Fellow's webhooks do.
+One set is read whole. A `standard` entry that dedupes on a header reads only that header's set and is `false` for the
+other (a header that is neither `webhook-id` nor `svix-id` accepts nothing), so on every request it accepts the id
+header it dedupes on is the one the signature covers: a delivery renamed to the other set's names cannot replay without
+its id, or with a fresh one. An entry that dedupes on the body, or on nothing, reads either set. AgentMail's entry
+declares the body's `event_id` as its delivery id: its `svix-id` differs between webhooks registered for the
+organization, a pod and an inbox, and `event_id` does not.
 
-`kind: 'basic'` (Mailjet) signs nothing either: the provider calls the URL the app registered with a user and password
-in it (`https://user:password@…`) and sends them as HTTP Basic. Pass `user:password` as the secret. The request passes
-when `authorization` is `Basic` (in any case), one space and exactly the base64 of the secret's UTF-8 bytes, compared as
-SHA-256 digests as `token` is; the password runs from the first `:`. A secret with no `:` or an empty password, a
-missing header, two spaces, base64 without its `=` padding and the credentials in clear are all `false`.
+`kind: 'basic'` (Mailjet, Pipedrive, Postmark) signs nothing: the app gives the provider a user and password, in the URL
+it registers (`https://user:password@…`) or in fields of their own (Pipedrive's `http_auth_user` and
+`http_auth_password`), and the provider sends them as HTTP Basic. Pass `user:password` as the secret. Where they sit in
+a URL, use a user and password of letters, digits, `-` and `_`: no page says how a reserved character there is escaped.
+The request passes when `authorization` is `Basic` (in any case), one space and exactly the base64 of the secret's UTF-8
+bytes, compared as SHA-256 digests as `token` is; the password runs from the first `:`. A secret with no `:` or an
+empty password, a missing header, two spaces, base64 without its `=` padding and the credentials in clear are all
+`false`.
 
 [Fireflies](fireflies.md) and [Breakcold](breakcold.md) declare a delivery id; Fireflies' module also parses the event.
 Stripe's entry declares the event's `id` as its delivery id.
@@ -113,9 +117,9 @@ Nylas makes the webhook's secret, so it is unsigned; it is answered with the val
 sent with chunked encoding, so keep that header when your server sends the `Response`.
 
 A challenge read from the body is answered only where its `when` holds; one read from a header or a query parameter
-wherever the value is present, and only as text (`text: true`). The value comes from whoever sent the request, so it is answered only when it is 1 to
-512 printable ASCII characters with no space, `<` or `>` (in a JSON answer, a finite number too): never markup, never
-a header. The answer copies nothing else of the request, changes nothing and holds nothing secret; anyone may receive
+where its `when` holds or, with none, wherever the value is present, and only as text (`text: true`). The value comes
+from whoever sent the request, so it is answered only when it is 1 to 512 printable ASCII characters with no space, `<`
+or `>` (in a JSON answer, a finite number too): never markup, never a header. The answer copies nothing else of the request, changes nothing and holds nothing secret; anyone may receive
 one for an unsigned challenge. Verify every request it does not answer.
 
 ```ts
