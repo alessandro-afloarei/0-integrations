@@ -15,8 +15,9 @@ const contact = { id: 'string', 'name?': 'string', 'description?': 'string', 'is
   'handles?': [{ handle: 'string', source: 'string' }] } as const;
 const conversationId = { conversation_id: { in: 'path', type: 'string', required: true } } as const;
 const channelId = { channel_id: { in: 'path', type: 'string', required: true } } as const;
-const recipients = { to: { in: 'body', type: ['string'] }, cc: { in: 'body', type: ['string'] }, bcc: { in: 'body', type: ['string'] },
-  subject: { in: 'body', type: 'string' }, body: { in: 'body', type: 'string', required: true }, author_id: { in: 'body', type: 'string' } } as const;
+const addressed = { to: { in: 'body', type: ['string'] }, cc: { in: 'body', type: ['string'] }, bcc: { in: 'body', type: ['string'] },
+  subject: { in: 'body', type: 'string' }, body: { in: 'body', type: 'string', required: true } } as const;
+const recipients = { ...addressed, author_id: { in: 'body', type: 'string' } } as const;
 const ref = 'https://dev.frontapp.com/reference';
 
 export const front = defineProvider({
@@ -49,18 +50,18 @@ export const front = defineProvider({
     'conversations.update': { docs: `${ref}/update-conversation`, method: 'PATCH', path: '/conversations/{conversation_id}',
       params: { ...conversationId, assignee_id: { in: 'body', type: 'string', nullable: true, description: 'A teammate\'s id; null unassigns.' },
         inbox_id: { in: 'body', type: 'string', description: 'Moves the conversation to this inbox.' },
-        status: { in: 'body', type: 'string', enum: ['archived', 'open', 'deleted', 'spam'], description: 'Give status or status_id, not both.' },
+        status: { in: 'body', type: 'string', enum: ['archived', 'open'], description: 'Give status or status_id, not both.' },
         status_id: { in: 'body', type: 'string', description: 'A ticket status id (ticketing must be on); give status or status_id.' },
         tag_ids: { in: 'body', type: ['string'], description: 'Every tag of the conversation: replaces its tags.' } } },
     'messages.list': { docs: `${ref}/list-conversation-messages`, path: '/conversations/{conversation_id}/messages',
       params: { ...conversationId, ...page }, result: { ...pagination, _results: [message] } },
     'replies.create': { docs: `${ref}/create-message-reply`, method: 'POST', path: '/conversations/{conversation_id}/messages',
-      params: { ...conversationId, ...recipients, channel_id: { in: 'body', type: 'string', description: 'The channel to send from.' },
-        sender_name: { in: 'body', type: 'string' }, text: { in: 'body', type: 'string' },
+      params: { ...conversationId, ...addressed, channel_id: { in: 'body', type: 'string', description: 'The channel to send from.' },
+        text: { in: 'body', type: 'string' },
         options: { in: 'body', type: { 'tag_ids?': ['string'], 'archive?': 'boolean' },
           description: 'archive is true by default: the conversation is archived as the reply is sent.' } } },
     'comments.create': { docs: `${ref}/add-comment`, method: 'POST', path: '/conversations/{conversation_id}/comments',
-      params: { ...conversationId, body: { in: 'body', type: 'string', required: true }, author_id: { in: 'body', type: 'string' },
+      params: { ...conversationId, body: { in: 'body', type: 'string', required: true },
         is_pinned: { in: 'body', type: 'boolean' } },
       result: { id: 'string', body: 'unknown', 'posted_at?': 'number', is_pinned: 'boolean' } },
     'contacts.list': { docs: `${ref}/list-contacts`, path: '/contacts', params: page, result: { ...pagination, _results: [contact] } },
