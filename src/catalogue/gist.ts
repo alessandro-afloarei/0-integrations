@@ -2,8 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Gist: OAuth 2 (an app made alone in the Developer Portal; listing it for the public needs Gist's review:
  * https://developers.getgist.com/docs/listing-your-app; scopes: https://developers.getgist.com/docs/oauth-scopes), or
- * the workspace's API key. 100 requests per 10 seconds per workspace, then a 429. No reply: its body picks its sender,
- * the contact too. The conversation and message lists' answers are not shown: each answers one page as sent. */
+ * the workspace's API key. 100 requests per 10 seconds per workspace, then a 429. A `reply` message reaches the
+ * contact. The conversation and message lists' answers are not shown: each answers one page as sent. */
 const conversation = { id: 'integer', 'title?': 'string', 'channel?': 'string', 'state?': 'string', 'open?': 'boolean',
   'created_at?': 'integer', 'updated_at?': 'integer', 'assignee?': 'unknown' } as const;
 const conversationId = { conversation_id: { in: 'path', type: 'integer', required: true } } as const;
@@ -41,6 +41,14 @@ export const gist = defineProvider({
       params: { ...conversationId, page: { in: 'query', type: 'integer', description: '1 by default.' },
         per_page: { in: 'query', type: 'integer', description: '50 by default, at most 60.' },
         with_notes: { in: 'query', type: 'boolean' } } },
+    'messages.create': { docs: `${ref}/#reply-to-a-conversation`, method: 'POST', path: '/conversations/{conversation_id}/messages',
+      params: { ...conversationId, message_type: { in: 'body', type: 'string', required: true, enum: ['reply', 'note'],
+        description: '`note` keeps the message internal: notes are not visible to the contact.' },
+      from: { in: 'body', type: { type: 'teammate', teammate_id: 'string' }, required: true,
+        description: 'teammate_id is the teammate who writes: the agent the page requires the request to name.' },
+      body: { in: 'body', type: 'string', required: true } },
+      result: { message: { id: 'integer', 'conversation_id?': 'integer', 'message_type?': 'string', 'is_inbound?': 'boolean',
+        'channel?': 'string', 'created_at?': 'integer', 'body?': 'unknown', 'author?': { 'type?': 'string', 'id?': 'integer' } } } },
     'contacts.list': { docs: `${ref}/#list-all-contacts`, path: '/contacts', paging: 'next', records: 'contacts',
       params: { per_page: { in: 'query', type: 'integer', description: '50 by default, at most 60.' },
         order: { in: 'query', type: 'string', enum: ['asc', 'desc'] },
