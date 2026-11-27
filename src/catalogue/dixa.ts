@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Dixa: an administrator's API token, sent bare; 10 requests a second per token, then a 429:
- * https://docs.dixa.io/docs/api-standards-rules. An Outbound message (`agentId`), on `messages.create` or in
- * `conversations.create`, reaches the customer. No conversation list but the search, and no update. Webhooks sign `t`
- * in milliseconds, not declared: https://docs.dixa.io/docs/webhooks/webhooks-security */
+/** Dixa: an administrator's API token, sent bare (https://docs.dixa.io/docs/tutorial-create-an-api-token); 10 requests
+ * a second per token, then a 429: https://docs.dixa.io/docs/api-standards-rules. An Outbound message (`agentId`) on
+ * `messages.create` or `conversations.create` reaches the customer. No conversation list but the search, no update.
+ * Webhooks sign `t` (13 digits in its example), not declared: https://docs.dixa.io/docs/webhooks/webhooks-security */
 const conversation = { id: 'integer', requesterId: 'string', channel: 'string', createdAt: 'string', 'state?': 'string',
   'direction?': 'string', 'subject?': 'string', 'assignment?': { 'agentId?': 'string', 'assignedAt?': 'string' } } as const;
 const content = { value: 'string', '_type?': 'string' } as const;
@@ -15,7 +15,7 @@ export const dixa = defineProvider({
   id: 'dixa', name: 'Dixa', docs: 'https://docs.dixa.io/openapi/dixa-api/v1/organization/getorganization',
   categories: ['support'],
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
-    help: 'Only a Dixa administrator can make one: Settings > Integrations > API Tokens > Add API token, with "Dixa API" as the API version and the permissions the calls need.' }],
+    help: 'Only a Dixa administrator can make one: Settings > Integrations > API Tokens > Add API token, with "Dixa API" as the API version; creating conversations, messages and notes needs the conversation.reply permission.' }],
   auth: [{ kind: 'key', send: { header: 'authorization' } }],
   http: { baseUrl: 'https://dev.dixa.io', minIntervalMs: 100, retry: { defaultWaitMs: 1_000 } },
   identify: { request: { path: '/v1/organization' }, id: 'data.id', name: 'data.name' },
@@ -30,12 +30,12 @@ export const dixa = defineProvider({
       notFound: 'null', params: conversationId, result: { data: conversation } },
     'conversations.create': { docs: `${ref}/conversations/postconversations`, method: 'POST', path: '/v1/conversations',
       params: { requesterId: { in: 'body', type: 'string', required: true, description: 'The end user\'s id.' },
-        _type: { in: 'body', type: 'string', description: 'The channel: Email, ContactForm, Chat, Sms, Whatsapp or Callback; each needs its own fields.' },
+        _type: { in: 'body', type: 'string', description: 'The channel: Email, ContactForm, Sms or Whatsapp; each needs its own fields.' },
         emailIntegrationId: { in: 'body', type: 'string', description: 'Required for Email and ContactForm.' },
         subject: { in: 'body', type: 'string', description: 'Required for Email and ContactForm.' },
         contactEndpointId: { in: 'body', type: 'string', description: 'Required for Sms and Whatsapp: the provisioned phone number.' },
         message: { in: 'body', type: 'unknown',
-          description: 'Required but for Callback: Inbound (content) from the end user, or Outbound (content, agentId) to the customer.' },
+          description: 'Required: Inbound (content) from the end user, or Outbound (content, agentId) to the customer; for Whatsapp, agentId and a template.' },
         language: { in: 'body', type: 'string' } },
       result: { data: { id: 'integer' } } },
     'messages.list': { docs: `${ref}/messages/getconversationsconversationidmessages`, path: '/v1/conversations/{conversationId}/messages',
