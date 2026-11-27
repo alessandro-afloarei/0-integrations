@@ -1446,6 +1446,18 @@ describe('an answer a rate-limit rule marks is retried as a 429 is', () => {
     expect(await sentOnce(github, message({}))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 60_000 });
   });
 
+  test("a rule with a wait of its own is reported, never retried: GitHub's primary 403 waits for its reset, not a shorter Retry-After", async () => {
+    const primary = (headers: Record<string, string>) => answer(403, { 'x-ratelimit-remaining': '0',
+      'x-ratelimit-reset': String(Date.now() / 1000 + 1800), ...headers });
+    expect(await sentOnce(github, primary({ 'retry-after': '2' }))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 2000 });
+    expect(await sentOnce(github, primary({}))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 1_800_000 });
+  });
+
+  test("the error carries the header wait the retry reads on a marked answer: a 529's 90 s is sent once with it", async () => {
+    const reset = marked({ wait: { header: 'ratelimit-reset', unit: 's' } }, { when: [{ status: 529 }] });
+    expect(await sentOnce(reset, answer(529, { 'ratelimit-reset': '90' }))).toMatchObject({ code: 'rate_limited', status: 529, retryAfterMs: 90_000 });
+  });
+
   test('an error a revoked code or an errors rule decides first is no rate limit, and is sent once', async () => {
     const decided = retrying({}, { http: { baseUrl: 'https://api.retrying.test', retry: {}, rateLimit: { when: [{ status: 403 }] } },
       errors: { detail: 'code', revoked: ['gone'], rules: [{ when: { detail: 'denied' }, code: 'rejected' }] } });

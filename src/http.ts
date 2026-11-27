@@ -262,8 +262,9 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
           beforeRequest: [pace], beforeRetry: [pace],
           afterResponse: [async ({ response, retryCount }) => {
             const { status, headers } = response;
-            // A rate limit the entry declares on another status (a 403, a 529) is retried as a 429 is. The body is read
-            // only when a rule may hold for the status, or for a body wait, past no positive Retry-After.
+            // A rate limit the entry declares on another status (a 403, a 529), by a rule with no `wait` of its own, is
+            // retried as a 429 is. The body is read only when a rule may hold for the status, or for a body wait past
+            // no positive Retry-After.
             const mayLimit = status >= 400 && status !== 429 && limits.some(rule => [undefined, 'error', status].includes(rule.status));
             if ((!RETRIED.includes(status) && !mayLimit) || retryCount >= limit) return;
             const now = Date.now();

@@ -22,9 +22,11 @@ Nothing here is released yet.
   `cal-api-version` its page fixes as a required argument, sent in place of the entry's.
 - New: a wait may be an ISO 8601 time (`unit: 'iso8601'`: `2021-06-15T10:51:23.035+0100`, its zone required), waited
   until that instant. Teamleader waits until its `x-ratelimit-reset`, where it waited a minute.
-- A read whose answer a `rateLimit` rule marks is retried as a 429 is, after its `Retry-After` (else the entry's
-  `retry.wait`, else `retry.defaultWaitMs`), never past `maxWaitMs`: Google's 403 `rateLimitExceeded`,
-  `userRateLimitExceeded` and `quotaExceeded` after a second, GitHub's secondary-limit 403 after its `retry-after`.
+- A read whose answer a `rateLimit` rule with no `wait` of its own marks is retried as a 429 is, after its
+  `Retry-After` (else the entry's `retry.wait`, else `retry.defaultWaitMs`), never past `maxWaitMs`; its error carries
+  that wait: Google's 403 `rateLimitExceeded`, `userRateLimitExceeded` and `quotaExceeded` after a second, GitHub's
+  secondary-limit 403 after its `retry-after`. A rule with its own `wait` (GitHub's 403 with
+  `x-ratelimit-remaining: 0`, which waits for its reset) is still reported, never retried.
 - Notion's 529 `service_overload` is a rate limit: `rate_limited` where it was `unavailable`, and a read is retried
   after its `Retry-After`, else a second, as a 429 is.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
