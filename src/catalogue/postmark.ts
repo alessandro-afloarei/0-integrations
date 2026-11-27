@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Postmark: a server's Server Token, no OAuth 2; domains take the whole account's token, another credential, so they
- * are left out. A 429 asks to slow down; ErrorCode is a number: https://postmarkapp.com/developer/api/overview
- * Lists answer one page (`count` and `offset` both required). A send emails its recipients and spends the plan's
- * emails: https://postmarkapp.com/pricing.txt */
+/** Postmark: a server's Server Token, no OAuth 2; a third-party application that interacts with the Service needs
+ * Postmark's prior written consent: https://postmarkapp.com/terms-of-service. Domains need the whole account's token,
+ * so are left out; a 429 asks to slow down; ErrorCode is a number: https://postmarkapp.com/developer/api/overview
+ * Lists are one page; a send emails its recipients, spending the plan's emails: https://postmarkapp.com/pricing.txt */
 const message = { MessageID: 'string', 'Subject?': 'string', 'From?': 'string', 'Recipients?': 'unknown', 'Status?': 'string',
   'ReceivedAt?': 'string', 'Tag?': 'string', 'MessageStream?': 'string' } as const;
 const ref = 'https://postmarkapp.com/developer/api';
@@ -12,7 +12,7 @@ export const postmark = defineProvider({
   id: 'postmark', name: 'Postmark', docs: 'https://postmarkapp.com/developer/api/overview',
   categories: ['mail'],
   fields: [{ name: 'serverToken', title: 'Server API token', secret: true,
-    help: 'For your own Postmark server: its Server API Token, on the server\'s API Tokens tab (Account Owners, Account Admins and Server Admins see it). A send needs a confirmed sender signature, and every email counts toward the plan (Free: 100 a month, no overages).' }],
+    help: 'For your own Postmark server: its Server API Token, on the server\'s API Tokens tab (Account Owners, Account Admins and Server Admins see it). A send needs a confirmed sender signature; while the account is pending approval, every recipient must share the From address\'s domain. Every email counts toward the plan (Free: 100 a month, no overages).' }],
   auth: [{ kind: 'key', send: { header: 'x-postmark-server-token' } }],
   http: { baseUrl: 'https://api.postmarkapp.com', headers: { accept: 'application/json' }, retry: {} },
   errors: { detail: 'ErrorCode', rules: [{ when: { detail: '701' }, code: 'not_found' }] },
