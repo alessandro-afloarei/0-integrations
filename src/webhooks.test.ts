@@ -1,18 +1,30 @@
-import { createHmac, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import { createHmac, generateKeyPairSync, sign, timingSafeEqual, type KeyObject } from 'node:crypto';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Webhook } from './catalogue.js';
+import { agentmail } from './catalogue/agentmail.js';
 import { airtable } from './catalogue/airtable.js';
 import { breakcold } from './catalogue/breakcold.js';
 import { chatwork } from './catalogue/chatwork.js';
 import { close } from './catalogue/close.js';
 import { discord } from './catalogue/discord.js';
+import { fellow } from './catalogue/fellow.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
+import { mailjet } from './catalogue/mailjet.js';
+import { recallai } from './catalogue/recallai.js';
+import { nylas } from './catalogue/nylas.js';
+import { pipedrive } from './catalogue/pipedrive.js';
 import { slack } from './catalogue/slack.js';
 import { stripe } from './catalogue/stripe.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook, type WebhookRequest } from './webhooks.js';
+
+// The real comparison, watched: the Basic test reads what reached it.
+vi.mock('node:crypto', async original => {
+  const crypto = await original<typeof import('node:crypto')>();
+  return { ...crypto, timingSafeEqual: vi.fn(crypto.timingSafeEqual) };
+});
 
 const now = 1730000000;
 const secret = 'webhook-secret';
@@ -368,37 +380,116 @@ test('an empty secret accepts nothing, whatever the kind', () => {
   expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.alloc(0))), '')).toBe(false);
 });
 
-/** A request with this JSON body: `challengeAnswer` runs after `verifyWebhook`, so no signature is needed here. */
+/** A request with this body and no signature. */
 const posted = (json: string) => request({}, Buffer.from(json));
-const answered = async (answer: Response | null) => (answer === null ? null
-  : { status: answer.status, type: answer.headers.get('content-type'), body: await answer.json() });
+/** Slack's `url_verification`, or any body, signed as Slack signs it (with `key`, at `at`). */
+const slackSigned = (json: string, key = secret, at = t) => request({ 'x-slack-request-timestamp': at,
+  'x-slack-signature': `v0=${createHmac('sha256', key).update(`v0:${at}:${json}`).digest('hex')}` }, Buffer.from(json));
+/** Discord's interaction, signed as Discord signs it. */
+const discordPing = (json: string) => request({ 'x-signature-timestamp': t,
+  'x-signature-ed25519': sign(null, Buffer.from(t + json), pair.privateKey).toString('hex') }, Buffer.from(json));
+/** Nylas' verification: a GET to the registered URL with `query`, and no body. */
+const nylasGet = (query: string) => ({ method: 'GET', url: `https://app.test/webhook${query}`, headers: new Headers(), rawBody: Buffer.alloc(0) });
+const answered = async (answer: Response | null) => (answer === null ? null : { status: answer.status,
+  type: answer.headers.get('content-type'), nosniff: answer.headers.get('x-content-type-options'),
+  length: answer.headers.get('content-length'), body: await answer.text() });
+const asJson = (body: unknown) => ({ status: 200, type: 'application/json', nosniff: null, length: null, body: JSON.stringify(body) });
+/** Nylas refuses a chunked answer: a text answer states its length, so an adapter that streams it sends no chunks. */
+const asText = (body: string) => ({ status: 200, type: 'text/plain; charset=utf-8', nosniff: 'nosniff', length: String(body.length), body });
 
-test("answers Slack's `url_verification` with its challenge, and nothing else", async () => {
+test("answers Slack's `url_verification` with its challenge only when it is signed with the app's secret", async () => {
   const challenge = '3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P';
-  // A signed `url_verification` passes `verifyWebhook` first, as an app calls them.
   const json = JSON.stringify({ token: 'Jhj5dZrVaK7ZwHHjRyZWjbDl', challenge, type: 'url_verification' });
-  const digest = createHmac('sha256', secret).update(`v0:${t}:${json}`).digest('hex');
-  const verification = request({ 'x-slack-signature': `v0=${digest}`, 'x-slack-request-timestamp': t }, Buffer.from(json));
-  expect(verifyWebhook(slack.webhook, verification, secret)).toBe(true);
-  expect(await answered(challengeAnswer(slack.webhook, verification)))
-    .toEqual({ status: 200, type: 'application/json', body: { challenge } });
-  expect(challengeAnswer(slack.webhook, posted(JSON.stringify({ type: 'event_callback', challenge, event: {} })))).toBeNull();
-  expect(challengeAnswer(slack.webhook, posted(JSON.stringify({ type: 'url_verification', challenge: { value: challenge } })))).toBeNull();
+  expect(await answered(challengeAnswer(slack.webhook, slackSigned(json), secret))).toEqual(asJson({ challenge }));
+  expect(challengeAnswer(slack.webhook, slackSigned(json), 'another-secret')).toBeNull();
+  // Verified as every delivery is: a stale timestamp, or the signature of another body replayed, answers nothing.
+  expect(challengeAnswer(slack.webhook, slackSigned(json, secret, String(now - 301)), secret)).toBeNull();
+  const replayed = slackSigned(JSON.stringify({ type: 'url_verification', challenge: 'other' }));
+  expect(challengeAnswer(slack.webhook, { ...replayed, rawBody: Buffer.from(json) }, secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned(json, 'another-secret'), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, posted(json), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned(JSON.stringify({ type: 'event_callback', challenge, event: {} })), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned(JSON.stringify({ type: 'url_verification', challenge: { value: challenge } })), secret)).toBeNull();
 });
 
-test("answers Discord's PING with `{ type: 1 }`, and no other interaction", async () => {
-  expect(await answered(challengeAnswer(discord.webhook, posted('{"type":1}')))).toEqual({ status: 200, type: 'application/json', body: { type: 1 } });
-  expect(challengeAnswer(discord.webhook, posted('{"type":2}'))).toBeNull();
+test("answers Discord's PING with `{ type: 1 }` only under its signature, and no other interaction", async () => {
+  expect(await answered(challengeAnswer(discord.webhook, discordPing('{"type":1}'), publicKey))).toEqual(asJson({ type: 1 }));
+  // Discord checks the endpoint with invalid signatures: a PING it did not sign is no handshake.
+  const forged = discordPing('{"type":1}');
+  const good = forged.headers.get('x-signature-ed25519') ?? '';
+  forged.headers.set('x-signature-ed25519', (parseInt(good.slice(0, 1), 16) ^ 1).toString(16) + good.slice(1));
+  expect(challengeAnswer(discord.webhook, forged, publicKey)).toBeNull();
+  expect(challengeAnswer(discord.webhook, posted('{"type":1}'), publicKey)).toBeNull();
+  expect(challengeAnswer(discord.webhook, discordPing('{"type":2}'), publicKey)).toBeNull();
+});
+
+test("answers Nylas' GET `?challenge=` with the value alone, as text, unsigned", async () => {
+  const value = 'bc609b38-c81f-47fb-a275-1d9bd61a968b';
+  for (const key of ['', 'any-secret']) expect(await answered(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${value}`), key))).toEqual(asText(value));
+  expect(await answered(challengeAnswer(nylas.webhook, nylasGet('?a=1&challenge=abc'), ''))).toEqual(asText('abc'));
+  expect(await answered(challengeAnswer(nylas.webhook, { ...nylasGet('?challenge=abc'), url: '/webhook?challenge=abc' }, ''))).toEqual(asText('abc'));
+  for (const query of ['', '?', '?challenge=', '?challenge', '?Challenge=abc', '?other=abc', '#challenge=abc', '#x?challenge=abc']) {
+    expect(challengeAnswer(nylas.webhook, nylasGet(query), '')).toBeNull();
+  }
+  // A notification is no handshake: its body is never read for a value.
+  expect(challengeAnswer(nylas.webhook, posted('{"challenge":"abc"}'), '')).toBeNull();
+  // A query challenge comes with no body: a delivery to a URL carrying `?challenge=` is an event, verified as one.
+  const relayed = { ...posted('{"trigger":"message.created"}'), url: 'https://app.test/webhook?challenge=abc' };
+  expect(challengeAnswer(nylas.webhook, relayed, '')).toBeNull();
+  expect(await answered(challengeAnswer(nylas.webhook, { ...relayed, rawBody: Buffer.alloc(0) }, ''))).toEqual(asText('abc'));
+  expect(challengeAnswer(nylas.webhook, { ...nylasGet('?challenge=abc'), rawBody: Buffer.from(' ') }, '')).toBeNull();
+});
+
+test('a challenge value is 1 to 512 printable ASCII characters with no space, `<` or `>`, or it is not answered', async () => {
+  const slackChallenge = (value: unknown) => slackSigned(JSON.stringify({ type: 'url_verification', challenge: value }));
+  for (const value of ['<script>alert(1)</script>', 'a<b', 'a>b', 'a b', 'a\nb', 'a\r\nx-evil: 1', 'a\tb', 'é', 'a\u0000', '', 'x'.repeat(513)]) {
+    expect(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${encodeURIComponent(value)}`), '')).toBeNull();
+    expect(challengeAnswer(slack.webhook, slackChallenge(value), secret)).toBeNull();
+  }
+  expect(challengeAnswer(nylas.webhook, nylasGet('?challenge=a+b'), '')).toBeNull();
+  const longest = 'x'.repeat(512);
+  expect(await answered(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${longest}`), ''))).toEqual(asText(longest));
+  const printable = '!"#$%&\'()*+,-./09:;=?@AZ[\\]^_`az{|}~';
+  expect(await answered(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${encodeURIComponent(printable)}`), ''))).toEqual(asText(printable));
+  expect(await answered(challengeAnswer(slack.webhook, slackChallenge(printable), secret))).toEqual(asJson({ challenge: printable }));
+  for (const value of [null, true, {}, [], 1e400]) expect(challengeAnswer(slack.webhook, slackChallenge(value), secret)).toBeNull();
+});
+
+test("answers Fellow's `url_verification` on its page's body with the challenge alone, as text, unsigned", async () => {
+  const json = '{\n  "type": "url_verification",\n  "challenge": "3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P"\n}';
+  expect(await answered(challengeAnswer(fellow.webhook, posted(json), ''))).toEqual(asText('3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P'));
+  expect(challengeAnswer(fellow.webhook, posted('{"type":"meeting.ended","challenge":"abc"}'), '')).toBeNull();
+});
+
+test('a query challenge echoes the query alone, after the request is verified unless it is unsigned', async () => {
+  const signed: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: { query: 'challenge' }, text: true } };
+  const sent = (headers: Record<string, string>) => ({ ...request(headers, Buffer.alloc(0)), url: 'https://app.test/webhook?challenge=abc' });
+  expect(await answered(challengeAnswer(signed, sent({ 'x-token': secret }), secret))).toEqual(asText('abc'));
+  expect(challengeAnswer(signed, sent({ 'x-token': 'wrong' }), secret)).toBeNull();
+  expect(challengeAnswer(signed, sent({}), secret)).toBeNull();
+  const unsigned: Webhook = { ...signed, challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
+  expect(await answered(challengeAnswer(unsigned, sent({}), ''))).toEqual(asText('abc'));
+});
+
+test('a text answer is a string: a number at a body path is not answered as text', async () => {
+  const text: Webhook = { kind: 'token', header: 'x-token', challenge: { when: { path: 'type', equals: 1 }, echo: 'value', text: true, unsigned: true } };
+  expect(challengeAnswer(text, posted('{"type":1,"value":42}'), '')).toBeNull();
+  expect(await answered(challengeAnswer(text, posted('{"type":1,"value":"42"}'), ''))).toEqual(asText('42'));
+});
+
+test("a body path is answered only when `when` holds: an app's own declaration without one answers nothing", () => {
+  // @ts-expect-error A body path needs `when`.
+  const loose: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: 'challenge', unsigned: true } };
+  expect(challengeAnswer(loose, posted('{"challenge":"abc"}'), '')).toBeNull();
 });
 
 test('a challenge answer echoes the one declared value and nothing else of the body', async () => {
-  expect(challengeAnswer(slack.webhook, posted('type=url_verification&challenge=x'))).toBeNull();
-  expect(challengeAnswer(slack.webhook, request({}, Buffer.from([0xff, 0xfe])))).toBeNull();
-  expect(challengeAnswer(fireflies.webhook, posted('{"type":"url_verification","challenge":"x"}'))).toBeNull();
-  expect(challengeAnswer(slack.webhook, posted('[{"type":"url_verification","challenge":"x"}]'))).toBeNull();
-  expect(challengeAnswer(slack.webhook, posted('{"type":"url_verification","challenge":null}'))).toBeNull();
-  expect(await answered(challengeAnswer(slack.webhook, posted('{"type":"url_verification","challenge":"x","token":"secret","extra":{"a":1}}'))))
-    .toEqual({ status: 200, type: 'application/json', body: { challenge: 'x' } });
+  expect(challengeAnswer(slack.webhook, slackSigned('type=url_verification&challenge=x'), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned('\u00ff'), secret)).toBeNull();
+  expect(challengeAnswer(fireflies.webhook, posted('{"type":"url_verification","challenge":"x"}'), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned('[{"type":"url_verification","challenge":"x"}]'), secret)).toBeNull();
+  expect(await answered(challengeAnswer(slack.webhook, slackSigned('{"type":"url_verification","challenge":"x","token":"secret","extra":{"a":1}}'), secret)))
+    .toEqual(asJson({ challenge: 'x' }));
 });
 
 test('a Standard Webhooks id holding a `.` is false: the signed content cannot be split again', () => {
@@ -410,7 +501,81 @@ test('a Standard Webhooks id holding a `.` is false: the signed content cannot b
   expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg.1', t), t, 'msg.1'), standardSecret)).toBe(false);
 });
 
+/** The same scheme under Svix's names (AgentMail): `svix-id`, `svix-timestamp`, `svix-signature`. */
+function svixSigned(signature: string, timestamp = t, id = 'msg_1'): WebhookRequest {
+  return request({ 'svix-id': id, 'svix-timestamp': timestamp, 'svix-signature': signature });
+}
+
+test("verifies AgentMail's webhook under Svix's header names, and the same request under `webhook-*` names", () => {
+  const good = standardSignature('msg_1', t);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(good), standardSecret)).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(`v1,${Buffer.alloc(32).toString('base64')} ${good}`), standardSecret)).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, standardSigned(good), standardSecret)).toBe(true);
+  // Svix's published example, signed at its own timestamp.
+  vi.setSystemTime(1731705121 * 1000);
+  const example = request({ 'svix-id': 'msg_loFOjxBNrRLzqYUf', 'svix-timestamp': '1731705121',
+    'svix-signature': 'v1,rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=' }, Buffer.from('{"event_type":"ping","data":{"success":true}}'));
+  expect(verifyWebhook(agentmail.webhook, example, 'whsec_plJ3nmyCDGBKInavdOK15jsl')).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, example, 'whsec_plJ3nmyCDGBKInavdOK15jsm')).toBe(false);
+});
+
+test('a request is checked with one set of Standard Webhooks headers whole, never an id or timestamp of the other', () => {
+  const good = standardSignature('msg_1', t);
+  // No `webhook-signature`: the `svix-*` set is read, and its id or timestamp is missing; `webhook-*` ones do not stand in.
+  expect(verifyWebhook(agentmail.webhook, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'svix-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, request({ 'svix-id': 'msg_1', 'webhook-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
+  // A `webhook-signature` chooses the `webhook-*` set, whatever `svix-*` headers stand beside it.
+  expect(verifyWebhook(agentmail.webhook, request({ 'svix-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good }), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, { ...svixSigned(good), headers: new Headers({ 'svix-id': 'msg_1', 'svix-timestamp': t,
+    'svix-signature': good, 'webhook-signature': 'v1,x' }) }, standardSecret)).toBe(false);
+});
+
+/** An app's own entry that dedupes on Svix's id header. */
+const svixDeduped: Webhook = { kind: 'standard', deliveryId: { header: 'svix-id' } };
+
+test("an entry that dedupes on a header reads only that header's set: a renamed replay is false", () => {
+  const good = standardSignature('msg_1', t);
+  // A GitLab delivery renamed to Svix's names would verify with no `webhook-id` to dedupe on.
+  expect(verifyWebhook(gitlab.webhook, svixSigned(good), standardSecret)).toBe(false);
+  expect(verifyWebhook(gitlab.webhook, request({ 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good, 'webhook-id': 'msg_2' }), standardSecret)).toBe(false);
+  expect(verifyWebhook(svixDeduped, standardSigned(good), standardSecret)).toBe(false);
+  expect(verifyWebhook(svixDeduped, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good, 'svix-id': 'msg_2' }), standardSecret)).toBe(false);
+  // A header in neither set verifies nothing.
+  const elsewhere: Webhook = { kind: 'standard', deliveryId: { header: 'x-delivery-id' } };
+  expect(verifyWebhook(elsewhere, standardSigned(good), standardSecret)).toBe(false);
+  expect(verifyWebhook(elsewhere, svixSigned(good), standardSecret)).toBe(false);
+  // Each reads its own set, the other set's headers beside it or not, and dedupes on the id that was signed.
+  const both = request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good, 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good });
+  expect(verifyWebhook(gitlab.webhook, standardSigned(good), standardSecret)).toBe(true);
+  expect(verifyWebhook(gitlab.webhook, both, standardSecret)).toBe(true);
+  expect(deliveryId(gitlab.webhook, both)).toBe('msg_1');
+  expect(verifyWebhook(svixDeduped, svixSigned(good), standardSecret)).toBe(true);
+  expect(deliveryId(svixDeduped, svixSigned(good))).toBe('msg_1');
+});
+
+test('an entry with a body id or none accepts either clean set, and both sets signed alike', () => {
+  const good = standardSignature('msg_1', t);
+  const both = request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good, 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good });
+  for (const webhook of [agentmail.webhook, recallai.webhook]) {
+    for (const delivery of [standardSigned(good), svixSigned(good), both]) expect(verifyWebhook(webhook, delivery, standardSecret)).toBe(true);
+  }
+});
+
+test('refuses a Svix-named request that is stale, altered or signed for another id', () => {
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', String(now - 301)), String(now - 301)), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', String(now - 300)), String(now - 300)), standardSecret)).toBe(true);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', t), t, 'msg_2'), standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg.1', t), t, 'msg.1'), standardSecret)).toBe(false);
+  const changed = Buffer.from(body);
+  changed[0] = 1;
+  expect(verifyWebhook(agentmail.webhook, { ...svixSigned(standardSignature('msg_1', t)), rawBody: changed }, standardSecret)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(standardSignature('msg_1', t)), `whsec_${Buffer.from('another-key').toString('base64')}`)).toBe(false);
+  expect(verifyWebhook(agentmail.webhook, svixSigned(`${'v1a,x '.repeat(1400)}${standardSignature('msg_1', t)}`), standardSecret)).toBe(false);
+});
+
 test('deliveryId reads the declared header or the body paths', () => {
+  expect(deliveryId(agentmail.webhook, request({ 'svix-id': 'msg_1' }, Buffer.from('{"event_type":"message.received","event_id":"e1"}')))).toBe('e1');
   expect(deliveryId(gitlab.webhook, standardSigned(standardSignature('msg_1', t)))).toBe('msg_1');
   expect(deliveryId(stripe.webhook, request({}, Buffer.from('{"id":"evt_1","type":"balance.available"}')))).toBe('evt_1');
   expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }))).toBe('d1');
@@ -419,4 +584,63 @@ test('deliveryId reads the declared header or the body paths', () => {
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('not json')))).toBeNull();
+});
+
+test("Pipedrive dedupes a webhooks v2 delivery on its event's id, and gives a v1 delivery, whose `meta.id` is the object's, none", () => {
+  // The guides' examples: v2's `meta` names its `version` and the event's `id`; v1's `meta.id` is the deal's.
+  const v2 = (id: string) => request({}, Buffer.from(JSON.stringify({ meta: { action: 'change', entity: 'deal', entity_id: '42', id,
+    version: '2.0', attempt: 1 }, data: { id: 42 } })));
+  const v1 = (title: string) => request({}, Buffer.from(JSON.stringify({ v: 1, meta: { v: 1, action: 'updated', object: 'deal', id: 42,
+    webhook_id: 7 }, current: { id: 42, title }, event: 'updated.deal' })));
+  expect([deliveryId(pipedrive.webhook, v1('first')), deliveryId(pipedrive.webhook, v1('second'))]).toEqual([null, null]);
+  const [one, two] = [deliveryId(pipedrive.webhook, v2('a3f1c2d4-0000-4000-8000-000000000001')),
+    deliveryId(pipedrive.webhook, v2('a3f1c2d4-0000-4000-8000-000000000002'))];
+  expect(one).not.toBeNull();
+  expect(two).not.toBeNull();
+  expect(one).not.toBe(two);
+  expect(deliveryId(pipedrive.webhook, v2('a3f1c2d4-0000-4000-8000-000000000001'))).toBe(one);
+});
+
+/** A delivery carrying this `authorization` header, as Mailjet sends the user and password of the URL it calls. */
+const basic = (authorization?: string) => request(authorization === undefined ? {} : { authorization });
+
+test("verifies Mailjet's Basic credentials: the scheme in any case, one space, the exact base64 of `user:password`", () => {
+  expect(verifyWebhook(mailjet.webhook, basic('Basic dXNlcjpwYXNz'), 'user:pass')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic('basic dXNlcjpwYXNz'), 'user:pass')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic('BASIC dXNlcjpwYXNz'), 'user:pass')).toBe(true);
+  // `user:pas` encodes with one `=`, which the header must keep.
+  expect(verifyWebhook(mailjet.webhook, basic('Basic dXNlcjpwYXM='), 'user:pas')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic('Basic dXNlcjpwYXM'), 'user:pas')).toBe(false);
+  // The password runs from the first `:`, so it may hold one; the secret's UTF-8 bytes are encoded.
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from('user:pa:ss').toString('base64')}`), 'user:pa:ss')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from('usér:pâss').toString('base64')}`), 'usér:pâss')).toBe(true);
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from('usér:pâss', 'latin1').toString('base64')}`), 'usér:pâss')).toBe(false);
+  for (const header of ['Basic  dXNlcjpwYXNz', 'BasicdXNlcjpwYXNz', 'Bearer dXNlcjpwYXNz', 'dXNlcjpwYXNz', 'Basic dXNlcjpwYXNz,',
+    `Basic ${Buffer.from('user:wrong').toString('base64')}`, `Basic ${Buffer.from('other:pass').toString('base64')}`, undefined]) {
+    expect(verifyWebhook(mailjet.webhook, basic(header), 'user:pass')).toBe(false);
+  }
+});
+
+test('a Basic secret with no `:`, or an empty password, keys nothing', () => {
+  for (const key of ['user', 'user:', '', ':']) {
+    expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from(key).toString('base64')}`), key)).toBe(false);
+  }
+  // An empty user is the provider's to refuse: the password alone still keys the check.
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from(':pass').toString('base64')}`), ':pass')).toBe(true);
+});
+
+test('a Basic header over 8 KiB is false before it is read, and the secret in clear is no credential', () => {
+  const long = `user:${'p'.repeat(7 * 1024)}`;
+  expect(verifyWebhook(mailjet.webhook, basic(`Basic ${Buffer.from(long).toString('base64')}`), long)).toBe(false);
+  expect(verifyWebhook(mailjet.webhook, basic('Basic user:pass'), 'user:pass')).toBe(false);
+  expect(verifyWebhook(mailjet.webhook, basic('user:pass'), 'user:pass')).toBe(false);
+});
+
+test('a Basic header is compared as a digest: every length reaches the comparison as 32 bytes', () => {
+  const compared = vi.mocked(timingSafeEqual);
+  for (const header of ['Basic d', 'Basic dXNlcjpwYXNz', `Basic ${'A'.repeat(4096)}`]) {
+    compared.mockClear();
+    verifyWebhook(mailjet.webhook, basic(header), 'user:pass');
+    expect(compared.mock.calls.map(([a, b]) => [a.byteLength, b.byteLength])).toEqual([[32, 32]]);
+  }
 });

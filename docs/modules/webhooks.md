@@ -1,6 +1,6 @@
 # `webhooks`
 
-`webhooks` verifies HMAC and Ed25519 signatures, shared tokens and Standard Webhooks with
+`webhooks` verifies HMAC and Ed25519 signatures, shared tokens, HTTP Basic credentials and Standard Webhooks with
 `verifyWebhook(entry.webhook, request, secret)` over the exact raw body bytes, and answers URL challenges with
 `challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification.
 `deliveryId(entry.webhook, request)` reads what the entry declares an app dedupes on: a header, or body paths joined
@@ -50,6 +50,24 @@ only the older secret token (`X-Gitlab-Token`) sends no signature, and this entr
 holding a `.` is `false`: the specification says the message id must "not be allowed to include any `.`", since the
 signed content joins id, timestamp and body with dots (GitLab's ids are UUIDs).
 
+A request with no `webhook-signature` is read under Svix's names instead, `svix-id`, `svix-timestamp` and
+`svix-signature`: Svix, the reference implementation, sends these, as AgentMail's, Resend's and Fellow's webhooks do.
+One set is read whole. A `standard` entry that dedupes on a header reads only that header's set and is `false` for the
+other (a header that is neither `webhook-id` nor `svix-id` accepts nothing), so on every request it accepts the id
+header it dedupes on is the one the signature covers: a delivery renamed to the other set's names cannot replay without
+its id, or with a fresh one. An entry that dedupes on the body, or on nothing, reads either set. AgentMail's entry
+declares the body's `event_id` as its delivery id: its `svix-id` differs between webhooks registered for the
+organization, a pod and an inbox, and `event_id` does not.
+
+`kind: 'basic'` (Mailjet, Pipedrive, Postmark) signs nothing: the app gives the provider a user and password, in the URL
+it registers (`https://user:password@…`) or in fields of their own (Pipedrive's `http_auth_user` and
+`http_auth_password`), and the provider sends them as HTTP Basic. Pass `user:password` as the secret. Where they sit in
+a URL, use a user and password of letters, digits, `-` and `_`: no page says how a reserved character there is escaped.
+The request passes when `authorization` is `Basic` (in any case), one space and exactly the base64 of the secret's UTF-8
+bytes, compared as SHA-256 digests as `token` is; the password runs from the first `:`. A secret with no `:` or an
+empty password, a missing header, two spaces, base64 without its `=` padding and the credentials in clear are all
+`false`.
+
 [Fireflies](fireflies.md) and [Breakcold](breakcold.md) declare a delivery id; Fireflies' module also parses the event.
 Stripe's entry declares the event's `id` as its delivery id.
 
@@ -74,21 +92,37 @@ const sharedToken: Webhook = { kind: 'token', header: 'x-goog-channel-token' };
 // `hmac` keyed with the secret's hex decoding, over the timestamp header's text and the body (Close)
 const decoded: Webhook = { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
   timestamp: { header: 'close-sig-timestamp' } };
+// `basic`: `authorization` holds HTTP Basic of the secret, `user:password` (Mailjet)
+const credentials: Webhook = { kind: 'basic' };
 // `standard`: Standard Webhooks fixes the headers and what is signed (GitLab)
 const standard: Webhook = { kind: 'standard', deliveryId: { header: 'webhook-id' } };
 // A `challenge` beside any kind: echo the body's `challenge` when its `type` is `url_verification` (Slack)
 const challenged: Webhook = { kind: 'hmac', header: 'x-slack-signature', signed: 'v0:{timestamp}:{body}', prefix: 'v0=',
   timestamp: { header: 'x-slack-request-timestamp' },
   challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge' } };
+// A `challenge` read from a GET's query and answered as text, unsigned: the secret comes after it (Nylas)
+const queried: Webhook = { kind: 'hmac', header: 'x-nylas-signature',
+  challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
 ```
 
 ## Receiving a delivery
 
-Verify first, then answer a challenge, then dedupe and handle. `challengeAnswer(entry.webhook, request)` answers a URL
-handshake the entry declares (`challenge`): Slack's `url_verification` with `{ "challenge": … }`, Discord's PING with
-`{ "type": 1 }`, each a JSON `200`. It is null for any other body, a body that is not JSON, a value that is not a string
-or a number, and an entry with no `challenge`; it copies nothing else of the body. Answer a challenge only after
-`verifyWebhook` accepted the request: an unsigned one would let anyone register your URL elsewhere.
+Answer a challenge first, then verify, then dedupe and handle. `challengeAnswer(entry.webhook, request, secret)`
+answers a URL handshake the entry declares (`challenge`) and is null for every other request. It verifies the request
+with `verifyWebhook` first, unless the entry marks the challenge `unsigned`: Slack's `url_verification` is answered
+`{ "challenge": … }` and Discord's PING `{ "type": 1 }`, each a JSON `200`, only under a valid signature (Discord also
+sends PINGs with invalid signatures, and expects the `401`). Nylas' check is a `GET` with `?challenge=…`, sent before
+Nylas makes the webhook's secret, so it is unsigned; it is answered with the value alone, as
+`text/plain; charset=utf-8` with `x-content-type-options: nosniff` and its `content-length`: Nylas refuses an answer
+sent with chunked encoding, so keep that header when your server sends the `Response`.
+
+A challenge read from the body is answered only where its `when` holds; one read from a query parameter only on a
+request with an empty body (a delivery to a URL holding the parameter is an event, verified as one), where its `when`
+holds or, with none, wherever the value is present, and only as text (`text: true`). The value comes from
+whoever sent the request, so it is answered only when it is 1 to 512 printable ASCII characters with no space, `<` or
+`>` (in a JSON answer, a finite number too): never markup, never a header. The answer copies nothing else of the
+request, changes nothing and holds nothing secret; anyone may receive one for an unsigned challenge. Verify every
+request it does not answer.
 
 ```ts
 import type { Webhook } from '0-integrations/catalogue';
@@ -99,10 +133,11 @@ async function receive(webhook: Webhook, request: Request, secret: string,
   const rawBody = await readCappedBody(request, 1024 * 1024);
   if (rawBody === null) return new Response(null, { status: 413 });
   const delivery = { method: request.method, url: request.url, headers: request.headers, rawBody };
-  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
-  const answer = challengeAnswer(webhook, delivery);
+  const answer = challengeAnswer(webhook, delivery, secret); // a handshake, verified unless the entry marks it unsigned
   if (answer !== null) return answer;
+  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
   return handle(deliveryId(webhook, delivery), rawBody); // the app dedupes on the id, when the entry declares one
 }
-// receive(slack.webhook, request, signingSecret, …), or receive(discord.webhook, request, publicKey, …)
+// receive(slack.webhook, request, signingSecret, …), receive(discord.webhook, request, publicKey, …),
+// or receive(nylas.webhook, request, webhookSecret, …)
 ```
