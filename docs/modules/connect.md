@@ -124,7 +124,12 @@ const later = client(signInWith(linear, kept.kind), { token: kept.token });
 ```
 
 Narrowed with a stored kind, the entry is a union: TypeScript gives `scopes` only once it knows the kind (`'scopes' in
-entry`, or a branch on the kind kept). Either sign-in's `values` hold the entry's plain fields and what `save` keeps.
+entry`, or a branch on the kind kept). Either sign-in's `values` hold its plain fields and what `save` keeps.
+
+A later sign-in may have its own fields and base. Outline's OAuth 2 is on app.getoutline.com; its key,
+`signInWith(outline, 'key')`, asks for the host of the person's own server and goes there. Keep the kind with the
+connection, beside the sealed secret, and narrow with that same kind for every later call: the library cannot tell an
+OAuth 2 token from a key, so a cloud token used with the key's narrowing would go to the host the values name.
 
 Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
 The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and

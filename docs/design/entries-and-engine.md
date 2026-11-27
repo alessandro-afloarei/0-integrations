@@ -319,12 +319,21 @@ is not a second sign-in.
    for apps that connect other people's accounts, which is what providers ask OAuth 2 for (ClickUp: "OAuth 2.0:
    Required for building apps for other users"). The key is `signInWith(entry, 'key')`. The rule constrains only an
    entry with two sign-ins.
-4. A narrowed entry keeps every field. An OAuth 2 sign-in reads the entry's plain fields: `startConnect` asks for them
-   and returns them; the app keeps them with `state`; every later call takes them (`finishConnect`, `refreshGrant`,
-   `revokeGrant`, `client`). It reads every one (in its URLs, the base, or `connection.*`), so a plain field only the
-   key reads (a Basic email beside OAuth 2) waits.
-5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `identify`, `save`,
-   `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
+4. A sign-in after the first may declare its own part, `fields`, `http: { baseUrl, host? }` and `identify`, and
+   `signInWith` puts it in place of the entry's: its `fields` and `identify` for the entry's, its `baseUrl` and `host`
+   over the entry's `http` (headers, retry and timeouts stay shared), and `auth` the sign-in without it. Outline's
+   OAuth 2 is on its cloud host, and its key, second, has its own `host` field and base `https://{host}/api`. The first
+   sign-in has none: its part is the entry's top level, so the entry used whole and its first narrowing are one.
+   `checkHosts`, which every send and `startConnect` run first, refuses a first sign-in that declares one (an app's
+   entry built without the types) with `TypeError('sign_in_own_first: <entry id>')`. Every rule then runs on each
+   narrowed entry: a later token sign-in with its own typed base beside a fixed token URL is `host_split`. An OAuth 2
+   sign-in reads its plain fields: `startConnect` asks for them and returns them; the app keeps them with `state`;
+   every later call takes them (`finishConnect`, `refreshGrant`, `revokeGrant`, `client`). It reads every one (in its
+   URLs, the base, or `connection.*`), so a plain field only the key reads (a Basic email beside OAuth 2) is the key's
+   own.
+5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `save`, `errors`,
+   `paging`, `webhook` and `operations` are shared by every sign-in, and `identify`, `fields` and the base and host of
+   `http` too, except what a later sign-in declares for itself; `send` is per sign-in already.
 6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
    per sign-in: an entry with several on `signInWith(entry, kind)`, each test named with its kind, and an entry with
    one as it is. The replay runs on the recorded sign-in only (rule 9).
@@ -337,7 +346,9 @@ is not a second sign-in.
    and the entry is `recorded` when that sign-in is. An OAuth 2 alternative is proven by its derived fake, and by a
    recording once the recorder learns the OAuth exchange.
 10. An app keeps the kind it chose with the connection (the secret's shape already differs: a grant, or the key's
-    fields) and narrows again for every later `client`, `refreshGrant` or `revokeGrant`.
+    fields) and narrows again for every later `client`, `refreshGrant` or `revokeGrant`. The engine cannot see a
+    connection used with another narrowing (a token is a string): Outline's OAuth 2 access token used with its key's
+    narrowing would go to the host the values name. Each narrowing sends only to its own base.
 
 ### `identify` and `save`
 
@@ -804,9 +815,8 @@ its docs, and engine tests as proof:
    five-step guide to adding a provider (`CONTRIBUTING.md`).
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
-code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; a base per sign-in
-(an OAuth 2 sign-in whose base differs from its key's; the [waiting list](../waiting-list.md) names who waits and
-why); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; `Operation.base`;
+placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
 (Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
 
 Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments
