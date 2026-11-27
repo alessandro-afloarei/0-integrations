@@ -1,11 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Daily: a domain's API key. Meetings are sessions, read back; rooms are created and updated. A next page starts after
- * its last record's id (starting_after): each list answers one page. https://docs.daily.co/docs/rest-api/errors
- * A 429 waits the 30-second window of the data reads: https://docs.daily.co/docs/rest-api/authentication. The webhook's
- * timestamp has no stated unit: not checked here. */
-const meeting = { id: 'string', 'room?': 'string', 'start_time?': 'integer', 'duration?': 'integer', 'ongoing?': 'boolean',
-  'max_participants?': 'integer', 'participants?': 'unknown' } as const;
+/** Daily: a domain's API key; rooms are listed, read, created and updated. A next page starts after its last record's
+ * id (starting_after): each list answers one page: https://docs.daily.co/docs/rest-api/errors. A 429 waits 30 s, the
+ * window of GET /recordings; no webhook (its timestamp has no stated unit). Identify reads the domain's configuration:
+ * https://docs.daily.co/reference/rest-api/domain/get-domain-config */
 const room = { id: 'string', 'name?': 'string', 'privacy?': 'string', 'url?': 'string', 'api_created?': 'boolean',
   'created_at?': 'string', 'config?': 'unknown' } as const;
 const page = { limit: { in: 'query', type: 'integer', description: '100 by default and at most.' },
@@ -25,13 +23,10 @@ export const daily = defineProvider({
   identify: { request: { path: '/' }, id: 'domain_id', name: 'domain_name' },
   errors: { detail: 'error' },
   operations: {
-    'meetings.list': { docs: `${ref}/meetings/list-meetings`, path: '/meetings',
-      params: { room: { in: 'query', type: 'string', description: 'A room name.' },
-        timeframe_start: { in: 'query', type: 'integer' }, timeframe_end: { in: 'query', type: 'integer' },
-        ongoing: { in: 'query', type: 'boolean' }, ...page },
-      result: { 'total_count?': 'integer', data: [meeting] } },
-    'meetings.get': { docs: `${ref}/meetings/get-meeting`, path: '/meetings/{meeting}', notFound: 'null',
-      params: { meeting: { in: 'path', type: 'string', required: true, description: 'The meeting session\'s id.' } }, result: meeting },
+    'rooms.list': { docs: `${ref}/rooms/list-rooms`, path: '/rooms', params: page,
+      result: { 'total_count?': 'integer', data: [room] } },
+    'rooms.get': { docs: `${ref}/rooms/get-room`, path: '/rooms/{room_name}', notFound: 'null',
+      params: { room_name: { in: 'path', type: 'string', required: true } }, result: room },
     'recordings.list': { docs: `${ref}/recordings/list-recordings`, path: '/recordings',
       params: { room_name: { in: 'query', type: 'string' }, ...page },
       result: { 'total_count?': 'integer', data: [{ id: 'string', 'room_name?': 'string', 'mtgSessionId?': 'string',
