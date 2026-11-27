@@ -22,6 +22,9 @@ Nothing here is released yet.
   `cal-api-version` its own page fixes in place of the entry's.
 - New: a wait may be an ISO 8601 time (`unit: 'iso8601'`: `2021-06-15T10:51:23.035+0100`, its zone required), waited
   until that instant. Teamleader waits until its `x-ratelimit-reset`, where it waited a minute.
+- A read whose answer a `rateLimit` rule marks is retried as a 429 is, after its `Retry-After` (else the entry's
+  `retry.wait`, else `retry.defaultWaitMs`), never past `maxWaitMs`: Google's 403 `rateLimitExceeded`,
+  `userRateLimitExceeded` and `quotaExceeded` after a second, GitHub's secondary-limit 403 after its `retry-after`.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.

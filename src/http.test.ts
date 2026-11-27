@@ -1407,6 +1407,53 @@ describe('which answers state a declared wait', () => {
   });
 });
 
+describe('an answer a rate-limit rule marks is retried as a 429 is', () => {
+  /** Google's 403 rate limit: its reason at `error.errors.0.reason`. */
+  const marked = (retry: Retry, when: Entry['http']['rateLimit'] = { when: [{ status: 403, detail: 'rateLimitExceeded' }] }) =>
+    retrying(retry, { http: { baseUrl: 'https://api.retrying.test', retry, rateLimit: when }, errors: { detail: 'error.errors.0.reason' } });
+  const reason = (status: number, code: string, headers: Record<string, string> = {}) => () =>
+    Response.json({ error: { errors: [{ reason: code }] } }, { status, headers });
+
+  test('a 403 the rule holds for waits the default second, a Retry-After of 2 its two, one of 90 is sent once with its wait', async () => {
+    await retriesAfter(marked({}), reason(403, 'rateLimitExceeded'), 1000);
+    await retriesAfter(marked({}), reason(403, 'rateLimitExceeded', { 'retry-after': '2' }), 2000);
+    expect(await sentOnce(marked({}), reason(403, 'rateLimitExceeded', { 'retry-after': '90' })))
+      .toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 90_000 });
+  });
+
+  test("a 529 the rule names waits the entry's default; a declared reset header counts on it as on a 429", async () => {
+    await retriesAfter(marked({ defaultWaitMs: 5000 }, { when: [{ status: 529 }] }), answer(529), 5000);
+    await retriesAfter(marked({ wait: { header: 'ratelimit-reset', unit: 's' } }, { when: [{ status: 529 }] }),
+      answer(529, { 'ratelimit-reset': '3' }), 3000);
+  });
+
+  test('a 403 no rule holds for, a write, and onlyStated with no stated wait are each sent once', async () => {
+    expect(await sentOnce(marked({}), reason(403, 'insufficientPermissions'))).toMatchObject({ code: 'rejected', status: 403 });
+    expect(await sentOnce(marked({ onlyStated: true }), reason(403, 'rateLimitExceeded'))).toMatchObject({ code: 'rate_limited', retryAfterMs: null });
+    const fake = script(marked({}), reason(403, 'rateLimitExceeded'), ok);
+    await expect(fake.client.json('/a', { method: 'POST', json: {} })).rejects.toMatchObject({ code: 'rate_limited', status: 403 });
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  test("GitHub's secondary 403 waits its retry-after, a header its rule reads; one with none is sent once", async () => {
+    const message = (headers: Record<string, string>) => () => Response.json({ message: 'You have exceeded a secondary rate limit' }, { status: 403, headers });
+    const fake = fakeFetch([{ url: /https:/, respond: sequence(message({ 'retry-after': '3' }), ok) }]);
+    const result = createClient(github, { token: () => Promise.resolve('k'), fetch: fake.fetch, minIntervalMs: 0 }).json('/user');
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(fake.calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toEqual({ ok: true });
+    expect(await sentOnce(github, message({}))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 60_000 });
+  });
+
+  test('an error a revoked code or an errors rule decides first is no rate limit, and is sent once', async () => {
+    const decided = retrying({}, { http: { baseUrl: 'https://api.retrying.test', retry: {}, rateLimit: { when: [{ status: 403 }] } },
+      errors: { detail: 'code', revoked: ['gone'], rules: [{ when: { detail: 'denied' }, code: 'rejected' }] } });
+    expect(await sentOnce(decided, () => Response.json({ code: 'denied' }, { status: 403 }))).toMatchObject({ code: 'rejected' });
+    expect(await sentOnce(decided, () => Response.json({ code: 'gone' }, { status: 403 }))).toMatchObject({ name: 'GrantRevoked' });
+  });
+});
+
 /** Wrike's shape: fixed sign-in URLs; the base on the host the token answer names, under a declared domain. */
 const named = defineProvider({ id: 'named', name: 'Named', scopes: { default: [] }, save: { host: 'tokenAnswer.host' },
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.named.test/authorize', tokenUrl: 'https://login.named.test/token' }],
