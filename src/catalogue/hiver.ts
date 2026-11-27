@@ -1,9 +1,10 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Hiver: an API key an admin creates, Bearer, with an admin user's access; identify only checks it. One request a
- * second per account, 5,000 a day; repeated retries after a 429 can get the key blacklisted, so none is retried. No
- * reply, conversation create or customer list in the API; a note's create takes a multipart body and is not declared.
- * A conversation's id is a number in a list and a string in a get. */
+/** Hiver: an API key an admin creates, Pro plan and up (https://hiverhq.com/pricing), Bearer, with an admin user's
+ * access: https://help.hiverhq.com/hiver-api/hiver-api. Identify only checks it. One request a second per account,
+ * 5,000 a day; repeated retries after a 429 can get the key blacklisted, so none is retried. No reply, conversation
+ * create or customer list in the API; a note's create takes a multipart body and is not declared. */
+// A conversation's id is a number in a list and a string in a get.
 const conversation = { id: 'unknown', 'status?': 'string', 'assignee?': { 'assignee_type?': 'string', 'assignee_id?': 'number' },
   'tag_ids?': 'unknown', 'gmail_thread_id?': 'string', 'private_permalink?': 'string', 'public_permalink?': 'string' } as const;
 const limit = { limit: { in: 'query', type: 'integer', description: 'Results per page, 10 to 100; 10 by default.' } } as const;
@@ -17,7 +18,7 @@ export const hiver = defineProvider({
   id: 'hiver', name: 'Hiver', docs: ref,
   categories: ['support'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'Only a Hiver admin can make one: Admin Panel > Integrations > Developer APIs > Create an API key, then switch the app on. It has an admin user\'s access.' }],
+    help: 'API access is on Hiver\'s Pro plan and up. Only a Hiver admin can make a key: Admin Panel > Integrations > Developer APIs > Create an API key, then switch the app on. It has an admin user\'s access.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api2.hiverhq.com/v1' },
   identify: { request: { path: '/inboxes' } },
