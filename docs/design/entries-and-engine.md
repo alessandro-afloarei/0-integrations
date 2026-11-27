@@ -679,13 +679,14 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | (string &
   `string`, `integer`, `number`, `boolean` and `unknown`. An argument fits it only when it is that value. A value the
   page fixes (a "Must be …", the one value an operation takes) is a literal, at the top level, inside an object or in
   each element of a list: the call states it, so a send reads as a send (Missive's `messages.create` is its draft with
-  `drafts.send: true`). `enum` lists two or more values; one value is a literal type. A literal is for arguments only:
-  `result` holds none, and none is the empty string: the table refuses both. A literal equal to a type name cannot be
-  written, and an entry that needs one waits.
+  `drafts.send: true`). `enum` lists two or more values (the table refuses an `enum` of one value); one value is a
+  literal type. A literal is for arguments only: `result` holds none, and none is the empty string: the table refuses
+  both. A literal equal to a type name cannot be written, and an entry that needs one waits.
 - `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 2xx
   with an empty body (a 202, a 201, a 204) answers `null`, which `unknown` already covers. Any other answer without
   JSON, and an empty 2xx to an operation with a `result`, is `invalid_response`.
-- A path's `{name}` must be a declared `path` parameter; the compiler refuses the entry otherwise.
+- A path's `{name}` must be a declared `path` parameter, and a shape constant is written `as const` (widened, its
+  `string` or `boolean` is no type name or literal); the compiler refuses the entry otherwise.
 - An operation id's first dot-separated segment is never `json`, `request` or `paginate` (compared for equality, so
   `requests.list` is fine): those are the client's own calls. Nor is an id `then`, which would make the client a
   thenable. No id has an empty segment or is a dotted prefix of another (`pages` beside `pages.markdown`). The
