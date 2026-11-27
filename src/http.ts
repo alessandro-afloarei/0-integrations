@@ -11,6 +11,8 @@ import { checkHosts, fill, hostPart, namedHosts, parseJson, placeholders, plainV
 export type RequestOptions = {
   method?: Method;
   query?: Readonly<Record<string, string>>;
+  /** Over the entry's and the app's, under the credential and a form's type. */
+  headers?: Readonly<Record<string, string>>;
   idempotent?: boolean;
   signal?: AbortSignal;
 } & ({ json?: unknown; form?: undefined } | { form: Readonly<Record<string, string>>; json?: undefined });
@@ -248,7 +250,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     let headers: Headers;
     try {
       headers = new Headers(entry.http.headers);
-      for (const [key, header] of Object.entries(input.headers ?? {})) headers.set(key, header);
+      for (const [key, header] of [...Object.entries(input.headers ?? {}), ...Object.entries(options.headers ?? {})]) headers.set(key, header);
       if (credential) headers.set(...credential);
       // A form's type over the entry's and the app's.
       if (options.form) headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');

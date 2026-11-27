@@ -618,8 +618,8 @@ provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft 
 type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;
   kind?: 'read' | 'write' | 'delete'; params?: Record<string, Param>; result?: Shape; records?: Path;
   paging?: string; notFound?: 'null'; base?: string; anyOf?: readonly (readonly Path[])[] };
-type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables'; type: Shape; required?: true; nullable?: true;
-  enum?: readonly string[]; description?: string };
+type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables' | 'header'; type: Shape; required?: true;
+  nullable?: true; enum?: readonly string[]; description?: string; value?: string | number | boolean };
 type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
 ```
 
@@ -648,9 +648,22 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   posted with the query to the base. `form` parameters are sent as an `application/x-www-form-urlencoded` body, each
   value as its string (`true`, `25`), an empty form when none is given, with the form's `content-type`, which wins over
   one the entry or the app sets (Chatwork, Zulip and Agile CRM take one).
+- A `header` parameter's name is the header's name, a lowercase token; its value is a string, a finite number or a
+  boolean, sent as its text. Headers are set in this order, a later one replacing an earlier one of the same name: the
+  entry's `http.headers`, the app's `headers`, the operation's header arguments, the credential, a form's
+  `content-type`. So a header parameter may replace an entry's header for one operation (Cal.com's `cal-api-version`),
+  and never the credential. A value holding a character outside printable ASCII, space and tab (a CR, an LF, a NUL) is
+  `param_invalid: <name>` before anything is sent.
+- A parameter with a `value` is sent with that value on every call, checked and placed as an argument is, and the
+  caller gives none: it is no argument in the types, and an argument of its name is not read (PagerDuty's acting
+  user is an argument; Cal.com's per-operation version, a draft's `draft: true` or a send's `send: true` are fixed).
+  The table test refuses a `value` beside `required` or `nullable`, one its own `type` or `enum` would refuse, and a
+  header's outside printable ASCII; a `description` may say why it is fixed.
 - A parameter has a place in its request or the entry is refused (the table test, and `client()` with
   `param_unplaced: <id> <name>` when it is built): a `path` one only where the path names it, `body` and `form` ones
-  never on a GET and never in one operation together, and on a GraphQL operation only `variables`.
+  never on a GET and never in one operation together, on a GraphQL operation only `variables`, and a `header` one
+  only as a scalar, never `nullable`, never named `content-type` or the credential's header of any sign-in
+  (`authorization` unless its `send` names another).
 - `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
   creates one record by any of several equal inputs (`[['email'], ['phone', 'last_name']]`). A path names a parameter
   or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read
@@ -766,6 +779,9 @@ start and end keep the page's shape (an object of `dateTime` and `timeZone` stay
 only as an acknowledgement, or not at all, has no `result`. Parameters: path ids; on a list, the one filter that scopes
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
+A header the page requires on one operation is a `header` parameter: the caller's value (PagerDuty's `From`) an
+argument, a value the page fixes ("Must be set to …") a `value`. `http.headers` holds the value most declared operations
+share; an operation whose page fixes another declares it as a `header` parameter with that `value` (Cal.com).
 A send that needs a multipart body (attachments) or a raw RFC 5322 message is declared with only the plain fields its
 page lets it take; a multipart body waits.
 When a page states that at least one of several equal inputs is required to find or create one record (in a sentence, a

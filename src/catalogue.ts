@@ -85,9 +85,10 @@ export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
 /** A value's declared type. In an object, a key ending in `?` may be missing or null, and is read as absent. */
 export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
 /** An operation's argument and where it is sent: `body` in a JSON object, `form` in a form-encoded body (never beside a
- * `body` one); `nullable` lets it be sent as JSON `null`. */
-export type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables'; type: Shape; required?: true; nullable?: true;
-  enum?: readonly string[]; description?: string };
+ * `body` one), `header` as the request header of its name; `nullable` lets it be sent as JSON `null`. With `value`, the
+ * engine always sends that value in its place, and a call gives none. */
+export type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables' | 'header'; type: Shape; required?: true; nullable?: true;
+  enum?: readonly string[]; description?: string; value?: string | number | boolean };
 /** A named read or write. `kind` defaults from the method; `paging` names an entry's shape, `records` the list in a page.
  * `anyOf`: sets of argument paths (`email`, `contact.email`), of which a call gives every one of at least one set. */
 export type Operation = ({ method?: Method; path: Template } | { graphql: string }) & { docs?: string;

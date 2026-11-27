@@ -453,3 +453,69 @@ test("an app's `anyOf` path that names no declared argument is refused when its 
   expect(() => client(entry([['email'], ['input.company.domain']]), { token: 'k' })).not.toThrow();
   for (const anyOf of [[['email'], []], []]) expect(() => client(entry(anyOf), { token: 'k' })).toThrow(new TypeError('param_group_unknown: people.get'));
 });
+
+/** Header parameters: an acting user the caller names, a version one operation replaces, and fixed values. */
+const headed = defineProvider({ id: 'headed', name: 'Headed', auth: [{ kind: 'key' }],
+  http: { baseUrl: BASE, headers: { 'x-version': '1', accept: 'application/json' } },
+  paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } } },
+  operations: {
+    'incidents.create': { method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
+      title: { in: 'body', type: 'string' } } },
+    'items.list': { path: '/items', paging: 'cursor', records: 'items', result: { items: ['string'], 'next?': 'string' },
+      params: { 'x-version': { in: 'header', type: 'string', value: '2' }, 'x-page': { in: 'header', type: 'integer' } } },
+    'drafts.create': { method: 'POST', path: '/drafts', params: { send: { in: 'body', type: 'boolean', value: true, description: 'Sends it.' },
+      subject: { in: 'body', type: 'string' } } },
+  } });
+
+test('a header parameter is sent as a header: required, given, replacing the entry\'s and the app\'s, never the credential', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const api = client(headed, { token: 'k', fetch: fake.fetch, headers: { from: 'app@acme.test', 'x-app': 'a' } });
+  await expect(untyped(api.incidents.create)({ title: 'Fire' })).rejects.toThrow(new TypeError('param_missing: from'));
+  expect(fake.calls).toEqual([]);
+  await api.incidents.create({ from: 'ana@acme.test', title: 'Fire' });
+  expect(fake.calls[0]).toMatchObject({ method: 'POST', url: `${BASE}/incidents`, body: '{"title":"Fire"}',
+    headers: { from: 'ana@acme.test', 'x-app': 'a', 'x-version': '1', accept: 'application/json', authorization: 'Bearer k' } });
+});
+
+test('a fixed value is always sent in its place, replacing an entry header; an argument of its name is ignored as an undeclared one', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(json({ items: ['a'], next: 'c2' }), json({ items: ['b'] })) }]);
+  const api = client(headed, { token: 'k', fetch: fake.fetch, headers: { 'x-version': 'app' } });
+  const seen = [];
+  for await (const item of untyped(api.items.list)({ 'x-version': '9', 'x-page': 3 }) as AsyncIterable<string>) seen.push(item);
+  await untyped(api.drafts.create)({ subject: 'Hi', send: false });
+  await api.drafts.create();
+  expect(seen).toEqual(['a', 'b']);
+  // Every page carries the operation's headers.
+  expect(fake.calls.map(call => [call.url, call.headers['x-version'], call.headers['x-page'], call.body])).toEqual([
+    [`${BASE}/items`, '2', '3', ''], [`${BASE}/items?cursor=c2`, '2', '3', ''],
+    [`${BASE}/drafts`, 'app', undefined, '{"send":true,"subject":"Hi"}'], [`${BASE}/drafts`, 'app', undefined, '{"send":true}']]);
+});
+
+test('H: a header value with a CR, an LF, a NUL or a character past printable ASCII is param_invalid before anything is sent', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const create = untyped(client(headed, { token: 'k', fetch: fake.fetch }).incidents.create);
+  for (const from of ['a\r\nx-evil: 1', 'a\nb', 'a\0b', 'é', 'a b', { a: 1 }, null]) {
+    await expect(create({ from })).rejects.toThrow(new TypeError(from === null ? 'param_missing: from' : 'param_invalid: from'));
+  }
+  expect(fake.calls).toEqual([]);
+  await create({ from: 'tab\tand ~ ok' });
+  expect(fake.calls[0]?.headers.from).toBe('tab\tand ~ ok');
+});
+
+test("an app's header parameter that could not be sent as its own header is refused when its client is built", () => {
+  const entry = (param: object, send?: object, op: object = { method: 'POST', path: '/a' }) => ({ id: 'w', name: 'W', http: { baseUrl: BASE },
+    auth: [{ kind: 'key', ...send && { send } }], operations: { op: { ...op, params: param } } }) as unknown as Entry;
+  for (const [param, send, op] of [
+    [{ authorization: { in: 'header', type: 'string' } }], [{ Authorization: { in: 'header', type: 'string' } }],
+    [{ 'content-type': { in: 'header', type: 'string' } }],
+    [{ 'x-api-key': { in: 'header', type: 'string' } }, { header: 'X-Api-Key' }],
+    [{ authorization: { in: 'header', type: 'string' } }, { basic: ['{token}', ''] }],
+    [{ x: { in: 'header', type: 'string', nullable: true } }], [{ x: { in: 'header', type: { a: 'string' } } }],
+    [{ x: { in: 'header', type: ['string'] } }], [{ x: { in: 'header', type: 'string' } }, undefined, { graphql: 'query { a }' }],
+  ] as const) {
+    const name = Object.keys(param)[0] ?? '';
+    expect(() => client(entry(param, send, op), { token: 'k' })).toThrow(new TypeError(`param_unplaced: op ${name}`));
+  }
+  // Beside a credential sent in another header, `authorization` is the app's to name.
+  expect(() => client(entry({ authorization: { in: 'header', type: 'string' } }, { header: 'x-api-key' }), { token: 'k' })).not.toThrow();
+});

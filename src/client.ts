@@ -12,11 +12,12 @@ export { guardedFetch } from './guard.js';
 /** An argument's type: one of its `enum`, else its shape's, and `null` when it is `nullable`. */
 type ArgOf<P> = (P extends { enum: readonly (infer E)[] } ? E : P extends { type: infer S } ? TypeOf<S> : never)
   | (P extends { nullable: true } ? null : never);
-/** An operation's arguments: the required ones required, the rest optional. */
-type Args<O> = O extends { params: infer Ps }
-  ? { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? K : never]: ArgOf<Ps[K]> }
-    & { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? never : K]?: ArgOf<Ps[K]> }
+/** An operation's arguments: the required ones required, the rest optional; one with a fixed `value` is none. */
+type Args<O> = O extends { params: infer Ps } ? ArgsOf<{ [K in keyof Ps as Ps[K] extends { value: unknown } ? never : K]: Ps[K] }>
   : Record<string, never>;
+type ArgsOf<Ps> = [keyof Ps] extends [never] ? Record<string, never>
+  : { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? K : never]: ArgOf<Ps[K]> }
+    & { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? never : K]?: ArgOf<Ps[K]> };
 /** A paged operation's own option: called once for each page that skipped a record, with what it skipped. */
 type Paged = { onSkipped?: (ids: (string | null)[]) => void };
 /** A call's arguments and options; the arguments may be left out when none is required. */
@@ -81,19 +82,22 @@ const bare = () => Object.create(null) as Record<string, unknown>;
 
 /** The request an operation's arguments make: each declared one checked by its shape and sent in its place. */
 function operationRequest(id: string, op: Operation, args: Given, signal?: AbortSignal): [string, RequestOptions] {
-  const at = { path: bare(), query: bare(), body: bare(), form: bare(), variables: bare() };
+  const at = { path: bare(), query: bare(), body: bare(), form: bare(), variables: bare(), header: bare() };
   const given = bare(); // each argument as checked, for `anyOf`
   for (const [name, param] of Object.entries(op.params ?? {})) {
-    const value = Object.hasOwn(args, name) ? args[name] : undefined;
+    // A fixed value is checked and sent as an argument is; the caller's own of that name is not read.
+    const value = param.value ?? (Object.hasOwn(args, name) ? args[name] : undefined);
     if (value === undefined || (value === null && param.nullable !== true)) {
       if (param.required) refuse(`param_missing: ${name}`);
       continue;
     }
     const checked = value === null ? null : shaped(param.type, value);
     const scalar = typeof checked === 'string' || typeof checked === 'number' || typeof checked === 'boolean';
-    // A path value is one segment: never empty or a dot segment, which the URL would resolve away.
+    // A path value is one segment: never empty or a dot segment, which the URL would resolve away. A header value is
+    // printable ASCII, space and tab: a CR or an LF would end the header.
     if (checked === INVALID || (checked !== null && param.enum !== undefined && !(typeof checked === 'string' && param.enum.includes(checked)))
-      || (param.in === 'path' || param.in === 'query' || param.in === 'form') && !scalar
+      || (param.in === 'path' || param.in === 'query' || param.in === 'form' || param.in === 'header') && !scalar
+      || (param.in === 'header' && !/^[\t\x20-\x7e]*$/u.test(String(checked)))
       || (param.in === 'path' && ['', '.', '..'].includes(String(checked)))) refuse(`param_invalid: ${name}`);
     given[name] = checked;
     at[param.in][name] = param.in === 'body' || param.in === 'variables' ? checked
@@ -106,6 +110,7 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
   return callRequest('graphql' in op ? { graphql: op.graphql }
     : { method: op.method ?? 'GET', path: fill(op.path, name => at.path[name] ?? refuse(`param_missing: ${name}`), id) }, {
     ...(Object.keys(at.query).length > 0 ? { query: at.query as Record<string, string> } : {}),
+    ...(Object.keys(at.header).length > 0 ? { headers: at.header as Record<string, string> } : {}),
     // A provider may require a JSON body whose every field is optional: an operation with a body parameter always sends one.
     // One operation never declares both (`param_unplaced`).
     ...(Object.values(op.params ?? {}).some(param => param.in === 'body') ? { json: at.body }
@@ -128,7 +133,7 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
 
   function operation(id: string, op: Operation) {
     const { paging, records, result } = op;
-    for (const [name, param] of Object.entries(op.params ?? {})) if (!placed(op, name, param)) refuse(`param_unplaced: ${id} ${name}`);
+    for (const [name, param] of Object.entries(op.params ?? {})) if (!placed(entry, op, name, param)) refuse(`param_unplaced: ${id} ${name}`);
     for (const path of op.anyOf?.flat() ?? []) if (argumentShape(op, path) === undefined) refuse(`param_group_unknown: ${id} ${path}`);
     // An empty set is always given whole, so it would let every call through.
     if (op.anyOf?.length === 0 || op.anyOf?.some(set => set.length === 0)) refuse(`param_group_unknown: ${id}`);

@@ -37,9 +37,13 @@ export function argumentShape(op: Operation, path: Path): Shape | undefined {
 }
 
 /** Whether a parameter has a place in its operation's request: GraphQL takes only variables; a path operation takes no
- * variables, a path parameter only where its path names it, and a body or form parameter only when it is not a GET and
- * the operation has no parameter of the other of the two. */
-export function placed(op: Operation, name: string, param: Param): boolean {
+ * variables, a path parameter only where its path names it, a body or form parameter only when it is not a GET and
+ * the operation has no parameter of the other of the two, and a header one only as a scalar, never `nullable`, never
+ * named `content-type` or a sign-in's credential header (`authorization` unless its `send` names another). */
+export function placed(entry: Entry, op: Operation, name: string, param: Param): boolean {
+  const credentials = entry.auth.map(auth => ('send' in auth && 'header' in auth.send ? auth.send.header : 'authorization').toLowerCase());
+  if (param.in === 'header') return !('graphql' in op) && param.nullable === undefined && typeof param.type === 'string'
+    && !['content-type', ...credentials].includes(name.toLowerCase());
   return 'graphql' in op ? param.in === 'variables'
     : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))
       && ((param.in !== 'body' && param.in !== 'form') || ((op.method ?? 'GET') !== 'GET'

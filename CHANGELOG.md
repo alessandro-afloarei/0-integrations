@@ -11,6 +11,10 @@ Nothing here is released yet.
 - A cursor may be a whole number, sent as its digits (Vercel's `pagination.next`): a numeric cursor no longer ends a
   walk after its first page, or throws `cursor_missing` beside a truthy `more`. A negative or fractional one is still
   blank.
+- New: `in: 'header'` parameters, sent as a request header over the entry's and the app's (never the credential); a
+  value outside printable ASCII is `param_invalid`. A parameter's `value` is sent on every call and is no argument.
+  `RequestOptions` takes `headers`, and the derived fake hands an operation's function the request's `headers` and
+  routes by a required header or a fixed value.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
