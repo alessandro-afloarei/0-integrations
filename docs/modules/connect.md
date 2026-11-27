@@ -31,7 +31,8 @@ none and starts with a form, and an entry whose kind is not known in the types (
   again, exchanges the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
   `scope_missing`; the granted scopes are split on the entry's `scopeSeparator`), and identifies the account. If that
   fails it revokes the new grant best-effort and throws the original error; `onRevokeFailed(error)` reports a failed
-  cleanup. An entry whose `reusesGrant` says re-consent can return a live connection's grant skips the cleanup: only
+  cleanup (an entry whose revoke is a request on the base cannot revoke a grant whose host was refused, so that is
+  reported too). An entry whose `reusesGrant` says re-consent can return a live connection's grant skips the cleanup: only
   the app knows who owns it.
 
 To ask for other scopes, derive an entry: `defineProvider({ ...google, scopes: { default: [...] } })`. `defineProvider`
@@ -148,8 +149,11 @@ to `finishConnect`, `refreshGrant`, `revokeGrant` and `client`. Never read a val
 callback is the person's browser, which can carry anything. Every OAuth 2 URL is filled and checked as a base is (a
 host name with no port, never a blocked address), and the exchange, refresh, revoke and calls all go to the host the
 `values` name.
-The values and the grant are one record: a token is sent to whatever host the `values` name, and the library cannot
-know which host issued it. Keep the host with the sealed grant, never apart.
+The values and the grant are one record. At connect the engine reads the host from the person's entry (or, for a
+named host, from the issuer's token answer); on every later call, refresh and revoke it is given the connection's
+kept `values` by the app and checks them against the entry's declared pattern again. It does not, and cannot, verify
+that a kept value is the one that connection was issued with (the library keeps no state): store a connection's
+values with its tokens and pass them back unchanged.
 
 ```ts
 import { mattermost } from '0-integrations/catalogue/mattermost';
@@ -192,7 +196,9 @@ grant and pass them to `client`, `refreshGrant` and `revokeGrant`, as for a host
 against the hosts the entry declares (Wrike's four data centres) before identify, before every call and before every
 refresh, never read from the callback or from the `values` an app passes to `finishConnect`. A token answer naming
 another host is refused (`base_host_refused`, or `base_value_invalid` for one that is no host name) and one naming
-none is `invalid_response` (`missing_fields`); either way the fresh grant is revoked. A refresh answer's host is not
+none is `invalid_response` (`missing_fields`); either way the fresh grant is revoked when the entry declares a revoke
+URL on a fixed host (Wrike declares no revoke: a person revokes the token by hand), and an entry whose revoke is a
+request on the base cannot revoke it (`onRevokeFailed` reports it). A refresh answer's host is not
 read: an account that moves to another data centre connects again.
 
 ## Google and Microsoft
