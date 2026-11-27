@@ -2,10 +2,11 @@ import { defineProvider } from '../catalogue.js';
 
 /** Missive: a personal API token, Productive plan only; identify only checks it. A 429 waits `Retry-After`:
  * https://missiveapp.com/docs/developers/rest-api/rate-limits. `conversations.list` answers one page: pass `until`, the
- * oldest conversation's `last_activity_at`. No draft or send: a draft's create may answer 201 with no body.
+ * oldest conversation's `last_activity_at`. `drafts.create` never sends (no `send`); its 201 may have no body (null).
  * Webhooks: https://missiveapp.com/docs/developers/webhooks */
 const conversation = { id: 'string', 'subject?': 'string', 'latest_message_subject?': 'string', 'messages_count?': 'integer',
   'created_at?': 'integer', 'last_activity_at?': 'integer', 'web_url?': 'string' } as const;
+const address = { address: 'string', 'name?': 'string' } as const;
 const on = { in: 'query', type: 'boolean' } as const;
 const id = { in: 'query', type: 'string' } as const;
 const ref = 'https://missiveapp.com/docs/developers/rest-api/endpoints';
@@ -34,5 +35,9 @@ export const missive = defineProvider({
       params: { organization: { in: 'query', type: 'string' }, limit: { in: 'query', type: 'integer', description: '50 by default, at most 200.' } },
       result: { shared_labels: [{ id: 'string', name: 'string', name_with_parent_names: 'string', organization: 'string',
         'color?': 'string', 'parent?': 'string' }] } },
+    'drafts.create': { docs: `${ref}#create-a-draft`, method: 'POST', path: '/drafts',
+      params: { drafts: { in: 'body', type: { 'subject?': 'string', 'body?': 'string', 'from_field?': address, 'to_fields?': [address],
+        'cc_fields?': [address], 'bcc_fields?': [address], 'conversation?': 'string' }, required: true,
+        description: 'An email draft: from_field must be one of your aliases; conversation appends it to that conversation.' } } },
   },
 });
