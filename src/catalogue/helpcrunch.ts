@@ -49,7 +49,7 @@ export const helpcrunch = defineProvider({
       params: { ...chatId, ...limit }, result: { data: [message] } },
     'messages.create': { docs: `${ref}/create-message-v1`, method: 'POST', path: '/messages',
       params: { chat: { in: 'body', type: 'integer', required: true }, text: { in: 'body', type: 'string', required: true },
-        markdownText: { in: 'body', type: 'string' }, agent: { in: 'body', type: 'integer', required: true },
+        markdownText: { in: 'body', type: 'string' }, agent: { in: 'body', type: 'integer', required: true, description: 'The agent who sends it.' },
         type: { in: 'body', type: 'string', required: true, enum: ['message', 'private'],
           description: '`private` keeps the message an internal note, visible to agents only.' } },
       result: message },
