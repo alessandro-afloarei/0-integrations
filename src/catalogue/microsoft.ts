@@ -12,7 +12,7 @@ export const microsoft = defineProvider({
   // Graph asks a 503 to be backed off as a 429 is (https://learn.microsoft.com/en-us/graph/best-practices-concept), so
   // its reads retry a 5xx with the backoff too.
   http: { baseUrl: 'https://graph.microsoft.com/v1.0', headers: { accept: 'application/json' },
-    retry: { limit: 2, maxWaitMs: 30_000, defaultWaitMs: 5000 } },
+    retry: {} },
   errors: { detail: ['error.code', 'error.errors.0.reason', 'error.status'] },
   // The address names the account; only the immutable id says who it is.
   identify: { request: { path: '/me', query: { $select: 'id,mail,userPrincipalName' } }, id: 'id',

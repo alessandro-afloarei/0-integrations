@@ -38,6 +38,12 @@ function script(entry: Entry, ...responses: (() => Response)[]) {
 /** A key sent bare in a header, and the provider's code at `type`: a code that may echo the key. */
 const headerKey = defineProvider({ id: 'header-key', name: 'Header key', auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: { baseUrl: 'https://api.header-key.test/v2' }, errors: { detail: 'type' } });
+/** Retries a read once and states no wait of its own: the engine's defaults, a one-second wait and a 60-second cap. */
+const retriesOnce = defineProvider({ id: 'retries-once', name: 'Retries once', auth: [{ kind: 'key' }],
+  http: { baseUrl: 'https://api.retries-once.test/v1', retry: {} } });
+/** Waits 30 seconds for a 429 that states no wait. */
+const waitsThirty = defineProvider({ id: 'waits-thirty', name: 'Waits thirty', auth: [{ kind: 'key' }],
+  http: { baseUrl: 'https://api.waits-thirty.test/v1', retry: { defaultWaitMs: 30_000 } } });
 const ok = () => Response.json({ ok: true });
 const limited = () => Response.json({}, { status: 429 });
 
@@ -51,7 +57,7 @@ test('sends the token where the provider wants it', async () => {
 });
 
 test('retries a 429 after its Retry-After', async () => {
-  const fake = script(hubspot, () => Response.json({}, { status: 429, headers: { 'Retry-After': '2' } }), ok);
+  const fake = script(retriesOnce, () => Response.json({}, { status: 429, headers: { 'Retry-After': '2' } }), ok);
   const result = fake.client.json('/items');
   await vi.advanceTimersByTimeAsync(1999);
   expect(fake.calls).toHaveLength(1);
@@ -61,7 +67,7 @@ test('retries a 429 after its Retry-After', async () => {
 });
 
 test("a Retry-After longer than the provider's maxWaitMs is reported, never retried at the cap", async () => {
-  const fake = script(hubspot, () => Response.json({}, { status: 429, headers: { 'Retry-After': '3600' } }), ok);
+  const fake = script(retriesOnce, () => Response.json({}, { status: 429, headers: { 'Retry-After': '3600' } }), ok);
   const result = fake.client.json('/items').catch((e: unknown) => e);
   await vi.advanceTimersByTimeAsync(3_600_000);
   expect(await result).toMatchObject({ code: 'rate_limited', status: 429, retryAfterMs: 3_600_000 });
@@ -69,7 +75,7 @@ test("a Retry-After longer than the provider's maxWaitMs is reported, never retr
 });
 
 test('waits defaultWaitMs when the 429 names no wait', async () => {
-  const fake = script(hubspot, limited, ok);
+  const fake = script(retriesOnce, limited, ok);
   const result = fake.client.json('/items');
   await vi.advanceTimersByTimeAsync(999);
   expect(fake.calls).toHaveLength(1);
@@ -89,7 +95,7 @@ test('breakcold waits what its 429 body names', async () => {
 });
 
 test('a second 429 past the limit is rate_limited', async () => {
-  const fake = script(hubspot, limited);
+  const fake = script(retriesOnce, limited);
   const result = fake.client.json('/items').catch((e: unknown) => e);
   await vi.advanceTimersByTimeAsync(1000);
   expect(await result).toMatchObject({ code: 'rate_limited', status: 429 });
@@ -97,12 +103,12 @@ test('a second 429 past the limit is rate_limited', async () => {
 });
 
 test('a POST is retried only when idempotent', async () => {
-  const once = script(hubspot, limited, ok);
+  const once = script(retriesOnce, limited, ok);
   await expect(once.client.json('/search', { method: 'POST', json: { query: 'x' } }))
     .rejects.toMatchObject({ code: 'rate_limited' });
   expect(once.calls).toHaveLength(1);
   expect(once.calls[0]?.body).toBe('{"query":"x"}');
-  const twice = script(hubspot, limited, ok);
+  const twice = script(retriesOnce, limited, ok);
   const result = twice.client.json('/search', { method: 'POST', form: { q: 'x' }, idempotent: true });
   await vi.advanceTimersByTimeAsync(1000);
   expect(await result).toEqual({ ok: true });
@@ -259,9 +265,9 @@ test('a body wait that cannot be read states none: the error is sanitized, with 
 
 test("a Retry-After of 0 or not a number waits for the body's wait, else the provider's default", async () => {
   const cases = [
-    { provider: hubspot, headers: { 'Retry-After': '0' }, body: {}, wait: 1000 },
+    { provider: retriesOnce, headers: { 'Retry-After': '0' }, body: {}, wait: 1000 },
     { provider: breakcold, headers: { 'Retry-After': '0' }, body: { error: { retryAfterMs: 1500 } }, wait: 1500 },
-    { provider: exa, headers: { 'Retry-After': 'soon' }, body: {}, wait: 30_000 },
+    { provider: waitsThirty, headers: { 'Retry-After': 'soon' }, body: {}, wait: 30_000 },
   ];
   for (const { provider, headers, body, wait } of cases) {
     const fake = script(provider, () => Response.json(body, { status: 429, headers }), ok);
@@ -402,7 +408,7 @@ test('a credential is matched as a detail reads: trimmed as sent, a slash read a
 });
 
 test('the retry waits an HTTP-date Retry-After, read as the error reads it', async () => {
-  const fake = script(hubspot, () => Response.json({}, { status: 429,
+  const fake = script(retriesOnce, () => Response.json({}, { status: 429,
     headers: { 'Retry-After': new Date(Date.now() + 3000).toUTCString() } }), ok);
   const result = fake.client.json('/items');
   await vi.advanceTimersByTimeAsync(2999);
@@ -652,7 +658,7 @@ test('a request whose URL leaves the base\'s origin is refused before the token 
 
 test("a 429 is retried after the default wait without reading its body when the entry names no body wait", async () => {
   const endless = () => new Response(new ReadableStream({ pull: () => new Promise(() => undefined) }), { status: 429 });
-  const fake = script(hubspot, endless, ok);
+  const fake = script(retriesOnce, endless, ok);
   const result = fake.client.json('/items');
   await vi.advanceTimersByTimeAsync(1000);
   expect(fake.calls).toHaveLength(2);
