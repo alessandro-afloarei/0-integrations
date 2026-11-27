@@ -5,14 +5,18 @@
 Nothing here is released yet.
 
 - New: `errors.detail` reads a numeric code as its digits (a non-negative whole number: `allow`, `revoked` and
-  `failed` compare `'2001'`); PagerDuty, Smartsheet and Cognism report theirs. A path that holds the HTTP status as a
-  number now reads as the code and hides a later path: an app's own entry leaves it out, as Google's no longer lists
-  `error.code`.
+  `failed` compare `'2001'`, and a rule's `detail: true` now holds for it); PagerDuty, Smartsheet and Cognism report
+  theirs. A path that holds the HTTP status as a number now reads as the code and hides a later path: an app's own
+  entry leaves it out, as Google's no longer lists `error.code`.
 - New: `in: 'form'` parameters, sent as a form body; Chatwork and Zulip post messages, Agile CRM lists companies. A
-  form's `content-type` wins over the entry's and the app's, on a raw `request`, `json` or `paginate` call that passes
-  a `form` too; a form operation paged by a body cursor is refused (`param_paged`).
+  form's `content-type` wins over the entry's and the app's, on a raw `request`, `json` or `paginate` call too. A call
+  holds one body: a `json` beside a `form` is refused by the types, and at run time as `request_failed` before it is
+  sent, as is a raw `paginate` of a form on a body cursor; a form operation paged by a body cursor is refused
+  (`param_paged`). The derived fake hands such an
+  operation's function its form body as its fields, each a string.
 - Chatwork's OAuth 2 sign-in asks `rooms.messages:write` as well: a client registered with the earlier scopes is
-  registered again with the declared ones, or its authorize fails with 5003.
+  registered again with the declared ones, or its authorize fails with 5003. A connection made before this change has
+  no `rooms.messages:write`: `messages.create` gets `rejected` until the person connects again.
 - New: `webhook.secret` decodes a base64 or hex secret before it keys the HMAC; Airtable, Chatwork and Close declare
   their webhooks. The decoding is strict (base64's `=` padding optional), and a key of only zero bytes keys nothing.
 - Breaking: a `standard` secret goes through the same decoding. A secret it accepted and now refuses (`false`): one
@@ -34,9 +38,12 @@ Nothing here is released yet.
   `signInWith(trello, 'key')`. Breaking: a key connection that still calls the whole entry with its `apiKey`
   (`client(trello, { token, values: { apiKey } })`) is now refused (`value_undeclared: trello apiKey`), nothing sent;
   an app narrows it with `signInWith(trello, 'key')` for every call.
-- Freshsales checks the bundle alias host against `*.myfreshworks.com` and `*.freshworks.com`: any other host is
-  refused with `base_host_refused` and nothing is sent, so the entry no longer goes through the address guard by
-  default.
+- Freshsales checks the bundle alias host against `*.myfreshworks.com` and `*.freshworks.com`: any other host, a
+  Freshsales Classic `<domain>.freshsales.io` included, is refused with `base_host_refused` and nothing is sent, where
+  any public host was accepted before, so the entry no longer goes through the address guard by default.
+- Honeybadger and PayPal send the credential only to the two API hosts each names (`app.honeybadger.io` and
+  `eu-app.honeybadger.io`; `api-m.paypal.com` and `api-m.sandbox.paypal.com`), never another host of their domain: a
+  stored `apiHost` outside them is refused with `base_host_refused` before a credential is read, and nothing is sent.
 - Slack signs in on commercial Slack or GovSlack: a plain field `domain` (`slack.com`, the default, or `slack-gov.com`)
   gives every Slack URL its host, and `startConnect` and `finishConnect` return it in `values`. Breaking: a Slack
   connection stored before this change passes `values: { domain: 'slack.com' }` (beside `botUserId`) to `client`,
@@ -44,8 +51,9 @@ Nothing here is released yet.
   throw `template_missing: slack {domain}` and send nothing. `slackClient` keeps calling slack.com.
 - New entry: Pipedrive (`crm`), OAuth 2 alone (PKCE, Basic client authentication), its calls on the `api_domain` its
   token answer names: persons (list, search, get, create, update), organizations and deals. `declared`.
-- For contributors: the recorder refuses, before any request, an entry whose base's host comes from a field with no
-  default or choice that `RECORD_VALUES` does not give.
+- For contributors: the recorder refuses, before any request, an entry whose base's host holds a value
+  `RECORD_VALUES` does not give as the host alone (never an `https://` origin): a field's, even one with a default or
+  choices, or a host the token answer names.
 - New: a sign-in after the first may declare its own `fields`, base and host (`http: { baseUrl, host }`, nothing else
   of `http`) and `identify`; `signInWith` puts them in place of the entry's. The engine refuses an app's entry whose
   first sign-in declares one, before anything is sent (`sign_in_own_first: <entry id>`), and `startConnect` now runs

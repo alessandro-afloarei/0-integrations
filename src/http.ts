@@ -7,14 +7,13 @@ import { backoffMs, declaredWait, responseJson, retryPolicy, sentWith } from './
 import { retryAfterMs } from './retry-after.js';
 import { checkHosts, fill, hostPart, namedHosts, parseJson, placeholders, plainValue } from './rules.js';
 
+/** A call holds one body at most: a JSON one or a form. */
 export type RequestOptions = {
   method?: Method;
   query?: Readonly<Record<string, string>>;
-  json?: unknown;
-  form?: Readonly<Record<string, string>>;
   idempotent?: boolean;
   signal?: AbortSignal;
-};
+} & ({ json?: unknown; form?: undefined } | { form: Readonly<Record<string, string>>; json?: undefined });
 export type ProviderResponse = { status: number; headers: Headers; data: unknown };
 
 /** The request a declared call makes, with what the caller adds: GraphQL is a POST of the query and its variables to
@@ -23,7 +22,7 @@ export function callRequest(call: Call, extra: RequestOptions & { variables?: Va
   const { variables = {}, ...options } = extra;
   return call.graphql === undefined
     ? [call.path ?? '', { method: call.method ?? 'GET', ...(call.query ? { query: call.query } : {}), ...options }]
-    : ['', { method: 'POST', json: { query: call.graphql, variables }, ...options }];
+    : ['', { method: 'POST', json: { query: call.graphql, variables }, ...options, form: undefined }];
 }
 export type HttpClient = {
   /** The base every path is read after: the entry's, or the one the client was built with. */
@@ -251,8 +250,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
       headers = new Headers(entry.http.headers);
       for (const [key, header] of Object.entries(input.headers ?? {})) headers.set(key, header);
       if (credential) headers.set(...credential);
-      // A form's type over the entry's and the app's; with a JSON body as well, the JSON is what is sent.
-      if (options.form && options.json === undefined) headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
+      // A form's type over the entry's and the app's.
+      if (options.form) headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
     } catch {
       throw new ProviderHttpError('request_failed', null);
     }
@@ -316,6 +315,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     if (url.origin !== origin) throw new TypeError('url_outside_origin');
     // A path is read after the base, so one without its `/` would run into the base's last segment (`/v1users`).
     if (path !== '' && !path.startsWith('/') && !path.startsWith('?')) throw new TypeError('url_path_relative');
+    // A call holds one body: an untyped caller's second would go out under the other's type.
+    if ([options.json, options.form].every(body => body !== undefined)) throw new ProviderHttpError('request_failed', null);
     for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value);
     // A next link may echo a query credential: `beforeRequest` never sees one.
     for (const name of queried) url.searchParams.delete(name);

@@ -69,7 +69,7 @@ export const BAD_KEY = 'kit-bad-key';
  * `kit-<name>`; and each host the token answer names, that same first name. */
 export function kitValues(entry: Entry): Record<string, string> {
   const first = String([entry.http.host].flat()[0]).replace(/^\*/u, 'kit');
-  const wholeHost = /^https:\/\/\{([^}]+)\}(?:[/:]|$)/u.exec(entry.http.baseUrl)?.[1];
+  const wholeHost = /^https:\/\/\{([^}]+)\}(?:\/|$)/u.exec(entry.http.baseUrl)?.[1];
   const host = (name: string) => (name === wholeHost && entry.http.host !== '*' ? first : undefined);
   const named = Object.keys(namedHosts(entry)).map((name): [string, string] => [name, first]);
   return Object.fromEntries([...(entry.fields ?? []).filter(field => field.secret !== true)

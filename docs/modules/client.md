@@ -112,9 +112,11 @@ What the guard does not cover:
 ## Raw calls
 
 Each takes a path after the base URL and `RequestOptions`: `method`, `query`, `json`, `form`, `idempotent`, `signal`. A
-`form` is sent form-encoded under the form's `content-type`, which wins over the entry's and the app's (given a `json`
-as well, the JSON is sent, under its own type). A path must start with `/` (or `?`, or be empty for the base itself); one that does not is refused before the token is
-read, as `TypeError('url_outside_origin')` when it would change the host and `TypeError('url_path_relative')` otherwise.
+`form` is sent form-encoded under the form's `content-type`, which wins over the entry's and the app's. A call holds one
+body: the types refuse a `json` beside a `form`, and a call that passes both anyway, or a `paginate` of a form on a
+shape whose cursor goes in the body, is `request_failed` before that request is sent. A path must start with `/` (or `?`, or be empty for the base itself);
+one that does not is refused before the token is read, as `TypeError('url_outside_origin')` when it would change the
+host and `TypeError('url_path_relative')` otherwise.
 
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
@@ -153,7 +155,8 @@ shape the entry does not declare (`paging_unknown: <name>`), `notFound` on a pag
 to no list in the `result` (`records_unshaped: <id>`), an operation on a `page` or `offset` shape whose `records` is
 not the shape's `list` (`records_unpaged: <id>`), and a parameter (or a literal query in its path) in the place its
 paging shape's `send` writes, which the walk sends itself, or a body cursor beside a form parameter, whose JSON would
-replace the form from the second page (`param_paged: <id> <name>`). A wrong value throws when the call is made, before anything is sent.
+replace the form from the second page (`param_paged: <id> <name>`). A wrong value throws when the call is made,
+before anything is sent.
 
 An app's own entry declares operations the same way:
 

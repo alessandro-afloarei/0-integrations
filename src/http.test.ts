@@ -7,10 +7,12 @@ import { exa } from './catalogue/exa.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { github } from './catalogue/github.js';
 import { gitlab as gitlabEntry } from './catalogue/gitlab.js';
+import { honeybadger } from './catalogue/honeybadger.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
 import { notion } from './catalogue/notion.js';
+import { paypal } from './catalogue/paypal.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { smartsheet } from './catalogue/smartsheet.js';
 import { trello as trelloEntry } from './catalogue/trello.js';
@@ -118,10 +120,17 @@ test('a POST is retried only when idempotent', async () => {
   expect(twice.calls[1]?.body).toBe('q=x');
 });
 
-test('a raw call with a form and a JSON body sends the JSON, under its own content type', async () => {
-  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({}) }]);
-  await createClient(exa, { token: () => Promise.resolve('k'), fetch: fake.fetch }).json('/x', { method: 'POST', json: { b: 2 }, form: { a: '1' } });
-  expect(fake.calls.map(({ body, headers }) => [body, headers['content-type']])).toEqual([['{"b":2}', 'application/json']]);
+test('hostile: a raw call holds one body: a form beside a JSON body is refused, nothing sent under the wrong type', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: () => Response.json([1]) }]);
+  const http = createClient(exa, { token: () => Promise.resolve('k'), fetch: fake.fetch, headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+  // @ts-expect-error -- the types refuse both bodies; an untyped caller is refused when it calls
+  await expect(http.json('/x', { method: 'POST', json: { b: 2 }, form: { a: '1' } })).rejects.toMatchObject({ code: 'request_failed', status: null });
+  expect(fake.calls).toEqual([]);
+  // A body cursor would add a JSON body to a form's next page.
+  const pages = walk(http, { kind: 'page', send: { body: 'page' } }, '/x', { method: 'POST', form: { a: '1' } });
+  await pages.next();
+  await expect(pages.next()).rejects.toMatchObject({ code: 'request_failed', status: null });
+  expect(fake.calls.map(({ body }) => body)).toEqual(['a=1']);
 });
 
 test("a request with the caller's signal never waits", async () => {
@@ -791,6 +800,33 @@ test.each(['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu', '
     const fake = filled(smartsheet, { apiHost });
     await fake.client.json('/users/me');
     expect(fake.calls.map(call => call.url)).toEqual([`https://${apiHost}/2.0/users/me`]);
+  });
+
+/** Where a client of `entry` on its `apiHost` sends `path`: the URL or the refusal, how often the token was read and a
+ * request sent. */
+async function regionTaken(entry: Entry, apiHost: string, path: string) {
+  const fake = filled(entry, { apiHost });
+  const sent = await fake.client.json(path).then(() => fake.calls[0]?.url, (error: unknown) => error);
+  return { sent, tokenRead: fake.token.mock.calls.length, requests: fake.calls.length };
+}
+
+test.each([['app.honeybadger.io', true], ['eu-app.honeybadger.io', true], ['x.honeybadger.io', false], ['127.0.0.1', false]] as const)(
+  "Honeybadger's client takes %s: %s (a refusal before the token is read or anything is sent)", async (apiHost, accepted) => {
+    expect(await regionTaken(honeybadger, apiHost, '/token')).toEqual(accepted ? { sent: `https://${apiHost}/v3/token`, tokenRead: 1, requests: 1 }
+      : { sent: new TypeError('base_host_refused: honeybadger'), tokenRead: 0, requests: 0 });
+  });
+
+test.each([['api-m.paypal.com', true], ['api-m.sandbox.paypal.com', true], ['www.paypal.com', false], ['127.0.0.1', false]] as const)(
+  "PayPal's client and token request take %s: %s (a refusal before a credential is read or anything is sent)", async (apiHost, accepted) => {
+    expect(await regionTaken(paypal, apiHost, '/v1/x')).toEqual(accepted ? { sent: `https://${apiHost}/v1/x`, tokenRead: 1, requests: 1 }
+      : { sent: new TypeError('base_host_refused: paypal'), tokenRead: 0, requests: 0 });
+    const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ access_token: 't', expires_in: 3600 }) }]);
+    let reads = 0;
+    const secret = { get clientSecret() { reads++; return 's'; } };
+    const sent = await requestToken(paypal, { secret, values: { apiHost, clientId: 'c' }, fetch: fake.fetch })
+      .then(() => fake.calls[0]?.url, (error: unknown) => error);
+    expect({ sent, reads, requests: fake.calls.length }).toEqual(accepted ? { sent: `https://${apiHost}/v1/oauth2/token`, reads: 1, requests: 1 }
+      : { sent: new TypeError('base_host_refused: paypal'), reads: 0, requests: 0 });
   });
 
 test("a stored Smartsheet connection without `apiHost` is template_missing before anything is sent; a connect fills the default", async () => {

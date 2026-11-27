@@ -1,17 +1,20 @@
 import { defineProvider } from '../catalogue.js';
 
+/** The live and sandbox API hosts (https://developer.paypal.com/api/rest/requests/). */
+const hosts = ['api-m.paypal.com', 'api-m.sandbox.paypal.com'] as const;
+
 /** PayPal's REST API with an app's client ID and secret: a token from `/v1/oauth2/token`, live or sandbox, requested
  * again when it runs out. The account is the app the token answer names. PayPal requires `Accept: application/json`
  * on a call that answers a body (https://developer.paypal.com/api/rest/requests/). */
 export const paypal = defineProvider({
   id: 'paypal', name: 'PayPal', docs: 'https://developer.paypal.com/api/rest/authentication/',
   categories: ['finance'],
-  fields: [{ name: 'apiHost', title: 'Environment', choices: ['api-m.paypal.com', 'api-m.sandbox.paypal.com'],
+  fields: [{ name: 'apiHost', title: 'Environment', choices: hosts,
     default: 'api-m.paypal.com', help: 'Live, or the sandbox for testing.' },
   { name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Secret', secret: true }],
   auth: [{ kind: 'token', request: { url: 'https://{apiHost}/v1/oauth2/token', body: { grant_type: 'client_credentials' },
     basic: ['{clientId}', '{clientSecret}'] } }],
-  http: { baseUrl: 'https://{apiHost}', host: '*.paypal.com', headers: { accept: 'application/json' },
+  http: { baseUrl: 'https://{apiHost}', host: hosts, headers: { accept: 'application/json' },
     retry: { onlyStated: true } },
   identify: { id: 'tokenAnswer.app_id' },
 });

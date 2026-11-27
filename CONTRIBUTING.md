@@ -119,26 +119,27 @@ value reads it). The good key must sign in, to an account when the entry names a
 neither may send more requests than the recording holds for it. The recorder runs this same check before it writes. A recording is `{ provider, synthetic, source, recordedAt,
 exchanges }`, each exchange `{ key: 'good' | 'bad', method, url, body?, status, headers?, response }` (a form body is
 kept as its text); the replay matches the method, the whole URL and the body, and fills a plain field with its kit
-value (its `default`, else its first choice, else `kit-<name>`).
+value (its `default`, else its first choice, else, for a field that is the base's whole host, the first host its
+`http.host` allows, such as `kit.myfreshworks.com`, else `kit-<name>`).
 
 To record an entry with no module from a test account, read the key at a prompt (bash and zsh) and run the recorder:
 `printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=<id> RECORD_VALUES='{"<plain field>":"…"}' pnpm vitest run src/record.test.ts`.
 For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test account with your app's own OAuth client.
 An entry with OAuth 2 and a key is recorded with its key: a recording is of the key or token sign-in when there is one.
-The recorder refuses a provider with a module but no kit scenario of that name, an entry that sends no request
-when it signs in, and, before anything is sent, a host field (in the base's host, with no default or choice) that
-`RECORD_VALUES` does not give. Otherwise it signs in with the key and with a bad key, and writes
-`src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL, request
-body, status, `retry-after` and the entry's declared wait headers (no other header), and from the answer only the
-paths the entry reads; at an error or condition path, only a provider code, a number or a boolean. It swaps the key,
-the plain values, the tokens issued, the account's id and name and the saved values for the kit's stand-ins. It refuses
-to write when a sign-in was redirected, when a value is too short to swap or a real value is still in an exchange, and
-when the file, replayed before it is written, fails the table test's own replay check
-([testing](docs/modules/testing.md#recording-an-entry-with-no-module) says exactly what is written, swapped and
-refused). Only such a capture from a real test account (`synthetic: false`)
-makes the entry `recorded`; never copy a file from a `.record-test-*` folder, which the recorder's own tests write on a
-fake. A recording written by hand from the provider's documented examples is marked `synthetic: true`: it tests the
-entry and leaves its tier `declared`. Every recording must sit beside an entry.
+The recorder refuses a provider with a module but no kit scenario of that name, an entry that sends no request when it
+signs in, and, before anything is sent, a value in the base's host (a field's, even one with a default or choices, or a
+host the token answer names) that `RECORD_VALUES` does not give as the host alone (an `https://` origin is refused).
+Otherwise it signs in with the key and with a bad key, and writes `src/catalogue/<id>.recording.json`, replacing any
+recording of that name. Each exchange keeps its method, URL, request body, status, `retry-after` and the entry's
+declared wait headers (no other header), and from the answer only the paths the entry reads; at an error or condition
+path, only a provider code, a number or a boolean. It swaps the key, the plain values, the tokens issued, the account's
+id and name and the saved values for the kit's stand-ins. It refuses to write when a sign-in was redirected, when a
+value is too short to swap or a real value is still in an exchange, and when the file, replayed before it is written,
+fails the table test's own replay check ([testing](docs/modules/testing.md#recording-an-entry-with-no-module) says
+exactly what is written, swapped and refused). Only such a capture from a real test account (`synthetic: false`) makes
+the entry `recorded`; never copy a file from a `.record-test-*` folder, which the recorder's own tests write on a fake.
+A recording written by hand from the provider's documented examples is marked `synthetic: true`: it tests the entry and
+leaves its tier `declared`. Every recording must sit beside an entry.
 
 Add a module, `src/<id>/<id>.ts`, only when the provider needs real code: answers with meaning, incremental reads,
 parsed webhooks, a sign-in the provider hosts. It builds on its entry with `client(entry, …)`, so its errors, retry and

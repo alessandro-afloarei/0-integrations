@@ -107,8 +107,9 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
     : { method: op.method ?? 'GET', path: fill(op.path, name => at.path[name] ?? refuse(`param_missing: ${name}`), id) }, {
     ...(Object.keys(at.query).length > 0 ? { query: at.query as Record<string, string> } : {}),
     // A provider may require a JSON body whose every field is optional: an operation with a body parameter always sends one.
-    ...(Object.values(op.params ?? {}).some(param => param.in === 'body') ? { json: at.body } : {}),
-    ...(Object.values(op.params ?? {}).some(param => param.in === 'form') ? { form: at.form as Record<string, string> } : {}),
+    // One operation never declares both (`param_unplaced`).
+    ...(Object.values(op.params ?? {}).some(param => param.in === 'body') ? { json: at.body }
+      : Object.values(op.params ?? {}).some(param => param.in === 'form') ? { form: at.form as Record<string, string> } : {}),
     variables: at.variables, idempotent: read, ...(signal ? { signal } : {}) });
 }
 

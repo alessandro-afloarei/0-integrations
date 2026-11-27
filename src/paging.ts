@@ -55,6 +55,8 @@ function relNext(header: string | null): string | undefined {
 
 function withCursor(where: Where, options: RequestOptions, cursor: string | number): RequestOptions {
   if ('query' in where) return { ...options, query: { ...options.query, [where.query]: String(cursor) } };
+  // A form holds no body cursor: its next page would carry a JSON body as well.
+  if (options.form) throw new ProviderHttpError('request_failed', null);
   const body = typeof options.json === 'object' && options.json !== null ? options.json : {};
   return { ...options, json: { ...body, [where.body]: cursor } };
 }
