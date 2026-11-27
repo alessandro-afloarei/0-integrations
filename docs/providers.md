@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers: 106 declared, 0 recorded;
-357 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
+359 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -77,7 +77,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [Nylas](https://developer.nylas.com/docs/v3/auth/hosted-oauth-accesstoken/) | mail, calendar | OAuth 2 | messages.list, messages.get, folders.list, drafts.create, messages.create, calendars.list, events.list, events.get, events.create, events.update | hmac | declared |
 | [Outline](https://www.getoutline.com/developers#description/oauth-20) | docs | OAuth 2, key | documents.list, documents.get, documents.create, documents.update, collections.list | — | declared |
 | [Outreach](https://developers.outreach.io/api/getting-started) | sales | OAuth 2 | sequences.list, prospects.list, prospects.get, prospects.create, prospects.update, sequenceStates.create | hmac | declared |
-| [PagerDuty](https://docs.pagerduty.com/developer/authentication) | monitoring | OAuth 2, key | incidents.list, incidents.get, services.list | hmac | declared |
+| [PagerDuty](https://docs.pagerduty.com/developer/authentication) | monitoring | OAuth 2, key | incidents.list, incidents.get, incidents.create, incidents.update, services.list | hmac | declared |
 | [PayPal](https://developer.paypal.com/api/rest/authentication/) | finance | token | — | — | declared |
 | [People Data Labs](https://docs.peopledatalabs.com/docs/authentication) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
 | [Pipedrive](https://pipedrive.readme.io/docs/marketplace-oauth-authorization) | crm | OAuth 2 | persons.list, persons.search, persons.get, persons.create, persons.update, organizations.list, deals.list | — | declared |

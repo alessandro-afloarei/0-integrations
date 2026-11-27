@@ -7,16 +7,20 @@ import { defineProvider } from '../catalogue.js';
 const incident = { id: 'string', 'title?': 'string', 'status?': 'string', 'html_url?': 'string', 'created_at?': 'string',
   'updated_at?': 'string', 'service?': { 'id?': 'string' } } as const;
 const limit = { limit: { in: 'query', type: 'integer', description: 'Results per page, at most 100.' } } as const;
+const id = { id: { in: 'path', type: 'string', required: true } } as const;
+const from = { from: { in: 'header', type: 'string', required: true,
+  description: 'The email address of a valid user associated with the account making the request.' } } as const;
+const service = { id: 'string', type: 'string' } as const;
 const rest = 'https://docs.pagerduty.com/developer/api/reference/rest';
 
 export const pagerduty = defineProvider({
   id: 'pagerduty', name: 'PagerDuty', docs: 'https://docs.pagerduty.com/developer/authentication',
   categories: ['monitoring'],
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
-    help: 'For your own PagerDuty account: an account API token (read-only is enough; only account admins make one) or a user API token. An app for other people connects with the OAuth 2 sign-in.' }],
+    help: 'For your own PagerDuty account: an account API token with full access (a read-only one cannot create or update incidents; only account admins make one) or a user API token. An app for other people connects with the OAuth 2 sign-in.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://identity.pagerduty.com/oauth/authorize', tokenUrl: 'https://identity.pagerduty.com/oauth/token',
     authorizeParams: { response_type: 'code' } }, { kind: 'key', send: { header: 'authorization', value: 'Token token={token}' } }],
-  scopes: { default: ['read'], requireGranted: true },
+  scopes: { default: ['write'], requireGranted: true },
   http: { baseUrl: 'https://api.pagerduty.com', headers: { accept: 'application/vnd.pagerduty+json;version=2' }, minIntervalMs: 63,
     retry: { defaultWaitMs: 60_000, wait: { header: 'ratelimit-reset', unit: 's' } } },
   errors: { detail: 'error.code' },
@@ -29,8 +33,15 @@ export const pagerduty = defineProvider({
   operations: {
     'incidents.list': { docs: `${rest}/incidents/list-incidents`, path: '/incidents', paging: 'incidents', records: 'incidents',
       params: { 'service_ids[]': { in: 'query', type: 'string' }, ...limit }, result: { incidents: [incident] } },
-    'incidents.get': { docs: `${rest}/incidents/get-incident`, path: '/incidents/{id}', notFound: 'null',
-      params: { id: { in: 'path', type: 'string', required: true } }, result: { incident } },
+    'incidents.get': { docs: `${rest}/incidents/get-incident`, path: '/incidents/{id}', notFound: 'null', params: id, result: { incident } },
+    'incidents.create': { docs: `${rest}/incidents/create-incident`, method: 'POST', path: '/incidents',
+      params: { ...from, incident: { in: 'body', required: true, type: { type: 'string', title: 'string', service },
+        description: '`type` is `incident`, `service.type` is `service_reference`.' } }, result: { incident } },
+    'incidents.update': { docs: `${rest}/incidents/update-incident`, method: 'PUT', path: '/incidents/{id}',
+      params: { ...id, ...from, incident: { in: 'body', required: true,
+        type: { type: 'string', 'status?': 'string', 'title?': 'string', 'service?': service },
+        description: '`type` is `incident` or `incident_reference`; `status` is `triggered`, `acknowledged` or `resolved`; `service.type` is `service_reference`.' } },
+      result: { incident } },
     'services.list': { docs: `${rest}/services/list-services`, path: '/services', paging: 'services', records: 'services',
       params: limit,
       result: { services: [{ id: 'string', 'name?': 'string', 'status?': 'string', 'html_url?': 'string', 'created_at?': 'string' }] } },

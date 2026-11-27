@@ -15,6 +15,9 @@ Nothing here is released yet.
   value outside printable ASCII is `param_invalid`. A parameter's `value` is sent on every call and is no argument.
   `RequestOptions` takes `headers`, and the derived fake hands an operation's function the request's `headers` and
   routes by a required header or a fixed value.
+- PagerDuty creates and updates incidents (`incidents.create`, `incidents.update`) with the `From` header the page
+  requires. Its OAuth 2 sign-in asks `write` in place of `read`, which the writes need: a connection made before this
+  change holds `read`, and its writes are refused until the person connects again.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.
