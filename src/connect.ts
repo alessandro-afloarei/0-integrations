@@ -3,7 +3,7 @@ import type { Entered, Entry, Field, Kept, Plain, Secrets, Value, Values, Values
 import { ProviderHttpError } from './errors.js';
 import { defaultFetch, filledBase } from './http.js';
 import { authorizeUrl, exchangeCode, pkcePair, requestToken, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
-import { checkHosts, placeholders, plainFields } from './rules.js';
+import { checkHosts, namedHosts, placeholders, plainFields, plainValue, readPath } from './rules.js';
 
 type Redirect<E extends Entry = Entry> = { kind: 'redirect'; url: string; codeVerifier?: string; values: Plain<E> };
 type Form = { kind: 'form'; fields: readonly Field[] };
@@ -86,19 +86,22 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
   // Read again, as a stored value is trusted no more than a typed one: the token URL is filled from these.
   const values = plainOf(entry, input.values ?? {});
   const { grant, extras } = await exchangeCode(entry, input.client, { ...input, values, fetch });
+  // A host the token answer names (Wrike's data centre) is kept before identify, which sends to it; never a caller's.
+  const named = Object.fromEntries(Object.entries(namedHosts(entry)).map(([name, path]) => [name, readPath({ tokenAnswer: extras }, path)]));
   try {
+    if (Object.keys(named).some(name => plainValue(named, name) === undefined)) throw new ProviderHttpError('invalid_response', 200, 'missing_fields');
     // RFC 6749 §5.1: a token answer without `scope` granted the scopes requested.
     const granted = typeof extras.scope === 'string' ? new Set(extras.scope.split(auth.scopeSeparator ?? ' ')) : undefined;
     if (entry.scopes?.requireGranted && granted && !entry.scopes.default.every(scope => granted.has(scope))) {
       throw new ProviderHttpError('rejected', null, 'scope_missing');
     }
-    return { secret: grant, ...await identifyAccount(entry, { fetch, token: grant.accessToken, values, tokenAnswer: extras }) };
+    return { secret: grant, ...await identifyAccount(entry, { fetch, token: grant.accessToken, values: { ...values, ...named }, tokenAnswer: extras }) };
   } catch (error) {
     // A reused grant may belong to a live connection; only the app can decide ownership.
     if (auth.reusesGrant) throw error;
     // Cleanup must not hide the original refusal.
     try {
-      await revokeGrant(entry, { ...grant, client: input.client, values, fetch });
+      await revokeGrant(entry, { ...grant, client: input.client, values: { ...values, ...named }, fetch });
     } catch (revokeError) { input.onRevokeFailed(revokeError); }
     throw error;
   }

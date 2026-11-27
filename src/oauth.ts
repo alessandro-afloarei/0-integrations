@@ -4,23 +4,25 @@ import type { Entry, Kept, Plain, Values, ValuesOption } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
-import { checkHosts, fill, holds, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
+import { checkHosts, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
 /** A refresh's input, which may be left out only when its values may. */
 type RefreshInput<E extends Entry, I = { fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>> = Partial<I> extends I ? [input?: I] : [input: I];
 
-/** The entry's OAuth 2 URLs, each filled and checked by the base's rule from the plain fields alone: a secret is never
- * in a URL, and a saved value does not exist before the exchange. */
+/** The entry's OAuth 2 URLs, each filled and checked by the base's rule from the plain fields alone (no secret, no saved
+ * value: none exists before the exchange); the refresh URL as a refresh is sent, a named host also (Wrike's). */
 function endpoints(entry: Entry, values: Values = {}) {
   const [auth] = entry.auth;
   const urls = oauthUrls(entry);
   if (auth.kind !== 'oauth2' || urls === undefined) throw new TypeError('oauth_unsupported');
   checkHosts(entry);
-  const plain = Object.fromEntries(plainFields(entry).map(({ name }) => [name, values[name]]));
-  const url = (template: string) => new URL(filledBase(entry, plain, template));
-  return { config: auth, authorize: url(urls.authorize), token: url(urls.token), refresh: url(urls.refresh),
+  const pick = (names: string[]) => Object.fromEntries(names.map(name => [name, values[name]]));
+  const plain = pick(plainFields(entry).map(({ name }) => name));
+  const url = (template: string, from = plain) => new URL(filledBase(entry, from, template));
+  return { config: auth, authorize: url(urls.authorize), token: url(urls.token),
+    refresh: () => url(urls.refresh, { ...plain, ...pick(Object.keys(namedHosts(entry))) }),
     revoke: urls.revoke === undefined ? undefined : url(urls.revoke) };
 }
 
@@ -90,7 +92,7 @@ function context(entry: Entry, credentials: OAuthClient, input: Sent, refresh = 
   // Each URL passes the one check every URL the library sends to passes, before anything is sent.
   const { config, token, refresh: renew, revoke } = endpoints(entry, input.values);
   const fetch = input.fetch ?? defaultFetch(entry);
-  const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (refresh ? renew : token).href,
+  const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (refresh ? renew() : token).href,
     ...(revoke ? { revocation_endpoint: revoke.href } : {}) };
   const client = { client_id: credentials.clientId };
   const auth = config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret);

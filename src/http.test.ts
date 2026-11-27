@@ -15,11 +15,11 @@ import { serpapi } from './catalogue/serpapi.js';
 import { smartsheet } from './catalogue/smartsheet.js';
 import { trello } from './catalogue/trello.js';
 import { client } from './client.js';
-import { finishConnect } from './connect.js';
+import { finishConnect, startConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import * as guard from './guard.js';
 import { callRequest, createClient, defaultFetch } from './http.js';
-import { exchangeCode, requestToken, revokeGrant } from './oauth.js';
+import { exchangeCode, refreshGrant, requestToken, revokeGrant, tokenSource } from './oauth.js';
 import { fill, hostPart } from './rules.js';
 import { walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
@@ -1347,4 +1347,63 @@ describe('which answers state a declared wait', () => {
     await retriesAfter(retrying({ onlyStated: true }), answer(503, { 'retry-after': '2' }), 2000);
     expect(await sentOnce(retrying({ onlyStated: true }), answer(503))).toMatchObject({ code: 'unavailable', retryAfterMs: null });
   });
+});
+
+/** Wrike's shape: fixed sign-in URLs; the base on the host the token answer names, under a declared domain. */
+const named = defineProvider({ id: 'named', name: 'Named', scopes: { default: [] }, save: { host: 'tokenAnswer.host' },
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.named.test/authorize', tokenUrl: 'https://login.named.test/token' }],
+  http: { baseUrl: 'https://{host}/api', host: '*.named.test' }, identify: { request: { path: '/me' }, id: 'id' } });
+
+test.each([[{ host: 'a.named.test' }, 'https://a.named.test/api/me'], [{ host: 'https://a.named.test' }, 'https://a.named.test/api/me'],
+  [{ host: 'https://a.named.test/' }, 'https://a.named.test/api/me']])("a client on a named host sends to the one kept: %j", async (values, url) => {
+  const fake = filled(named, values);
+  await fake.client.json('/me');
+  expect(fake.calls.map(call => call.url)).toEqual([url]);
+});
+
+test("Pipedrive's shape: an origin the token answer names fills as its host", async () => {
+  const origin = defineProvider({ ...named, save: { apiDomain: 'tokenAnswer.api_domain' }, http: { baseUrl: 'https://{apiDomain}/api/v1', host: '*.pipedrive.com' } });
+  const fake = filled(origin, { apiDomain: 'https://x.pipedrive.com' });
+  await fake.client.json('/users/me');
+  expect(fake.calls.map(call => call.url)).toEqual(['https://x.pipedrive.com/api/v1/users/me']);
+});
+
+test.each([[{}, 'template_missing: named {host}'], [{ host: 'evil.test' }, 'base_host_refused: named'], [{ host: '127.0.0.1' }, 'base_host_refused: named'],
+  [{ host: 'https://a.named.test@evil.test' }, 'base_value_invalid: named {host}'], [{ host: 'https://a.named.test/x' }, 'base_value_invalid: named {host}'],
+  [{ host: 'http://a.named.test' }, 'base_value_invalid: named {host}'], [{ host: ['a.named.test'] }, 'template_missing: named {host}']])(
+  'a client on a named host with the values %j is refused before the token is read, nothing sent', async (values, message) => {
+    const fake = filled(named, values);
+    await expect(fake.client.json('/me')).rejects.toThrow(new TypeError(message));
+    expect([fake.token.mock.calls.length, fake.before.mock.calls.length, fake.calls.length]).toEqual([0, 0, 0]);
+  });
+
+test('a token entry on a named host: a client with a tampered host never asks its token source, nothing sent', async () => {
+  const tokened = defineProvider({ id: 'named', name: 'Named', fields: [{ name: 'secret', title: 'Secret', secret: true }],
+    auth: [{ kind: 'token', request: { url: 'https://login.named.test/token', body: { s: '{secret}' } } }], save: { host: 'tokenAnswer.host' },
+    http: { baseUrl: 'https://{host}/api', host: '*.named.test' } });
+  const fake = fakeFetch([{ url: /./u, respond: ok }]);
+  const values = { host: 'evil.test' };
+  await expect(client(tokened, { token: tokenSource(tokened, { secret: { secret: 's' }, values, fetch: fake.fetch }), values, fetch: fake.fetch })
+    .json('/me')).rejects.toThrow(new TypeError('base_host_refused: named'));
+  expect(fake.calls).toEqual([]);
+});
+
+test.each<[string, Entry, string]>([
+  ["`http.host: '*'`", { ...named, http: { ...named.http, host: '*' } }, 'base_host_refused: named'],
+  ['no `http.host`', { ...named, http: { baseUrl: named.http.baseUrl } }, 'base_host_refused: named'],
+  ['a typed host beside it', { ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' } }, 'host_split: named'],
+  ['a typed base with a named refresh URL', { ...named, fields: [{ name: 'site', title: 'Site' }], http: { ...named.http, baseUrl: 'https://{site}/api' },
+    auth: [{ ...named.auth[0], refreshUrl: 'https://{host}/token' }] }, 'host_split: named'],
+])('a named host with %s is refused on every path before anything is sent', async (_, entry, message) => {
+  const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'a', token_type: 'bearer', host: 'a.named.test', id: '1' }) }]);
+  const refused = new TypeError(message);
+  const values = { host: 'a.named.test', region: 'named.test', site: 'a.named.test' };
+  const oauthClient = { clientId: 'c', clientSecret: 's' };
+  await expect(startConnect(entry, { clientId: 'c', redirectUri: 'https://app.test/cb', state: 's', values })).rejects.toThrow(refused);
+  await expect(finishConnect(entry, { client: oauthClient, code: 'c', redirectUri: 'https://app.test/cb', codeVerifier: 'v'.repeat(43), values,
+    fetch: fake.fetch, onRevokeFailed: () => undefined })).rejects.toThrow(refused);
+  expect(() => client(entry, { token: 't', values, fetch: fake.fetch })).toThrow(refused);
+  await expect(refreshGrant(entry, oauthClient, 'r', { values, fetch: fake.fetch })).rejects.toThrow(refused);
+  await expect(revokeGrant(entry, { accessToken: 'a', values, fetch: fake.fetch })).rejects.toThrow(refused);
+  expect(fake.calls).toEqual([]);
 });

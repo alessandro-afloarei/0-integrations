@@ -5,7 +5,7 @@ import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
 import { backoffMs, declaredWait, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
-import { checkHosts, fill, hostPart, parseJson, placeholders, plainValue } from './rules.js';
+import { checkHosts, fill, hostPart, namedHosts, parseJson, placeholders, plainValue } from './rules.js';
 
 export type RequestOptions = {
   method?: Method;
@@ -131,7 +131,9 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
   const tail = baseUrl.slice(head.length);
   const invalid = (name: string) => new TypeError(`base_value_invalid: ${entry.id} {${name}}`);
   const filled = fill(head, name => {
-    const value = plainValue(values, name);
+    const given = plainValue(values, name);
+    // A named host may be an https origin (Pipedrive's `api_domain`): its host, checked as a typed one, is the rest.
+    const value = Object.hasOwn(namedHosts(entry), name) && typeof given === 'string' ? /^https:\/\/([^/]*)\/?$/u.exec(given)?.[1] ?? given : given;
     if (value !== undefined && !BASE_VALUE.test(String(value))) throw invalid(name);
     return value;
   }, entry.id) + fill(tail, name => {

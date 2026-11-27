@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { afterEach, expect, test, vi } from 'vitest';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { authorizeUrl, exchangeCode, pkcePair, refreshGrant, requestToken, revokeGrant, tokenSource } from './oauth.js';
-import { defineProvider } from './catalogue.js';
+import { defineProvider, type Entry } from './catalogue.js';
 import { figma } from './catalogue/figma.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
@@ -660,3 +660,37 @@ test('a request revoke beside fixed cloud OAuth 2 URLs and a typed base is host_
     .rejects.toThrow(new TypeError('host_split: own'));
   expect(fake.calls).toEqual([]);
 });
+
+/** Wrike's shape: fixed sign-in URLs, the base and the refresh on the host the token answer names. */
+const named = defineProvider({ id: 'named', name: 'Named', scopes: { default: [] }, save: { host: 'tokenAnswer.host' },
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.named.test/authorize', tokenUrl: 'https://login.named.test/token',
+    refreshUrl: 'https://{host}/token', pkce: false }],
+  revoke: { request: { method: 'POST', path: '/revoke' } }, http: { baseUrl: 'https://{host}/api', host: '*.named.test' } });
+
+test("a refresh goes to the host the connection keeps, and a refresh answer's host is not read", async () => {
+  const fake = endpoint({ ...token, host: 'evil.test' });
+  expect(await refreshGrant(named, client, 'r', { values: { host: 'a.named.test' }, fetch: fake.fetch })).toMatchObject({ accessToken: 'a' });
+  await refreshGrant(named, client, 'r', { values: { host: 'https://a.named.test/' }, fetch: fake.fetch });
+  expect(fake.calls.map(call => call.url)).toEqual(['https://a.named.test/token', 'https://a.named.test/token']);
+});
+
+test.each([[{}, 'template_missing: named {host}'], [{ host: '' }, 'template_missing: named {host}'], [{ host: 'evil.test' }, 'base_host_refused: named'],
+  [{ host: '127.0.0.1' }, 'base_host_refused: named'], [{ host: 'https://a.named.test:8443' }, 'base_value_invalid: named {host}'],
+  [{ host: 'a.named.test@evil.test' }, 'base_value_invalid: named {host}'], [{ host: { toString: (): string => 'a.named.test' } }, 'template_missing: named {host}']])(
+  'a refresh or a request revoke with the values %j is refused before its token is sent, nothing sent', async (values, message) => {
+    const fake = endpoint(token);
+    await expect(refreshGrant(named, client, 'private-refresh', { values, fetch: fake.fetch })).rejects.toThrow(new TypeError(message));
+    await expect(revokeGrant(named, { accessToken: 'private-access', values, fetch: fake.fetch })).rejects.toThrow(new TypeError(message));
+    expect(fake.calls).toEqual([]);
+  });
+
+test.each([['authorizeUrl', 'https://{host}/authorize'], ['tokenUrl', 'https://{host}/token']])(
+  'a named host in the %s is template_missing at start and exchange, nothing sent: no token answer exists yet', async (key, url) => {
+    const early: Entry = defineProvider({ ...named, auth: [{ ...named.auth[0], [key]: url }] });
+    const fake = endpoint({ ...token, host: 'a.named.test' });
+    const input = { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's', values: { host: 'a.named.test' } };
+    expect(() => authorizeUrl(early, input)).toThrow(new TypeError('template_missing: named {host}'));
+    await expect(exchangeCode(early, client, { ...exchange, values: { host: 'a.named.test' }, fetch: fake.fetch }))
+      .rejects.toThrow(new TypeError('template_missing: named {host}'));
+    expect(fake.calls).toEqual([]);
+  });
