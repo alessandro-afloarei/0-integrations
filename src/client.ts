@@ -12,12 +12,11 @@ export { guardedFetch } from './guard.js';
 /** An argument's type: one of its `enum`, else its shape's, and `null` when it is `nullable`. */
 type ArgOf<P> = (P extends { enum: readonly (infer E)[] } ? E : P extends { type: infer S } ? TypeOf<S> : never)
   | (P extends { nullable: true } ? null : never);
-/** An operation's arguments: the required ones required, the rest optional; one with a fixed `value` is none. */
-type Args<O> = O extends { params: infer Ps } ? ArgsOf<{ [K in keyof Ps as Ps[K] extends { value: unknown } ? never : K]: Ps[K] }>
+/** An operation's arguments: the required ones required, the rest optional. */
+type Args<O> = O extends { params: infer Ps }
+  ? { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? K : never]: ArgOf<Ps[K]> }
+    & { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? never : K]?: ArgOf<Ps[K]> }
   : Record<string, never>;
-type ArgsOf<Ps> = [keyof Ps] extends [never] ? Record<string, never>
-  : { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? K : never]: ArgOf<Ps[K]> }
-    & { -readonly [K in keyof Ps as Ps[K] extends { required: true } ? never : K]?: ArgOf<Ps[K]> };
 /** A paged operation's own option: called once for each page that skipped a record, with what it skipped. */
 type Paged = { onSkipped?: (ids: (string | null)[]) => void };
 /** A call's arguments and options; the arguments may be left out when none is required. */
@@ -85,8 +84,7 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
   const at = { path: bare(), query: bare(), body: bare(), form: bare(), variables: bare(), header: bare() };
   const given = bare(); // each argument as checked, for `anyOf`
   for (const [name, param] of Object.entries(op.params ?? {})) {
-    // A fixed value is checked and sent as an argument is; the caller's own of that name is not read.
-    const value = param.value ?? (Object.hasOwn(args, name) ? args[name] : undefined);
+    const value = Object.hasOwn(args, name) ? args[name] : undefined;
     if (value === undefined || (value === null && param.nullable !== true)) {
       if (param.required) refuse(`param_missing: ${name}`);
       continue;

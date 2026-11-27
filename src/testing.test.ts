@@ -309,25 +309,19 @@ describe('fakeProvider', () => {
     await expect(api.contacts.update({ contactId: 'c1' })).resolves.toEqual({ data: { _id: 'updated' } });
   });
 
-  test('a function receives the headers; on one route a required header, or a fixed value sent as it is fixed, chooses', async () => {
+  test('a function receives the headers; of two operations on one route, the one whose required header the call carries answers', async () => {
     const versioned = defineProvider({ id: 'versioned', name: 'Versioned', auth: [{ kind: 'key' }],
       http: { baseUrl: 'https://api.versioned.test', headers: { 'x-version': '1' } }, operations: {
-        'items.list': { path: '/items', params: { 'x-version': { in: 'header', type: 'string', value: '2' } } },
-        'items.mine': { path: '/items', params: { from: { in: 'header', type: 'string', required: true } } },
-        'drafts.create': { method: 'POST', path: '/drafts', params: { subject: { in: 'body', type: 'string' } } },
-        'messages.create': { method: 'POST', path: '/drafts', params: { send: { in: 'body', type: 'boolean', value: true },
-          subject: { in: 'body', type: 'string' } } } } });
+        'items.list': { path: '/items', params: { 'x-version': { in: 'header', type: 'string' } } },
+        'items.mine': { path: '/items', params: { from: { in: 'header', type: 'string', required: true } } } } });
     const calls: FakeCall[] = [];
     const by = (name: string) => (call: FakeCall) => { calls.push(call); return { by: name }; };
-    const { fetch } = fakeFetch(fakeProvider(versioned, { key: 'k', operations: { 'items.list': by('list'), 'items.mine': by('mine'),
-      'drafts.create': by('draft'), 'messages.create': by('send') } }));
+    const { fetch } = fakeFetch(fakeProvider(versioned, { key: 'k', operations: { 'items.list': by('list'), 'items.mine': by('mine') } }));
     const api = client(versioned, { token: 'k', fetch });
-    await expect(api.items.list()).resolves.toEqual({ by: 'list' });
+    await expect(api.items.list({ 'x-version': '2' })).resolves.toEqual({ by: 'list' });
     await expect(api.items.mine({ from: 'ana@versioned.test' })).resolves.toEqual({ by: 'mine' });
-    await expect(api.drafts.create({ subject: 'Hi' })).resolves.toEqual({ by: 'draft' });
-    await expect(api.messages.create({ subject: 'Hi' })).resolves.toEqual({ by: 'send' });
     expect(calls.map(call => [call.headers['x-version'], call.headers.from, call.headers.authorization])).toEqual([
-      ['2', undefined, 'Bearer k'], ['1', 'ana@versioned.test', 'Bearer k'], ['1', undefined, 'Bearer k'], ['1', undefined, 'Bearer k']]);
+      ['2', undefined, 'Bearer k'], ['1', 'ana@versioned.test', 'Bearer k']]);
   });
 
   /** Basic client authentication, a JSON token body and no PKCE: the three shapes that differ from the defaults. */

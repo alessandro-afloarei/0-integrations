@@ -454,7 +454,7 @@ test("an app's `anyOf` path that names no declared argument is refused when its 
   for (const anyOf of [[['email'], []], []]) expect(() => client(entry(anyOf), { token: 'k' })).toThrow(new TypeError('param_group_unknown: people.get'));
 });
 
-/** Header parameters: an acting user the caller names, a version one operation replaces, and fixed values. */
+/** Header parameters: an acting user the caller names, and a version one operation must send in place of the entry's. */
 const headed = defineProvider({ id: 'headed', name: 'Headed', auth: [{ kind: 'key' }],
   http: { baseUrl: BASE, headers: { 'x-version': '1', accept: 'application/json' } },
   paging: { cursor: { kind: 'cursor', next: 'next', send: { query: 'cursor' } } },
@@ -462,9 +462,7 @@ const headed = defineProvider({ id: 'headed', name: 'Headed', auth: [{ kind: 'ke
     'incidents.create': { method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
       title: { in: 'body', type: 'string' } } },
     'items.list': { path: '/items', paging: 'cursor', records: 'items', result: { items: ['string'], 'next?': 'string' },
-      params: { 'x-version': { in: 'header', type: 'string', value: '2' }, 'x-page': { in: 'header', type: 'integer' } } },
-    'drafts.create': { method: 'POST', path: '/drafts', params: { send: { in: 'body', type: 'boolean', value: true, description: 'Sends it.' },
-      subject: { in: 'body', type: 'string' } } },
+      params: { 'x-version': { in: 'header', type: 'string', enum: ['2'], required: true }, 'x-page': { in: 'header', type: 'integer' } } },
   } });
 
 test('a header parameter is sent as a header: required, given, replacing the entry\'s and the app\'s, never the credential', async () => {
@@ -477,18 +475,19 @@ test('a header parameter is sent as a header: required, given, replacing the ent
     headers: { from: 'ana@acme.test', 'x-app': 'a', 'x-version': '1', accept: 'application/json', authorization: 'Bearer k' } });
 });
 
-test('a fixed value is always sent in its place, replacing an entry header; an argument of its name is ignored as an undeclared one', async () => {
+test("a required one-value header replaces the entry's and the app's of its name on every page; without it or another, nothing is sent", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: sequence(json({ items: ['a'], next: 'c2' }), json({ items: ['b'] })) }]);
   const api = client(headed, { token: 'k', fetch: fake.fetch, headers: { 'x-version': 'app' } });
+  const list = (args: Record<string, unknown>) => untyped(api.items.list)(args) as AsyncGenerator<string>;
+  await expect(list({}).next()).rejects.toThrow(new TypeError('param_missing: x-version'));
+  await expect(list({ 'x-version': '9' }).next()).rejects.toThrow(new TypeError('param_invalid: x-version'));
+  expect(fake.calls).toEqual([]);
   const seen = [];
-  for await (const item of untyped(api.items.list)({ 'x-version': '9', 'x-page': 3 }) as AsyncIterable<string>) seen.push(item);
-  await untyped(api.drafts.create)({ subject: 'Hi', send: false });
-  await api.drafts.create();
+  for await (const item of api.items.list({ 'x-version': '2', 'x-page': 3 })) seen.push(item);
   expect(seen).toEqual(['a', 'b']);
-  // Every page carries the operation's headers.
-  expect(fake.calls.map(call => [call.url, call.headers['x-version'], call.headers['x-page'], call.body])).toEqual([
-    [`${BASE}/items`, '2', '3', ''], [`${BASE}/items?cursor=c2`, '2', '3', ''],
-    [`${BASE}/drafts`, 'app', undefined, '{"send":true,"subject":"Hi"}'], [`${BASE}/drafts`, 'app', undefined, '{"send":true}']]);
+  // One `x-version` goes out, the operation's, on every page.
+  expect(fake.calls.map(call => [call.url, call.headers['x-version'], call.headers['x-page']])).toEqual([
+    [`${BASE}/items`, '2', '3'], [`${BASE}/items?cursor=c2`, '2', '3']]);
 });
 
 test('H: a header value with a CR, an LF, a NUL or a character past printable ASCII is param_invalid before anything is sent', async () => {
@@ -507,7 +506,7 @@ test("an app's header parameter that could not be sent as its own header is refu
     auth: [{ kind: 'key', ...send && { send } }], operations: { op: { ...op, params: param } } }) as unknown as Entry;
   for (const [param, send, op] of [
     [{ authorization: { in: 'header', type: 'string' } }], [{ Authorization: { in: 'header', type: 'string' } }],
-    [{ 'content-type': { in: 'header', type: 'string' } }],
+    [{ 'content-type': { in: 'header', type: 'string' } }], [{ Host: { in: 'header', type: 'string' } }],
     [{ 'x-api-key': { in: 'header', type: 'string' } }, { header: 'X-Api-Key' }],
     [{ authorization: { in: 'header', type: 'string' } }, { basic: ['{token}', ''] }],
     [{ x: { in: 'header', type: 'string', nullable: true } }], [{ x: { in: 'header', type: { a: 'string' } } }],

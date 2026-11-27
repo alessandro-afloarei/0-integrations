@@ -35,12 +35,9 @@ const acme = defineProvider({
         estimate: { in: 'body', type: { points: 'integer', 'unit?': 'string' } },
         parent: { in: 'body', type: 'string', nullable: true },
         from: { in: 'header', type: 'string' },
-        'x-version': { in: 'header', type: 'string', value: '2' },
       },
       result: { id: 'string', url: 'string' },
     },
-    // Every parameter fixed: no argument is needed, and none is taken.
-    'drafts.send': { method: 'POST', path: '/drafts', params: { send: { in: 'body', type: 'boolean', value: true } } },
     // The records path reads `a.b` as one key before it reads `a` then `b`.
     'events.list': { path: '/events', paging: 'cursor', records: 'a.b',
       result: { 'a.b': [{ whole: 'string' }], a: { b: [{ split: 'string' }] } } },
@@ -107,13 +104,10 @@ function typed() {
   void api.issues.create({ title: 'x', estimate: { unit: 'h' } });
   // @ts-expect-error title is not nullable
   void api.issues.create({ title: null });
-  // A header parameter is an argument; a parameter with a fixed value is none.
+  // A header parameter is an argument.
   void api.issues.create({ title: 'Ship', from: 'ana@acme.test' });
-  // @ts-expect-error x-version is sent as its fixed value, never given
-  void api.issues.create({ title: 'Ship', 'x-version': '3' });
-  void api.drafts.send();
-  // @ts-expect-error send is fixed
-  void api.drafts.send({ send: false });
+  // @ts-expect-error from is a string header
+  void api.issues.create({ title: 'Ship', from: 7 });
   // @ts-expect-error first is an integer variable
   void api.viewer({ first: 'five' });
   // An operation or a result field that is not declared is not there (asserted, since a read of it lints as unsafe).

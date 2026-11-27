@@ -12,14 +12,13 @@ Nothing here is released yet.
   walk after its first page, or throws `cursor_missing` beside a truthy `more`. A negative or fractional one is still
   blank.
 - New: `in: 'header'` parameters, sent as a request header over the entry's and the app's (never the credential); a
-  value outside printable ASCII is `param_invalid`. A parameter's `value` is sent on every call and is no argument.
-  `RequestOptions` takes `headers`, and the derived fake hands an operation's function the request's `headers` and
-  routes by a required header or a fixed value.
+  value outside printable ASCII is `param_invalid`. `RequestOptions` takes `headers`, and the derived fake hands an
+  operation's function the request's `headers` and routes by a required header the request carries.
 - PagerDuty creates and updates incidents (`incidents.create`, `incidents.update`) with the `From` header the page
   requires. Its OAuth 2 sign-in asks `write` in place of `read`, which the writes need: a connection made before this
   change holds `read`, and its writes are refused until the person connects again.
-- Cal.com lists event types and bookings (`eventTypes.list`, `bookings.list`, paged by its cursor), each sending the
-  `cal-api-version` its own page fixes in place of the entry's.
+- Cal.com lists event types and bookings (`eventTypes.list`, `bookings.list`, paged by its cursor), each taking the
+  `cal-api-version` its page fixes as a required argument, sent in place of the entry's.
 - New: a wait may be an ISO 8601 time (`unit: 'iso8601'`: `2021-06-15T10:51:23.035+0100`, its zone required), waited
   until that instant. Teamleader waits until its `x-ratelimit-reset`, where it waited a minute.
 - A read whose answer a `rateLimit` rule marks is retried as a 429 is, after its `Retry-After` (else the entry's

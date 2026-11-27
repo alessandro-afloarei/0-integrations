@@ -114,7 +114,7 @@ What the guard does not cover:
 
 Each takes a path after the base URL and `RequestOptions`: `method`, `query`, `headers` (over the entry's and the app's,
 under the credential), `json`, `form`, `idempotent`, `signal`. A
-`form` is sent form-encoded under the form's `content-type`, which wins over the entry's and the app's. A call holds one
+`form` is sent form-encoded under the form's `content-type`, which wins over the entry's, the app's and the call's. A call holds one
 body: the types refuse a `json` beside a `form`, and a call that passes both anyway, or a `paginate` of a form on a
 shape whose cursor goes in the body, is `request_failed` before that request is sent. A path must start with `/` (or `?`, or be empty for the base itself);
 one that does not is refused before the token is read, as `TypeError('url_outside_origin')` when it would change the
@@ -141,8 +141,6 @@ An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pag
 - A header parameter is sent as the request header of its name, its value as its text, over the entry's and the app's
   header of that name (Cal.com's per-operation `cal-api-version`), never over the credential. A value holding anything
   but printable ASCII, space and tab (a CR, an LF, a NUL, `é`) is `param_invalid` before anything is sent.
-- A parameter with a fixed `value` is always sent, in its place, as that value, and is no argument: the types leave it
-  out, and an argument of its name is not read, as an undeclared one is not.
 - The answer is read by the operation's `result`: undeclared keys are dropped, and an answer that does not fit is
   `invalid_response`. With no `result` the answer is `unknown`, and a 2xx with an empty body (a 202, a 201, a 204)
   answers `null`; any other answer without JSON is `invalid_response`. With `notFound: 'null'` a 404 answers `null`.
@@ -157,7 +155,7 @@ of them by `client` as `TypeError('operation_clash: <id>')` for an app's own ent
 A wrong entry throws when its client is built: a URL that is not a well-formed template or hosts that split
 (`base_host_refused`, `host_split`, both before the token is read, and first in `finishConnect` too), a clashing id, a
 parameter with no place in the request, such as a body or form parameter on a GET, the two in one operation, or a
-header parameter on GraphQL, `nullable`, not a scalar or named `content-type` or a sign-in's credential header
+header parameter on GraphQL, `nullable`, not a scalar or named `content-type`, `host` or a sign-in's credential header
 (`param_unplaced: <id> <name>`), a paging
 shape the entry does not declare (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
 to no list in the `result` (`records_unshaped: <id>`), an operation on a `page`, `offset` or `last` shape whose `records` is

@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lookupNames } from '../account.js';
-import { defineProvider, signInWith, type Category, type Entry, type Field, type Param, type Shape, type Value } from '../catalogue.js';
+import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked } from '../errors.js';
 import { callBase, createClient, credentialOf, filledBase } from '../http.js';
@@ -60,8 +60,7 @@ const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true
 const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 'delete']).optional(),
   params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'form', 'variables', 'header']), type: shape,
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
-    description: z.string().optional(), value: z.unknown().optional() })
-    .refine(({ value }) => ['undefined', 'string', 'boolean'].includes(typeof value) || Number.isFinite(value), "a parameter's `value` is a string, a finite number or a boolean"))
+    description: z.string().optional() }))
     .refine(params => Object.entries(params).every(([name, param]) => param.in !== 'header' || headerName.safeParse(name).success), headerMessage)
     .optional(),
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional(),
@@ -212,12 +211,7 @@ const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs,
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
-const PLACED = "a `params[].in` the operation's request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL, a header a scalar, never `nullable`, never named `content-type` or a sign-in's credential header)";
-const FIXED = "a `params[].value` only on a parameter neither `required` nor `nullable`, of its `type` and `enum`, a header's in printable ASCII, space and tab";
-/** Whether a fixed value is one an argument of its parameter could be: the engine checks and sends it as one. */
-const fixable = ({ type, value, enum: among, in: place }: Param) => (type === 'unknown' || (type === 'integer' ? Number.isSafeInteger(value)
-  : type === 'number' ? Number.isFinite(value) : typeof value === type)) && (among === undefined || among.includes(String(value)))
-  && (place !== 'header' || /^[\t\x20-\x7e]*$/u.test(String(value)));
+const PLACED = "a `params[].in` the operation's request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL, a header a scalar, never `nullable`, never named `content-type`, `host` or a sign-in's credential header)";
 const runnable = {
   // The host the URL parser reads is then the host part every other rule reads.
   [WELL_FORMED_URLS]: (entry: Entry) => declaredUrls(entry).every(url => hostPart(url) !== undefined),
@@ -343,9 +337,6 @@ const runnable = {
     Object.entries(op.params ?? {}).every(([name, param]) => placed(whole, op, name, param))),
   // The client checks an argument against its enum as a string.
   '`params[].enum` only on a `type: \'string\'` parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
-  // A call gives no argument for it, so `required` and `nullable` say nothing; a value the call would refuse is no value.
-  [FIXED]: (entry: Entry) => params(entry).every(param => param.value === undefined
-    || (param.required === undefined && param.nullable === undefined && fixable(param))),
   // A path segment, a query value and a form value are one string each: never null, a list or an object.
   'only a scalar, non-`nullable` parameter `in` a path, a query or a form': (entry: Entry) => params(entry).every(param =>
     !['path', 'query', 'form'].includes(param.in) || (param.nullable === undefined && typeof param.type === 'string')),
@@ -701,18 +692,11 @@ test.each<[Rule, Entry]>([
     [PLACED, { me: { graphql: 'query { me { id } }', params: { q: { in: 'form', type: 'string' } } } }],
     [PLACED, { add: { method: 'POST', path: '/items', params: { authorization: { in: 'header', type: 'string' } } } }],
     [PLACED, { add: { method: 'POST', path: '/items', params: { 'content-type': { in: 'header', type: 'string' } } } }],
+    [PLACED, { add: { method: 'POST', path: '/items', params: { host: { in: 'header', type: 'string' } } } }],
     [PLACED, { add: { method: 'POST', path: '/items', params: { from: { in: 'header', type: 'string', nullable: true } } } }],
     [PLACED, { add: { method: 'POST', path: '/items', params: { from: { in: 'header', type: { a: 'string' } } } } }],
     [PLACED, { add: { method: 'POST', path: '/items', params: { from: { in: 'header', type: ['string'] } } } }],
     [PLACED, { me: { graphql: 'query { me { id } }', params: { from: { in: 'header', type: 'string' } } } }],
-    [FIXED, { list: { path: '/items', params: { v: { in: 'header', type: 'string', value: 'a', required: true } } } }],
-    [FIXED, { list: { path: '/items', params: { v: { in: 'header', type: 'string', value: 'a', nullable: true } } } }],
-    [FIXED, { list: { path: '/items', params: { v: { in: 'header', type: 'integer', value: 'a' } } } }],
-    [FIXED, { list: { path: '/items', params: { v: { in: 'header', type: 'boolean', value: 'a' } } } }],
-    [FIXED, { list: { path: '/items', params: { v: { in: 'header', type: 'string', value: 'a', enum: ['b'] } } } }],
-    [FIXED, { list: { path: '/items', params: { v: { in: 'header', type: 'string', value: 'é' } } } }],
-    [FIXED, { list: { path: '/items', params: { v: { in: 'header', type: 'string', value: 'a\r\nx-evil: 1' } } } }],
-    [FIXED, { add: { method: 'POST', path: '/items', params: { n: { in: 'body', type: 'integer', value: 1.5 } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: { a: 'string' } } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: 'string', nullable: true } } } }],
     ['`notFound` only on an operation with no `paging`', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
@@ -1006,8 +990,6 @@ test.each<[string, Record<string, unknown>, string]>([
 test.each<[string, object, string]>([
   ['a header parameter named with a capital', { From: { in: 'header', type: 'string' } }, headerMessage],
   ['a header parameter named with a space', { 'x from': { in: 'header', type: 'string' } }, headerMessage],
-  ...([{ a: 1 }, ['a'], null] as const).map((value): [string, object, string] => [`a value ${JSON.stringify(value)}`,
-    { send: { in: 'body', type: 'unknown', value } }, "a parameter's `value` is a string, a finite number or a boolean"]),
 ])('%s fails the schema, with what to fix', (_, params, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], operations: { add: { method: 'POST', path: '/items', params } } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
@@ -1079,8 +1061,7 @@ test('an entry whose operations keep every rule passes them all', () => {
         params: { email: { in: 'body', type: 'string' }, person: { in: 'body', type: { 'name?': 'string', 'company?': { domain: 'string' } }, required: true } } },
       me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
       'incidents.create': { docs: 'https://k.test/docs/incidents', method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
-        'x-version': { in: 'header', type: 'string', value: '2026-05-01', description: 'The version this operation needs.' },
-        draft: { in: 'body', type: 'boolean', value: true }, n: { in: 'query', type: 'integer', value: 2 } } },
+        'x-version': { in: 'header', type: 'string', enum: ['2026-05-01'], required: true, description: 'The version this operation needs.' } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
   expect(entrySchema.safeParse(good).error).toBeUndefined();

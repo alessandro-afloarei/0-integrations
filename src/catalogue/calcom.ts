@@ -2,7 +2,7 @@ import { defineProvider } from '../catalogue.js';
 
 /** Cal.com cloud, the API key alone (OAuth clients wait for review): https://cal.com/docs/api-reference/v2/oauth
  * (its example calls api.cal.com/v2/me: https://cal.com/docs/api-reference/v2/me/get-my-profile). Each operation
- * names its own `cal-api-version`: 2026-02-25 unless it fixes another. A booking sends the attendee its confirmation.
+ * names its own `cal-api-version`: 2026-02-25, else an argument. A booking sends the attendee its confirmation.
  * Webhooks sign the body: https://cal.com/docs/features/workflow-webhooks, https://cal.com/help/webhooks */
 const ref = 'https://cal.com/docs/api-reference/v2/bookings';
 
@@ -18,11 +18,14 @@ export const calcom = defineProvider({
   paging: { bookings: { kind: 'cursor', next: 'pagination.nextCursor', more: 'pagination.hasMore', send: { query: 'cursor' } } },
   operations: {
     'eventTypes.list': { docs: 'https://cal.com/docs/api-reference/v2/event-types/list-event-types', path: '/v2/event-types',
-      params: { 'cal-api-version': { in: 'header', type: 'string', value: '2026-06-12' }, username: { in: 'query', type: 'string', description: 'The user whose event types are listed.' } },
+      params: { 'cal-api-version': { in: 'header', type: 'string', enum: ['2026-06-12'], required: true,
+        description: 'The API version this operation is written for.' },
+        username: { in: 'query', type: 'string', description: 'The user whose event types are listed.' } },
       result: { status: 'string', data: [{ id: 'number', title: 'string', slug: 'string', lengthInMinutes: 'number', hidden: 'boolean',
         ownerId: 'number', bookingUrl: 'string' }] } },
     'bookings.list': { docs: `${ref}/get-all-bookings`, path: '/v2/bookings', paging: 'bookings', records: 'data',
-      params: { 'cal-api-version': { in: 'header', type: 'string', value: '2026-05-01' },
+      params: { 'cal-api-version': { in: 'header', type: 'string', enum: ['2026-05-01'], required: true,
+        description: 'The API version this operation is written for.' },
         eventTypeId: { in: 'query', type: 'string', description: 'An event type\'s id.' },
         limit: { in: 'query', type: 'number', description: '50 by default, at most 100.' } },
       result: { data: [{ uid: 'string', title: 'string', status: 'string', start: 'string', end: 'string', eventType: { id: 'number' },

@@ -101,7 +101,6 @@ const moreSpecific = (a: readonly number[], b: readonly number[]) => {
   const at = a.findIndex((segment, index) => segment !== b[index]);
   return at === -1 || at >= b.length ? a.length - b.length : (a[at] ?? 0) - (b[at] ?? 0);
 };
-const own = (record: Readonly<Record<string, string>>, name: string) => (Object.hasOwn(record, name) ? record[name] : undefined);
 /** `value` at a dotted path of `into`, the objects on the way made; never over a value already there. */
 function put(into: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
   const [head = '', ...rest] = path.split('.');
@@ -167,14 +166,12 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     else paths.push([op.method ?? 'GET', op.path, op, answer]);
   }
   // One route per method and path: of its operations, the one whose required query, body and header parameters the call all
-  // carries (a fixed one with its value), the most first.
+  // carries, the most first.
   for (const [method, path] of paths.filter(([method, path], at) => paths.findIndex(([m, p]) => m === method && p === path) === at)) {
     routes.push(route(method, base(), path, call => paths.filter(([m, p]) => m === method && p === path).map(([, , op, answer]) => {
-      const required = Object.entries(op.params ?? {}).filter(([, param]) => (param.required || param.value !== undefined) && param.in !== 'path');
-      const carried = required.every(([name, param]) => {
-        const sent = param.in === 'query' ? own(call.query, name) : param.in === 'header' ? own(call.headers, name.toLowerCase()) : readPath(call.body, name);
-        return param.value === undefined ? sent !== undefined : sent === param.value || sent === String(param.value);
-      });
+      const required = Object.entries(op.params ?? {}).filter(([, param]) => param.required && param.in !== 'path');
+      const carried = required.every(([name, param]) => (param.in === 'query' ? Object.hasOwn(call.query, name)
+        : param.in === 'header' ? Object.hasOwn(call.headers, name.toLowerCase()) : readPath(call.body, name) !== undefined));
       return [carried ? required.length : -1, answer] as const;
     }).reduce((best, next) => (next[0] > best[0] ? next : best))[1](call)));
   }
