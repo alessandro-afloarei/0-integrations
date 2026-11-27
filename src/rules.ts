@@ -20,6 +20,9 @@ export function readPath(value: unknown, path: Path): unknown {
   return Object.hasOwn(record, head) ? readPath(record[head], path.slice(dot + 1)) : undefined;
 }
 
+/** A value as text: a non-empty string, or a non-negative safe integer as its digits; null for any other (a cursor, a code). */
+export const textOf = (value: unknown) => typeof value === 'string' && value !== '' ? value : Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : null;
+
 /** The shape at a dotted path through an object shape's keys, the whole rest tried as one key first, as `readPath` reads. */
 export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined {
   if (typeof shape !== 'object' || Array.isArray(shape)) return undefined;

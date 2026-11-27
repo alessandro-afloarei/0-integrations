@@ -2,18 +2,16 @@ import type { Paging, Where } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import type { HttpClient, RequestOptions } from './http.js';
 import { paginate } from './paginate.js';
-import { readPath } from './rules.js';
+import { readPath, textOf } from './rules.js';
 
 type Cursor = Extract<Paging, { kind: 'cursor' | 'last' }>;
 type Linked = Extract<Paging, { kind: 'linkHeader' | 'nextUrl' }>;
 type Listed = Extract<Paging, { kind: 'page' | 'offset' | 'last' }>;
 
 /** The next cursor, or null on the last page: with `more`, a falsy one ends the list and a truthy one needs a cursor;
- * without it, a blank cursor ends the list. `next` is read in `record` (the answer by default). A cursor is a
- * non-empty string, or a non-negative safe integer as its digits; any other value is blank. */
+ * without it, a blank cursor ends the list. `next` is read in `record` (the answer by default), as `textOf` reads it. */
 export function nextCursor(shape: Cursor, answer: unknown, record: unknown = answer): string | null {
-  const next = readPath(record, shape.next);
-  const cursor = typeof next === 'string' && next !== '' ? next : Number.isSafeInteger(next) && Number(next) >= 0 ? String(next) : null;
+  const cursor = textOf(readPath(record, shape.next));
   if (shape.more === undefined) return cursor;
   if (!readPath(answer, shape.more)) return null;
   if (cursor === null) throw new ProviderHttpError('invalid_response', null, 'cursor_missing');
@@ -62,11 +60,12 @@ function withCursor(where: Where, options: RequestOptions, cursor: string | numb
   return { ...options, json: { ...body, [where.body]: cursor } };
 }
 
-/** A page-number, offset or last-record list's loader: nothing first, then each next value, until `more` is falsy or
- * the list is empty. An offset grows by the entries the list holds, a skipped record included, never a number the answer
- * names; a last-record value is read from the answer's own last entry, so a skipped record still gives it. A missing
- * list, or one that is no list, is `invalid_response`: a malformed answer never reads as an empty list. A list equal to
- * the page before's is `page_repeated`: the provider ignores the value, and would never end. */
+/** A page-number, offset or last-record list's loader: nothing first, then each next value, until the list is empty or
+ * `more` is falsy; without `more`, a last-record list also ends on a blank value (`nextCursor`). An offset grows by the
+ * entries the list holds, a skipped record included, never a number the answer names; a last-record value is read from
+ * the answer's own last entry, so a skipped record still gives it. A missing list, or one that is no list, is
+ * `invalid_response`: a malformed answer never reads as an empty list. A list equal to the page before's is
+ * `page_repeated`: the provider ignores the value, and would never end. */
 function listed(http: HttpClient, shape: Listed, path: string, options: RequestOptions) {
   let previous: string | undefined;
   return async (page: string | undefined) => {
@@ -78,10 +77,10 @@ function listed(http: HttpClient, shape: Listed, path: string, options: RequestO
     if (previous !== undefined && seen === previous) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
     previous = seen;
     if (shape.kind === 'last') return { items: [answer], skipped: [], cursor: list.length === 0 ? null : nextCursor(shape, answer, list.at(-1)) };
-    const last = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
+    const end = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
     const next = shape.kind === 'offset' ? Number(page ?? 0) + list.length
       : Number(page ?? (shape.zeroBased ? 0 : 1)) + 1;
-    return { items: [answer], skipped: [], cursor: last ? null : String(next) };
+    return { items: [answer], skipped: [], cursor: end ? null : String(next) };
   };
 }
 

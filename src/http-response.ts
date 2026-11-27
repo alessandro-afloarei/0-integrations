@@ -2,7 +2,7 @@ import type { Entry, Errors, Http, Retry, Wait } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError, type ProviderErrorCode } from './errors.js';
 import type { ProviderResponse } from './http.js';
 import { retryAfterMs } from './retry-after.js';
-import { holds, readPath, type Answer } from './rules.js';
+import { holds, readPath, textOf, type Answer } from './rules.js';
 
 function statusCode(status: number): ProviderErrorCode {
   if (status === 401 || status === 403) return 'rejected';
@@ -47,9 +47,8 @@ export function responseJson(entry: Pick<Entry, 'http' | 'errors'>, response: Pr
  * as its digits), kept only if `allow` lists it. */
 export function codeOf(errors: Errors | undefined, body: unknown): string | undefined {
   const paths = typeof errors?.detail === 'string' ? [errors.detail] : errors?.detail ?? [];
-  const code = paths.map(path => readPath(body, path)).map(value => (Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : value))
-    .find(value => typeof value === 'string' && value !== '');
-  return typeof code === 'string' && (errors?.allow?.includes(code) ?? true) ? code : undefined;
+  const code = paths.map(path => textOf(readPath(body, path))).find(value => value !== null);
+  return code && (errors?.allow?.includes(code) ?? true) ? code : undefined;
 }
 
 /** An ISO 8601 instant with its zone (Teamleader's `2021-06-15T10:51:23.035+0100`) in epoch milliseconds, read by its
