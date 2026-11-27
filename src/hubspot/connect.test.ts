@@ -14,21 +14,26 @@ const tokenUrl = 'https://api.hubapi.com/oauth/2026-03/token';
 const revokeUrl = `${tokenUrl}/revoke`;
 const accountUrl = 'https://api.hubapi.com/account-info/2026-09/details';
 
+/** Each code's PKCE verifier, kept as an app keeps it with its state. */
+const verifiers = new Map<string, string | undefined>();
+
 async function authorize(http: ReturnType<typeof fakeFetch>): Promise<string> {
-  const response = await http.fetch((await startConnect(hubspot, start)).url, { redirect: 'manual' });
+  const begun = await startConnect(hubspot, start);
+  const response = await http.fetch(begun.url, { redirect: 'manual' });
   expect(response.status).toBe(302);
   const back = new URL(response.headers.get('location') ?? '');
   expect(back.origin + back.pathname).toBe(callback);
   expect(back.searchParams.get('state')).toBe(start.state);
   const code = back.searchParams.get('code');
   if (!code) throw new Error('expected_code');
+  verifiers.set(code, begun.codeVerifier);
   return code;
 }
 
 const revoke = (grant: Grant, fetch: typeof globalThis.fetch) => revokeGrant(hubspot, { ...grant, client, fetch });
 
 const finish = (http: ReturnType<typeof fakeFetch>, code: string, onRevokeFailed = vi.fn()) =>
-  finishConnect(hubspot, { client, code, redirectUri: callback, fetch: http.fetch, onRevokeFailed });
+  finishConnect(hubspot, { client, code, redirectUri: callback, codeVerifier: verifiers.get(code), fetch: http.fetch, onRevokeFailed });
 
 function withTokenAnswer(routes: Route[], change: (body: Record<string, unknown>) => void): Route[] {
   const respond = respondFrom(routes);
@@ -46,7 +51,9 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 describe('HubSpot sign-in', () => {
   it('starts with the exact read scopes', async () => {
     const begun = await startConnect(hubspot, start);
-    expect(begun).toEqual({ kind: 'redirect', url: 'https://app.hubspot.com/oauth/authorize?client_id=client&scope=oauth+crm.objects.companies.read+crm.objects.contacts.read+crm.objects.deals.read+crm.objects.owners.read&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fhubspot%2Fcallback&state=state+%2B%26%2F%3F%3D', values: {} });
+    const challenge = new URL(begun.url).searchParams.get('code_challenge') ?? '';
+    expect(begun.codeVerifier).toBeTypeOf('string');
+    expect(begun).toEqual({ kind: 'redirect', url: `https://app.hubspot.com/oauth/authorize?client_id=client&scope=oauth+crm.objects.companies.read+crm.objects.contacts.read+crm.objects.deals.read+crm.objects.owners.read&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fhubspot%2Fcallback&state=state+%2B%26%2F%3F%3D&code_challenge=${challenge}&code_challenge_method=S256`, codeVerifier: begun.codeVerifier, values: {} });
   });
 
   it('starts, authorizes and finishes with the unchanged Grant and Portal label', async () => {
@@ -65,7 +72,7 @@ describe('HubSpot sign-in', () => {
     });
     expect(http.calls.map(call => call.url.split('?')[0])).toEqual(['https://app.hubspot.com/oauth/authorize', tokenUrl]);
     expect(Object.fromEntries(new URLSearchParams(http.calls[1]?.body))).toEqual({ client_id: client.clientId,
-      client_secret: client.clientSecret, grant_type: 'authorization_code', code, redirect_uri: callback });
+      client_secret: client.clientSecret, grant_type: 'authorization_code', code, redirect_uri: callback, code_verifier: verifiers.get(code) });
     expect(onRevokeFailed).not.toHaveBeenCalled();
   });
 
@@ -140,10 +147,10 @@ describe('HubSpot sign-in', () => {
     const code = await authorize(http);
     const onRevokeFailed = vi.fn();
     await expect(finishConnect(hubspot, { client: { ...client, clientId: 'wrong-client' },
-      redirectUri: callback, code, fetch: http.fetch, onRevokeFailed }))
+      redirectUri: callback, code, codeVerifier: verifiers.get(code), fetch: http.fetch, onRevokeFailed }))
       .rejects.toEqual(new ProviderHttpError('request_failed', 401, 'invalid_client'));
     await expect(finishConnect(hubspot, { client, redirectUri: `${callback}?changed=1`, code,
-      fetch: http.fetch, onRevokeFailed })).rejects.toBeInstanceOf(GrantRevoked);
+      codeVerifier: verifiers.get(code), fetch: http.fetch, onRevokeFailed })).rejects.toBeInstanceOf(GrantRevoked);
     await finish(http, code);
     await expect(finish(http, code)).rejects.toBeInstanceOf(GrantRevoked);
     expect(http.calls.some(call => call.url === revokeUrl)).toBe(false);

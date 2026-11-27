@@ -13,7 +13,7 @@ export const savvycal = defineProvider({
   categories: ['calendar'],
   fields: [{ name: 'accessToken', title: 'Personal access token', secret: true,
     help: 'For testing and controlling your own SavvyCal account (pt_secret_…, from Developer Settings): an app acting for other people connects with the OAuth 2 sign-in.' }],
-  auth: [{ kind: 'oauth2', authorizeUrl: 'https://savvycal.com/oauth/authorize', tokenUrl: 'https://savvycal.com/oauth/token', pkce: false,
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://savvycal.com/oauth/authorize', tokenUrl: 'https://savvycal.com/oauth/token',
     authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: [] },
   http: { baseUrl: 'https://api.savvycal.com' },

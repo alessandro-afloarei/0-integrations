@@ -15,7 +15,7 @@ export const teamleader = defineProvider({
   id: 'teamleader', name: 'Teamleader Focus', docs: 'https://developer.focus.teamleader.eu/docs/authentication',
   categories: ['crm'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://focus.teamleader.eu/oauth2/authorize',
-    tokenUrl: 'https://focus.teamleader.eu/oauth2/access_token', pkce: false, authorizeParams: { response_type: 'code' } }],
+    tokenUrl: 'https://focus.teamleader.eu/oauth2/access_token', authorizeParams: { response_type: 'code' } }],
   scopes: { default: [] },
   // A 429 waits its `x-ratelimit-reset`, else the sliding minute.
   http: { baseUrl: 'https://api.focus.teamleader.eu',

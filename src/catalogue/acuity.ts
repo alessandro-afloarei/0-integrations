@@ -12,7 +12,7 @@ export const acuity = defineProvider({
   id: 'acuity', name: 'Acuity Scheduling', docs: 'https://developers.acuityscheduling.com/docs/oauth2',
   categories: ['calendar'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://acuityscheduling.com/oauth2/authorize', tokenUrl: 'https://acuityscheduling.com/oauth2/token',
-    pkce: false, authorizeParams: { response_type: 'code' } },
+    authorizeParams: { response_type: 'code' } },
   { kind: 'key', send: { basic: ['{userId}', '{apiKey}'] }, fields: [{ name: 'userId', title: 'User ID', help: 'Your numeric User ID, under Integrations in Acuity.' },
     { name: 'apiKey', title: 'API key', secret: true,
       help: 'Under Integrations in Acuity: for one Acuity account. An app that many Acuity users connect to uses the OAuth 2 sign-in, as Acuity recommends.' }] }],

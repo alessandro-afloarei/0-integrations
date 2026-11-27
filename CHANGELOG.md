@@ -21,6 +21,11 @@ Nothing here is released yet.
   `/v3/customers`); its operations send the same URLs as before. An app's raw `json`, `request` and `paginate` paths
   name the version now (`api.json('/v2/users/me')`, where `/users/me` was), and `baseUrl` lost its `/v2`. No sign-in,
   field or host changed, so a stored connection keeps working.
+- Breaking: Acuity Scheduling, Bitbucket, Capsule, ClickUp, Close, Gist, Help Scout, HubSpot, Intercom, Jira, Outreach,
+  Salesloft, SavvyCal, Teamleader Focus, Todoist and Wrike now send PKCE (S256): an app keeps the `codeVerifier`
+  `startConnect` returns and hands it to `finishConnect`, as for every other OAuth 2 entry, or the exchange throws
+  `code_verifier_required`, nothing sent. Slack alone keeps `pkce: false`, because its page states that the server
+  refuses PKCE (`pkce_not_allowed`).
 
 - New: `clientAuth: 'none'`, a public client: the code exchange, the refresh and an RFC 7009 revoke send its
   `client_id` in the body and no secret, even one an untyped caller passes; PKCE is required (an app's entry that

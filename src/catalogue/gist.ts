@@ -19,7 +19,7 @@ export const gist = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'For your own Gist workspace, from Integration Settings: Gist asks an app for other workspaces to connect with OAuth 2.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.getgist.com/oauth/authorize', tokenUrl: 'https://api.getgist.com/oauth/token',
-    pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
+    authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: ['read_conversations', 'write_conversations', 'read_bulk_contacts'] },
   http: { baseUrl: 'https://api.getgist.com', retry: { defaultWaitMs: 10_000 } },
   identify: { request: { path: '/token/info' }, id: 'workspace_id' },

@@ -20,7 +20,7 @@ export const intercom = defineProvider({
   // needs Read one admin). An EU or AU customer signing in with Google needs its region's authorize host (not here):
   // https://developers.intercom.com/docs/build-an-integration/learn-more/authentication/setting-up-oauth
   // https://developers.intercom.com/docs/publish-to-the-app-store/review-publish-your-app
-  auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.intercom.com/oauth', tokenUrl: 'https://api.intercom.io/auth/eagle/token', pkce: false },
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.intercom.com/oauth', tokenUrl: 'https://api.intercom.io/auth/eagle/token' },
   { kind: 'key', fields: [{ name: 'apiHost', title: 'Region', choices: hosts,
     default: 'api.intercom.io', help: 'Where the workspace is hosted: the US, the EU or Australia.' },
   { name: 'accessToken', title: 'Access token', secret: true,

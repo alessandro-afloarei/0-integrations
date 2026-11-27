@@ -28,7 +28,7 @@ afterEach(() => vi.useRealTimers());
 
 test("builds HubSpot's and Slack's authorize URLs", () => {
   const input = { clientId: 'id', redirectUri: 'https://app.test/cb', scopes: ['oauth', 'crm.objects.deals.read'], state: 's' };
-  expect(authorizeUrl(hubspot, input).href).toBe('https://app.hubspot.com/oauth/authorize?client_id=id&scope=oauth+crm.objects.deals.read&redirect_uri=https%3A%2F%2Fapp.test%2Fcb&state=s');
+  expect(authorizeUrl(hubspot, { ...input, codeChallenge: 'c' }).href).toBe('https://app.hubspot.com/oauth/authorize?client_id=id&scope=oauth+crm.objects.deals.read&redirect_uri=https%3A%2F%2Fapp.test%2Fcb&state=s&code_challenge=c&code_challenge_method=S256');
   expect(authorizeUrl(slack, { ...input, scopes: ['chat:write', 'channels:read'], values: { domain: 'slack.com' } }).href)
     .toContain('scope=chat%3Awrite%2Cchannels%3Aread');
 });
@@ -59,12 +59,12 @@ test('exchanges a HubSpot code', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-10-24T12:00:00Z'));
   const fake = endpoint({ ...token, hub_id: 42 });
-  const answer = await exchangeCode(hubspot, client, { ...exchange, fetch: fake.fetch });
+  const answer = await exchangeCode(hubspot, client, { ...exchange, codeVerifier: 'v', fetch: fake.fetch });
   expect(answer.grant).toEqual({ accessToken: 'a', refreshToken: 'r', expiresAt: '2026-10-24T12:30:00.000Z' });
   expect(answer.extras).toEqual({ hub_id: 42 });
   expect(fake.calls[0]?.url).toBe('https://api.hubapi.com/oauth/2026-03/token');
   expect(Object.fromEntries(new URLSearchParams(fake.calls[0]?.body))).toEqual({
-    grant_type: 'authorization_code', code: exchange.code, redirect_uri: exchange.redirectUri,
+    grant_type: 'authorization_code', code: exchange.code, redirect_uri: exchange.redirectUri, code_verifier: 'v',
     client_id: client.clientId, client_secret: client.clientSecret,
   });
 });
@@ -86,15 +86,15 @@ test("Slack's ok:false is a refusal, not a token", async () => {
 });
 
 test('a token answer that states no token_type is read as Bearer; one that states another type is refused unless listed', async () => {
-  expect((await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ access_token: 'a', refresh_token: 'r', expires_in: 1800 }).fetch }))
+  expect((await exchangeCode(hubspot, client, { ...exchange, codeVerifier: 'v', fetch: endpoint({ access_token: 'a', refresh_token: 'r', expires_in: 1800 }).fetch }))
     .grant).toMatchObject({ accessToken: 'a', refreshToken: 'r' });
   // ClickUp's documented answer: the token alone.
-  expect(await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ access_token: 'only' }).fetch }))
+  expect(await exchangeCode(hubspot, client, { ...exchange, codeVerifier: 'v', fetch: endpoint({ access_token: 'only' }).fetch }))
     .toEqual({ grant: { accessToken: 'only', refreshToken: null, expiresAt: null }, extras: {} });
   expect(await refreshGrant(hubspot, client, 'old', { fetch: endpoint({ access_token: 'new' }).fetch }))
     .toEqual({ accessToken: 'new', refreshToken: 'old', expiresAt: null });
-  expect((await exchangeCode(hubspot, client, { ...exchange, fetch: endpoint(token).fetch })).grant.accessToken).toBe('a');
-  await expect(exchangeCode(hubspot, client, { ...exchange, fetch: endpoint({ ...token, token_type: 'mac' }).fetch }))
+  expect((await exchangeCode(hubspot, client, { ...exchange, codeVerifier: 'v', fetch: endpoint(token).fetch })).grant.accessToken).toBe('a');
+  await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier: 'v', fetch: endpoint({ ...token, token_type: 'mac' }).fetch }))
     .rejects.toMatchObject({ code: 'invalid_response', status: 200 });
 });
 
@@ -169,9 +169,9 @@ test('errors never carry the tokens they were sent', async () => {
 
 test('malformed token responses are invalid_response', async () => {
   for (const body of [{}, { access_token: '', token_type: 'bearer' }, { access_token: 'a', token_type: 'bearer', expires_in: 'wrong' }]) {
-    await expect(exchangeCode(hubspot, client, { ...exchange, fetch: endpoint(body).fetch }))
+    await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier: 'v', fetch: endpoint(body).fetch }))
       .rejects.toBeInstanceOf(ProviderHttpError);
-    await expect(exchangeCode(hubspot, client, { ...exchange, fetch: endpoint(body).fetch }))
+    await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier: 'v', fetch: endpoint(body).fetch }))
       .rejects.toMatchObject({ code: 'invalid_response', status: 200 });
   }
 });
@@ -361,7 +361,7 @@ test("clientAuth 'none' beside `pkce: false` is refused before anything is sent:
   expect(fake.calls).toEqual([]);
 });
 
-/** A token endpoint that takes JSON, the client id and secret in the body, no PKCE (Atlassian's shape). */
+/** A token endpoint that takes JSON (Atlassian's shape), the client id and secret in the body, no PKCE. */
 const jsonBodied = defineProvider({ id: 'jsonbodied', name: 'JSON', auth: [{ kind: 'oauth2', authorizeUrl: 'https://json.test/authorize',
   tokenUrl: 'https://json.test/token', json: true, pkce: false }], scopes: { default: [] },
   revoke: { url: 'https://json.test/revoke', token: ['refresh'] }, http: { baseUrl: 'https://api.json.test' } });

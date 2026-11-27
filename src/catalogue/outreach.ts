@@ -16,7 +16,7 @@ export const outreach = defineProvider({
   id: 'outreach', name: 'Outreach', docs: 'https://developers.outreach.io/api/getting-started',
   categories: ['sales'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://api.outreach.io/oauth/authorize', tokenUrl: 'https://api.outreach.io/oauth/token',
-    pkce: false, authorizeParams: { response_type: 'code' } }],
+    authorizeParams: { response_type: 'code' } }],
   scopes: { default: ['prospects.read', 'prospects.write', 'sequences.read', 'sequenceStates.write'] },
   http: { baseUrl: 'https://api.outreach.io/api/v2', headers: { 'content-type': 'application/vnd.api+json' }, retry: {} },
   identify: { request: {} },

@@ -19,7 +19,7 @@ export const salesloft = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'For your own Salesloft account: Salesloft makes API keys for customers, and an app for other people connects with the OAuth 2 sign-in. Give the key the people:read, people:write and cadences:read scopes.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://accounts.salesloft.com/oauth/authorize', tokenUrl: 'https://accounts.salesloft.com/oauth/token',
-    json: true, pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
+    json: true, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: ['people:read', 'people:write', 'cadences:read'] },
   http: { baseUrl: 'https://api.salesloft.com', retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/v2/me' }, id: 'data.id', name: ['data.name', 'data.email'] },

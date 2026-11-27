@@ -18,8 +18,9 @@ export const capsule = defineProvider({
   categories: ['crm'],
   fields: [{ name: 'apiToken', title: 'API authentication token', secret: true,
     help: 'For your own Capsule account: under My Preferences, then API Authentication Tokens. An app for other people connects with the OAuth 2 sign-in.' }],
+  // PKCE S256: https://api.capsulecrm.com/.well-known/oauth-authorization-server
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://api.capsulecrm.com/oauth/authorise', tokenUrl: 'https://api.capsulecrm.com/oauth/token',
-    pkce: false, authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
+    authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: ['read', 'write'] },
   revoke: { url: 'https://api.capsulecrm.com/oauth/token/revoke', token: ['refresh', 'access'] },
   http: { baseUrl: 'https://api.capsulecrm.com/api/v2',

@@ -18,7 +18,7 @@ export const helpscout = defineProvider({
   id: 'helpscout', name: 'Help Scout', docs: 'https://developer.helpscout.com/mailbox-api/overview/authentication/',
   categories: ['support', 'mail'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://secure.helpscout.net/authentication/authorizeClientApplication',
-    tokenUrl: 'https://api.helpscout.net/v2/oauth2/token', pkce: false, authorizeParams: { response_type: 'code' } }],
+    tokenUrl: 'https://api.helpscout.net/v2/oauth2/token', authorizeParams: { response_type: 'code' } }],
   scopes: { default: [] },
   http: { baseUrl: 'https://api.helpscout.net', retry: { wait: { header: 'x-ratelimit-retry-after', unit: 's' } } },
   identify: { request: { path: '/v2/users/me' }, id: 'id', name: 'email' },
