@@ -463,6 +463,23 @@ describe.each(entries)('%s', (id, entry) => {
         }
       });
     }
+    // A token answer naming a host outside `http.host` connects nothing: the token request alone, then a fixed revoke.
+    const hosts = Object.values(namedHosts(one));
+    if (hosts.length > 0) {
+      test(`refuses a token answer that names a host outside \`http.host\`${named}`, async () => {
+        const values = kitValues(one);
+        const token = new URL(filledBase(one, values, oauthUrls(one)?.token)).href;
+        const answer = { access_token: GOOD_KEY, refresh_token: 'kit-refresh', token_type: 'bearer',
+          ...Object.fromEntries(hosts.map(path => [path.slice('tokenAnswer.'.length), 'evil.test'])) };
+        const { fetch, calls } = fakeFetch([{ url: token, respond: () => Response.json(answer) }, { url: /./u, respond: () => new Response(null) }]);
+        const start = await startConnect(one, { clientId: 'kit-client', redirectUri: 'https://app.example.test/callback', state: 'kit-state', values });
+        if (start.kind !== 'redirect') throw new Error('an OAuth 2 sign-in starts with a redirect');
+        await expect(finishConnect(one, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, code: 'kit-code', redirectUri: 'https://app.example.test/callback',
+          codeVerifier: start.codeVerifier, values: start.values, fetch, onRevokeFailed: () => undefined })).rejects.toThrow(new TypeError(`base_host_refused: ${one.id}`));
+        const revoke = one.revoke !== undefined && 'url' in one.revoke ? [new URL(filledBase(one, values, one.revoke.url)).href] : [];
+        expect(calls.map(call => call.url)).toEqual([token, ...revoke]);
+      });
+    }
   }
   test('names only what each place allows in its templates', () => {
     // identify and save read one lookup: the id found, the token answer, a connection value (a plain field the user
