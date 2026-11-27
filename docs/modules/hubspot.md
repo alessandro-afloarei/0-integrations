@@ -61,7 +61,8 @@ const connected = await finishConnect(hubspot, {
 });
 ```
 
-The example uses app-owned `portalData`, OAuth `client`, a fresh stored `state`, and an `onRevokeFailed` observer.
+The example uses app-owned `portalData`, OAuth `client`, a fresh stored `state` with the start's `codeVerifier`, and an
+`onRevokeFailed` observer.
 In the app, consume and validate that state once; keep the returned secret on the server.
 
 ## Stage history
