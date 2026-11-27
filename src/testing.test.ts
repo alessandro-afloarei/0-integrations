@@ -341,20 +341,20 @@ describe('fakeProvider', () => {
     expect((await fetch('https://basicjson.test/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status).toBe(401);
   });
 
-  test.each([[{ revoke: 'basic' }, 'https://basicjson.test/revoke'], [{ refresh: 'basic' }, 'https://basicjson.test/token'],
-    [{ exchange: 'basic', refresh: 'basic' }, 'https://basicjson.test/token']] as const)(
-    'clientAuth %j: each request is answered only with the client authentication declared for it, on its URL', async (clientAuth, revokeUrl) => {
+  test.each([['basic', 'https://basicjson.test/revoke'], [undefined, 'https://basicjson.test/revoke'], ['basic', 'https://basicjson.test/token'],
+    [undefined, 'https://basicjson.test/token']] as const)(
+    'clientAuth %j, a revoke at %s: each request is answered only with the client authentication declared', async (clientAuth, revokeUrl) => {
     const split = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize',
-      tokenUrl: 'https://basicjson.test/token', clientAuth, pkce: false }], revoke: { url: revokeUrl, token: ['refresh'] } });
+      tokenUrl: 'https://basicjson.test/token', ...clientAuth && { clientAuth }, pkce: false }], revoke: { url: revokeUrl, token: ['refresh'] } });
     const { fetch } = fakeFetch(fakeProvider(split, { key: 'k' }));
     const basic = `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}`;
     const pair = { client_id: 'kit-client', client_secret: 'kit-secret' };
     const requests = { exchange: [{ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri }, 'https://basicjson.test/token'],
       refresh: [{ grant_type: 'refresh_token', refresh_token: 'kit-refresh' }, 'https://basicjson.test/token'], revoke: [{ token: 'kit-refresh' }, revokeUrl] } as const;
-    for (const [request, [params, url]] of Object.entries(requests)) {
+    for (const [params, url] of Object.values(requests)) {
       const sent = (byBasic: boolean, inBody: boolean) => fetch(url, { method: 'POST', ...byBasic && { headers: { authorization: basic } },
         body: new URLSearchParams({ ...params, ...inBody ? pair : { client_id: 'kit-client' } }) });
-      const declared = (clientAuth as Partial<Record<string, 'basic'>>)[request] === 'basic';
+      const declared = clientAuth === 'basic';
       expect((await sent(declared, !declared)).status).toBe(200);
       // The other method, and both together, are no client.
       for (const [byBasic, inBody] of [[!declared, declared], [true, true]] as const) {

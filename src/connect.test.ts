@@ -461,25 +461,6 @@ describe('connect review regressions', () => {
     }
   });
 
-  it('a failed identify revokes with the client authentication the revoke declares, not the exchange\'s', async () => {
-    const split = defineProvider({ id: 'split', name: 'Split', http: { baseUrl: 'https://api.split.test' }, scopes: { default: [] },
-      auth: [{ kind: 'oauth2', authorizeUrl: 'https://split.test/authorize', tokenUrl: 'https://split.test/token', pkce: false,
-        clientAuth: { revoke: 'basic' } }], revoke: { url: 'https://split.test/revoke', token: ['access'] },
-      identify: { request: { path: '/me' }, id: 'id' } });
-    const http = fakeFetch([{ url: 'https://api.split.test/me', respond: () => Response.json({}, { status: 401 }) },
-      ...fakeProvider(split, { key: 'k', client })]);
-    const onRevokeFailed = vi.fn();
-    await expect(finishConnect(split, { client, code: 'kit-code', redirectUri: callback, fetch: http.fetch, onRevokeFailed }))
-      .rejects.toMatchObject({ code: 'rejected' });
-    expect(onRevokeFailed).not.toHaveBeenCalled();
-    const [exchanged, , revoked] = http.calls;
-    expect([exchanged?.url, revoked?.url]).toEqual(['https://split.test/token', 'https://split.test/revoke']);
-    expect(exchanged?.headers.authorization).toBeUndefined();
-    expect(new URLSearchParams(exchanged?.body).get('client_secret')).toBe(client.clientSecret);
-    expect(revoked?.headers.authorization).toBe(`Basic ${btoa('client:secret')}`);
-    expect(revoked?.body).toBe('token=k');
-  });
-
   it('a public client connects and, after a failed identify, revokes with its id alone, never a secret', async () => {
     const open = defineProvider({ id: 'open', name: 'Open', http: { baseUrl: 'https://api.open.test' }, scopes: { default: [] },
       auth: [{ kind: 'oauth2', authorizeUrl: 'https://open.test/authorize', tokenUrl: 'https://open.test/token', clientAuth: 'none' }],

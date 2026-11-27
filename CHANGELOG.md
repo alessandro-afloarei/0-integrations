@@ -4,10 +4,12 @@
 
 Nothing here is released yet.
 
-- New: `clientAuth` may name the requests that use HTTP Basic (`{ revoke: 'basic' }`), the others sending the client's
-  id and secret in the body, or be `'none'` for a public client: its id alone, PKCE required (`OAuthClient<typeof
-  entry>` then has no secret). No entry uses the object form yet. Firecrawl lists OAuth 2 first, a public client that
-  revokes with its refresh token; its key is `signInWith(firecrawl, 'key')`.
+- New: `clientAuth` may be `'none'` for a public client: its id alone, PKCE required (`OAuthClient<typeof entry>` then
+  has no secret). Firecrawl lists OAuth 2 first, a public client that revokes with its refresh token; its key is
+  `signInWith(firecrawl, 'key')`.
+- New entry: brevo (mail), OAuth 2 first as a public app Brevo reviews before other accounts authorize it, its API key
+  second, for your own account.
+- An OAuth 2 error detail never echoes the client's Basic value, also from a request that sent the client in the body.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.

@@ -20,10 +20,9 @@ password); for an OAuth 2 entry, the access token its token URL gives.
   over the token or `expires_in`). One whose Basic or body differs
   from the request the engine sends for `key` is 400 `{ "error": "invalid_client" }`. Its calls then carry `kit-token`.
 - An OAuth 2 entry's token, refresh and RFC 7009 revoke URLs, filled from `values`, take a form body, or a JSON one
-  with `json`, and check the client authentication `clientAuth` declares for the request (a revoke when the revoke URL
-  gets no `grant_type`, a refresh when it is a `refresh_token` grant, else the exchange, also on a shared URL): a Basic
-  header and no `client_secret` in the body where it uses Basic, `client_id` alone and no Basic header for a public
-  client (`'none'`), else `client_id` and `client_secret` in the body and no Basic header, against `client`, by default
+  with `json`, and check the client authentication `clientAuth` declares (a Basic header and no `client_secret` in the
+  body, `client_id` alone and no Basic header for a public client, `'none'`, else `client_id` and `client_secret` in the
+  body and no Basic header) against `client`, by default
   `{ clientId: 'kit-client', clientSecret: 'kit-secret' }`: another is 401 `{ "error": "invalid_client" }`.
   - A grant whose `content-type` is not the entry's encoding (`application/x-www-form-urlencoded`, or
     `application/json` with `json`) is 400 `{ "error": "invalid_request" }`, before its client is checked.

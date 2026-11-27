@@ -26,13 +26,12 @@ export type TokenRequest = { url: Template; body: Readonly<Record<string, Templa
   basic?: readonly [Template, Template]; token?: Path };
 /** `oauth2.refreshUrl`: where a refresh posts (else `tokenUrl`). `json`: the token endpoint, its refresh and an RFC 7009
  * revoke take the parameters as one JSON object instead of a form. `clientAuth`: the client's id and secret go in the
- * body, unless `'basic'` sends them by HTTP Basic on every request, or an object names the requests that do; `'none'`
- * is a public client, its id alone in the body and PKCE required. `token`: one declared request gives the token. */
+ * body, unless `'basic'` sends them by HTTP Basic; `'none'` is a public client, its id alone in the body and PKCE
+ * required. `token`: one declared request gives the token. */
 export type Auth =
   | { kind: 'key'; send?: Send }
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
-    clientAuth?: 'basic' | 'none' | { readonly exchange?: 'basic'; readonly refresh?: 'basic'; readonly revoke?: 'basic' };
-    scopeSeparator?: ','; authorizeParams?: Readonly<Record<string, string>>;
+    clientAuth?: 'basic' | 'none'; scopeSeparator?: ','; authorizeParams?: Readonly<Record<string, string>>;
     tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true }
   | { kind: 'token'; request: TokenRequest; send?: Send };
 /** A declared request. `base` names one of `http.bases` to send it to instead of the entry's own base. */

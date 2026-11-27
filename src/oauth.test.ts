@@ -281,46 +281,35 @@ test('an error never carries the Basic client credential the request sent, form-
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(`Basic ${sent}`));
 });
 
-/** Basic on the RFC 7009 revoke alone, the client in the body of the token requests. */
-const basicRevoke = defineProvider({ id: 'basicrevoke', name: 'Basic revoke', auth: [{ kind: 'oauth2', authorizeUrl: 'https://split.test/authorize',
-  tokenUrl: 'https://split.test/token', pkce: false, clientAuth: { revoke: 'basic' } }], scopes: { default: [] },
-  revoke: { url: 'https://split.test/revoke', token: ['access'] }, http: { baseUrl: 'https://api.split.test' } });
-const basicOf = (id: string, secret: string) => `Basic ${Buffer.from(`${id}:${secret.replaceAll('-', '%2D')}`).toString('base64')}`;
+/** The client in the body (no `clientAuth`), an RFC 7009 revoke, no PKCE. */
+const bodied = defineProvider({ id: 'bodied', name: 'Bodied', auth: [{ kind: 'oauth2', authorizeUrl: 'https://bodied.test/authorize',
+  tokenUrl: 'https://bodied.test/token', pkce: false }], scopes: { default: [] },
+  revoke: { url: 'https://bodied.test/revoke', token: ['access'] }, http: { baseUrl: 'https://api.bodied.test' } });
 
-test('clientAuth { revoke: basic }: the exchange and the refresh send the client in the body, the revoke by Basic alone', async () => {
+test('a client in the body: the exchange, the refresh and the revoke each send its id and secret in the body, no Basic', async () => {
   const fake = endpoint(token);
-  await exchangeCode(basicRevoke, client, { ...exchange, fetch: fake.fetch });
-  await refreshGrant(basicRevoke, client, 'r', { fetch: fake.fetch });
-  await revokeGrant(basicRevoke, { accessToken: 'a', client, fetch: fake.fetch });
-  expect(fake.calls.map(call => call.headers.authorization)).toEqual([undefined, undefined, basicOf('id', client.clientSecret)]);
+  await exchangeCode(bodied, client, { ...exchange, fetch: fake.fetch });
+  await refreshGrant(bodied, client, 'r', { fetch: fake.fetch });
+  await revokeGrant(bodied, { accessToken: 'a', client, fetch: fake.fetch });
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(undefined));
   expect(fake.calls.map(call => Object.fromEntries(new URLSearchParams(call.body)))).toEqual([
     { code: exchange.code, redirect_uri: exchange.redirectUri, grant_type: 'authorization_code', client_id: 'id', client_secret: client.clientSecret },
     { refresh_token: 'r', grant_type: 'refresh_token', client_id: 'id', client_secret: client.clientSecret },
-    { token: 'a' },
+    { token: 'a', client_id: 'id', client_secret: client.clientSecret },
   ]);
 });
 
-test('clientAuth { refresh: basic } on one URL: the exchange sends the client in the body, the refresh by Basic alone', async () => {
-  const basicRefresh = defineProvider({ ...basicRevoke, id: 'basicrefresh', auth: [{ ...basicRevoke.auth[0], clientAuth: { refresh: 'basic' } }] });
-  const fake = endpoint(token);
-  await exchangeCode(basicRefresh, client, { ...exchange, fetch: fake.fetch });
-  await refreshGrant(basicRefresh, client, 'r', { fetch: fake.fetch });
-  expect(fake.calls.map(call => call.url)).toEqual(Array(2).fill('https://split.test/token'));
-  expect(fake.calls.map(call => call.headers.authorization)).toEqual([undefined, basicOf('id', client.clientSecret)]);
-  expect(fake.calls.map(call => new URLSearchParams(call.body).get('client_secret'))).toEqual([client.clientSecret, null]);
-});
-
-test("no error detail echoes the client's Basic value, on the requests that send it and on those that send the body", async () => {
+test("no error detail echoes the client's Basic value, even from a request that sent its client in the body", async () => {
   // `id:abcdef` encodes to base64 without padding, so an echo of it would pass the detail pattern.
   const sent = Buffer.from('id:abcdef').toString('base64');
   const echoing = { clientId: 'id', clientSecret: 'abcdef' };
   const echo = endpoint({ error: sent }, 400);
   for (const run of [
-    () => exchangeCode(basicRevoke, echoing, { ...exchange, fetch: echo.fetch }),
-    () => refreshGrant(basicRevoke, echoing, 'r', { fetch: echo.fetch }),
-    () => revokeGrant(basicRevoke, { accessToken: 'a', client: echoing, fetch: echo.fetch }),
+    () => exchangeCode(bodied, echoing, { ...exchange, fetch: echo.fetch }),
+    () => refreshGrant(bodied, echoing, 'r', { fetch: echo.fetch }),
+    () => revokeGrant(bodied, { accessToken: 'a', client: echoing, fetch: echo.fetch }),
   ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
-  expect(echo.calls.map(call => call.headers.authorization)).toEqual([undefined, undefined, `Basic ${sent}`]);
+  expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(undefined));
 });
 
 /** A public client (RFC 6749 §2.1): its id in the body, no secret, PKCE on (Firecrawl's shape). */
