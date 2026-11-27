@@ -1,10 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Missive: a personal API token, Productive plan only; identify only checks it. A 429 waits `Retry-After`:
- * https://missiveapp.com/docs/developers/rest-api/rate-limits. `conversations.list`, `messages.list` answer one page:
- * pass `until`, the oldest record's `last_activity_at` or `delivered_at`. `drafts.create` never sends (no `send`);
- * `messages.create` is the same draft with `send: true`: it emails its recipients at once, and any matching outgoing
- * message rules run. Either 201 may have no body (null). Webhooks: https://missiveapp.com/docs/developers/webhooks */
+ * https://missiveapp.com/docs/developers/rest-api/rate-limits. Lists of conversations and messages answer one page.
+ * `messages.create` is the draft with `send: true`: it emails its recipients at once and runs matching outgoing rules;
+ * `drafts.create` never sends; a 201 may be empty (null). Webhooks: https://missiveapp.com/docs/developers/webhooks */
 const conversation = { id: 'string', 'subject?': 'string', 'latest_message_subject?': 'string', 'messages_count?': 'integer',
   'created_at?': 'integer', 'last_activity_at?': 'integer', 'web_url?': 'string' } as const;
 const address = { address: 'string', 'name?': 'string' } as const;
