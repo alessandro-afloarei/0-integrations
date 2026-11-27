@@ -15,10 +15,12 @@ export type SlackClient = {
 const postedSchema = z.object({ ts: z.string() });
 const channelSchema = z.object({ id: z.string(), name: z.string(), is_private: z.boolean().optional() });
 const channelsSchema = z.object({ channels: z.array(z.unknown()) });
+// The client is for commercial Slack, on slack.com.
+const values = { domain: 'slack.com' };
 
 export function slackClient(input: { token: string; fetch: typeof fetch }): SlackClient {
-  const http = createClient(slack, { token: () => Promise.resolve(input.token), fetch: input.fetch });
-  const posts = createClient(slack, { token: () => Promise.resolve(input.token), fetch: input.fetch,
+  const http = createClient(slack, { token: () => Promise.resolve(input.token), fetch: input.fetch, values });
+  const posts = createClient(slack, { token: () => Promise.resolve(input.token), fetch: input.fetch, values,
     headers: { 'Content-Type': 'application/json; charset=utf-8' } });
   return {
     async postMessage(message) {

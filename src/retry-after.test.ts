@@ -155,7 +155,7 @@ describe('Slack retry hints', () => {
   test.each(['channels', 'revoke'] as const)('retains a hint on Slack %s without changing the refusal', async operation => {
     const fake = scripted(() => Response.json({ ok: false, error: 'ratelimited' }, { headers: { 'Retry-After': '2' } }));
     const run = operation === 'channels' ? slackClient({ token: 'fixture-key', fetch: fake.fetch }).channels()
-      : revokeGrant(slack, { accessToken: 'fixture-key', fetch: fake.fetch });
+      : revokeGrant(slack, { accessToken: 'fixture-key', fetch: fake.fetch, values: { domain: 'slack.com' } });
     await expect(run)
       .rejects.toMatchObject({ code: 'request_failed', status: 200, detail: 'ratelimited', retryAfterMs: 2000 });
     expect(fake.calls).toHaveLength(1);

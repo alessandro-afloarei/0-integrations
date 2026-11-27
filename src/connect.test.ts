@@ -53,7 +53,7 @@ afterEach(() => vi.useRealTimers());
 describe('connect', () => {
   it('builds the existing Slack authorization URL byte for byte', async () => {
     expect(await startConnect(slack, start)).toEqual({ kind: 'redirect',
-      url: 'https://slack.com/oauth/v2/authorize?client_id=client&scope=chat%3Awrite%2Cchat%3Awrite.public%2Cchannels%3Aread%2Cgroups%3Aread&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fslack%2Fcallback&state=state', values: {} });
+      url: 'https://slack.com/oauth/v2/authorize?client_id=client&scope=chat%3Awrite%2Cchat%3Awrite.public%2Cchannels%3Aread%2Cgroups%3Aread&redirect_uri=https%3A%2F%2Fapp.test%2Fapi%2Fintegrations%2Fslack%2Fcallback&state=state', values: { domain: 'slack.com' } });
   });
 
   it('finishes Slack from its entry: the grant, the team, the bot user', async () => {
@@ -63,7 +63,7 @@ describe('connect', () => {
     const code = await authorize(http);
     const result = await finishConnect(slack, { client, code, redirectUri: callback, fetch: http.fetch, onRevokeFailed: vi.fn() });
     expect(result).toEqual({ secret: { accessToken: 'xoxe.xoxb-fixture-1793491200000', refreshToken: 'xoxe-1-fixture-1793491200000',
-      expiresAt: '2026-11-01T12:00:00.000Z' }, values: { botUserId: 'U1' }, account: { id: 'T1', name: 'Acme' } });
+      expiresAt: '2026-11-01T12:00:00.000Z' }, values: { domain: 'slack.com', botUserId: 'U1' }, account: { id: 'T1', name: 'Acme' } });
     const team: string = result.account.id; // typed: no null check for an entry whose identify names an id
     expect(team).toBe('T1');
     expect(Object.fromEntries(new URLSearchParams(http.calls[0]?.body))).toEqual({ client_id: 'client', client_secret: 'secret',
