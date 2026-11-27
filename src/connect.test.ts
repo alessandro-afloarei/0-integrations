@@ -707,19 +707,20 @@ describe("a sign-in's own part", () => {
 
 describe('a host the token answer names', () => {
   /** Wrike's shape: fixed sign-in URLs, the base and the refresh on the host the token answer names, under one domain. */
-  const named = defineProvider({ id: 'named', name: 'Named', scopes: { default: [] },
+  const unidentified = { id: 'named', name: 'Named', scopes: { default: [] },
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.named.test/authorize', tokenUrl: 'https://login.named.test/token',
       refreshUrl: 'https://{host}/token' }],
     revoke: { url: 'https://login.named.test/revoke', token: ['refresh'] }, save: { host: 'tokenAnswer.host' },
-    http: { baseUrl: 'https://{host}/api', host: '*.named.test' }, identify: { request: { path: '/me' }, id: 'id' } });
+    http: { baseUrl: 'https://{host}/api', host: '*.named.test' } } as const;
+  const named = defineProvider({ ...unidentified, identify: { request: { path: '/me' }, id: 'id' } });
   /** The same base on a host a person types: a named value is checked as this one's is. */
   const typed = defineProvider({ ...named, fields: [{ name: 'host', title: 'Host' }], save: {} });
   const answering = (host: unknown) => fakeFetch([
     { url: 'https://login.named.test/token', respond: () => Response.json({ access_token: 'a', refresh_token: 'r', token_type: 'bearer',
-      ...(host === undefined ? {} : { host }) }) },
+      user_id: 'u1', ...(host === undefined ? {} : { host }) }) },
     { url: 'https://login.named.test/revoke', respond: () => new Response(null, { status: 200 }) },
     { url: /./u, respond: () => Response.json({ id: 'u1' }) }]);
-  const finish = (fetch: typeof globalThis.fetch, extra: object = {}) => finishConnect(named, { client, code: 'c', redirectUri: callback,
+  const finish = (fetch: typeof globalThis.fetch, extra: object = {}, entry: Entry = named) => finishConnect(entry, { client, code: 'c', redirectUri: callback,
     codeVerifier: 'v'.repeat(43), fetch, onRevokeFailed: error => { throw error; }, ...extra });
   const refusalOf = (run: () => unknown) => { try { run(); } catch (error) { return error; } return undefined; };
 
@@ -757,6 +758,15 @@ describe('a host the token answer names', () => {
     'a token answer whose host is %j is invalid_response (missing_fields) before identify sends; the fresh grant is revoked', async host => {
       const http = answering(host);
       await expect(finish(http.fetch)).rejects.toEqual(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
+      expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://login.named.test/revoke']);
+    });
+
+  it.each(([['reads the token answer alone', { id: 'tokenAnswer.user_id' }], ['is empty', {}], ['is not declared', undefined]] as const)
+    .flatMap(([shape, identify]) => ['evil.test', '127.0.0.1', 'https://a.named.test:8443'].map(host => [shape, host, identify] as const)))(
+    'an identify that %s, sending nothing on the base: a token answer naming %j is refused all the same; the grant is revoked', async (_, host, identify) => {
+      const http = answering(host);
+      await expect(finish(http.fetch, {}, defineProvider({ ...unidentified, ...identify && { identify } })))
+        .rejects.toEqual(refusalOf(() => filledBase(typed, { host })));
       expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://login.named.test/revoke']);
     });
 
