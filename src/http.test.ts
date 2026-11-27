@@ -1446,11 +1446,33 @@ describe('an answer a rate-limit rule marks is retried as a 429 is', () => {
     expect(await sentOnce(github, message({}))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 60_000 });
   });
 
-  test("a rule with a wait of its own is reported, never retried: GitHub's primary 403 waits for its reset, not a shorter Retry-After", async () => {
-    const primary = (headers: Record<string, string>) => answer(403, { 'x-ratelimit-remaining': '0',
-      'x-ratelimit-reset': String(Date.now() / 1000 + 1800), ...headers });
-    expect(await sentOnce(github, primary({ 'retry-after': '2' }))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 2000 });
-    expect(await sentOnce(github, primary({}))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 1_800_000 });
+  test("GitHub's primary limit is never sent again before its reset: a 429 or a 403, whatever Retry-After says", async () => {
+    const primary = (status: number, seconds: number | undefined, headers: Record<string, string> = {}) => answer(status, {
+      'x-ratelimit-remaining': '0', ...(seconds === undefined ? {} : { 'x-ratelimit-reset': String(Date.now() / 1000 + seconds) }), ...headers });
+    for (const status of [429, 403]) {
+      expect(await sentOnce(github, primary(status, 1800, { 'retry-after': '2' }))).toMatchObject({ code: 'rate_limited', status, retryAfterMs: 1_800_000 });
+      expect(await sentOnce(github, primary(status, 1800))).toMatchObject({ code: 'rate_limited', status, retryAfterMs: 1_800_000 });
+      await retriesAfter(github, primary(status, 20, { 'retry-after': '2' }), 20_000);
+      await retriesAfter(github, primary(status, 1, { 'retry-after': '30' }), 30_000);
+      await retriesAfter(github, primary(status, undefined, { 'retry-after': '2' }), 2000);
+    }
+  });
+
+  test("Jira's shape: onlyStated beside a rule's ISO reset, retried only after a Retry-After, never before the reset", async () => {
+    const jira = retrying({ onlyStated: true }, { http: { baseUrl: 'https://api.retrying.test', retry: { onlyStated: true },
+      rateLimit: { when: [{ status: 429, wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } }] } } });
+    const at = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
+    expect(await sentOnce(jira, answer(429, { 'x-ratelimit-reset': at(1800) }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 1_800_000 });
+    expect(await sentOnce(jira, answer(429, { 'x-ratelimit-reset': at(1800), 'retry-after': '5' })))
+      .toMatchObject({ code: 'rate_limited', retryAfterMs: 1_800_000 });
+    await retriesAfter(jira, answer(429, { 'x-ratelimit-reset': at(3), 'retry-after': '5' }), 5000);
+  });
+
+  test("with no stated wait, the default is raised to a rule's own wait when that is later", async () => {
+    const own = marked({}, { when: [{ status: 403, wait: { header: 'x-reset', unit: 's' } }] });
+    await retriesAfter(own, answer(403, { 'x-reset': '7' }), 7000);
+    await retriesAfter(marked({}, { when: [{ status: 429, wait: { header: 'x-reset', unit: 's' } }] }), answer(429, { 'x-reset': '7' }), 7000);
+    expect(await sentOnce(own, answer(403, { 'x-reset': '90' }))).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
   });
 
   test("the error carries the header wait the retry reads on a marked answer: a 529's 90 s is sent once with it", async () => {

@@ -89,11 +89,13 @@ const limits: Rules = {
   errors: { detail: 'error.code' },
 };
 
-test('a declared rate limit waits its reset, Retry-After first, else the default', () => {
+test('a declared rate limit waits its reset, or a later Retry-After, else the default', () => {
   const reset = String(NOW / 1000 + 90);
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset })).toMatchObject({ code: 'rate_limited', retryAfterMs: 90_000 });
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': 'soon' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
-  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset, 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 30_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': reset, 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 90_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 + 10), 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 30_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': 'soon', 'Retry-After': '30' })).toMatchObject({ retryAfterMs: 30_000 });
   expect(fail(limits, 403, { message: 'Please SLOW DOWN' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
   expect(fail(limits, 403, { error: { code: 'quota' } })).toMatchObject({ code: 'rate_limited', detail: 'quota', retryAfterMs: 60_000 });
   expect(fail(limits, 403, { error: { code: 403 } })).toMatchObject({ code: 'rejected', detail: '403', retryAfterMs: null });
@@ -101,12 +103,14 @@ test('a declared rate limit waits its reset, Retry-After first, else the default
   expect(fail(limits, 403, {})).toMatchObject({ code: 'rejected', retryAfterMs: null });
 });
 
-test("a declared rate limit's error carries the stated wait first: Retry-After, else retry.wait, else the rule's", () => {
+test("a declared rate limit's error carries the stated wait (Retry-After, else retry.wait), or the rule's own when later", () => {
   const both: Rules = { http: { ...BASE, retry: { limit: 0, wait: { path: 'waitMs', unit: 'ms' } },
     rateLimit: { when: [{ status: 429, wait: { header: 'x-reset', unit: 's' } }] } } };
-  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 5000 });
+  expect(fail(both, 429, { waitMs: 15_000 }, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 15_000 });
+  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 9000 });
   expect(fail(both, 429, {}, { 'x-reset': '9' })).toMatchObject({ code: 'rate_limited', retryAfterMs: 9000 });
-  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9', 'Retry-After': '2' })).toMatchObject({ retryAfterMs: 2000 });
+  expect(fail(both, 429, { waitMs: 15_000 }, { 'x-reset': '9', 'Retry-After': '2' })).toMatchObject({ retryAfterMs: 9000 });
+  expect(fail(both, 429, { waitMs: 5000 }, { 'x-reset': '9', 'Retry-After': '20' })).toMatchObject({ retryAfterMs: 20_000 });
 });
 
 test('a rule with no status holds on any status and names its own detail', () => {

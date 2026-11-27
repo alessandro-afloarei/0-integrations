@@ -262,23 +262,24 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
           beforeRequest: [pace], beforeRetry: [pace],
           afterResponse: [async ({ response, retryCount }) => {
             const { status, headers } = response;
-            // A rate limit the entry declares on another status (a 403, a 529), by a rule with no `wait` of its own, is
-            // retried as a 429 is. The body is read only when a rule may hold for the status, or for a body wait past
-            // no positive Retry-After.
-            const mayLimit = status >= 400 && status !== 429 && limits.some(rule => [undefined, 'error', status].includes(rule.status));
+            // A rate limit the entry declares on another status (a 403, a 529) is retried as a 429 is. The body is read
+            // only when a rule may hold for the status, or for a body wait past no positive Retry-After.
+            const mayLimit = status >= 400 && limits.some(rule => [undefined, 'error', status].includes(rule.status));
             if ((!RETRIED.includes(status) && !mayLimit) || retryCount >= limit) return;
             const now = Date.now();
             const read = mayLimit || (wait !== undefined && 'path' in wait && !retryAfterMs(headers, now));
             const body = read ? parseJson(await retryBody(response, timeoutMs)) : undefined;
-            const limited = status === 429 || (mayLimit && declaredLimit(classify(entry, { status, headers, data: body }, now)));
+            const declared = mayLimit ? declaredLimit(classify(entry, { status, headers, data: body }, now)) : undefined;
+            const limited = status === 429 || declared !== undefined;
             if (!limited && !RETRIED.includes(status)) return;
-            // Never before the stated wait (Retry-After, else `retry.wait`, a header's on a rate limit alone): one past
-            // the cap is reported, not retried; with `onlyStated`, so is none.
+            // The stated wait (Retry-After, else `retry.wait`, a header's on a rate limit alone); none with `onlyStated`
+            // is not retried. Never before it or the rule's own wait, the later of the two: past the cap, reported.
             const stated = retryAfterMs(headers, now, declaredWait(wait, { status: limited ? 429 : status, headers, body }, now)) || undefined;
-            if (stated === undefined ? onlyStated : stated > retry.maxWaitMs) return;
+            const own = Math.ceil(declared?.own ?? 0);
+            if ((stated === undefined ? onlyStated : stated > retry.maxWaitMs) || own > retry.maxWaitMs) return;
             // Without a stated wait, a rate limit waits the provider's default, no jitter; another status the backoff.
             const fallback = limited ? retry.defaultWaitMs : backoffMs(retry.maxWaitMs, retryCount);
-            return ky.retry({ delay: Math.min(stated ?? fallback, retry.maxWaitMs) });
+            return ky.retry({ delay: Math.min(Math.max(stated ?? fallback, own), retry.maxWaitMs) });
           }],
         },
       });

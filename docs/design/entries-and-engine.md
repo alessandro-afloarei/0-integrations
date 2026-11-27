@@ -447,10 +447,8 @@ classified in this order, and the first step that decides wins:
 1. `errors.revoked`: the provider's code is on the list, so the grant is gone (`GrantRevoked`).
 2. `errors.rules`, in the order written. A rule with no `detail` keeps the provider's code. The error carries only
    the stated wait (below): never a rate limit's.
-3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is the
-   stated wait, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`. The rule's `wait` is the error's
-   alone: the retry never reads it, so an answer whose rule has its own `wait` is reported, not retried (GitHub's
-   403 with `x-ratelimit-remaining: 0` waits for its reset, never a shorter `Retry-After`).
+3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`), or a 429 a rule names.
+   The wait reported is the answer's wait (below), else `rateLimit.defaultWaitMs`.
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -464,11 +462,11 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   checks the first code found, so a refused one hides a later path.
 - Only a call marked idempotent is retried: a GET unless the caller says `idempotent: false`, or any call the caller
   marks `idempotent: true` (an operation of `kind: 'read'`, an idempotent DELETE), never with a caller's `signal`. It is
-  retried after a 429, an answer step 3 decides by a rule with no `wait` of its own (Google's 403 `rateLimitExceeded`,
-  Notion's 529), a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was dropped
-  before an answer), up to `retry.limit` retries of any of these together. Such a rate limit is retried as a 429 is; to
-  test a rule, the body is read only when a rule's `status` is the answer's (or it names none, or `error`), within
-  `timeoutMs`. The limit counts per request sent: a redirect hop and the resend after a 401 each get their own.
+  retried after a 429, an answer step 3 decides (Google's 403 `rateLimitExceeded`, Notion's 529), a 408, 500, 502, 503
+  or 504, or a network failure (the connection could not be made, or was dropped before an answer), up to `retry.limit`
+  retries of any of these together. Such a rate limit is retried as a 429 is; to test a rule, the body is read only when
+  a rule's `status` is the answer's (or it names none, or `error`), within `timeoutMs`. The limit counts per request
+  sent: a redirect hop and the resend after a 401 each get their own.
 - A **wait** (`Wait`) is read from a header, or several (the longest of those present counts), holding a positive
   decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
   instants, whose wait is the instant minus now, at least 0. An `iso8601` wait is the header's or the path's string read
@@ -479,18 +477,21 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 - An answer's **stated wait** is a positive `Retry-After`, else `retry.wait`: a wait declared as a header counts only on
   a 429 (or an answer step 3 decides), since a reset header rides on every answer; one declared as a body path counts on
   any answer that holds it, for the retry on every retried status. A declared wait that is not positive (an instant
-  already past, a body `0`) states no wait, as a past `Retry-After` date does. The retry reads `Retry-After` and the
-  entry's `retry.wait`; a rate-limit rule's own `wait` is carried by the error and is not read by the retry. A retry
-  never comes before the stated wait (rounded up to a whole millisecond): an answer whose stated wait is longer than
-  `maxWaitMs` is not retried, whatever its status, and its error carries that wait. An error carries the stated wait,
-  else a `Retry-After` of 0 when nothing else is stated. With `retry.onlyStated`, an answer that states no wait is not
-  retried either, and neither is a network failure (Jira: "Only retry if the API is idempotent and the response includes
-  a Retry-After header"); so `onlyStated` and `defaultWaitMs` do not go together, and the table refuses the pair.
-- Otherwise a 429 (or an answer step 3 decides) waits its stated wait, else `retry.defaultWaitMs`, with no jitter. The
-  others wait a positive `Retry-After`; without one, the n-th retry (n from 0) waits a full-jitter backoff: a random
-  share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4 seconds and so on. No wait is longer than
-  `maxWaitMs`. The backoff never starts from `defaultWaitMs`, which entries set for a rate limit (a minute for
-  Firecrawl).
+  already past, a body `0`) states no wait, as a past `Retry-After` date does. **The answer's wait**, which the retry
+  and the error both read, is the later of its stated wait and the matching rate-limit rule's own `wait`, when the rule
+  has one: a page that gives two times not to retry before (GitHub's `retry-after` and its reset while
+  `x-ratelimit-remaining` is 0) is never answered before the later, on a 403 or a 429. A retry never comes before the
+  answer's wait (rounded up to a whole millisecond): an answer whose wait is longer than `maxWaitMs` is not retried,
+  whatever its status, and its error carries that wait. An error carries the answer's wait, else a `Retry-After` of 0
+  when nothing else is stated. With `retry.onlyStated`, an answer that states no wait is not retried either (a rule's
+  own wait alone states none: Jira's 429 with only its reset is reported, carrying it), and neither is a network failure
+  (Jira: "Only retry if the API is idempotent and the response includes a Retry-After header"); so `onlyStated` and
+  `defaultWaitMs` do not go together, and the table refuses the pair.
+- Otherwise a 429 (or an answer step 3 decides) waits its wait, else `retry.defaultWaitMs` raised to the rule's own
+  `wait` when that is later, with no jitter. The others wait a positive `Retry-After`; without one, the n-th retry (n
+  from 0) waits a full-jitter backoff: a random share of `min(maxWaitMs, 1000 × 2^n)` milliseconds, so at most 1, 2, 4
+  seconds and so on. No wait is longer than `maxWaitMs`. The backoff never starts from `defaultWaitMs`, which entries
+  set for a rate limit (a minute for Firecrawl).
 - Never retried: a call not marked idempotent, a timeout (the caller has already waited the whole `timeoutMs`; a
   retry would only multiply it), a 501, any other 4xx, a 2xx that `errors.failed` marks, the guard's `address_blocked`,
   the OAuth token endpoint, a `token` entry's request and an RFC 7009 revoke. The last answer is classified as any
