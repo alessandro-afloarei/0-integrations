@@ -39,8 +39,9 @@ one takes five steps:
    - a parameter the docs' prose calls required is required;
    - read what each page requires, not only what you declare: every parameter it marks required (path, query or body),
      a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
-     the list to its container (a project, a board), are required; an operation that needs a header whose value changes
-     per call stays out and goes on the [waiting list](docs/waiting-list.md);
+     the list to its one container (a project, a board), are required, and when none of them is its container the list
+     declares the page's sets as `anyOf`; an operation that needs a header whose value changes per call stays out and
+     goes on the [waiting list](docs/waiting-list.md);
    - when the page states that at least one of several equal inputs that find or create one record (an email, a LinkedIn
      URL, a domain) is required, none is required and the operation declares the page's sets as `anyOf`
      (`[['email'], ['phone', 'last_name']]`), which the descriptions do not repeat; a rule that reads two ways gives the
@@ -48,6 +49,8 @@ one takes five steps:
      its descriptions claim one);
    - a call the docs say spends credits is `kind: 'write'`, whatever its method, and its leading comment names the
      credit page;
+   - a write that reaches people (a message sent, an event or a meeting whose create invites its guests) says so in its
+     leading comment and declares the provider's parameter to send no notification, optional;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
