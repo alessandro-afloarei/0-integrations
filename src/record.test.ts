@@ -84,11 +84,12 @@ const identityPaths = (value: Value | undefined) => (value === undefined ? [] : 
  * result is replayed as the table test replays it, and written only when both sign-ins end as they did live. */
 async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
   const entry = recordedSignIn(whole);
-  // A host the kit fills in (no default, no choice) may be a real one: a real key goes only to the host the owner names.
+  // A host the kit fills in (a field with no default or choice, or a host the token answer names) may be a real one: a
+  // real key goes only to the host the owner names, or to a field's documented default or first choice.
   const typed = placeholders(/^https:\/\/[^/]*/u.exec(entry.http.baseUrl)?.[0] ?? '');
-  const unnamed = (entry.fields ?? []).find(field => typed.includes(field.name) && field.default === undefined && field.choices === undefined
-    && given[field.name] === undefined);
-  if (unnamed) throw new Error(`recording refused: give the host field ${unnamed.name} in RECORD_VALUES`);
+  const unnamed = typed.find(name => { const field = entry.fields?.find(each => each.name === name);
+    return field?.default === undefined && field?.choices === undefined && given[name] === undefined; });
+  if (unnamed !== undefined) throw new Error(`recording refused: give ${unnamed}, in the base's host, in RECORD_VALUES`);
   const [auth] = entry.auth;
   if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
   const kit = kitValues(entry);
@@ -236,11 +237,27 @@ describe('recording an entry with no module, on its derived fake standing in for
     const sent: string[] = [];
     const counting: Wrap = fetch => async (input, init) => { sent.push(new Request(input, init).url); return fetch(input, init); };
     expect((await recordOnFake(typedHost, { key: 'real-key-1', wrap: counting })).refused)
-      .toBe('recording refused: give the host field host in RECORD_VALUES');
+      .toBe('recording refused: give host, in the base\'s host, in RECORD_VALUES');
     expect(sent).toEqual([]);
     const { recording, refused } = await recordOnFake(typedHost, { key: 'real-key-1', values: { host: 'eu.acme.example' }, account: { id: 'u-real-881' }, wrap: counting });
     expect(refused).toBeUndefined();
     expect(sent[0]).toBe('https://eu.acme.example/api/me');
+    expect(recording?.exchanges[0]?.url).toBe('https://kit.acme.test/api/me');
+  });
+
+  test('a host the token answer names is refused before any request, until RECORD_VALUES names it', async () => {
+    const named = defineProvider({ id: 'acme', name: 'Acme', docs: 'https://acme.test/docs',
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://oauth.acme.test/authorize', tokenUrl: 'https://oauth.acme.test/token' }], scopes: { default: [] },
+      save: { apiDomain: 'tokenAnswer.api_domain' }, http: { baseUrl: 'https://{apiDomain}/api', host: '*.acme.test' },
+      identify: { request: { path: '/me' }, id: 'id' } });
+    const sent: string[] = [];
+    const counting: Wrap = fetch => async (input, init) => { sent.push(new Request(input, init).url); return fetch(input, init); };
+    expect((await recordOnFake(named, { key: 'real-key-1', wrap: counting })).refused)
+      .toBe('recording refused: give apiDomain, in the base\'s host, in RECORD_VALUES');
+    expect(sent).toEqual([]);
+    const { recording, refused } = await recordOnFake(named, { key: 'real-key-1', values: { apiDomain: 'eu.acme.test' }, account: { id: 'u-real-881' }, wrap: counting });
+    expect(refused).toBeUndefined();
+    expect(sent[0]).toBe('https://eu.acme.test/api/me');
     expect(recording?.exchanges[0]?.url).toBe('https://kit.acme.test/api/me');
   });
 
