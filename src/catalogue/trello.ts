@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Trello: OAuth 2.0 (3LO), its client set to confidential, the token Bearer on the API; or the app's API key and the
- * person's token in one `Authorization: OAuth …` header. The client is set up on the app's OAuth 2.0 tab:
- * https://developer.atlassian.com/cloud/trello/guides/rest-api/oauth-2-client-configuration/
+/** Trello: OAuth 2.0 (3LO), its client set to confidential with the Read members scope, the token Bearer on the API;
+ * or the app's API key and the person's token in one `Authorization: OAuth …` header. The client is set up on the
+ * app's OAuth 2.0 tab: https://developer.atlassian.com/cloud/trello/guides/rest-api/oauth-2-client-configuration/
  * `GET /1/members/me` names the member: https://developer.atlassian.com/cloud/trello/rest/api-group-members/ */
 export const trello = defineProvider({
   id: 'trello', name: 'Trello', docs: 'https://developer.atlassian.com/cloud/trello/guides/rest-api/oauth-2-confidential-client-usage/',
