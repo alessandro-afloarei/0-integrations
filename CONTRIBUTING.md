@@ -60,10 +60,10 @@ one takes five steps:
      an update declare no field that chooses their author: the credential's own identity speaks. Where the page requires
      the request to name the agent who sends (Atlas's `agentId`), that field is declared, its description saying so. A
      create may name the customer as its first message's author where the page asks for it (Zammad, Dixa), and an entry
-     may leave such a create out. An update offers no path and no enum value that sends, deletes or marks spam. Where
-     a status cannot be an enum (Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer inside an
-     object), the description names the values the template covers; where the page lists a spam or removed value among
-     them, it says the entry does not check the value;
+     may leave such a create out. A create or an update offers no path and no enum value that sends, deletes or marks
+     spam. Where a status cannot be an enum (Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer
+     inside an object), the description names the values the template covers; where the page lists a spam or removed
+     value among them, it says the entry does not check the value;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
