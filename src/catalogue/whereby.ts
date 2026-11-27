@@ -17,7 +17,7 @@ export const whereby = defineProvider({
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.whereby.dev/v1', retry: { defaultWaitMs: 60_000, wait: { path: 'data.msLeft', unit: 'ms' } } },
   identify: { request: { path: '/meetings', query: { limit: '1' } } },
-  webhook: { kind: 'hmac', header: 'whereby-signature', signed: '{timestamp}.{body}', part: 'v1', timestamp: { part: 't' },
+  webhook: { kind: 'hmac', header: 'whereby-signature', signed: '{timestamp}.{body}', part: 'v1', timestamp: { part: 't', toleranceSeconds: 60 },
     deliveryId: { body: ['id'] } },
   paging: { cursor: { kind: 'cursor', next: 'cursor', send: { query: 'cursor' } } },
   operations: {
