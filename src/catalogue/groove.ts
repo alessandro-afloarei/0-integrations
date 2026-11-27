@@ -41,7 +41,7 @@ export const groove = defineProvider({
         to: { in: 'body', type: 'string', required: true, description: 'The email of the customer or mailbox it is addressed to.' },
         mailbox: { in: 'body', type: 'string', description: 'A mailbox\'s email or id; the primary mailbox by default.' },
         assignee: { in: 'body', type: 'string', description: 'An agent\'s email.' }, subject: { in: 'body', type: 'string' },
-        state: { in: 'body', type: 'string', enum: states }, tags: { in: 'body', type: ['string'] }, ...sending },
+        state: { in: 'body', type: 'string', enum: settable }, tags: { in: 'body', type: ['string'] }, ...sending },
       result: { ticket } },
     'tickets.update': { docs: `${ref}/tickets`, method: 'PUT', path: '/tickets/{ticket_number}/state',
       params: { ...number, state: { in: 'body', type: 'string', required: true, enum: settable } } },
