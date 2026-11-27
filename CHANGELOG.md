@@ -5,10 +5,11 @@
 Nothing here is released yet.
 
 - Every entry's `retry` was read against its provider's rate-limit page: an entry whose pages state no limit status
-  declares none, and a number no page states is gone. A positive `Retry-After` still wins wherever one is sent. A read
-  is what the engine retries: identify's request, a raw GET or a raw call marked idempotent, and an operation of
-  `kind: 'read'` (or a GET with no `kind`); a 5xx below is one it retries, a 500, 502, 503 or 504 (a 501 or a 505 is
-  reported at once). A rate-limited read now:
+  declares none, and a number no page states is gone. A positive `Retry-After` still wins wherever one is sent. The
+  engine retries an operation of `kind: 'read'` (or a GET with no `kind`), a raw GET or a raw call marked idempotent,
+  and identify's request when it is a GET (a POST or GraphQL identify is sent once); a call given the caller's own
+  `signal` is never retried. A read below is one of these, and a 5xx one the engine retries, a 500, 502, 503 or 504
+  (a 501 or a 505 is reported at once). A rate-limited read now:
   - Affinity: waits its `x-ratelimit-limit-user-reset` header, not one second.
   - Attio: waits a `Retry-After` up to the engine's 60-second cap, no longer 10 seconds.
   - Azure DevOps: waits its `X-RateLimit-Reset` header, not one second.
@@ -37,9 +38,9 @@ Nothing here is released yet.
   - Freshsales: waits a minute when it names no wait, not one second.
   - GitBook: waits its `X-RateLimit-Reset` header, not one second.
   - GitHub: is retried only on a 408, 429, 500, 502, 503 or 504 that names a positive `Retry-After` of at most 60
-    seconds: such a read is waited and tried once more, `githubClient`'s reads too; it was not retried. A 403 is
-    reported with its wait, never retried, and so are any other status (a 505 at once), a primary limit with no
-    `Retry-After` and a longer wait.
+    seconds: such a read is waited and tried once more, `githubClient`'s reads too; it was not retried. Every other
+    error status (a 403, a 505) is reported at once, with its wait where it names one, and so are a primary limit with
+    no `Retry-After` and a longer wait.
   - GitLab: is retried after its `Retry-After`, else one second, and a 408, a 5xx or a dropped connection on a read is
     now retried once; it was not retried.
   - Google: is retried once, after its `Retry-After` or one second, up to the engine's 60-second cap, and a 5xx or a
