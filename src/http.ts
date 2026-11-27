@@ -335,7 +335,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     const sendAs = (bearer: string) => follow(url, bearer, credentialOf(entry, bearer, input.values ?? {}), options);
     const bearer = await token();
     const response = await sendAs(bearer);
-    if (response.status !== 401) return response;
+    // A 401 a rate-limit rule marks is a limit, not a refused token: never renewed and sent before its stated time.
+    if (response.status !== 401 || declaredLimit(classify(entry, response))) return response;
     const renewed = await renew(bearer);
     return renewed === bearer ? response : sendAs(renewed);
   };

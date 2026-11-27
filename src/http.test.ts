@@ -140,6 +140,24 @@ test("a request with the caller's signal never waits", async () => {
   expect(fake.calls).toHaveLength(1);
 });
 
+test('a 401 a rate-limit rule marks is not renewed and sent again before its stated time; an ordinary 401 is', async () => {
+  const limited401 = defineProvider({ id: 'limited-401', name: 'Limited 401', auth: [{ kind: 'key' }],
+    http: { baseUrl: 'https://api.limited-401.test', retry: {},
+      rateLimit: { when: [{ status: 401, header: 'x-reset', wait: { header: 'x-reset', unit: 's' } }] } } });
+  for (const method of ['GET', 'POST'] as const) {
+    const fake = script(limited401, () => Response.json({}, { status: 401, headers: { 'retry-after': '90', 'x-reset': '120' } }), ok);
+    fake.token.mockResolvedValueOnce('old').mockResolvedValue('new');
+    const result = fake.client.json('/items', { method }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(await result).toMatchObject({ code: 'rate_limited', status: 401, retryAfterMs: 120_000 });
+    expect(fake.calls).toHaveLength(1);
+  }
+  const ordinary = script(limited401, () => Response.json({}, { status: 401 }), ok);
+  ordinary.token.mockResolvedValueOnce('old').mockResolvedValue('new');
+  expect(await ordinary.client.json('/items')).toEqual({ ok: true });
+  expect(ordinary.calls.map(call => call.headers.authorization)).toEqual(['Bearer old', 'Bearer new']);
+});
+
 test('a 401 asks once for a fresh token', async () => {
   const fake = script(hubspot, () => Response.json({}, { status: 401 }), ok);
   fake.token.mockResolvedValueOnce('old').mockResolvedValue('new');
