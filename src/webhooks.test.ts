@@ -740,10 +740,12 @@ test('deliveryId reads the declared header or the body paths', () => {
   expect(deliveryId(stripe.webhook, request({}, Buffer.from('{"id":"evt_1","type":"balance.available"}')))).toBe('evt_1');
   expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }, Buffer.from('{"eventId":"evt_1"}')))).toBe('evt_1');
   expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }))).toBeNull();
-  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"meeting.transcribed","meeting_id":"m1"}')))).toBe('meeting.transcribed:m1');
-  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
-  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
-  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('not json')))).toBeNull();
+  // Several body paths are joined with `:`; one missing or empty, or a body that is no JSON, gives none.
+  const joined: Webhook = { kind: 'hmac', header: 'x-signature', deliveryId: { body: ['event', 'meeting_id'] } };
+  expect(deliveryId(joined, request({}, Buffer.from('{"event":"meeting.transcribed","meeting_id":"m1"}')))).toBe('meeting.transcribed:m1');
+  expect(deliveryId(joined, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
+  expect(deliveryId(joined, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
+  expect(deliveryId(joined, request({}, Buffer.from('not json')))).toBeNull();
 });
 
 test('Breakcold, PagerDuty and TidyCal dedupe on the id their signed body holds, whatever a replay puts in a header', () => {
@@ -784,6 +786,31 @@ test('Linear, Sentry, RocketReach and Todoist declare no delivery id: their id h
     expect(webhook.deliveryId).toBeUndefined();
     expect(deliveryId(webhook, request({ 'linear-delivery': 'a', 'request-id': 'b', 'rr-request-id': 'c', 'x-todoist-delivery-id': 'd' },
       Buffer.from('{"id":"e"}')))).toBeNull();
+  }
+});
+
+test("Front dedupes on the signed event's `payload.id`; its validation request has none", () => {
+  const event = '{"type":"inbound_received","authorization":{"id":"cmp_abc"},"payload":{"id":"evt_55c8c149","type":"inbound"}}';
+  const ids = { 'x-front-delivery-id': 'a', 'x-request-id': 'b', 'x-webhook-id': 'c' };
+  const sent = frontSigned(event, ids);
+  expect(verifyWebhook(front.webhook, sent, secret)).toBe(true);
+  expect(deliveryId(front.webhook, sent)).toBe('evt_55c8c149');
+  // A replay renames any id-like header freely: it still verifies, and still dedupes as the event it copies.
+  const renamed = frontSigned(event, { 'x-front-delivery-id': 'z', 'x-request-id': 'y', 'x-webhook-id': 'x' });
+  expect(verifyWebhook(front.webhook, renamed, secret)).toBe(true);
+  expect(deliveryId(front.webhook, renamed)).toBe('evt_55c8c149');
+  const sync = frontSigned(frontSync, { 'x-front-challenge': 'c1', ...ids });
+  expect(verifyWebhook(front.webhook, sync, secret)).toBe(true);
+  expect(deliveryId(front.webhook, sync)).toBeNull();
+});
+
+test('Fireflies declares no delivery id: a resend after the notes change carries the same event and meeting id', () => {
+  const sign = (json: string) => request({ 'x-hub-signature': `sha256=${createHmac('sha256', secret).update(json).digest('hex')}` }, Buffer.from(json));
+  const first = sign('{"event":"meeting.transcribed","timestamp":1793520000000,"meeting_id":"ASxwZxCstx"}');
+  const resend = sign('{"event":"meeting.transcribed","timestamp":1793520900000,"meeting_id":"ASxwZxCstx","reprocessed_at":1793520800000}');
+  for (const delivery of [first, resend]) {
+    expect(verifyWebhook(fireflies.webhook, delivery, secret)).toBe(true);
+    expect(deliveryId(fireflies.webhook, delivery)).toBeNull();
   }
 });
 

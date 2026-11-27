@@ -265,7 +265,7 @@ function webhooksDeclared() {
     challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
   // A `challenge` read from a request header and answered as text, after the request verifies (Front)
   const headed: Webhook = { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', encoding: 'base64',
-    timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
+    timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' }, deliveryId: { body: ['payload.id'] },
     challenge: { when: { path: 'type', equals: 'sync' }, echo: { header: 'x-front-challenge' }, text: true } };
   return [timestamped, pieces, signedWithKey, sharedToken, instant, decoded, credentials, standard, challenged, queried, headed];
 }

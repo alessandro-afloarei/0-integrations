@@ -6,9 +6,9 @@
 `deliveryId(entry.webhook, request)` reads what the entry declares an app dedupes on: a header, or body paths joined
 with `:`, null when one is missing. A catalogue entry on a signed scheme (`hmac`, `ed25519`) declares a body path,
 never a header (the table refuses a header id there): its signature covers no header, so a replay could rename one.
-Read it only after `verifyWebhook` accepted the request: an
-id such as Fireflies' `event:meeting_id` can be guessed, so deduplicating before verifying lets a forged post suppress
-the real delivery.
+Read it only after `verifyWebhook` accepted the request: a
+body id such as Stripe's event `id` is no secret, so deduplicating before verifying lets a forged post that copies it
+suppress the real delivery.
 Routing, replay protection, dedupe and the inbox remain in the app.
 
 An entry's `webhook` declares the scheme: the header, what is signed, SHA-256 or SHA-1 (`hash: 'sha1'`, Intercom), and
@@ -74,8 +74,9 @@ bytes, compared as SHA-256 digests as `token` is; the password runs from the fir
 empty password, a missing header, two spaces, base64 without its `=` padding and the credentials in clear are all
 `false`.
 
-[Fireflies](fireflies.md) and [Breakcold](breakcold.md) declare a delivery id; Fireflies' module also parses the event.
-Stripe's entry declares the event's `id` as its delivery id.
+[Breakcold](breakcold.md) declares a delivery id, and Stripe's entry the event's `id`. [Fireflies](fireflies.md)
+declares none (a resend after a meeting's notes change carries the same event and meeting id); its module parses the
+event.
 
 ## Declaring a webhook
 
@@ -114,7 +115,7 @@ const queried: Webhook = { kind: 'hmac', header: 'x-nylas-signature',
   challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
 // A `challenge` read from a request header and answered as text, after the request verifies (Front)
 const headed: Webhook = { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', encoding: 'base64',
-  timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
+  timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' }, deliveryId: { body: ['payload.id'] },
   challenge: { when: { path: 'type', equals: 'sync' }, echo: { header: 'x-front-challenge' }, text: true } };
 ```
 

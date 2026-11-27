@@ -66,13 +66,18 @@ Nothing here is released yet.
 - Webhooks:
   - New: a webhook timestamp may be epoch milliseconds or an ISO 8601 instant (`timestamp.unit`); Zendesk verifies its
     webhooks.
-  - New: a challenge may be read from a request header (`echo: { header }`, text only); Front verifies its webhooks and
-    answers its validation request. A value read from a query or a header is never answered inside JSON, even by an
+  - New: a challenge may be read from a request header (`echo: { header }`, text only); Front verifies its webhooks,
+    answers its validation request and dedupes on the signed event's `payload.id` (the validation request has none). A value read from a query or a header is never answered inside JSON, even by an
     app's own declaration that leaves out `text`.
-  - Breaking: a signed webhook (`hmac`, `ed25519`) dedupes on a body path only; Breakcold reads `eventId`, PagerDuty
-    `event.id` and TidyCal `id` from the signed body, and Linear, Sentry, RocketReach and Todoist declare no
-    `deliveryId` (no page documents a signed per-delivery id), so `deliveryId()` answers null and an app dedupes them on
-    its own key.
+  - Breaking: every catalogue entry with a signed webhook (`hmac`, `ed25519`) dedupes on a body path (the table refuses
+    a header id there). Breakcold reads `eventId`, PagerDuty `event.id` and TidyCal `id` from the signed body; PagerDuty's
+    id is now the event's, the same in every subscription's copy, where `X-Webhook-Id` was per webhook, so its values
+    change. Linear, Sentry, RocketReach and Todoist declare no `deliveryId` (no page documents a signed per-delivery id),
+    so `deliveryId()` answers null and an app dedupes them on its own key.
+  - Breaking: Fireflies declares no `deliveryId`: `event` and `meeting_id` name the meeting, and a resend after its notes
+    change carries the same pair, so deduping on it dropped every updated transcript or summary. `deliveryId()` answers
+    null; an app dedupes on its own key, for example the event, the meeting id and `reprocessed_at` (absent on a first
+    delivery).
   - Breaking: `challengeAnswer(webhook, request, secret)` verifies the request itself unless the entry marks its
     challenge `unsigned`; call it before `verifyWebhook`. Slack's `url_verification` and Discord's PING are answered
     only under a valid signature: with a wrong secret they were answered, and are now null. A value is answered only as
