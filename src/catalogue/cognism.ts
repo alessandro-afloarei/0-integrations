@@ -20,6 +20,7 @@ export const cognism = defineProvider({
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://app.cognism.com/api/search',
     retry: { defaultWaitMs: 60_000, wait: { header: 'x-rate-limit-reset', unit: 's' } } },
+  errors: { detail: 'errors.0.code' },
   identify: { request: { path: '/entitlement/contactEntitlementSubscription' } },
   operations: {
     'contacts.search': { docs: `${docs}#6c453b29-38c4-4037-8c09-7ba084bb3b7f`, method: 'POST', path: '/contact/search',
