@@ -3,7 +3,7 @@ import { defineProvider } from '../catalogue.js';
 /** Agile CRM: the user's email and REST API key as Basic, on the account's own subdomain; answers are XML unless
  * `accept` asks for JSON. A list's next cursor is in its last record, so each list answers one page and an app sends
  * `cursor` itself. The contacts list and a contact answer 204 when there is none, so they are read as they come. A
- * company is a contact of type COMPANY; the companies list takes a form body, which the engine cannot send yet. */
+ * company is a contact of type COMPANY; the companies list is a POST that only reads, its parameters a form. */
 const ref = 'https://github.com/agilecrm/rest-api';
 const property = { 'type?': 'string', 'name?': 'string', 'subtype?': 'string', 'value?': 'string' } as const;
 const contact = { id: 'unknown', 'type?': 'string', 'created_time?': 'unknown', 'updated_time?': 'integer',
@@ -36,6 +36,11 @@ export const agilecrm = defineProvider({
     'contacts.update': { docs: `${ref}#14-update-properties-of-a-contact-by-id-partial-update`, method: 'PUT',
       path: '/api/contacts/edit-properties',
       params: { id: { in: 'body', type: 'string', required: true }, properties: { ...properties, required: true } }, result: contact },
+    'companies.list': { docs: `${ref}#23-get-list-of-companies`, method: 'POST', kind: 'read', path: '/api/contacts/companies/list',
+      params: { page_size: { in: 'form', type: 'integer' },
+        global_sort_key: { in: 'form', type: 'string', description: 'The key to sort by, such as -created_time.' },
+        cursor: { in: 'form', type: 'string', description: 'The cursor of the last company of the page before.' } },
+      result: [{ ...contact, 'cursor?': 'string' }] },
     'deals.list': { docs: `${ref}#31-listing-deals`, path: '/api/opportunity', params: paged,
       result: [{ id: 'integer', 'name?': 'string', 'milestone?': 'string', 'pipeline_id?': 'unknown', 'owner_id?': 'string',
         'close_date?': 'integer', 'created_time?': 'unknown', 'cursor?': 'string' }] },
