@@ -12,6 +12,9 @@ Nothing here is released yet.
   `teams.list` page to their end and lose their `after` variable.
 - Breaking: a body paging value may sit at a path (`send: { body: 'pagination.cursor' }`); Fellow's
   `recordings.list` pages to its end and its `pagination` lost `cursor`.
+- Breaking: a raw `paginate` on a body or `variables` place is `request_failed` before the first request in three
+  cases: a form, a JSON body that is no object, or a value on the body path that is no object. A form failed at the
+  second request; a body that was no object was replaced from the second page.
 - New entries: 25 support providers (atlas, chatwoot, crisp, customerly, devrev, dixa, edesk, freshchat, freshdesk,
   freshservice, gist, groove, happyfox, helpcrunch, helpwise, hiver, liveagent, plain, pylon, reamaze, thena, trengo,
   unthread, zammad, zendesk), each with its category's operations (Plain its reads only). Every entry is `declared`.

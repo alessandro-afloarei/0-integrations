@@ -585,8 +585,10 @@ a shape's `send` writes: the walk sends it.
   and their stop rules do not change. A GraphQL operation pages only on a shape whose `send` is `variables`, and an
   operation with a path never pages on one: `paging_unplaced: <id>`, from `client()` and the table. An operation that
   declares a variable of the `send` name is `param_paged`, as in any other place. A raw `paginate` on a `variables`
-  shape needs a JSON body. A missing `variables` object starts as `{}`, and a body or a `variables` that is not an
-  object is `request_failed` before anything is sent, as a form is.
+  shape needs a JSON body.
+- A request a `body` or `variables` place cannot be written into is `request_failed` before the first request: a form,
+  a JSON body that is not an object, or a value on the body path that is not an object. A missing (or null) body,
+  `variables` object or object on the path starts as `{}`.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.
