@@ -12,7 +12,7 @@ const message = { id: 'integer', 'conversation_id?': 'integer', 'type?': 'string
   'contact?': { 'contact_id?': 'integer', 'name?': 'string' } } as const;
 const conversationId = { conversation_id: { in: 'path', type: 'integer', required: true } } as const;
 const sent = { sender_type: { in: 'body', type: 'string', required: true, enum: ['account'],
-  description: 'The account (team member) account_id sends the message.' },
+  description: 'The account (team member) account_id sends the message: this entry takes the account\'s form only.' },
 account_id: { in: 'body', type: 'integer', required: true }, content: { in: 'body', type: 'string', description: 'HTML.' },
 attachments: { in: 'body', type: [{ filename: 'string', base64: 'string' }] } } as const;
 const ref = 'https://customerly.readme.io/reference';
@@ -30,7 +30,7 @@ export const customerly = defineProvider({
   operations: {
     'conversations.list': { docs: `${ref}/get_officialcustomerly_apipublic_v2_conversations_list_listall`, path: '/conversations',
       paging: 'cursor', records: 'conversations',
-      params: { status: { in: 'query', type: 'string', enum: ['opened', 'snoozed', 'closed'] },
+      params: { status: { in: 'query', type: 'string', enum: ['opened', 'snoozed', 'closed', 'spam'] },
         account_id: { in: 'query', type: 'integer' }, team_id: { in: 'query', type: 'integer' }, keyword: { in: 'query', type: 'string' },
         search_type: { in: 'query', type: 'string', enum: ['contacts', 'messages'] },
         order: { in: 'query', type: 'string', enum: ['newest_first', 'oldest_first'] },
