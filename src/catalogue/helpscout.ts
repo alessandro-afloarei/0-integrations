@@ -51,7 +51,7 @@ export const helpscout = defineProvider({
         description: 'replace for every path but /mailboxId (move) and un-assigning /assignTo (remove).' },
       path: { in: 'body', type: 'string', required: true, enum: ['/assignTo', '/mailboxId', '/primaryCustomer.id', '/status', '/subject'],
         description: 'The field changed.' },
-      value: { in: 'body', type: 'unknown', description: 'A string for /subject and /status (active, closed, open or pending), a number for an id.' } } },
+      value: { in: 'body', type: 'unknown', description: 'A string for /subject, one for /status (active, closed, open or pending: the entry does not check the value), a number for an id.' } } },
     'threads.list': { docs: `${ref}/conversations/threads/list/`, path: '/v2/conversations/{conversationId}/threads', paging: 'next',
       records: '_embedded.threads', params: conversationId, result: { _embedded: { threads: [thread] } } },
     'threads.create': { docs: `${ref}/conversations/threads/reply/`, method: 'POST', path: '/v2/conversations/{conversationId}/reply',
