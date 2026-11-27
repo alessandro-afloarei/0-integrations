@@ -147,6 +147,8 @@ const entrySchema = z.strictObject({
     z.strictObject({ kind: z.literal('page'), send: where, list: z.string().optional(), more: z.string().optional(),
       zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional() }),
     z.strictObject({ kind: z.literal('offset'), send: where, list: z.string().optional(), more: z.string().optional() }),
+    z.strictObject({ kind: z.literal('last'), next: z.string().min(1, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"),
+      send: where, list: z.string().optional(), more: z.string().optional() }),
     z.strictObject({ kind: z.literal('linkHeader'), pathPrefix }),
     z.strictObject({ kind: z.literal('nextUrl'), next: z.string(), pathPrefix }),
   ])).optional(),
@@ -388,7 +390,7 @@ const runnable = {
   // The rule the engine runs before every OAuth 2 request and every call on a named base.
   [HOST_SPLIT]: (entry: Entry) => !hostSplit(entry),
   // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
-  "an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
+  "an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
     operations(entry).every(op => { const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
       return shape === undefined || pagedRecords(op, shape); }),
   // The walk sets that parameter itself on every page after the first.
@@ -721,19 +723,24 @@ test.each<[Rule, Entry]>([
     .map((when): [Rule, Entry] => ["a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
         webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when, echo: 'type' } } })]),
-  ["an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+  ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' }, list: 'items' } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'result.items',
       result: { result: { items: [{ id: 'string' }] } } } } })],
-  ["an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+  ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { offset: { kind: 'offset', send: { body: 'offset' }, list: 'data' } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'offset',
       result: { data: [{ id: 'string' }] } } } })],
-  ["an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+  ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' } } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'items', result: { items: [{ id: 'string' }] } } } })],
+  ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
+    auth: [{ kind: 'key' }], fields: [secret], paging: { last: { kind: 'last', next: 'id', send: { query: 'after' }, list: 'data' } },
+    operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'last', records: 'items',
+      result: { data: [{ id: 'string' }], items: [{ id: 'string' }] } } } })],
   ...([[{ kind: 'page', send: { query: 'page' } }, 'page', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'cursor', 'body'],
-    [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'q', 'form']] as const)
+    [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'q', 'form'],
+    [{ kind: 'last', next: 'id', send: { query: 'after' } }, 'after', 'query'], [{ kind: 'last', next: 'id', send: { body: 'after' } }, 'q', 'form']] as const)
     .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
@@ -976,6 +983,9 @@ test.each<[Record<string, unknown>, string]>([
   [{ kind: 'page', send: { query: 'page' }, zeroBased: false }, '`zeroBased` is `true` or left out (the first page is 1)'],
   [{ kind: 'offset', send: { query: 'offset' }, zeroBased: true }, 'Unrecognized key: "zeroBased"'],
   [{ kind: 'linkHeader', zeroBased: true }, 'Unrecognized key: "zeroBased"'],
+  [{ kind: 'last', next: 'cursor', send: { query: 'cursor' }, zeroBased: true }, 'Unrecognized key: "zeroBased"'],
+  [{ kind: 'last', next: 'cursor', send: { query: 'cursor' }, pathPrefix: '/me/' }, 'Unrecognized key: "pathPrefix"'],
+  [{ kind: 'last', next: '', send: { query: 'cursor' } }, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"],
   [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
   ...['me', '/me', 'me/'].flatMap(pathPrefix => [{ kind: 'linkHeader', pathPrefix }, { kind: 'nextUrl', next: 'next', pathPrefix }]
     .map((shape): [Record<string, unknown>, string] => [shape, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)'])),

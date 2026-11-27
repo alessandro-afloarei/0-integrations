@@ -500,6 +500,7 @@ type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
   | { kind: 'offset'; send: Where; list?: Path; more?: Path }
   | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
+  | { kind: 'last'; next: Path; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
 type Where = { query: string } | { body: string };
@@ -510,7 +511,9 @@ The engine owns the stop rules, and entries hold no stop expressions. An operati
 a shape's `send` writes: the walk sends it.
 
 - `cursor`: with `more`, stop when it is falsy; a truthy `more` with a blank cursor is `invalid_response`
-  (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`.
+  (`cursor_missing`). Without `more`, a blank cursor stops. A repeated cursor is `invalid_response`. A cursor is a
+  non-empty string, or a non-negative safe integer sent as its digits (Vercel's `pagination.next`), as `errors.detail`
+  reads a code; any other value is blank.
 - `page`: sends nothing on the first request, then 2, 3 and so on (with `zeroBased`, 1, 2 and so on), in `send`'s
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
@@ -529,6 +532,13 @@ a shape's `send` writes: the walk sends it.
   after it does. The offset grows on every page, so a provider that ignores it is `page_repeated`. An operation on an
   `offset` shape names the shape's `list` as its `records`. Declare it only for an offset that counts the records
   skipped from 0, cited (an example of `0`, or a starting record position); one counted from 1 waits.
+- `last`: the `page` kind's walk and stop rules, run by the same loader, with another next value: the value at `next`
+  inside the last element of `list` (the answer itself when `list` is absent), sent in `send`'s place (Render's
+  `cursor`, a sibling of each resource). The first request sends nothing; an empty list ends the walk. With `more`, a
+  falsy `more` ends it and a truthy `more` with a blank value is `invalid_response` (`cursor_missing`); without `more`,
+  a blank value ends it. The value follows the cursor's rule, and one that comes back is `cursor_repeated`, through the
+  one `paginate` guard. The last element is read from the answer itself, so a record the parser skips still gives the
+  value. An operation on a `last` shape names the shape's `list` as its `records`.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.

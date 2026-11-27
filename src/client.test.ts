@@ -334,15 +334,16 @@ test("an app's operation with a parameter in the place its paging shape's `send`
     paging: { list: shape }, operations: { 'things.list': { method: 'POST', kind: 'read', path: '/things', paging: 'list',
       params: { at: { in: place, type: 'integer' } } } } }) as Entry;
   for (const [shape, place] of [[{ kind: 'page', send: { query: 'at' } }, 'query'], [{ kind: 'offset', send: { body: 'at' } }, 'body'],
-    [{ kind: 'cursor', next: 'next', send: { query: 'at' } }, 'query']] as const) {
+    [{ kind: 'cursor', next: 'next', send: { query: 'at' } }, 'query'], [{ kind: 'last', next: 'cursor', send: { query: 'at' } }, 'query']] as const) {
     expect(() => client(entry(shape, place), { token: 'k' })).toThrow(new TypeError('param_paged: things.list at'));
   }
   // The same name in the other place is the caller's own.
   expect(() => client(entry({ kind: 'offset', send: { body: 'at' } }, 'query'), { token: 'k' })).not.toThrow();
   // A cursor written into a JSON body would replace a form's body from the second page on.
   const fake = fakeFetch([]);
-  expect(() => client(entry({ kind: 'cursor', next: 'next', send: { body: 'offset' } }, 'form'), { token: 'k', fetch: fake.fetch }))
-    .toThrow(new TypeError('param_paged: things.list offset'));
+  for (const shape of [{ kind: 'cursor', next: 'next', send: { body: 'offset' } }, { kind: 'last', next: 'id', send: { body: 'offset' } }]) {
+    expect(() => client(entry(shape, 'form'), { token: 'k', fetch: fake.fetch })).toThrow(new TypeError('param_paged: things.list offset'));
+  }
   expect(fake.calls).toEqual([]);
 });
 
@@ -381,11 +382,12 @@ test("an operation whose path's own query names the key its paging writes is ref
   expect(() => client(entry('//x/items?offset=2'), { token: 'k' })).toThrow(new TypeError('param_paged: things.list offset'));
 });
 
-test("an app's operation on an `offset` shape whose `records` is not the shape's `list` is refused when built", () => {
-  const entry = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
-    paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'items' } },
-    operations: { 'things.list': { path: '/things', paging: 'offset', records: 'data', result: { data: ['string'], items: ['string'] } } } } as Entry;
-  expect(() => client(entry, { token: 'k' })).toThrow(new TypeError('records_unpaged: things.list'));
+test("an app's operation on an `offset` or `last` shape whose `records` is not the shape's `list` is refused when built", () => {
+  for (const shape of [{ kind: 'offset', send: { query: 'offset' }, list: 'items' }, { kind: 'last', next: 'id', send: { query: 'after' }, list: 'items' }]) {
+    const entry = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, paging: { list: shape },
+      operations: { 'things.list': { path: '/things', paging: 'list', records: 'data', result: { data: ['string'], items: ['string'] } } } } as Entry;
+    expect(() => client(entry, { token: 'k' })).toThrow(new TypeError('records_unpaged: things.list'));
+  }
 });
 
 test("an app's operation on a `page` shape reads its records at the shape's `list`, or is refused when built", async () => {

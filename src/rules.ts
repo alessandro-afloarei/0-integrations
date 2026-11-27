@@ -46,10 +46,10 @@ export function placed(op: Operation, name: string, param: Param): boolean {
         && !Object.values(op.params ?? {}).some(each => each.in === (param.in === 'body' ? 'form' : 'body'))));
 }
 
-/** Whether a paged operation reads its records where its shape walks: on a `page` or `offset` shape, at the shape's
- * `list` (both left out for a list at the answer's top level), else the walk and the records read two lists. */
+/** Whether a paged operation reads its records where its shape walks: on a `page`, `offset` or `last` shape, at the
+ * shape's `list` (both left out for a list at the answer's top level), else the walk and the records read two lists. */
 export function pagedRecords(op: Operation, shape: Paging): boolean {
-  return (shape.kind !== 'page' && shape.kind !== 'offset') || op.records === shape.list;
+  return !(shape.kind === 'page' || shape.kind === 'offset' || shape.kind === 'last') || op.records === shape.list;
 }
 
 /** The parameter an operation declares in the place its paging shape's `send` writes, if any: the walk sends that value

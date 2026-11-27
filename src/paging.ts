@@ -4,15 +4,16 @@ import type { HttpClient, RequestOptions } from './http.js';
 import { paginate } from './paginate.js';
 import { readPath } from './rules.js';
 
-type Cursor = Extract<Paging, { kind: 'cursor' }>;
+type Cursor = Extract<Paging, { kind: 'cursor' | 'last' }>;
 type Linked = Extract<Paging, { kind: 'linkHeader' | 'nextUrl' }>;
-type PageNumber = Extract<Paging, { kind: 'page' | 'offset' }>;
+type Listed = Extract<Paging, { kind: 'page' | 'offset' | 'last' }>;
 
 /** The next cursor, or null on the last page: with `more`, a falsy one ends the list and a truthy one needs a cursor;
- * without it, a blank cursor ends the list. */
-export function nextCursor(shape: Cursor, answer: unknown): string | null {
-  const next = readPath(answer, shape.next);
-  const cursor = typeof next === 'string' && next !== '' ? next : null;
+ * without it, a blank cursor ends the list. `next` is read in `record` (the answer by default). A cursor is a
+ * non-empty string, or a non-negative safe integer as its digits; any other value is blank. */
+export function nextCursor(shape: Cursor, answer: unknown, record: unknown = answer): string | null {
+  const next = readPath(record, shape.next);
+  const cursor = typeof next === 'string' && next !== '' ? next : Number.isSafeInteger(next) && Number(next) >= 0 ? String(next) : null;
   if (shape.more === undefined) return cursor;
   if (!readPath(answer, shape.more)) return null;
   if (cursor === null) throw new ProviderHttpError('invalid_response', null, 'cursor_missing');
@@ -61,19 +62,22 @@ function withCursor(where: Where, options: RequestOptions, cursor: string | numb
   return { ...options, json: { ...body, [where.body]: cursor } };
 }
 
-/** A page-number or offset list's loader: no number first, then each next one, until `more` is falsy or the list is
- * empty. An offset grows by the entries the list holds, a skipped record included, never a number the answer names. A
- * missing list, or one that is no list, is `invalid_response`: a malformed answer never reads as an empty list. A list
- * equal to the page before's is `page_repeated`: the provider ignores the number, and would never end. */
-function numbered(http: HttpClient, shape: PageNumber, path: string, options: RequestOptions) {
+/** A page-number, offset or last-record list's loader: nothing first, then each next value, until `more` is falsy or
+ * the list is empty. An offset grows by the entries the list holds, a skipped record included, never a number the answer
+ * names; a last-record value is read from the answer's own last entry, so a skipped record still gives it. A missing
+ * list, or one that is no list, is `invalid_response`: a malformed answer never reads as an empty list. A list equal to
+ * the page before's is `page_repeated`: the provider ignores the value, and would never end. */
+function listed(http: HttpClient, shape: Listed, path: string, options: RequestOptions) {
   let previous: string | undefined;
   return async (page: string | undefined) => {
-    const answer = await http.json(path, page === undefined ? options : withCursor(shape.send, options, Number(page)));
+    const answer = await http.json(path, page === undefined ? options
+      : withCursor(shape.send, options, shape.kind === 'last' ? page : Number(page)));
     const list = shape.list === undefined ? answer : readPath(answer, shape.list);
     if (!Array.isArray(list)) throw new ProviderHttpError('invalid_response', null, 'missing_fields');
     const seen = JSON.stringify(list);
     if (previous !== undefined && seen === previous) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
     previous = seen;
+    if (shape.kind === 'last') return { items: [answer], skipped: [], cursor: list.length === 0 ? null : nextCursor(shape, answer, list.at(-1)) };
     const last = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
     const next = shape.kind === 'offset' ? Number(page ?? 0) + list.length
       : Number(page ?? (shape.zeroBased ? 0 : 1)) + 1;
@@ -88,7 +92,7 @@ export async function* walk(http: HttpClient, shape: Paging, path: string, optio
       const answer = await http.json(path, cursor === undefined ? options : withCursor(shape.send, options, cursor));
       return { items: [answer], skipped: [], cursor: nextCursor(shape, answer) };
     }
-    : shape.kind === 'page' || shape.kind === 'offset' ? numbered(http, shape, path, options)
+    : shape.kind === 'page' || shape.kind === 'offset' || shape.kind === 'last' ? listed(http, shape, path, options)
     : async (link: string | undefined) => {
       const { data, headers } = await http.answer(link ?? path, link === undefined ? options : { ...options, query: {} });
       const next = shape.kind === 'linkHeader' ? relNext(headers.get('link')) : readPath(data, shape.next);

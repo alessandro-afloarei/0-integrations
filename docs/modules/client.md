@@ -122,7 +122,7 @@ host and `TypeError('url_path_relative')` otherwise.
 - `request(path, options?)` answers `{ status, headers, data, empty }` as it came, whatever the status: `data` the
   body's JSON, else `undefined`, and `empty` true when the body held nothing but whitespace.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
-  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered or offset page that
+  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered, offset or last-record page that
   repeats the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
   base's origin (Shortcut's search answers a path and query string); one outside the base's origin, path or
   `pathPrefix` is `invalid_response` (`next_link_foreign`), and nothing is sent to it.
@@ -153,7 +153,7 @@ A wrong entry throws when its client is built: a URL that is not a well-formed t
 parameter with no place in the request, such as a body or form parameter on a GET, or the two in one operation
 (`param_unplaced: <id> <name>`), a paging
 shape the entry does not declare (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
-to no list in the `result` (`records_unshaped: <id>`), an operation on a `page` or `offset` shape whose `records` is
+to no list in the `result` (`records_unshaped: <id>`), an operation on a `page`, `offset` or `last` shape whose `records` is
 not the shape's `list` (`records_unpaged: <id>`), and a parameter (or a literal query in its path) in the place its
 paging shape's `send` writes, which the walk sends itself, or a body cursor beside a form parameter, whose JSON would
 replace the form from the second page (`param_paged: <id> <name>`). A wrong value throws when the call is made,
