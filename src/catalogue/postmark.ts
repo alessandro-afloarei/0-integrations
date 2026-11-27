@@ -17,6 +17,10 @@ export const postmark = defineProvider({
   http: { baseUrl: 'https://api.postmarkapp.com', headers: { accept: 'application/json' }, retry: {} },
   errors: { detail: 'ErrorCode', rules: [{ when: { detail: '701' }, code: 'not_found' }] },
   identify: { request: { path: '/server' }, id: 'ID', name: 'Name' },
+  // Nothing is signed: the app puts a user and password in the webhook's URL (or its HttpAuth) and passes
+  // `user:password` as the secret; X-PM-Webhook-Trace-Id stays the same across retries of one event:
+  // https://postmarkapp.com/developer/webhooks/webhooks-overview
+  webhook: { kind: 'basic', deliveryId: { header: 'x-pm-webhook-trace-id' } },
   operations: {
     'messages.list': { docs: `${ref}/messages-api#outbound-message-search`, path: '/messages/outbound',
       params: { count: { in: 'query', type: 'integer', required: true, description: 'At most 500; count and offset together at most 10,000.' },
