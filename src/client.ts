@@ -1,7 +1,7 @@
 import type { Entry, Operation, Shape, TypeOf } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { callRequest, createClient, defaultFetch, type HttpOptions, type ProviderResponse, type RequestOptions } from './http.js';
-import { classify, responseJson } from './http-response.js';
+import { classify, emptyAnswers, responseJson } from './http-response.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
 import { argumentShape, checkHosts, clashing, fill, pagedParam, pagedRecords, placed, readPath, shapeAt } from './rules.js';
@@ -137,7 +137,7 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
         try {
           const response = await http.request(...operationRequest(id, op, args, signal));
           // An empty 2xx answers null when no result is declared; any other answer without JSON is `invalid_response`.
-          if (result === undefined && response.empty && classify(entry, response) === null) return null;
+          if (result === undefined && emptyAnswers.has(response) && classify(entry, response) === null) return null;
           const answer = responseJson(entry, response);
           return result === undefined ? answer : parseAnswer(schemaOf(result), answer);
         } catch (error) {

@@ -119,8 +119,7 @@ one that does not is refused before the token is read, as `TypeError('url_outsid
 host and `TypeError('url_path_relative')` otherwise.
 
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
-- `request(path, options?)` answers `{ status, headers, data, empty }` as it came, whatever the status: `data` the
-  body's JSON, else `undefined`, and `empty` true when the body held nothing but whitespace.
+- `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
   A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered, offset or last-record page that
   repeats the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the

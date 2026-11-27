@@ -3,7 +3,7 @@ import ky, { HTTPError, isNetworkError, isTimeoutError } from 'ky';
 import type { Call, Entry, Method, Values } from './catalogue.js';
 import { ProviderHttpError } from './errors.js';
 import { blockedHost, guardedFetch, refusal } from './guard.js';
-import { backoffMs, declaredWait, responseJson, retryPolicy, sentWith } from './http-response.js';
+import { backoffMs, declaredWait, emptyAnswers, responseJson, retryPolicy, sentWith } from './http-response.js';
 import { retryAfterMs } from './retry-after.js';
 import { checkHosts, fill, hostPart, namedHosts, parseJson, placeholders, plainValue } from './rules.js';
 
@@ -14,8 +14,7 @@ export type RequestOptions = {
   idempotent?: boolean;
   signal?: AbortSignal;
 } & ({ json?: unknown; form?: undefined } | { form: Readonly<Record<string, string>>; json?: undefined });
-/** `data` is the body's JSON, else undefined; `empty`, the body held nothing but whitespace. */
-export type ProviderResponse = { status: number; headers: Headers; data: unknown; empty: boolean };
+export type ProviderResponse = { status: number; headers: Headers; data: unknown };
 
 /** The request a declared call makes, with what the caller adds: GraphQL is a POST of the query and its variables to
  * the base. The one rule for every declared call (identify, a request revoke, an operation, a paged operation). */
@@ -282,12 +281,13 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
       });
       const response = await pending;
       const text = await pending.text();
-      return { status: response.status, headers: response.headers, data: parseJson(text), empty: text.trim() === '' };
+      const answer = { status: response.status, headers: response.headers, data: parseJson(text) };
+      if (text.trim() === '') emptyAnswers.add(answer);
+      return answer;
     } catch (error) {
       if (error instanceof HTTPError) {
-        const data: unknown = error.data;
-        return { status: error.response.status, headers: error.response.headers, data: typeof data === 'string' ? parseJson(data) : data,
-          empty: typeof data === 'string' ? data.trim() === '' : data === undefined };
+        return { status: error.response.status, headers: error.response.headers,
+          data: typeof error.data === 'string' ? parseJson(error.data) : error.data };
       }
       if (isNetworkError(error) || isTimeoutError(error) || options.signal?.aborted) throw new ProviderHttpError('unavailable', null);
       throw error;

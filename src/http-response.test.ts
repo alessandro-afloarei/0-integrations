@@ -29,7 +29,7 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); });
 afterEach(() => vi.useRealTimers());
 type Rules = Pick<Entry, 'http' | 'errors'>;
 const BASE = { baseUrl: 'https://api.acme.test' };
-const response = (status: number, data: unknown, headers: Record<string, string> = {}) => ({ status, headers: new Headers(headers), data, empty: data === undefined });
+const response = (status: number, data: unknown, headers: Record<string, string> = {}) => ({ status, headers: new Headers(headers), data });
 const fail = (entry: Rules, status: number, data: unknown, headers?: Record<string, string>) => {
   const error = classify(entry, response(status, data, headers));
   return error instanceof ProviderHttpError

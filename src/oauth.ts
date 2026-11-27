@@ -253,8 +253,7 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
   try {
     const answer = await (input.fetch ?? defaultFetch(entry))(url, { method: 'POST', headers, redirect: 'manual',
       body: request.json ? JSON.stringify(body) : new URLSearchParams(body), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) });
-    const text = await answer.text();
-    response = sentWith({ status: answer.status, headers: answer.headers, data: parseJson(text), empty: text.trim() === '' }, secrets);
+    response = sentWith({ status: answer.status, headers: answer.headers, data: parseJson(await answer.text()) }, secrets);
   } catch (error) {
     if (error instanceof ProviderHttpError) throw error; // the address guard's refusal
     throw new ProviderHttpError('unavailable', null);

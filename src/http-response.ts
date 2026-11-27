@@ -24,6 +24,9 @@ export function safeDetail(code: string, secrets: readonly string[] = []): strin
 /** The credentials each answer's request sent, so a code echoing one is never a detail; they never leave this library. */
 const credentials = new WeakMap<ProviderResponse, readonly string[]>();
 
+/** The 2xx answers whose body held nothing but whitespace, which an operation with no result reads as null. */
+export const emptyAnswers = new WeakSet<ProviderResponse>();
+
 /** Records the credentials `response`'s request sent; only the HTTP client calls it. */
 export function sentWith(response: ProviderResponse, sent: readonly string[]): ProviderResponse {
   credentials.set(response, sent);
