@@ -2,7 +2,7 @@ import { defineProvider } from '../catalogue.js';
 
 /** Freshdesk: an agent's personal API key as the Basic user, any password (`X`); what it can do follows the agent's
  * role. A reply emails the requester (its cc and bcc too); a note may notify agents (`notify_emails`). Lists follow the
- * `link` header; a 429 waits `Retry-After`; an error names a machine-readable code. All on one page:
+ * `link` header, a search by page; a 429 waits `Retry-After`; an error names a machine-readable code. All on one page:
  * https://developers.freshdesk.com/api/ */
 const ref = 'https://developers.freshdesk.com/api/#';
 const ticket = { id: 'number', 'subject?': 'string', 'status?': 'number', 'priority?': 'number', 'requester_id?': 'number',
@@ -39,7 +39,7 @@ export const freshdesk = defineProvider({
   http: { baseUrl: 'https://{domain}.freshdesk.com/api/v2', host: '*.freshdesk.com', retry: {} },
   identify: { request: { path: '/agents/me' }, id: 'id', name: ['contact.name', 'contact.email'] },
   errors: { detail: 'errors.0.code' },
-  paging: { link: { kind: 'linkHeader' } },
+  paging: { link: { kind: 'linkHeader' }, search: { kind: 'page', send: { query: 'page' }, list: 'results', total: { entries: 'total' } } },
   operations: {
     'tickets.list': { docs: `${ref}list_all_tickets`, path: '/tickets', paging: 'link',
       params: { filter: { in: 'query', type: 'string', enum: ['new_and_my_open', 'watching', 'spam', 'deleted'] },
@@ -49,11 +49,10 @@ export const freshdesk = defineProvider({
         order_by: { in: 'query', type: 'string', enum: ['created_at', 'due_by', 'updated_at', 'status'] },
         order_type: { in: 'query', type: 'string', enum: ['asc', 'desc'] }, ...perPage },
       result: [ticket] },
-    // One page of 30, `page` up to 10; the answer's `total` counts the matches.
-    'tickets.search': { docs: `${ref}filter_tickets`, path: '/search/tickets',
+    // Pages of 30 to the answer's `total`; a page past the 10th is refused.
+    'tickets.search': { docs: `${ref}filter_tickets`, path: '/search/tickets', paging: 'search', records: 'results',
       params: { query: { in: 'query', type: 'string', required: true,
-        description: 'Ticket fields in double quotes, up to 512 characters: "priority:3 AND status:2".' },
-      page: { in: 'query', type: 'integer', description: 'From 1, at most 10.' } },
+        description: 'Ticket fields in double quotes, up to 512 characters: "priority:3 AND status:2".' } },
       result: { 'total?': 'number', results: [ticket] } },
     'tickets.get': { docs: `${ref}view_a_ticket`, path: '/tickets/{id}', notFound: 'null', params: id, result: ticket },
     'tickets.create': { docs: `${ref}create_ticket`, method: 'POST', path: '/tickets', params: { ...requester, ...written },
