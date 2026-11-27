@@ -5,7 +5,9 @@
 Nothing here is released yet.
 
 - `errors.detail` reads a numeric code as its digits; PagerDuty, Smartsheet and Cognism report theirs.
-- New: `in: 'form'` parameters, sent as a form body; Chatwork and Zulip post messages, Agile CRM lists companies.
+- New: `in: 'form'` parameters, sent as a form body; Chatwork and Zulip post messages, Agile CRM lists companies. A
+  form's `content-type` wins over the entry's and the app's, on a raw `request`, `json` or `paginate` call that passes
+  a `form` too; a form operation paged by a body cursor is refused (`param_paged`).
 - Chatwork's OAuth 2 sign-in asks `rooms.messages:write` as well: a client registered with the earlier scopes is
   registered again with the declared ones, or its authorize fails with 5003.
 - New: `webhook.secret` decodes a base64 or hex secret before it keys the HMAC; Airtable, Chatwork and Close declare
