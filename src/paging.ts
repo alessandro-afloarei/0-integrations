@@ -71,11 +71,12 @@ function withCursor(where: Where, options: RequestOptions, cursor: string | numb
  * `more` is falsy; without `more`, a last-record list also ends on a blank value (`nextCursor`). An offset grows by the
  * entries the list holds, a skipped record included, never a number the answer names; a last-record value is read from
  * the answer's own last entry, so a skipped record still gives it. A missing list, or one that is no list, is
- * `invalid_response`: a malformed answer never reads as an empty list. A list equal to the page before's is
- * `page_repeated`: the provider ignores the value, and would never end. A `page` list with `total` also ends once the
+ * `invalid_response`: a malformed answer never reads as an empty list. A list equal to the page before's or the first
+ * page's is `page_repeated`: the provider ignores the value, or answers its first page past the end, and would never end. A `page` list with `total` also ends once the
  * pages, or the entries (a skipped record included), it read reach the number each answer names. */
 function listed(http: HttpClient, shape: Listed, path: string, options: RequestOptions) {
   let previous: string | undefined;
+  let first: string | undefined;
   let read = 0;
   return async (page: string | undefined) => {
     const answer = await http.json(path, page === undefined ? options
@@ -83,8 +84,9 @@ function listed(http: HttpClient, shape: Listed, path: string, options: RequestO
     const list = shape.list === undefined ? answer : readPath(answer, shape.list);
     if (!Array.isArray(list)) throw new ProviderHttpError('invalid_response', null, 'missing_fields');
     const seen = JSON.stringify(list);
-    if (previous !== undefined && seen === previous) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
+    if (previous !== undefined && (seen === previous || seen === first)) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
     previous = seen;
+    first ??= seen;
     if (shape.kind === 'last') return { items: [answer], skipped: [], cursor: list.length === 0 ? null : nextCursor(shape, answer, list.at(-1)) };
     const total = shape.kind === 'page' ? shape.total : undefined;
     const count = total && readPath(answer, 'pages' in total ? total.pages : total.entries);

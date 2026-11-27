@@ -542,9 +542,10 @@ a shape's `send` writes: the walk sends it.
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
   `invalid_response` (`missing_fields`): a malformed answer never reads as an empty list. A page whose list
-  equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
-  number would otherwise never end. Records are expected to differ between pages (they carry ids), so two adjacent pages
-  that are truly identical end the walk the same way. An operation on a `page` shape names the shape's `list` as its `records` (both
+  equals the page before's or the first page's is `invalid_response` (`page_repeated`) and is not yielded: a provider
+  that ignores the page number, or answers its first page again past the end, would otherwise never end. Records are
+  expected to differ between pages (they carry ids), so two such pages that are truly identical end the walk the same
+  way. An operation on a `page` shape names the shape's `list` as its `records` (both
   absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
   With `total`, a `page` walk also stops after the page at which the pages it read (`{ pages }`), or the entries it
   read, a skipped record included (`{ entries }`), reach the number at that path in that page's answer. The number is
@@ -565,8 +566,8 @@ a shape's `send` writes: the walk sends it.
   `offset` shape names the shape's `list` as its `records`. Declare it only for an offset that counts the records
   skipped from 0, cited (an example of `0`, or a starting record position); one counted from 1 waits.
 - A `page` or `offset` list whose page states where its numbering starts may be paged although no page says what a
-  request past the end answers. The walk ends on an empty list, and a provider that answers otherwise fails loudly
-  (`page_repeated`, or its own error), never silently.
+  request past the end answers. The walk ends on an empty list. A provider that answers otherwise past the end, with
+  the page before or the first page again (`page_repeated`) or with its own error, fails loudly, never silently.
 - `last`: the `page` kind's walk and stop rules, run by the same loader, with another next value: the value at `next`
   inside the last element of `list` (the answer itself when `list` is absent), sent in `send`'s place (Render's
   `cursor`, a sibling of each resource). The first request sends nothing; an empty list ends the walk. With `more`, a

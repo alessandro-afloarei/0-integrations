@@ -4,6 +4,8 @@
 
 Nothing here is released yet.
 
+- A `page`, `offset` or `last` walk whose page equals its first page is `page_repeated`, as one equal to the page before
+  is: a provider that answers its first page again past the end no longer yields it a second time, or walks on forever.
 - Breaking: a `page` walk may stop at the answer's count (`total: { pages }` or `{ entries }`); Smartsheet's
   `sheets.list` and `rows.list` page to their end and lose their `page` parameter.
 - Breaking: GraphQL lists page through their variables (`send: { variables }`); Linear's `issues.list` and

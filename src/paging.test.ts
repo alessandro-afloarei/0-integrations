@@ -218,6 +218,29 @@ test('page: a provider that ignores the page number is page_repeated, and the re
   expect(walked.pages).toEqual([{ data: [1], has_more: true }]);
 });
 
+test('page: a provider that answers the first page again past the end is page_repeated at the first request past it, no duplicate yielded', async () => {
+  const shape = { kind: 'page', send: { query: 'page' }, list: 'data' } as const;
+  const pages = [[1, 2], [3, 4], [5]];
+  const walkOn = async (at: (page: number) => number) => {
+    const fake = fakeFetch([{ url: /https:/, respond: request =>
+      Response.json({ data: pages[at(Number(new URL(request.url).searchParams.get('page') ?? 1))] ?? [] }) }]);
+    const seen: unknown[] = [];
+    let error: unknown;
+    try { for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), shape, '/items')) seen.push(page); } catch (caught) { error = caught; }
+    return { urls: fake.calls.length, seen, error };
+  };
+  for (const at of [(page: number) => (page > 3 ? 1 : page) - 1, (page: number) => (page - 1) % 3]) {
+    const walked = await walkOn(at);
+    expect(walked.error).toMatchObject({ code: 'invalid_response', detail: 'page_repeated' });
+    expect([walked.urls, walked.seen]).toEqual([4, [{ data: [1, 2] }, { data: [3, 4] }, { data: [5] }]]);
+  }
+  // One record repeated across two pages that differ as wholes is no repeat; a one-page list ends as before.
+  const shared = await pageWalk(shape, [{ data: [1, 2] }, { data: [2, 3] }, { data: [] }]);
+  expect([shared.urls.length, shared.error]).toEqual([3, undefined]);
+  const single = await pageWalk(shape, [{ data: [1] }, { data: [] }]);
+  expect([single.urls.length, single.pages, single.error]).toEqual([2, [{ data: [1] }, { data: [] }], undefined]);
+});
+
 test('page: a missing list path, or an answer that is not a list, is invalid_response, never an empty end', async () => {
   for (const [shape, answer] of [[{ kind: 'page', send: { query: 'page' }, list: 'result.items' }, { result: {} }],
     [{ kind: 'page', send: { query: 'page' } }, { items: [1] }], [{ kind: 'page', send: { query: 'page' }, list: 'items' }, { items: 'x' }]] as const) {
