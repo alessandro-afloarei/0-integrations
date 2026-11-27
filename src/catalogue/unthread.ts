@@ -2,8 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Unthread (Integrations & API on every plan: https://www.unthread.io/pricing): a message reaches the customer in
  * the Slack thread, or by email, unless it is a private note; a Slack conversation's create posts its details in Slack.
- * Webhooks: hex HMAC-SHA256 of the body; check the body's `webhookTimestamp` (milliseconds) yourself, and answer
- * the `url_verification` event with a 200: https://docs.unthread.io/docs/webhooks */
+ * Webhooks: hex HMAC-SHA256 of the body, which carries `webhookTimestamp` in milliseconds; answer the
+ * `url_verification` event with a 200: https://docs.unthread.io/docs/webhooks */
 const conversation = { id: 'string', 'friendlyId?': 'number', 'title?': 'string', 'status?': 'string', 'customerId?': 'string',
   'priority?': 'number', 'createdAt?': 'string', 'updatedAt?': 'string' } as const;
 const message = { id: 'string', 'ts?': 'string', 'text?': 'unknown', 'userId?': 'string', 'conversationId?': 'string',
