@@ -9,7 +9,9 @@ export const firecrawl = defineProvider({
   docs: 'https://docs.firecrawl.dev/api-reference/v2-introduction',
   categories: ['search'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://www.firecrawl.dev/api/oauth/authorize', tokenUrl: 'https://www.firecrawl.dev/api/oauth/token',
-    clientAuth: 'none', authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
+    clientAuth: 'none', authorizeParams: { response_type: 'code' } }, { kind: 'key', identify: {} }],
+  // The token answer names the team the person picked, which every call bills; the key's sign-in checks nothing.
+  identify: { id: 'tokenAnswer.team_id' },
   // `offline_access` tells the person the app stays connected until they revoke it.
   scopes: { default: ['firecrawl:global', 'offline_access'] },
   // The refresh token ends the whole connection; an access token ends only itself.

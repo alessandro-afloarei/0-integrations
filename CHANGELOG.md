@@ -11,7 +11,10 @@ Nothing here is released yet.
 - Firecrawl lists OAuth 2 first, a public client that revokes the whole connection with its refresh token; its API key
   is `signInWith(firecrawl, 'key')`. Breaking: `startConnect(firecrawl)` and `finishConnect(firecrawl, { secret })` on
   the whole entry now connect by OAuth 2 and throw `oauth_options_required` without its options, nothing sent; an app
-  connects a key with `signInWith(firecrawl, 'key')`. A stored key's calls send the same `Authorization: Bearer`.
+  connects a key with `signInWith(firecrawl, 'key')`. A stored key's calls send the same `Authorization: Bearer`, and
+  its disconnect is `revokeGrant(signInWith(firecrawl, 'key'), …)` (done, nothing sent): on the whole entry it now
+  throws `oauth_client_required`, nothing sent. The OAuth 2 sign-in's account is the team its token answer names
+  (`team_id`); the key's sign-in still names none.
 - New entry: Brevo (`mail`), `emails.list`, `emails.get`, `domains.list` and `emails.create`: OAuth 2 first, a public
   client whose app Brevo reviews before other accounts authorize it, and its API key second, for your own Brevo
   account, `signInWith(brevo, 'key')`. `declared`. A send takes an HTML or a plain-text body, one of them; the list
