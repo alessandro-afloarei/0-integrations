@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, signInWith, type Entry, type Own, type SignIn } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Own, type SignIn, type TypeOf } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
 import { firecrawl } from './catalogue/firecrawl.js';
 import { jira } from './catalogue/jira.js';
@@ -274,7 +274,26 @@ async function clientByEntry(clientId: string, clientSecret: string, code: strin
   expectTypeOf<OAuthClient>().toEqualTypeOf<{ clientId: string; clientSecret: string }>();
 }
 
+/** A send fixed inside an object, an author fixed in each list element. */
+const fixed = defineProvider({ id: 'fixed', name: 'Fixed', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.fixed.test' }, operations: {
+  'messages.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', required: true, type: { send: true, 'subject?': 'string' } },
+    messages: { in: 'body', type: [{ actor_type: 'agent' }] } } } } });
+
+// Never called: the types are the test.
+function literals() {
+  expectTypeOf<TypeOf<{ send: true }>>().branded.toEqualTypeOf<{ send: true }>();
+  expectTypeOf<TypeOf<[{ actor_type: 'agent'; 'text?': 'string' }]>>().branded.toEqualTypeOf<{ actor_type: 'agent'; text?: string }[]>();
+  expectTypeOf<TypeOf<'string'>>().toEqualTypeOf<string>();
+  const api = client(fixed, { token: 't' });
+  expectTypeOf<Parameters<typeof api.messages.create>[0]>().branded
+    .toEqualTypeOf<{ drafts: { send: true; subject?: string }; messages?: { actor_type: 'agent' }[] }>();
+  // @ts-expect-error `send` is the literal `true`
+  void api.messages.create({ drafts: { send: false } });
+  // @ts-expect-error each element's `actor_type` is the literal 'agent'
+  void api.messages.create({ drafts: { send: true }, messages: [{ actor_type: 'user' }] });
+}
+
 test('the narrowed types compile', () => {
-  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide, ownTypes, clientByEntry].every(item => typeof item === 'function')).toBe(true);
+  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide, ownTypes, clientByEntry, literals].every(item => typeof item === 'function')).toBe(true);
   expect(mailed.auth.map(auth => auth.kind)).toEqual(['oauth2', 'key']);
 });

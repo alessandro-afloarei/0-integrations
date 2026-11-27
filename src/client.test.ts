@@ -122,6 +122,46 @@ test('an argument the request cannot carry is a TypeError before any request', a
   expect(fake.calls).toEqual([]);
 });
 
+/** Literal types: a send fixed inside an object, an author fixed in each list element, a version fixed in a header. */
+const fixed = defineProvider({ id: 'fixed', name: 'Fixed', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: {
+  'messages.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', required: true, type: { send: true, 'subject?': 'string' } } } },
+  'threads.create': { method: 'POST', path: '/threads', params: { messages: { in: 'body', required: true, type: [{ actor_type: 'agent', 'text?': 'string' }] },
+    kind: { in: 'body', type: 'string' }, 'x-version': { in: 'header', type: '2026-06-12', required: true } } } } });
+
+test('a literal type fits only its value, at the top level, inside an object and in each list element; a type name stays a type', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const api = client(fixed, { token: 'k', fetch: fake.fetch });
+  await api.messages.create({ drafts: { send: true, subject: 'Hi' } });
+  await api.threads.create({ messages: [{ actor_type: 'agent', text: 'a' }, { actor_type: 'agent' }], kind: 'x', 'x-version': '2026-06-12' });
+  await api.threads.create({ messages: [], 'x-version': '2026-06-12' });
+  expect(wire(fake)).toEqual([['POST', `${BASE}/drafts`, '{"drafts":{"send":true,"subject":"Hi"}}'],
+    ['POST', `${BASE}/threads`, '{"messages":[{"actor_type":"agent","text":"a"},{"actor_type":"agent"}],"kind":"x"}'],
+    ['POST', `${BASE}/threads`, '{"messages":[]}']]);
+  expect(fake.calls.map(call => call.headers['x-version'])).toEqual([undefined, '2026-06-12', '2026-06-12']);
+});
+
+test('hostile: a value beside a literal is refused before anything is sent: false, missing, the string "true", a padded string', async () => {
+  const fake = fakeFetch([]);
+  const api = client(fixed, { token: 'k', fetch: fake.fetch });
+  for (const drafts of [{ send: false }, {}, { send: 'true' }, { send: 1 }, { subject: 'Hi' }]) {
+    await expect(untyped(api.messages.create)({ drafts })).rejects.toThrow(new TypeError('param_invalid: drafts'));
+  }
+  for (const messages of [[{ actor_type: 'agent' }, { actor_type: 'user' }], [{ actor_type: 'agent ' }], [{}], ['agent']]) {
+    await expect(untyped(api.threads.create)({ messages, 'x-version': '2026-06-12' })).rejects.toThrow(new TypeError('param_invalid: messages'));
+  }
+  for (const version of ['2026-06-13', ' 2026-06-12', 20260612]) {
+    await expect(untyped(api.threads.create)({ messages: [], 'x-version': version })).rejects.toThrow(new TypeError('param_invalid: x-version'));
+  }
+  expect(fake.calls).toEqual([]);
+});
+
+test('hostile: an own `__proto__` key beside a literal is read by the declared keys only', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  await untyped(client(fixed, { token: 'k', fetch: fake.fetch }).messages.create)(
+    { drafts: JSON.parse('{"__proto__":{"send":false,"to":"x"},"send":true}') as unknown });
+  expect(wire(fake)).toEqual([['POST', `${BASE}/drafts`, '{"drafts":{"send":true}}']]);
+});
+
 test('an answer keeps its declared keys; a key? missing or null is absent; anything else out of shape is invalid_response', async () => {
   const { api } = setup(sequence(json({ id: 'x', count: 2, assignee: null, secret: 's' }), json({ id: 'x', count: 2.5 }), json({ count: 1 })));
   expect(await api.issues.get({ id: 'x' })).toStrictEqual({ id: 'x', count: 2 });

@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers: 132 declared, 0 recorded;
-557 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
+558 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -88,7 +88,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers:
 | [MeetGeek](https://docs.meetgeek.ai/api/getting-started/authorization) | meetings | key | meetings.list, meetings.get, transcripts.get | hmac | declared |
 | [Metabase](https://www.metabase.com/articles/set-up-metabase-from-code-with-the-api) | analytics | token | — | — | declared |
 | [Microsoft](https://learn.microsoft.com/en-us/graph/auth-v2-user) | mail, calendar | OAuth 2 | — | — | declared |
-| [Missive](https://missiveapp.com/docs/developers/rest-api) | mail, support | key | conversations.list, conversations.get, sharedLabels.list, drafts.create, conversations.update, messages.list, contacts.list | hmac | declared |
+| [Missive](https://missiveapp.com/docs/developers/rest-api) | mail, support | key | conversations.list, conversations.get, sharedLabels.list, drafts.create, messages.create, conversations.update, messages.list, contacts.list | hmac | declared |
 | [monday.com](https://developer.monday.com/api-reference/docs/authentication) | tasks | OAuth 2, key | items.list, items.get, items.create, items.update, boards.list | — | declared |
 | [Notion](https://developers.notion.com/reference/authentication) | docs | key | pages.markdown | — | declared |
 | [Nutshell](https://developers.nutshell.com/docs/api-authentication) | crm | key | contacts.list, contacts.get, contacts.create, accounts.list, leads.list | — | declared |

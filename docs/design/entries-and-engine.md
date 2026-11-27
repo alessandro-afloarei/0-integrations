@@ -664,7 +664,8 @@ type Operation = ({ method?: Method; path: Template } | { graphql: string }) & {
   paging?: string; notFound?: 'null'; base?: string; anyOf?: readonly (readonly Path[])[] };
 type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables' | 'header'; type: Shape; required?: true;
   nullable?: true; enum?: readonly string[]; description?: string };
-type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
+type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | (string & {}) | boolean
+  | readonly [Shape] | { readonly [key: string]: Shape };
 ```
 
 - `docs` is the provider's page that states the operation's method, path, parameters and answer, https. Every operation
@@ -674,6 +675,13 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   says `kind: 'read'`: the engine retries only a call marked idempotent, a GET by default and an operation of
   `kind: 'read'`.
 - A shape key ending in `?` may be missing or null, and is read as absent.
+- A shape that is neither a type name nor a list nor an object is a literal: `true`, `false`, or a string other than
+  `string`, `integer`, `number`, `boolean` and `unknown`. An argument fits it only when it is that value. A value the
+  page fixes (a "Must be …", the one value an operation takes) is a literal, at the top level, inside an object or in
+  each element of a list: the call states it, so a send reads as a send (Missive's `messages.create` is its draft with
+  `drafts.send: true`). `enum` lists two or more values; one value is a literal type. A literal is for arguments only:
+  `result` holds none, and none is the empty string: the table refuses both. A literal equal to a type name cannot be
+  written, and an entry that needs one waits.
 - `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 2xx
   with an empty body (a 202, a 201, a 204) answers `null`, which `unknown` already covers. Any other answer without
   JSON, and an empty 2xx to an operation with a `result`, is `invalid_response`.

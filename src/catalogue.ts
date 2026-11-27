@@ -88,8 +88,10 @@ export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
   | { kind: 'linkHeader'; pathPrefix?: string } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
   pathPrefix?: string };
-/** A value's declared type. In an object, a key ending in `?` may be missing or null, and is read as absent. */
-export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
+/** A value's declared type: a type name, a literal (`true`, `false`, or another string: only that value), a list or an
+ * object. In an object, a key ending in `?` may be missing or null, and is read as absent. */
+export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | (string & {}) | boolean
+  | readonly [Shape] | { readonly [key: string]: Shape };
 /** An operation's argument and where it is sent: `body` in a JSON object, `form` in a form-encoded body (never beside a
  * `body` one), `header` as the request header of its name; `nullable` lets it be sent as JSON `null`. */
 export type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables' | 'header'; type: Shape; required?: true; nullable?: true;
@@ -116,7 +118,7 @@ type Scalars = { string: string; integer: number; number: number; boolean: boole
 /** An optional shape key without its `?`; never for a required one. */
 type OptionalKey<K> = K extends `${infer N}?` ? N : never;
 /** The TypeScript type a shape declares: a `key?` is optional, never null (a null is read as absent). */
-export type TypeOf<S> = S extends keyof Scalars ? Scalars[S] : S extends readonly [infer E] ? TypeOf<E>[]
+export type TypeOf<S> = S extends keyof Scalars ? Scalars[S] : S extends string | boolean ? S : S extends readonly [infer E] ? TypeOf<E>[]
   : { -readonly [K in keyof S as Exclude<K, `${string}?`>]: TypeOf<S[K]> } & { -readonly [K in keyof S as OptionalKey<K>]?: TypeOf<S[K]> };
 /** The client's own calls: an operation id whose first segment EQUALS one is refused (`'requests.create'` is fine), and
  * so is `then` itself, which would make the client a thenable. `clashing` in rules.ts is the run time's copy. */

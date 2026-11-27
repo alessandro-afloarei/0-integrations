@@ -7,6 +7,7 @@ import { folk } from './catalogue/folk.js';
 import { gitlab as gitlabEntry } from './catalogue/gitlab.js';
 import { lemlist } from './catalogue/lemlist.js';
 import { metabase } from './catalogue/metabase.js';
+import { missive } from './catalogue/missive.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { slack } from './catalogue/slack.js';
@@ -307,6 +308,29 @@ describe('fakeProvider', () => {
     const api = client(lemlist, { token: 'k', fetch });
     await expect(api.contacts.create({ email: 'a@example.test' })).resolves.toEqual({ data: { _id: 'created' } });
     await expect(api.contacts.update({ contactId: 'c1' })).resolves.toEqual({ data: { _id: 'updated' } });
+  });
+
+  test("Missive's draft and send share a route: a call whose `drafts.send` is `true` is the send, any other the draft", async () => {
+    const { fetch } = fakeFetch(fakeProvider(missive, { key: 'k', operations: {
+      'drafts.create': () => ({ by: 'draft' }), 'messages.create': () => ({ by: 'send' }) } }));
+    const api = client(missive, { token: 'k', fetch });
+    await expect(api.drafts.create({ drafts: { subject: 'Hi' } })).resolves.toEqual({ by: 'draft' });
+    await expect(api.messages.create({ drafts: { send: true, subject: 'Hi' } })).resolves.toEqual({ by: 'send' });
+    const sent = (drafts: unknown) => fetch('https://public.missiveapp.com/v1/drafts', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ drafts }) }).then(answer);
+    for (const drafts of [{ send: false }, { send: 'true' }, {}]) await expect(sent(drafts)).resolves.toEqual({ status: 200, body: { by: 'draft' } });
+  });
+
+  test('of two operations on one route, the one whose literals all hold answers, in every list element, the most literals first', async () => {
+    const authored = defineProvider({ id: 'authored', name: 'Authored', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.authored.test' },
+      operations: { 'threads.create': { method: 'POST', path: '/threads', params: { messages: { in: 'body', type: ['unknown'], required: true } } },
+        'replies.create': { method: 'POST', path: '/threads', params: { messages: { in: 'body', required: true, type: [{ actor: 'agent', 'draft?': true }] } } } } });
+    const { fetch } = fakeFetch(fakeProvider(authored, { key: 'k', operations: {
+      'threads.create': () => ({ by: 'thread' }), 'replies.create': () => ({ by: 'reply' }) } }));
+    const sent = (messages: unknown) => fetch('https://api.authored.test/threads', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ messages }) }).then(answer).then(({ body }) => (body as { by: string }).by);
+    expect(await Promise.all([[{ actor: 'agent' }, { actor: 'agent', draft: true }], [{ actor: 'agent' }, { actor: 'user' }],
+      [{ actor: 'agent', draft: false }], [{ actor: 'agent ' }], ['agent']].map(sent))).toEqual(['reply', 'thread', 'thread', 'thread', 'thread']);
   });
 
   test('a function receives the headers; of two operations on one route, the one whose required header the call carries answers', async () => {

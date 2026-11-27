@@ -1,11 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
 import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
-import type { Entry, Operation, Value, Values } from './catalogue.js';
+import type { Entry, Operation, Shape, Value, Values } from './catalogue.js';
 import type { WithLock } from './credentials.js';
 import { callBase, credentialOf, filledBase } from './http.js';
 import { requestToken, type OAuthClient } from './oauth.js';
-import { oauthUrls, parseJson, placeholders, readPath } from './rules.js';
+import { isLiteral, oauthUrls, parseJson, placeholders, readPath } from './rules.js';
 import type { Sealed, SecretStore, TenantKeyStore } from './vault.js';
 
 export function memoryStores(): {
@@ -109,6 +109,15 @@ function put(into: Record<string, unknown>, path: string, value: unknown): Recor
   else if (rest.length > 0 && typeof inner === 'object' && inner !== null) put(inner as Record<string, unknown>, rest.join('.'), value);
   return into;
 }
+/** How many of a shape's literals a value sent holds, or -1 when it breaks one or lacks a required key: an object's at
+ * each key (a `key?` missing, or a null, holds none), a list's in every element. */
+function literalsHeld(shape: Shape, value: unknown): number {
+  if (typeof shape !== 'object') return isLiteral(shape) ? (value === shape ? 1 : -1) : 0;
+  const held = Array.isArray(shape) ? (Array.isArray(value) ? value : [undefined]).map(item => literalsHeld((shape as readonly [Shape])[0], item))
+    : Object.entries(shape).map(([key, inner]) => { const found = readPath(value, key.replace(/\?$/u, ''));
+      return found === undefined ? (key.endsWith('?') ? 0 : -1) : found === null ? 0 : literalsHeld(inner, found); });
+  return held.includes(-1) ? -1 : held.reduce((sum, count) => sum + count, 0);
+}
 /** The paths a value reads from identify's answer, never the token answer or a connection value: each a template
  * reads, else the first of a list of fallbacks. */
 const answerPaths = (value: Value | undefined) => {
@@ -166,15 +175,17 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     if ('graphql' in op) graphql.push([base(), op.graphql, answer]);
     else paths.push([op.method ?? 'GET', op.path, op, answer]);
   }
-  // One route per method and path: of its operations, the one whose required query, body and header parameters the call all
-  // carries, the most first.
+  // One route per method and path: of its operations, one whose required query, body and header parameters the call all
+  // carries and whose literals all hold in it, the most literals first, then the most required parameters.
   for (const [method, path] of paths.filter(([method, path], at) => paths.findIndex(([m, p]) => m === method && p === path) === at)) {
     routes.push(route(method, base(), path, call => paths.filter(([m, p]) => m === method && p === path).map(([, , op, answer]) => {
-      const required = Object.entries(op.params ?? {}).filter(([, param]) => param.required && param.in !== 'path');
-      const carried = required.every(([name, param]) => (param.in === 'query' ? Object.hasOwn(call.query, name)
-        : param.in === 'header' ? Object.hasOwn(call.headers, name.toLowerCase()) : readPath(call.body, name) !== undefined));
-      return [carried ? required.length : -1, answer] as const;
-    }).reduce((best, next) => (next[0] > best[0] ? next : best))[1](call)));
+      const params = Object.entries(op.params ?? {}).filter(([, param]) => param.in !== 'path');
+      // The call's arguments as one object of the parameters, `name?` for an optional one.
+      const held = literalsHeld(Object.fromEntries(params.map(([name, param]) => [param.required ? name : `${name}?`, param.type])),
+        Object.fromEntries(params.map(([name, param]) => [name, param.in === 'query' ? readPath(call.query, name)
+          : param.in === 'header' ? readPath(call.headers, name.toLowerCase()) : readPath(call.body, name)])));
+      return [held, held < 0 ? 0 : params.filter(([, param]) => param.required).length, answer] as const;
+    }).reduce((best, next) => (next[0] > best[0] || (next[0] === best[0] && next[1] > best[1]) ? next : best))[2](call)));
   }
   const { request: identify, id, name } = entry.identify ?? {};
   if (identify !== undefined) {

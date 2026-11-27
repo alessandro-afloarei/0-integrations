@@ -12,7 +12,7 @@ import { callBase, createClient, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, namedHosts, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, isLiteral, namedHosts, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -51,8 +51,12 @@ const value = z.union([z.string(), z.array(z.string())]);
 const method = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const request = z.strictObject({ method: method.optional(), path: template.optional(),
   query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional(), base: z.string().optional() });
+const EMPTY_LITERAL = 'a literal type is the one value a caller sends: an empty string is none';
+/** A type name, a literal (`true`, `false`, another string), a list or an object. */
 const shape: z.ZodType<Shape> = z.lazy(() =>
-  z.union([z.enum(['string', 'integer', 'number', 'boolean', 'unknown']), z.tuple([shape]), z.record(z.string(), shape)]));
+  z.union([z.string().min(1, EMPTY_LITERAL), z.boolean(), z.tuple([shape]), z.record(z.string(), shape)]));
+/** Whether a shape holds a literal anywhere. */
+const literalIn = (item: Shape): boolean => (typeof item === 'object' ? Object.values(item as Record<string, Shape>).some(literalIn) : isLiteral(item));
 /** Every category once: the compiler refuses one missing from `Category` or not in it. */
 const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true, code: true, monitoring: true, crm: true,
   sales: true, mail: true, calendar: true, meetings: true, support: true, marketing: true, finance: true, hr: true,
@@ -221,6 +225,7 @@ const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs,
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
+const RESULT_LITERAL = "no literal type in an operation's `result` (a record holding another value would be skipped, silently): give the key its type name";
 const PLACED = "a `params[].in` the operation's request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL, a header a scalar, never `nullable`, never named `content-type`, `host` or a sign-in's credential header)";
 const runnable = {
   // The host the URL parser reads is then the host part every other rule reads.
@@ -354,6 +359,7 @@ const runnable = {
   '`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter': (entry: Entry) =>
     operations(entry).every(op => op.anyOf === undefined || (op.anyOf.length > 1 && op.anyOf.every(set => set.length > 0
       && set.every(path => argumentShape(op, path) !== undefined && op.params?.[path]?.required !== true)))),
+  [RESULT_LITERAL]: (entry: Entry) => operations(entry).every(op => op.result === undefined || !literalIn(op.result)),
   // A paged operation yields its records: a 404 is no record to answer null for.
   '`notFound` only on an operation with no `paging`': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
   // A saved value would replace the field the person entered, which `Connected` types as a string.
@@ -730,6 +736,8 @@ test.each<[Rule, Entry]>([
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
     ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],
+    [RESULT_LITERAL, { list: { path: '/items', result: { kind: 'x' } } }],
+    [RESULT_LITERAL, { list: { path: '/items', result: { items: [{ 'draft?': true }] } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
@@ -1044,6 +1052,7 @@ test.each<[string, Record<string, unknown>, string]>([
 
 test.each<[string, object, string]>([
   ['a header parameter named with a capital', { From: { in: 'header', type: 'string' } }, headerMessage],
+  ['an empty literal type', { kind: { in: 'body', type: { kind: '' } } }, EMPTY_LITERAL],
   ['a header parameter named with a space', { 'x from': { in: 'header', type: 'string' } }, headerMessage],
 ])('%s fails the schema, with what to fix', (_, params, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], operations: { add: { method: 'POST', path: '/items', params } } };

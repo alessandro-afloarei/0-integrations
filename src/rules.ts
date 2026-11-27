@@ -31,6 +31,9 @@ export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined
   return Object.hasOwn(keys, path) ? keys[path] : dot === -1 ? undefined : shapeAt(keys[path.slice(0, dot)], path.slice(dot + 1));
 }
 
+/** Whether a shape is a literal: `true`, `false`, or a string that is no type name. */
+export const isLiteral = (shape: Shape) => typeof shape === 'boolean' || (typeof shape === 'string' && !['string', 'integer', 'number', 'boolean', 'unknown'].includes(shape));
+
 /** The declared shape an `anyOf` path names: a parameter's `type`, then at each dot a key of an object, a `key?` named without its `?`. */
 export function argumentShape(op: Operation, path: Path): Shape | undefined {
   const own = (shape: Shape | undefined, key: string) => typeof shape === 'object' && !Array.isArray(shape) && Object.hasOwn(shape, key)

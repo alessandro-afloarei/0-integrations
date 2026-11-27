@@ -43,6 +43,9 @@ one takes five steps:
      declares the page's sets as `anyOf`; a header the page requires on one operation is a required `header` parameter
      (PagerDuty's `From`); a header whose value the page fixes for one operation is a required `header` parameter with
      that one value as its `enum` (Cal.com's `cal-api-version`);
+   - a value the page fixes (a "Must be …", the one value an operation takes) is a literal type: `send: true`,
+     `actor_type: 'agent'`, at the top level, inside an object or in each list element, so the call states it; never in
+     a `result`;
    - when the page states that at least one of several equal inputs that find or create one record (an email, a LinkedIn
      URL, a domain) is required, none is required and the operation declares the page's sets as `anyOf`
      (`[['email'], ['phone', 'last_name']]`), which the descriptions do not repeat; a rule that reads two ways gives the
@@ -121,7 +124,8 @@ entry:
   path, in `s`, `ms`, `epochSeconds`, `epochMs` or `iso8601`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000
   when left out) and never beside `onlyStated`;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
-  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation names
+  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, no `result` holds a
+  literal type and no literal is empty, a paged operation names
   a declared shape and no `notFound`, a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's
   `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id is
   a client call or a dotted prefix of another;
