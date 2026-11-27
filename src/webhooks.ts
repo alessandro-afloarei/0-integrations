@@ -50,11 +50,12 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
       return false;
     }
   }
-  // The key is the secret's bytes, or its decoding, which must encode back to it exactly (hex in either case); a key
-  // that decodes loosely, or is empty (anyone can sign with it), accepts nothing.
+  // The key is the secret's bytes, or its decoding, which must encode back to it exactly (hex in either case, base64's
+  // `=` padding optional); a key that decodes loosely, or is empty (anyone can sign with it), accepts nothing.
   const text = standard ? secret.replace(/^whsec_/u, '') : secret;
   const key = Buffer.from(text, scheme.secret ?? 'utf8');
-  const exact = scheme.secret === undefined || key.toString(scheme.secret) === (scheme.secret === 'hex' ? text.toLowerCase() : text);
+  const exact = scheme.secret === undefined
+    || key.toString(scheme.secret).replace(/=+$/u, '') === (scheme.secret === 'hex' ? text.toLowerCase() : text.replace(/=+$/u, ''));
   if (!exact || key.length === 0) return false;
   const hmac = createHmac(scheme.hash ?? 'sha256', key).update(content);
   const expected = Buffer.from((scheme.prefix ?? '') + hmac.digest(scheme.encoding ?? 'hex'));

@@ -276,14 +276,20 @@ test('`secret` keys the HMAC with the hex or base64 decoding of the secret, neve
 });
 
 test.each<[string, 'base64' | 'hex']>([
-  ['ab$c', 'base64'], ['YWJj ZGVm', 'base64'], [' YWJjZGVm', 'base64'], ['YWJjZGVm\n', 'base64'], ['YWI', 'base64'], ['YWI==', 'base64'],
-  ['-_8-', 'base64'], ['YQ=', 'base64'], ['', 'base64'], ['====', 'base64'],
+  ['ab$c', 'base64'], ['YWJj ZGVm', 'base64'], [' YWJjZGVm', 'base64'], ['YWJjZGVm\n', 'base64'], ['YR==', 'base64'], ['YR', 'base64'],
+  ['-_8-', 'base64'], ['', 'base64'], ['====', 'base64'],
   ['abc', 'hex'], ['0g', 'hex'], ['zz', 'hex'], ['ab cd', 'hex'], ['0x00ff', 'hex'], ['', 'hex'],
 ])('a %j secret that is no exact %s keys nothing: false, never its loose decoding or its text', (bad, encoding) => {
   const webhook = encoding === 'hex' ? decodedHex : decodedBase64;
   for (const key of [Buffer.from(bad, encoding), Buffer.from(bad)]) {
     expect(verifyWebhook(webhook, request({ 'x-signature': hmacHex(key) }), bad)).toBe(false);
   }
+});
+
+test.each(['YQ', 'YQ=', 'YQ==', 'YWI', 'YWI='])('a base64 secret %j with its padding left out or in is its bytes', padded => {
+  const key = Buffer.from(padded, 'base64');
+  expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(key) }), padded)).toBe(true);
+  expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(padded) }), padded)).toBe(false);
 });
 
 test('a decoded secret keeps the signature rules: one header, the whole digest, these bytes', () => {
@@ -297,10 +303,18 @@ test('a decoded secret keeps the signature rules: one header, the whole digest, 
   expect(verifyWebhook(decodedHex, request({ 'x-signature': good }, Buffer.from('{"event":"deleted"}')), hexSecret)).toBe(false);
 });
 
-test('a Standard Webhooks secret is decoded as strictly: loose base64 after `whsec_` is false', () => {
-  for (const loose of [`whsec_${standardKey.toString('base64')} `, `whsec_${standardKey.toString('base64url')}-`, `whsec_${standardKey.toString('base64').slice(0, -1)}`]) {
-    expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.from(loose.slice(6), 'base64'))), loose)).toBe(false);
+test('a Standard Webhooks secret is decoded as strictly, padding optional: loose base64 after `whsec_` is false', () => {
+  const loose = [`whsec_${standardKey.toString('base64')} `, `whsec_${standardKey.toString('base64')}\n`, `whsec_${standardKey.toString('base64url')}-`, 'whsec_YR=='];
+  for (const secret of loose) {
+    for (const key of [Buffer.from(secret.slice(6), 'base64'), Buffer.from(secret.slice(6))]) {
+      expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, key)), secret)).toBe(false);
+    }
   }
+  // The specification asks for base64 alone; its reference libraries read an unpadded secret, and so does this one.
+  const padded = Buffer.alloc(32, 7);
+  expect(padded.toString('base64')).toMatch(/=$/u);
+  const unpadded = `whsec_${padded.toString('base64').replace(/=+$/u, '')}`;
+  expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, padded)), unpadded)).toBe(true);
 });
 
 // The three pages give no secret, body and signature together, so each vector is computed from the page's recipe.
