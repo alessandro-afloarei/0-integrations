@@ -27,7 +27,8 @@ export const calcom = defineProvider({
         teamSlug: { in: 'body', type: 'string' }, organizationSlug: { in: 'body', type: 'string' },
         usernames: { in: 'body', type: ['string'], description: 'A dynamic group booking: 2 to 20 hosts, no event type.' },
         guests: { in: 'body', type: ['string'], description: 'Guest emails.' }, lengthInMinutes: { in: 'body', type: 'number' },
-        location: { in: 'body', type: 'unknown' }, bookingFieldsResponses: { in: 'body', type: 'unknown' } },
+        location: { in: 'body', type: 'unknown' }, bookingFieldsResponses: { in: 'body', type: 'unknown' },
+        emailVerificationCode: { in: 'body', type: 'string', description: 'Required when the event type has email verification on.' } },
       result: { status: 'string', data: 'unknown' } },
   },
 });
