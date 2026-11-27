@@ -75,7 +75,8 @@ export type Webhook = (
   | { kind: 'basic' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] };
   challenge?: { unsigned?: true } & ({ when: When; echo: Path; text?: true } | { when?: When; echo: { query: string }; text: true }) };
-export type Where = { query: string } | { body: string };
+/** Where a walk writes its next value: a query parameter, a key of a JSON body, or a GraphQL variable. */
+export type Where = { query: string } | { body: string } | { variables: string };
 /** `page`: no number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy, `list` (the
  * answer when absent) is empty, or the pages or entries read (a skipped record counted) reach each answer's `total`; a
  * missing or non-list `list`, or a `total` that is no non-negative safe integer, is `invalid_response`. `offset`: as

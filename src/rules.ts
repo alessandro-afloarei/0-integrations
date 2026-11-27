@@ -59,6 +59,12 @@ export function pagedRecords(op: Operation, shape: Paging): boolean {
   return !(shape.kind === 'page' || shape.kind === 'offset' || shape.kind === 'last') || op.records === shape.list;
 }
 
+/** Whether a paged operation's request has room where its shape writes: a GraphQL one only in its variables, a path one
+ * never there. */
+export function pagingPlaced(op: Operation, shape: Paging): boolean {
+  return ('graphql' in op) === ('send' in shape && 'variables' in shape.send);
+}
+
 /** The parameter an operation declares in the place its paging shape's `send` writes, if any: the walk sends that value
  * itself, and a caller's would start the walk there and be overwritten after the first page. A body cursor beside a form
  * parameter is named too: from the second page its JSON would replace the form. */

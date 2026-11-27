@@ -347,6 +347,23 @@ test("an app's operation with a parameter in the place its paging shape's `send`
   expect(fake.calls).toEqual([]);
 });
 
+test("an app's GraphQL operation pages only on a `variables` shape, and a path operation never on one, refused when built", () => {
+  const entry = (op: object, shape: object) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
+    paging: { list: shape }, operations: { 'things.list': { kind: 'read', paging: 'list', ...op } } }) as unknown as Entry;
+  const graphql = { graphql: 'query Things($after: String) { things(after: $after) { id } }' };
+  const variables = { kind: 'cursor', next: 'next', send: { variables: 'after' } };
+  const fake = fakeFetch([]);
+  for (const shape of [{ kind: 'cursor', next: 'next', send: { query: 'after' } }, { kind: 'cursor', next: 'next', send: { body: 'after' } },
+    { kind: 'page', send: { query: 'page' } }, { kind: 'linkHeader' }, { kind: 'nextUrl', next: 'next' }]) {
+    expect(() => client(entry(graphql, shape), { token: 'k', fetch: fake.fetch })).toThrow(new TypeError('paging_unplaced: things.list'));
+  }
+  expect(() => client(entry({ method: 'POST', path: '/things' }, variables), { token: 'k', fetch: fake.fetch })).toThrow(new TypeError('paging_unplaced: things.list'));
+  expect(() => client(entry({ ...graphql, params: { after: { in: 'variables', type: 'string' } } }, variables), { token: 'k', fetch: fake.fetch }))
+    .toThrow(new TypeError('param_paged: things.list after'));
+  expect(() => client(entry(graphql, variables), { token: 'k', fetch: fake.fetch })).not.toThrow();
+  expect(fake.calls).toEqual([]);
+});
+
 test('client() refuses an entry checkHosts refuses when it is built, before it reads the token it is given', () => {
   let reads = 0;
   const bent = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: 'https:///api.acme.test' } } as Entry;

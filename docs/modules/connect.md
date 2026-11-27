@@ -119,7 +119,8 @@ const { secret, account } = await finishConnect(linear, { client: oauthClient, c
 // secret: the grant to seal, with `kind: 'oauth2'` kept beside it; account: the Linear user
 
 const api = client(linear, { token: secret.accessToken });
-const issues = await api.issues.list({ teamId, first: 50 }); // one page: nodes and pageInfo
+const titles: string[] = [];
+for await (const issue of api.issues.list({ teamId, first: 50 })) titles.push(issue.title); // every page, 50 at a time
 
 // A person's own key instead: a form, then one call.
 const key = signInWith(linear, 'key');
@@ -139,9 +140,8 @@ OAuth 2 token from a key, so a cloud token used with the key's narrowing would g
 the entry's sign-in does not declare is refused (`value_undeclared`), so a connection kept from another sign-in never
 reaches the wrong host: a key connection's `host` given to the whole entry, or to its OAuth 2 narrowing, sends nothing.
 
-Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
-The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and
-refreshes with `refreshGrant(linear, …)`, through [credentials](credentials.md).
+Linear's lists page to their end: the walk sends `pageInfo.endCursor` as the `after` variable until `hasNextPage` is
+false. A Linear grant lasts 24 hours and refreshes with `refreshGrant(linear, …)`, through [credentials](credentials.md).
 
 ## OAuth 2 on the person's own server
 

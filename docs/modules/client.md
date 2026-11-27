@@ -161,7 +161,8 @@ header parameter on GraphQL, `nullable`, not a scalar or named `content-type`, `
 (`param_unplaced: <id> <name>`), a paging
 shape the entry does not declare (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
 to no list in the `result` (`records_unshaped: <id>`), an operation on a `page`, `offset` or `last` shape whose `records` is
-not the shape's `list` (`records_unpaged: <id>`), and a parameter (or a literal query in its path) in the place its
+not the shape's `list` (`records_unpaged: <id>`), a GraphQL operation on a shape whose `send` is not `variables`, or
+an operation with a path on one whose `send` is (`paging_unplaced: <id>`), and a parameter (or a literal query in its path) in the place its
 paging shape's `send` writes, which the walk sends itself, or a body cursor beside a form parameter, whose JSON would
 replace the form from the second page (`param_paged: <id> <name>`). A wrong value throws when the call is made,
 before anything is sent.

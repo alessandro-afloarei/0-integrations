@@ -126,11 +126,10 @@ test('hostile: a raw call holds one body: a form beside a JSON body is refused, 
   // @ts-expect-error -- the types refuse both bodies; an untyped caller is refused when it calls
   await expect(http.json('/x', { method: 'POST', json: { b: 2 }, form: { a: '1' } })).rejects.toMatchObject({ code: 'request_failed', status: null });
   expect(fake.calls).toEqual([]);
-  // A body cursor would add a JSON body to a form's next page.
+  // A body cursor would add a JSON body to a form's next page: refused before the first.
   const pages = walk(http, { kind: 'page', send: { body: 'page' } }, '/x', { method: 'POST', form: { a: '1' } });
-  await pages.next();
   await expect(pages.next()).rejects.toMatchObject({ code: 'request_failed', status: null });
-  expect(fake.calls.map(({ body }) => body)).toEqual(['a=1']);
+  expect(fake.calls).toEqual([]);
 });
 
 test("a request with the caller's signal never waits", async () => {

@@ -6,4 +6,5 @@ pages and refuses a repeated cursor; the app stops when its own budget says so. 
 no status and the library's own `detail` (`cursor_repeated`, `cursor_missing`), so it never reads as a provider's code.
 
 A client built from an entry pages by the entry's declared shapes instead: [client](client.md). There a page-number
-list may also stop at the count its answers name (`total`), as Smartsheet's do.
+list may also stop at the count its answers name (`total`), as Smartsheet's do, and a GraphQL list pages through its
+query's variables (`send: { variables }`), as Linear's do.

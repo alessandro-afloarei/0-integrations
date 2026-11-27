@@ -3,6 +3,7 @@ import { defineProvider, type Paging } from './catalogue.js';
 import { createClient, type RequestOptions } from './http.js';
 import { followed, nextCursor, ownPath, walk } from './paging.js';
 import { clickup } from './catalogue/clickup.js';
+import { linear } from './catalogue/linear.js';
 import { smartsheet } from './catalogue/smartsheet.js';
 import { client, type Client } from './client.js';
 import { fakeFetch, fakeProvider, sequence, type FakeCall } from './testing.js';
@@ -406,5 +407,63 @@ test('ClickUp tasks.list, through client() and raw paginate: { tasks: [] } ends 
     const broken = await run({}, read);
     expect(broken.seen).toHaveLength(1);
     expect(broken.error).toMatchObject({ code: 'invalid_response' });
+  }
+});
+
+/** Linear's `issues.list` walked on a stub: each request's JSON body, every issue's id, and the error it ends on. */
+async function linearIssues(...answers: readonly unknown[]) {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(...answers.map(answer => () => Response.json(answer))) }]);
+  const ids: string[] = [];
+  let error: unknown;
+  try { for await (const item of client(linear, { token: 'k', fetch: fake.fetch }).issues.list({ teamId: 't1', first: 2 })) ids.push(item.id); } catch (caught) { error = caught; }
+  return { bodies: fake.calls.map(call => JSON.parse(call.body) as { query: string; variables: unknown }), ids, error };
+}
+const linearIssue = (id: string) => ({ id, title: 'T', url: 'https://linear.app/x', state: { id: 's', name: 'Todo' }, team: { id: 't1' },
+  createdAt: '2026-01-01', updatedAt: '2026-01-01' });
+const issuesPage = (ids: readonly string[], hasNextPage: boolean, endCursor?: unknown) =>
+  ({ data: { issues: { nodes: ids.map(linearIssue), pageInfo: { hasNextPage, endCursor } } } });
+
+test("variables: Linear's issues.list sends no after first, then the end cursor in its variables, the query unchanged", async () => {
+  const walked = await linearIssues(issuesPage(['a', 'b'], true, 'c2'), issuesPage(['c'], false, 'c3'));
+  expect(walked.error).toBeUndefined();
+  expect(walked.ids).toEqual(['a', 'b', 'c']);
+  expect(walked.bodies.map(body => body.variables)).toEqual([{ teamId: 't1', first: 2 }, { teamId: 't1', first: 2, after: 'c2' }]);
+  expect(walked.bodies[1]?.query).toBe(walked.bodies[0]?.query);
+});
+
+test('variables: a blank or object end cursor with hasNextPage is cursor_missing; one that comes back is cursor_repeated', async () => {
+  for (const endCursor of ['', null, { id: 'c2' }]) {
+    const walked = await linearIssues(issuesPage(['a'], true, endCursor));
+    expect([walked.bodies.length, walked.error]).toEqual([1, expect.objectContaining({ code: 'invalid_response', detail: 'cursor_missing' })]);
+  }
+  const again = await linearIssues(issuesPage(['a'], true, 'c2'), issuesPage(['b'], true, 'c2'));
+  expect([again.bodies.length, again.error]).toEqual([2, expect.objectContaining({ code: 'invalid_response', detail: 'cursor_repeated' })]);
+});
+
+test("variables: a 2xx with errors fails through the entry's errors.failed before any cursor is read", async () => {
+  const walked = await linearIssues({ errors: [{ message: 'x', extensions: { code: 'RATELIMITED' } }], ...issuesPage(['a'], true, 'c2') });
+  expect([walked.bodies.length, walked.ids, walked.error]).toEqual([1, [], expect.objectContaining({ code: 'request_failed', detail: 'RATELIMITED' })]);
+});
+
+test('variables: a page number is sent as a number beside the caller\'s variables', async () => {
+  const boards = defineProvider({ id: 'boards', name: 'Boards', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test/graphql' },
+    paging: { page: { kind: 'page', send: { variables: 'page' }, list: 'data.boards' } },
+    operations: { 'boards.list': { kind: 'read', graphql: 'query Boards($limit: Int, $page: Int) { boards(limit: $limit, page: $page) { id } }',
+      params: { limit: { in: 'variables', type: 'integer' } }, paging: 'page', records: 'data.boards', result: { data: { boards: [{ id: 'string' }] } } } } });
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ data: { boards: [{ id: 'a' }] } }), () => Response.json({ data: { boards: [] } })) }]);
+  for await (const board of client(boards, { token, fetch: fake.fetch }).boards.list({ limit: 5 })) expect(board).toEqual({ id: 'a' });
+  expect(fake.calls.map(call => (JSON.parse(call.body) as { variables: unknown }).variables)).toEqual([{ limit: 5 }, { limit: 5, page: 2 }]);
+});
+
+test('variables: a raw paginate writes into the body\'s variables, made when missing; a body or variables that is no object is request_failed, nothing sent', async () => {
+  const shape = { kind: 'cursor', next: 'next', send: { variables: 'after' } } as const;
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'c2' }), () => Response.json({})) }]);
+  for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), shape, '', { method: 'POST', json: { query: 'q' } })) expect(page).toBeTypeOf('object');
+  expect(fake.calls.map(call => call.body)).toEqual(['{"query":"q"}', '{"query":"q","variables":{"after":"c2"}}']);
+  for (const json of ['query { a }', { query: 'q', variables: 'x' }, { query: 'q', variables: ['x'] }, ['q']]) {
+    const none = fakeFetch([{ url: /https:/, respond: () => Response.json({ next: 'c2' }) }]);
+    await expect(walk(createClient(acme, { token, fetch: none.fetch }), shape, '', { method: 'POST', json }).next())
+      .rejects.toMatchObject({ code: 'request_failed' });
+    expect(none.calls).toEqual([]);
   }
 });

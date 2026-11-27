@@ -12,7 +12,7 @@ import { callBase, createClient, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, namedHosts, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, namedHosts, oauthUrls, pagedParam, pagedRecords, pagingPlaced, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -75,13 +75,15 @@ const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName 
     echo: z.union([z.string().min(1), z.strictObject({ query: z.string().min(1, 'a challenge `query` names its parameter: give the name') })]),
     text: z.literal(true).optional(), unsigned: z.literal(true).optional() })
     .refine(item => typeof item.echo === 'string' || item.text === true, 'a challenge read from a query is answered as text: give `text: true`').optional() };
-const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]);
+const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() }),
+  z.strictObject({ variables: z.string().min(1, 'a `variables` place names the GraphQL variable: give the name') })]);
 /** A `page` shape's count: of pages or of entries, one path to it. */
 const countPath = z.string().min(1, "a `total` is a path to the answer's count: give it");
 const total = z.strictObject({ pages: countPath.optional(), entries: countPath.optional() })
   .refine(item => (item.pages === undefined) !== (item.entries === undefined), 'a `total` counts `pages` or `entries`: give one of them');
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
+const PAGING_PLACED = 'a GraphQL operation paged only on a shape whose `send` is `variables`, and a path operation never on one';
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
 const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
 const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
@@ -416,6 +418,11 @@ const runnable = {
   "an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
     operations(entry).every(op => { const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
       return shape === undefined || pagedRecords(op, shape); }),
+  // A GraphQL request has room only in its variables, and a path request has none there.
+  [PAGING_PLACED]: (entry: Entry) => operations(entry).every(op => {
+    const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
+    return shape === undefined || pagingPlaced(op, shape);
+  }),
   // The walk sets that parameter itself on every page after the first.
   "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`": (entry: Entry) => operations(entry).every(op => {
     const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
@@ -791,6 +798,11 @@ test.each<[Rule, Entry]>([
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
           params: { [name]: { in: place, type: 'integer' } } } } })]),
+  ...([[{ kind: 'cursor', next: 'next', send: { query: 'after' } }, { graphql: 'query T($after: String) { t(after: $after) { id } }' }],
+    [{ kind: 'nextUrl', next: 'next' }, { graphql: 'query T { t { id } }' }],
+    [{ kind: 'cursor', next: 'next', send: { variables: 'after' } }, { method: 'POST', path: '/items' }]] as const)
+    .map(([shape, op]): [Rule, Entry] => [PAGING_PLACED, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
+      operations: { 'items.list': { docs: 'https://k.test/docs/items', kind: 'read', paging: 'list', ...op } } })]),
   ...([
     [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }, { baseUrl: 'https://api.k.test' }],
     [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' }],
@@ -1069,6 +1081,7 @@ test.each<[Record<string, unknown>, string]>([
   [{ kind: 'last', next: 'cursor', send: { query: 'cursor' }, pathPrefix: '/me/' }, 'Unrecognized key: "pathPrefix"'],
   [{ kind: 'last', next: '', send: { query: 'cursor' } }, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"],
   [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
+  [{ kind: 'cursor', next: 'next', send: { variables: '' } }, 'a `variables` place names the GraphQL variable: give the name'],
   [{ kind: 'cursor', next: 'next', send: { query: 'cursor' }, total: { pages: 'pages' } }, 'Unrecognized key: "total"'],
   [{ kind: 'offset', send: { query: 'offset' }, total: { entries: 'total' } }, 'Unrecognized key: "total"'],
   [{ kind: 'page', send: { query: 'page' }, total: { pages: 'pages', entries: 'total' } }, 'a `total` counts `pages` or `entries`: give one of them'],

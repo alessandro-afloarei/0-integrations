@@ -273,7 +273,7 @@ keeps the global one.
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
-`Operation.base`, placeholders in `identify`'s request path, `Size`, and `Where.variables`.
+`Operation.base`, placeholders in `identify`'s request path, and `Size`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -527,7 +527,7 @@ type Paging =
   | { kind: 'last'; next: Path; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
-type Where = { query: string } | { body: string };
+type Where = { query: string } | { body: string } | { variables: string };
 type Size = { send: Where; value?: number };
 ```
 
@@ -571,6 +571,13 @@ a shape's `send` writes: the walk sends it.
   a blank value ends it. The value follows the cursor's rule, and one that comes back is `cursor_repeated`, through the
   one `paginate` guard. The last element is read from the answer itself, so a record the parser skips still gives the
   value. An operation on a `last` shape names the shape's `list` as its `records`.
+- A `variables` place writes the value into the GraphQL request's `variables`, beside the caller's: a cursor as a
+  string, a page number or an offset as a number, as a body place does. `cursor`, `page`, `offset` and `last` take it,
+  and their stop rules do not change. A GraphQL operation pages only on a shape whose `send` is `variables`, and an
+  operation with a path never pages on one: `paging_unplaced: <id>`, from `client()` and the table. An operation that
+  declares a variable of the `send` name is `param_paged`, as in any other place. A raw `paginate` on a `variables`
+  shape needs a JSON body. A missing `variables` object starts as `{}`, and a body or a `variables` that is not an
+  object is `request_failed` before anything is sent, as a form is.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.
