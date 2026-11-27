@@ -91,10 +91,10 @@ describe("the HubSpot client", () => {
     expect(token).toHaveBeenLastCalledWith("expired");
   });
 
-  it("retries one rate limit after HubSpot's wait, and reports one longer than a minute", async () => {
-    const { calls, fetch } = scripted(json({}, 429, { "retry-after": "10" }), page([]));
+  it("retries one rate limit after HubSpot's wait of up to a minute, and reports one longer", async () => {
+    const { calls, fetch } = scripted(json({}, 429, { "retry-after": "60" }), page([]));
     const result = hubspotClient({ token: () => Promise.resolve("t"), fetch, ...noWait }).search("companies", { since: null, properties: ["name"] });
-    await vi.advanceTimersByTimeAsync(9999);
+    await vi.advanceTimersByTimeAsync(59_999);
     expect(calls).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
     await result;
