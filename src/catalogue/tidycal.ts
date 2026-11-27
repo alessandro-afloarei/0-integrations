@@ -1,8 +1,7 @@
 import { defineProvider } from '../catalogue.js';
 
-/** TidyCal: OAuth 2 with its own client, made alone under Integrations, or a personal access token; its sign-in checks
- * the credential, `/me` naming no id. PKCE: https://tidycal.com/.well-known/oauth-authorization-server. A booking
- * emails the booker. A 429 waits its `Retry-After`; webhooks sign `t.body`, on the reference page too. */
+/** TidyCal: a personal access token; its sign-in checks the credential, `/me` naming no id. A booking emails the
+ * booker. A 429 waits its `Retry-After`; webhooks sign `t.body`, on the reference page too. */
 const booking = { id: 'integer', 'booking_type_id?': 'integer', 'starts_at?': 'string', 'ends_at?': 'string',
   'cancelled_at?': 'string', 'timezone?': 'string', 'created_at?': 'string', 'updated_at?': 'string' } as const;
 const ref = 'https://tidycal.com/developer/docs#tag';
@@ -11,10 +10,8 @@ export const tidycal = defineProvider({
   id: 'tidycal', name: 'TidyCal', docs: 'https://tidycal.com/developer/docs',
   categories: ['calendar'],
   fields: [{ name: 'accessToken', title: 'Personal access token', secret: true,
-    help: 'For your own TidyCal account (Integrations, Advanced, Manage API keys, Personal tokens): an integration that other people sign in to uses the OAuth 2 sign-in.' }],
-  auth: [{ kind: 'oauth2', authorizeUrl: 'https://tidycal.com/oauth/authorize', tokenUrl: 'https://tidycal.com/oauth/token',
-    authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
-  scopes: { default: [] },
+    help: 'For your own TidyCal account (Integrations, Advanced, Manage API keys, Personal tokens): an integration that other people sign in to needs its own OAuth 2.0 client.' }],
+  auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://tidycal.com/api', retry: {} },
   identify: { request: { path: '/me' } },
   webhook: { kind: 'hmac', header: 'tidycal-signature', signed: '{timestamp}.{body}', part: 'v1', timestamp: { part: 't' },
