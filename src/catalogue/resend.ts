@@ -35,7 +35,7 @@ export const resend = defineProvider({
         'region?': 'string' }] } },
     'emails.create': { docs: `${ref}/emails/send-email`, method: 'POST', path: '/emails', kind: 'write',
       params: { from: { in: 'body', type: 'string', required: true, description: 'The sender, an address or "Name <address>".' },
-        to: { in: 'body', type: ['string'], required: true, description: 'At most 50 addresses.' },
+        to: { in: 'body', type: ['string'], required: true, description: 'A list of recipient addresses, one to 50.' },
         subject: { in: 'body', type: 'string', required: true }, html: { in: 'body', type: 'string' },
         text: { in: 'body', type: 'string' } },
       result: { id: 'string' } },
