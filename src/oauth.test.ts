@@ -281,6 +281,44 @@ test('an error never carries the Basic client credential the request sent, form-
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(`Basic ${sent}`));
 });
 
+/** Basic on the RFC 7009 revoke alone, the client in the body of the token requests (Todoist's shape). */
+const basicRevoke = defineProvider({ id: 'basicrevoke', name: 'Basic revoke', auth: [{ kind: 'oauth2', authorizeUrl: 'https://split.test/authorize',
+  tokenUrl: 'https://split.test/token', pkce: false, clientAuth: { revoke: 'basic' } }], scopes: { default: [] },
+  revoke: { url: 'https://split.test/revoke', token: ['access'] }, http: { baseUrl: 'https://api.split.test' } });
+const basicOf = (id: string, secret: string) => `Basic ${Buffer.from(`${id}:${secret.replaceAll('-', '%2D')}`).toString('base64')}`;
+
+test('clientAuth { revoke: basic }: the exchange and the refresh send the client in the body, the revoke by Basic alone', async () => {
+  const fake = endpoint(token);
+  await exchangeCode(basicRevoke, client, { ...exchange, fetch: fake.fetch });
+  await refreshGrant(basicRevoke, client, 'r', { fetch: fake.fetch });
+  await revokeGrant(basicRevoke, { accessToken: 'a', client, fetch: fake.fetch });
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual([undefined, undefined, basicOf('id', client.clientSecret)]);
+  expect(fake.calls.map(call => Object.fromEntries(new URLSearchParams(call.body)))).toEqual([
+    { code: exchange.code, redirect_uri: exchange.redirectUri, grant_type: 'authorization_code', client_id: 'id', client_secret: client.clientSecret },
+    { refresh_token: 'r', grant_type: 'refresh_token', client_id: 'id', client_secret: client.clientSecret },
+    { token: 'a' },
+  ]);
+});
+
+test('clientAuth { refresh: basic } on one URL: the exchange sends the client in the body, the refresh by Basic alone', async () => {
+  const basicRefresh = defineProvider({ ...basicRevoke, id: 'basicrefresh', auth: [{ ...basicRevoke.auth[0], clientAuth: { refresh: 'basic' } }] });
+  const fake = endpoint(token);
+  await exchangeCode(basicRefresh, client, { ...exchange, fetch: fake.fetch });
+  await refreshGrant(basicRefresh, client, 'r', { fetch: fake.fetch });
+  expect(fake.calls.map(call => call.url)).toEqual(Array(2).fill('https://split.test/token'));
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual([undefined, basicOf('id', client.clientSecret)]);
+  expect(fake.calls.map(call => new URLSearchParams(call.body).get('client_secret'))).toEqual([client.clientSecret, null]);
+});
+
+test('clientAuth as an object: no error detail echoes the Basic value its revoke sent', async () => {
+  // `id:abcdef` encodes to base64 without padding, so an echo of it would pass the detail pattern.
+  const sent = Buffer.from('id:abcdef').toString('base64');
+  const echo = endpoint({ error: sent }, 400);
+  await expect(revokeGrant(basicRevoke, { accessToken: 'a', client: { clientId: 'id', clientSecret: 'abcdef' }, fetch: echo.fetch }))
+    .rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(echo.calls.map(call => call.headers.authorization)).toEqual([`Basic ${sent}`]);
+});
+
 /** A token endpoint that takes JSON, the client id and secret in the body, no PKCE (Atlassian's shape). */
 const jsonBodied = defineProvider({ id: 'jsonbodied', name: 'JSON', auth: [{ kind: 'oauth2', authorizeUrl: 'https://json.test/authorize',
   tokenUrl: 'https://json.test/token', json: true, pkce: false }], scopes: { default: [] },

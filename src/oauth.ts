@@ -4,7 +4,7 @@ import type { Entry, Kept, Plain, Values, ValuesOption } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
-import { checkHosts, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
+import { basicOn, checkHosts, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath, type OAuthRequest } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
 export type OAuthClient = { clientId: string; clientSecret: string };
@@ -87,16 +87,17 @@ const bearerByDefault = (send: CustomFetch): CustomFetch => async (url, options)
 type Sent = { values?: Values; fetch?: typeof globalThis.fetch };
 
 /** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. The app's
- * `fetch`, else the entry's default: the address guard for a typed host. */
-function context(entry: Entry, credentials: OAuthClient, input: Sent, refresh = false) {
+ * `fetch`, else the entry's default: the address guard for a typed host. The client authenticates as the entry says
+ * for this request. */
+function context(entry: Entry, credentials: OAuthClient, input: Sent, request: OAuthRequest) {
   // Each URL passes the one check every URL the library sends to passes, before anything is sent.
   const { config, token, refresh: renew, revoke } = endpoints(entry, input.values);
   const fetch = input.fetch ?? defaultFetch(entry);
-  const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (refresh ? renew() : token).href,
+  const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (request === 'refresh' ? renew() : token).href,
     ...(revoke ? { revocation_endpoint: revoke.href } : {}) };
   const client = { client_id: credentials.clientId };
-  const auth = config.clientAuth === 'basic' ? oauth.ClientSecretBasic(credentials.clientSecret) : oauth.ClientSecretPost(credentials.clientSecret);
-  // The Basic value as sent (the id and secret form-encoded first), so no error detail echoes it.
+  const auth = (basicOn(config, request) ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(credentials.clientSecret);
+  // The Basic value this request sends (the id and secret form-encoded first), so no error detail echoes it.
   const sent = new Headers();
   void auth(as, client, new URLSearchParams(), sent);
   const basic = sent.get('authorization')?.slice('Basic '.length);
@@ -153,7 +154,7 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
 
 export async function exchangeCode<const E extends Entry>(entry: E, client: OAuthClient, input: { code: string; redirectUri: string;
   codeVerifier?: string | undefined; fetch?: typeof globalThis.fetch } & ValuesOption<Plain<E>>): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
-  const c = context(entry, client, input);
+  const c = context(entry, client, input, 'exchange');
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
   const params = new URLSearchParams({ code: input.code, redirect_uri: input.redirectUri });
   if (input.codeVerifier) params.set('code_verifier', input.codeVerifier);
@@ -169,7 +170,7 @@ export async function exchangeCode<const E extends Entry>(entry: E, client: OAut
 
 export async function refreshGrant<const E extends Entry>(entry: E, client: OAuthClient, refreshToken: string,
   ...[input]: RefreshInput<E>): Promise<Grant> {
-  const c = context(entry, client, input ?? {}, true);
+  const c = context(entry, client, input ?? {}, 'refresh');
   const secrets = [...c.secrets, refreshToken];
   const response = await send(c, entry, secrets, () => oauth.refreshTokenGrantRequest(c.as, c.client, c.auth, refreshToken, c.options));
   try {
@@ -180,7 +181,7 @@ export async function refreshGrant<const E extends Entry>(entry: E, client: OAut
 }
 
 async function revokeToken(entry: Entry, client: OAuthClient, token: string, input: Sent): Promise<void> {
-  const c = context(entry, client, input);
+  const c = context(entry, client, input, 'revoke');
   const secrets = [...c.secrets, token];
   const response = await send(c, entry, secrets, () => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options));
   // Any 2xx, as providers answer a revoke with 200 or 204; oauth4webapi accepts only 200.

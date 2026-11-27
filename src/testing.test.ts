@@ -341,6 +341,31 @@ describe('fakeProvider', () => {
     expect((await fetch('https://basicjson.test/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status).toBe(401);
   });
 
+  test.each([[{ revoke: 'basic' }, 'https://basicjson.test/revoke'], [{ refresh: 'basic' }, 'https://basicjson.test/token'],
+    [{ exchange: 'basic', refresh: 'basic' }, 'https://basicjson.test/token']] as const)(
+    'clientAuth %j: each request is answered only with the client authentication declared for it, on its URL', async (clientAuth, revokeUrl) => {
+    const split = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize',
+      tokenUrl: 'https://basicjson.test/token', clientAuth, pkce: false }], revoke: { url: revokeUrl, token: ['refresh'] } });
+    const { fetch } = fakeFetch(fakeProvider(split, { key: 'k' }));
+    const basic = `Basic ${btoa('kit%2Dclient:kit%2Dsecret')}`;
+    const pair = { client_id: 'kit-client', client_secret: 'kit-secret' };
+    const requests = { exchange: [{ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri }, 'https://basicjson.test/token'],
+      refresh: [{ grant_type: 'refresh_token', refresh_token: 'kit-refresh' }, 'https://basicjson.test/token'], revoke: [{ token: 'kit-refresh' }, revokeUrl] } as const;
+    for (const [request, [params, url]] of Object.entries(requests)) {
+      const sent = (byBasic: boolean, inBody: boolean) => fetch(url, { method: 'POST', ...byBasic && { headers: { authorization: basic } },
+        body: new URLSearchParams({ ...params, ...inBody ? pair : { client_id: 'kit-client' } }) });
+      const declared = (clientAuth as Partial<Record<string, 'basic'>>)[request] === 'basic';
+      expect((await sent(declared, !declared)).status).toBe(200);
+      // The other method, and both together, are no client.
+      for (const [byBasic, inBody] of [[!declared, declared], [true, true]] as const) {
+        expect(await answer(await sent(byBasic, inBody))).toEqual({ status: 401, body: { error: 'invalid_client' } });
+      }
+    }
+    await expect(exchangeCode(split, kitClient, { code: 'kit-code', redirectUri, fetch })).resolves.toMatchObject({ grant: { accessToken: 'k' } });
+    await expect(refreshGrant(split, kitClient, 'kit-refresh', { fetch })).resolves.toMatchObject({ accessToken: 'k' });
+    await expect(revokeGrant(split, { refreshToken: 'kit-refresh', client: kitClient, fetch })).resolves.toBeUndefined();
+  });
+
   test('a PKCE entry is answered only with a code verifier, its client in the form body, and a given code and client', async () => {
     const pkce = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize', tokenUrl: 'https://basicjson.test/token' }] });
     const client = { clientId: 'app', clientSecret: 'secret' };

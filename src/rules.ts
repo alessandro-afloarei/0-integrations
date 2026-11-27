@@ -1,4 +1,4 @@
-import type { Entry, Field, Operation, Paging, Param, Path, Shape, Template, Values, When } from './catalogue.js';
+import type { Auth, Entry, Field, Operation, Paging, Param, Path, Shape, Template, Values, When } from './catalogue.js';
 
 /** The text as JSON, or undefined when it is none. */
 export function parseJson(text: string): unknown {
@@ -102,6 +102,11 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
   return { authorize: auth.authorizeUrl, token: auth.tokenUrl, refresh: auth.refreshUrl ?? auth.tokenUrl,
     ...(entry.revoke && 'url' in entry.revoke ? { revoke: entry.revoke.url } : {}) };
 }
+
+export type OAuthRequest = 'exchange' | 'refresh' | 'revoke';
+/** Whether an OAuth 2 client authenticates by HTTP Basic on this request; else it sends its id and secret in the body. */
+export const basicOn = ({ clientAuth }: Extract<Auth, { kind: 'oauth2' }>, request: OAuthRequest): boolean =>
+  clientAuth === 'basic' || (typeof clientAuth === 'object' && clientAuth[request] === 'basic');
 
 /** The base's named host by name, with its path: on an OAuth 2 sign-in, the base's whole host one placeholder, a `save`
  * key read from one `tokenAnswer.*` path, never a field. */

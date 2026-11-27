@@ -288,7 +288,8 @@ accepts only a string or a number from them.
 type Auth =
   | { kind: 'key'; send?: Send }
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
-      clientAuth?: 'basic'; scopeSeparator?: ','; authorizeParams?: Record<string, string>;
+      clientAuth?: 'basic' | { exchange?: 'basic'; refresh?: 'basic'; revoke?: 'basic' };
+      scopeSeparator?: ','; authorizeParams?: Record<string, string>;
       tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true; send?: Send }
   | { kind: 'token'; request: TokenRequest; send?: Send };
 
@@ -308,10 +309,14 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today.
+- `oauth2.clientAuth` says how the client authenticates: its id and secret in the body by default; `'basic'` by HTTP
+  Basic on every request; an object names the requests that use Basic, the others in the body (Todoist's RFC 7009
+  revoke, `{ revoke: 'basic' }`). The table refuses an empty object and one naming all three (write `'basic'`). The
+  values no error detail may echo are those the request sends: the secret, and the Basic value where it uses Basic.
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
-  (Atlassian) with `content-type: application/json`, the client id and secret in it unless `clientAuth: 'basic'`. The
+  (Atlassian) with `content-type: application/json`, the client id and secret in it unless that request uses Basic. The
   answer is read as a form-bodied one is.
 - `token` turns what the person entered into a short-lived token with one request: client credentials (Zoom, PayPal) or
   a session sign-in (Metabase). It has no refresh: a new request is the refresh.

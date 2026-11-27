@@ -35,6 +35,11 @@ URLs never name one, since no token answer exists before them (`template_missing
 revoke send their parameters as one JSON object (`content-type: application/json`); Basic client authentication stays a
 header.
 
+The client sends its id and secret in the body unless the entry's `clientAuth` says otherwise: `'basic'` sends them by
+HTTP Basic on every request, and an object names the requests that do (Todoist's `{ revoke: 'basic' }`: the exchange and
+the refresh in the body, the RFC 7009 revoke by Basic alone). No error detail echoes the secret, or the Basic value a
+request sent.
+
 `revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke: an RFC 7009 revoke of the
 first token the entry's `revoke.token` names (it needs `client`, else `oauth_client_required`), or the entry's
 `revoke.request` sent with the access token, to the `http.bases` entry its `base` names, if any. A 2xx,

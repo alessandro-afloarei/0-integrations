@@ -5,7 +5,7 @@ import type { Entry, Operation, Value, Values } from './catalogue.js';
 import type { WithLock } from './credentials.js';
 import { callBase, credentialOf, filledBase } from './http.js';
 import { requestToken, type OAuthClient } from './oauth.js';
-import { oauthUrls, parseJson, placeholders, readPath } from './rules.js';
+import { basicOn, oauthUrls, parseJson, placeholders, readPath, type OAuthRequest } from './rules.js';
 import type { Sealed, SecretStore, TenantKeyStore } from './vault.js';
 
 export function memoryStores(): {
@@ -211,9 +211,12 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
   }
   const urls = oauthUrls(entry);
   if (auth.kind === 'oauth2' && urls !== undefined) {
-    // The client authentication the entry declares, encoded as RFC 6749 §2.3.1 says: a Basic header, or the body's pair.
-    const client = { headers: new Headers(), body: new URLSearchParams() };
-    void (auth.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(clientSecret)({ issuer: '' }, { client_id: clientId }, client.body, client.headers);
+    // The client authentication the entry declares for a request, encoded as RFC 6749 §2.3.1 says: a Basic header, or the body's pair.
+    const clientOf = (request: OAuthRequest) => {
+      const client = { basic: basicOn(auth, request), headers: new Headers(), body: new URLSearchParams() };
+      void (client.basic ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(clientSecret)({ issuer: '' }, { client_id: clientId }, client.body, client.headers);
+      return client;
+    };
     for (const url of new Set([urls.token, urls.refresh, urls.revoke ?? urls.token])) {
       routes.push(route('POST', target(new URL(filledBase(entry, values, url))), '', async (_call, sent) => {
         // A grant comes in the encoding the entry declares, as the engine sends it: checked before its body is read.
@@ -221,15 +224,18 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
         const revokeOnly = url === urls.revoke && url !== urls.token && url !== urls.refresh;
         if (!revokeOnly && type !== (auth.json ? 'application/json' : 'application/x-www-form-urlencoded')) return Response.json({ error: 'invalid_request' }, { status: 400 });
         const body = new URLSearchParams(auth.json ? parseJson(await sent.text()) as Record<string, string> : await sent.text());
+        // On a URL a revoke shares with a grant, a request with a `grant_type` is that grant.
+        const request = url === urls.revoke && !body.has('grant_type') ? 'revoke' : body.get('grant_type') === 'refresh_token' ? 'refresh' : 'exchange';
         // One method per request (RFC 6749 §2.3.1): with Basic, no client secret in the body.
+        const client = clientOf(request);
         const sameClient = sent.headers.get('authorization') === client.headers.get('authorization') && [...client.body].every(([name, value]) => body.get(name) === value)
-          && (auth.clientAuth !== 'basic' || !body.has('client_secret'));
+          && (!client.basic || !body.has('client_secret'));
         if (!sameClient) return Response.json({ error: 'invalid_client' }, { status: 401 });
-        // A revoke names its token (RFC 7009 §2.1); on a URL it shares with a grant, a request with a `grant_type` is that grant.
-        if (url === urls.revoke && !body.has('grant_type')) {
+        // A revoke names its token (RFC 7009 §2.1).
+        if (request === 'revoke') {
           return body.has('token') ? new Response(null, { status: 200 }) : Response.json({ error: 'invalid_request' }, { status: 400 });
         }
-        const granted = body.get('grant_type') === 'refresh_token' ? url === urls.refresh && body.get('refresh_token') === 'kit-refresh' : url === urls.token
+        const granted = request === 'refresh' ? url === urls.refresh && body.get('refresh_token') === 'kit-refresh' : url === urls.token
           && body.get('grant_type') === 'authorization_code' && body.get('code') === code && body.has('redirect_uri')
           && (auth.pkce === false || body.get('code_verifier')?.trim());
         if (!granted) return Response.json({ error: 'invalid_grant' }, { status: 400 });

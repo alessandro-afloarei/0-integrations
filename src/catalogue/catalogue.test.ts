@@ -77,6 +77,13 @@ const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks on
 const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
 const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
 const OWN_FIRST = "no own `fields`, `http` or `identify` on the first sign-in: its part is the entry's top level";
+const BASIC = "`clientAuth` is `'basic'`, or names each request that uses Basic as `'basic'`";
+/** `clientAuth`: Basic on every request, or the requests that use it, at least one and not all three. */
+const basicOn = z.literal('basic').optional();
+const clean = { when: ({ issues }: { issues: readonly unknown[] }) => issues.length === 0 };
+const clientAuth = z.union([z.literal('basic'), z.strictObject({ exchange: basicOn, refresh: basicOn, revoke: basicOn })
+  .refine(requests => Object.keys(requests).length > 0, { ...clean, error: '`clientAuth` names at least one request that uses Basic: name one, or leave it out' })
+  .refine(requests => Object.keys(requests).length < 3, { ...clean, error: "`clientAuth` naming every request is `'basic'`: write that" })], BASIC);
 const fields = z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
   secret: z.literal(true).optional(), default: z.string().optional(),
   help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
@@ -97,7 +104,7 @@ const entrySchema = z.strictObject({
     z.strictObject({ kind: z.literal('key'), send: send.optional(), ...own }),
     z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, refreshUrl: https.optional(),
       json: z.literal(true, '`json` is `true` or left out').optional(), pkce: z.literal(false).optional(),
-      clientAuth: z.literal('basic').optional(), scopeSeparator: z.literal(',').optional(),
+      clientAuth: clientAuth.optional(), scopeSeparator: z.literal(',').optional(),
       authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() }),
     z.strictObject({ kind: z.literal('token'), send: send.optional(), ...own, request: z.strictObject({ url: https,
@@ -809,6 +816,18 @@ test.each([[{ refreshUrl: 'http://k.test/refresh' }, 'refreshUrl', 'Invalid stri
     const bad = { ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], ...part }] };
     expect(entrySchema.safeParse(bad).error?.issues.map(issue => [issue.path.at(-1), issue.message])).toEqual([[key, message]]);
   });
+
+test.each([[{}, '`clientAuth` names at least one request that uses Basic: name one, or leave it out'],
+  [{ exchange: 'basic', refresh: 'basic', revoke: 'basic' }, "`clientAuth` naming every request is `'basic'`: write that"],
+  ['post', BASIC], [{ revoke: 'post' }, BASIC], [{ revoke: true }, BASIC], [{ authorize: 'basic' }, 'Unrecognized key: "authorize"']])(
+  'clientAuth %j fails the schema, with what to fix', (value, message) => {
+    const bad = { ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], clientAuth: value }] };
+    expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
+  });
+
+test.each(['basic', { revoke: 'basic' }, { exchange: 'basic', refresh: 'basic' }])('clientAuth %j passes the schema', value => {
+  expect(entrySchema.safeParse({ ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], clientAuth: value }] }).error).toBeUndefined();
+});
 
 test.each(['', '  '])('a token request whose `token` path is %j fails the schema, with what to fix', token => {
   const bad = { ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, token } }] };
