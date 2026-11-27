@@ -26,8 +26,7 @@ const written = { name: { in: 'body', type: 'string', description: 'The requeste
   group_id: { in: 'body', type: 'number' }, tags: { in: 'body', type: ['string'] },
   custom_fields: { in: 'body', type: 'unknown', description: 'Custom field names and values.' } } as const;
 const body = { body: { in: 'body', type: 'string', description: 'The content, in HTML.' },
-  structured_body: { in: 'body', type: 'unknown', description: 'For a web chat or mobile SDK ticket, in place of `body`: { body_contents: [...] }.' },
-  user_id: { in: 'body', type: 'number' } } as const;
+  structured_body: { in: 'body', type: 'unknown', description: 'For a web chat or mobile SDK ticket, in place of `body`: { body_contents: [...] }.' } } as const;
 
 export const freshdesk = defineProvider({
   id: 'freshdesk', name: 'Freshdesk', docs: `${ref}authentication`,
@@ -70,8 +69,7 @@ export const freshdesk = defineProvider({
     'notes.create': { docs: `${ref}add_note_to_a_ticket`, method: 'POST', path: '/tickets/{ticket_id}/notes',
       params: { ticket_id: { in: 'path', type: 'number', required: true }, ...body,
         private: { in: 'body', type: 'boolean', description: 'True by default; false makes a public note the requester sees.' },
-        notify_emails: { in: 'body', type: ['string'], description: 'Agents or users to notify about the note.' },
-        incoming: { in: 'body', type: 'boolean' } },
+        notify_emails: { in: 'body', type: ['string'], description: 'Agents or users to notify about the note.' } },
       anyOf: [['body'], ['structured_body']], result: conversation },
     'contacts.list': { docs: `${ref}list_all_contacts`, path: '/contacts', paging: 'link',
       params: { email: { in: 'query', type: 'string' }, mobile: { in: 'query', type: 'string' }, phone: { in: 'query', type: 'string' },
