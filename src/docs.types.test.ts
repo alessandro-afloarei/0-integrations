@@ -237,7 +237,7 @@ async function designClient() {
 function webhooksDeclared() {
   // `hmac` with a timestamp header (Breakcold)
   const timestamped: Webhook = { kind: 'hmac', header: 'x-webhook-signature', signed: '{timestamp}.{body}', prefix: 'sha256=',
-    timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { header: 'x-webhook-delivery-id' } };
+    timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { body: ['eventId'] } };
   // `hmac` with `part`: `t=…,v1=…` pieces in one header (Stripe)
   const pieces: Webhook = { kind: 'hmac', header: 'stripe-signature', signed: '{timestamp}.{body}', part: 'v1',
     timestamp: { part: 't' }, deliveryId: { body: ['id'] } };

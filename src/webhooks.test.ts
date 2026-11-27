@@ -15,10 +15,16 @@ import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { mailjet } from './catalogue/mailjet.js';
 import { recallai } from './catalogue/recallai.js';
+import { linear } from './catalogue/linear.js';
 import { nylas } from './catalogue/nylas.js';
+import { pagerduty } from './catalogue/pagerduty.js';
 import { pipedrive } from './catalogue/pipedrive.js';
+import { rocketreach } from './catalogue/rocketreach.js';
+import { sentry } from './catalogue/sentry.js';
 import { slack } from './catalogue/slack.js';
 import { stripe } from './catalogue/stripe.js';
+import { tidycal } from './catalogue/tidycal.js';
+import { todoist } from './catalogue/todoist.js';
 import { zendesk } from './catalogue/zendesk.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook, type WebhookRequest } from './webhooks.js';
 
@@ -732,12 +738,53 @@ test('deliveryId reads the declared header or the body paths', () => {
   expect(deliveryId(agentmail.webhook, request({ 'svix-id': 'msg_1' }, Buffer.from('{"event_type":"message.received","event_id":"e1"}')))).toBe('e1');
   expect(deliveryId(gitlab.webhook, standardSigned(standardSignature('msg_1', t)))).toBe('msg_1');
   expect(deliveryId(stripe.webhook, request({}, Buffer.from('{"id":"evt_1","type":"balance.available"}')))).toBe('evt_1');
-  expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }))).toBe('d1');
-  expect(deliveryId(breakcold.webhook, request({}))).toBeNull();
+  expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }, Buffer.from('{"eventId":"evt_1"}')))).toBe('evt_1');
+  expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"meeting.transcribed","meeting_id":"m1"}')))).toBe('meeting.transcribed:m1');
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
   expect(deliveryId(fireflies.webhook, request({}, Buffer.from('not json')))).toBeNull();
+});
+
+test('Breakcold, PagerDuty and TidyCal dedupe on the id their signed body holds, whatever a replay puts in a header', () => {
+  // Each signed by its page's recipe: Breakcold `sha256=` and the hex HMAC of `<t>.<body>`; PagerDuty `v1=` and the hex
+  // HMAC of the body; TidyCal `t=…,v1=…`, the hex HMAC of `<t>.<body>` keyed with the whole secret, `whsec_` included.
+  const tidycalSecret = 'whsec_tidycal-test-secret';
+  const hex = (key: string, content: string) => createHmac('sha256', key).update(content).digest('hex');
+  const samples = [
+    [breakcold.webhook, secret, 'evt_abc123', (json: string, headers: Record<string, string>) => request({ ...headers,
+      'x-webhook-timestamp': t, 'x-webhook-signature': `sha256=${hex(secret, `${t}.${json}`)}` }, Buffer.from(json)),
+    '{"eventId":"evt_abc123","event":"record.created","data":{"id":"record_id"}}', 'x-webhook-delivery-id'],
+    [pagerduty.webhook, secret, '5ac64822-4adc-4fda-ade0-410becf0de4f', (json: string, headers: Record<string, string>) =>
+      request({ ...headers, 'x-pagerduty-signature': `v1=${hex(secret, json)}` }, Buffer.from(json)),
+    '{"event":{"id":"5ac64822-4adc-4fda-ade0-410becf0de4f","event_type":"incident.priority_updated"}}', 'x-webhook-id'],
+    [tidycal.webhook, tidycalSecret, '6f1b7c52-0f4e-4d0e-9d5e-0a4a8b1f2c33', (json: string, headers: Record<string, string>) =>
+      request({ ...headers, 'tidycal-signature': `t=${t},v1=${hex(tidycalSecret, `${t}.${json}`)}` }, Buffer.from(json)),
+    '{"id":"6f1b7c52-0f4e-4d0e-9d5e-0a4a8b1f2c33","type":"booking.created","data":{}}', 'tidycal-event-id'],
+  ] as const;
+  for (const [webhook, key, id, sign, json, header] of samples) {
+    const sent = sign(json, { [header]: 'first' });
+    expect(verifyWebhook(webhook, sent, key)).toBe(true);
+    expect(deliveryId(webhook, sent)).toBe(id);
+    // A replay renames the header freely: it still verifies, and still dedupes as the delivery it copies.
+    const replayed = sign(json, { [header]: 'renamed' });
+    expect(verifyWebhook(webhook, replayed, key)).toBe(true);
+    expect(deliveryId(webhook, replayed)).toBe(id);
+    const flipped = Buffer.from(json.replace('"', "'"));
+    expect(verifyWebhook(webhook, { ...sent, rawBody: flipped }, key)).toBe(false);
+    expect(verifyWebhook(webhook, sent, 'another-secret')).toBe(false);
+  }
+  // Breakcold's and TidyCal's timestamps are seconds, signed: a stale one is false.
+  vi.setSystemTime((now + 301) * 1000);
+  for (const [webhook, key, , sign, json] of [samples[0], samples[2]]) expect(verifyWebhook(webhook, sign(json, {}), key)).toBe(false);
+});
+
+test('Linear, Sentry, RocketReach and Todoist declare no delivery id: their id headers are not signed', () => {
+  for (const webhook of [linear.webhook, sentry.webhook, rocketreach.webhook, todoist.webhook] as Webhook[]) {
+    expect(webhook.deliveryId).toBeUndefined();
+    expect(deliveryId(webhook, request({ 'linear-delivery': 'a', 'request-id': 'b', 'rr-request-id': 'c', 'x-todoist-delivery-id': 'd' },
+      Buffer.from('{"id":"e"}')))).toBeNull();
+  }
 });
 
 test("Pipedrive dedupes a webhooks v2 delivery on its event's id, and gives a v1 delivery, whose `meta.id` is the object's, none", () => {

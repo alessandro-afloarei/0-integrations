@@ -4,8 +4,10 @@
 `verifyWebhook(entry.webhook, request, secret)` over the exact raw body bytes, and answers URL challenges with
 `challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification.
 `deliveryId(entry.webhook, request)` reads what the entry declares an app dedupes on: a header, or body paths joined
-with `:`, null when one is missing. Read it only after `verifyWebhook` accepted the request: an id such as Fireflies'
-`event:meeting_id` can be guessed, so deduplicating before verifying lets a forged post suppress the real delivery.
+with `:`, null when one is missing; a signed scheme (`hmac`, `ed25519`) dedupes on a body path only, since its
+signature covers no header and a replay could rename one. Read it only after `verifyWebhook` accepted the request: an
+id such as Fireflies' `event:meeting_id` can be guessed, so deduplicating before verifying lets a forged post suppress
+the real delivery.
 Routing, replay protection, dedupe and the inbox remain in the app.
 
 An entry's `webhook` declares the scheme: the header, what is signed, SHA-256 or SHA-1 (`hash: 'sha1'`, Intercom), and
@@ -83,7 +85,7 @@ import type { Webhook } from '0-integrations/catalogue';
 
 // `hmac` with a timestamp header (Breakcold)
 const timestamped: Webhook = { kind: 'hmac', header: 'x-webhook-signature', signed: '{timestamp}.{body}', prefix: 'sha256=',
-  timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { header: 'x-webhook-delivery-id' } };
+  timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { body: ['eventId'] } };
 // `hmac` with `part`: `t=…,v1=…` pieces in one header (Stripe)
 const pieces: Webhook = { kind: 'hmac', header: 'stripe-signature', signed: '{timestamp}.{body}', part: 'v1',
   timestamp: { part: 't' }, deliveryId: { body: ['id'] } };

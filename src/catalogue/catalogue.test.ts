@@ -83,6 +83,7 @@ const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ b
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
+const DELIVERY_SIGNED = 'no header `deliveryId` on a signed webhook (`hmac`, `ed25519`): its signature does not cover a header, so a replay renames it; read the id from the body';
 const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
 const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
 const OWN_FIRST = "no own `fields`, `http` or `identify` on the first sign-in: its part is the entry's top level";
@@ -400,6 +401,11 @@ const runnable = {
   'a `webhook.challenge.echo` with no `.` (a top-level key of the body)': (entry: Entry) => {
     const echo = entry.webhook?.challenge?.echo;
     return typeof echo !== 'string' || !echo.includes('.');
+  },
+  // `standard` signs its id header, and `basic` and `token` sign nothing, so there a header is no weaker than the body.
+  [DELIVERY_SIGNED]: (entry: Entry) => {
+    const webhook = entry.webhook;
+    return webhook === undefined || !['hmac', 'ed25519'].includes(webhook.kind) || webhook.deliveryId === undefined || 'body' in webhook.deliveryId;
   },
   // A value read from the signature's or the timestamp's own header would echo the signature, or a time.
   "a `webhook.challenge.echo` header apart from the webhook's signature and timestamp headers": (entry: Entry) => {
@@ -770,6 +776,8 @@ test.each<[Rule, Entry]>([
       signed: '{body}', timestamp: { header: 'x-t' } }],
     ['a `webhook.challenge.echo` with no `.` (a top-level key of the body)', { kind: 'ed25519', header: 'x-signature-ed25519',
       challenge: { when: { path: 'type', equals: 1 }, echo: 'a.b' } }],
+    [DELIVERY_SIGNED, { kind: 'hmac', header: 'x', deliveryId: { header: 'x-id' } }],
+    [DELIVERY_SIGNED, { kind: 'ed25519', header: 'x-signature-ed25519', deliveryId: { header: 'x-id' } }],
     ...([{ kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
       challenge: { echo: { header: 'x-front-signature' }, text: true } },
     { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' },
@@ -1134,6 +1142,16 @@ test.each<[string, Record<string, unknown>, string]>([
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
 
+
+test('a header delivery id on a scheme whose id header is signed or that signs nothing, and a body id on a signed one, pass every rule', () => {
+  for (const webhook of [{ kind: 'standard', deliveryId: { header: 'webhook-id' } }, { kind: 'basic', deliveryId: { header: 'x-pm-webhook-trace-id' } },
+    { kind: 'token', header: 'x-token', deliveryId: { header: 'x-id' } }, { kind: 'hmac', header: 'x-signature', deliveryId: { body: ['id'] } },
+    { kind: 'ed25519', header: 'x-signature-ed25519', deliveryId: { body: ['event.id'] } }] as const) {
+    const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook });
+    expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
+    expect(entrySchema.safeParse(good).error).toBeUndefined();
+  }
+});
 
 test("a base with a host from a field's choices and a path segment from a saved value passes every rule", () => {
   const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', choices: ['eu.k.test'] }],

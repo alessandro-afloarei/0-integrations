@@ -56,6 +56,10 @@ Nothing here is released yet.
   - New: a challenge may be read from a request header (`echo: { header }`, text only); Front verifies its webhooks and
     answers its validation request. A value read from a query or a header is never answered inside JSON, even by an
     app's own declaration that leaves out `text`.
+  - Breaking: a signed webhook (`hmac`, `ed25519`) dedupes on a body path only; Breakcold reads `eventId`, PagerDuty
+    `event.id` and TidyCal `id` from the signed body, and Linear, Sentry, RocketReach and Todoist declare no
+    `deliveryId` (no page documents a signed per-delivery id), so `deliveryId()` answers null and an app dedupes them on
+    its own key.
   - Breaking: `challengeAnswer(webhook, request, secret)` verifies the request itself unless the entry marks its
     challenge `unsigned`; call it before `verifyWebhook`. Slack's `url_verification` and Discord's PING are answered
     only under a valid signature: with a wrong secret they were answered, and are now null. A value is answered only as

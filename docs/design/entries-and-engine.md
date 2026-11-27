@@ -597,7 +597,9 @@ type Webhook = (
 `verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
 request. Every comparison is constant time over buffers of equal length, a timestamp is inside its tolerance (item 3),
 and a signature header longer than 8 KiB is `false` before it is parsed.
-`deliveryId` is what an app dedupes on; several body paths are joined with `:`.
+`deliveryId` is what an app dedupes on; several body paths are joined with `:`. `deliveryId` is signed content where the
+scheme signs anything: a body path for `hmac` and `ed25519`, the signed id header for `standard`. `basic` and `token`
+sign nothing, so a header is no weaker than the body there.
 
 1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
    (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`). The key is the secret's bytes, or
@@ -656,8 +658,9 @@ from a query). Timestamps are seconds but for Zendesk (`iso8601`) and Front (`ep
 that keys nothing (one that does not decode exactly, a key of only zero bytes, or a Basic secret without a password) is
 `false`. The table test also refuses a `challenge.when` with a `status` or `detail`, a body `echo` whose `when` reads no
 body `path`, an `echo` path holding a `.`, an empty query name, a query or header `echo` without `text`, a header `echo`
-that is no lowercase token or that names the webhook's signature or timestamp header, and a timestamp `unit` other than
-`epochMs` and `iso8601` (a body `echo` without a `when` does not compile).
+that is no lowercase token or that names the webhook's signature or timestamp header, a timestamp `unit` other than
+`epochMs` and `iso8601`, and a header `deliveryId` on an `hmac` or `ed25519` webhook (its signature does not cover a
+header, so a replay renames it) (a body `echo` without a `when` does not compile).
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a

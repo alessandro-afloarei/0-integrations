@@ -26,7 +26,9 @@ export const pagerduty = defineProvider({
     retry: { defaultWaitMs: 60_000, wait: { header: 'ratelimit-reset', unit: 's' } } },
   errors: { detail: 'error.code' },
   identify: { request: { path: '/abilities' } },
-  webhook: { kind: 'hmac', header: 'x-pagerduty-signature', part: 'v1', deliveryId: { header: 'x-webhook-id' } },
+  // Deduped on the signed body's `event.id`, "The unique id of the event": two subscriptions' copies of one event
+  // dedupe as one. https://docs.pagerduty.com/developer/webhooks-overview
+  webhook: { kind: 'hmac', header: 'x-pagerduty-signature', part: 'v1', deliveryId: { body: ['event.id'] } },
   // A list pages up to 10,000 records; past them PagerDuty answers 400 and the walk fails: narrow it with a filter.
   // https://docs.pagerduty.com/developer/pagination
   paging: { incidents: { kind: 'offset', send: { query: 'offset' }, list: 'incidents', more: 'more' },

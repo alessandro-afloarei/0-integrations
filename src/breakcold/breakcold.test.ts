@@ -125,10 +125,10 @@ test('a page claiming more with no cursor is refused, never read as the last', a
   expect(await client(answering({ data: [], pagination: { cursor: 'c2', hasMore: true } })).workspaces()).toMatchObject({ cursor: 'c2' });
 });
 
-test('reads Breakcold delivery id without changing its bytes', () => {
-  const delivery = (headers: Headers) => deliveryId(breakcold.webhook,
-    { method: 'POST', url: 'https://app.test/webhook', headers, rawBody: new Uint8Array() });
-  expect(delivery(new Headers({ 'x-webhook-delivery-id': 'delivery:1', 'x-webhook-event': 'record.updated' }))).toBe('delivery:1');
-  expect(delivery(new Headers())).toBeNull();
-  expect(delivery(new Headers({ 'x-webhook-delivery-id': '' }))).toBeNull();
+test("reads Breakcold's delivery id from the signed body's `eventId`, never a header", () => {
+  const delivery = (json: string, headers = new Headers()) => deliveryId(breakcold.webhook,
+    { method: 'POST', url: 'https://app.test/webhook', headers, rawBody: Buffer.from(json) });
+  expect(delivery('{"eventId":"evt:1","event":"record.updated"}', new Headers({ 'x-webhook-delivery-id': 'other' }))).toBe('evt:1');
+  expect(delivery('{"event":"record.updated"}', new Headers({ 'x-webhook-delivery-id': 'delivery:1' }))).toBeNull();
+  expect(delivery('{"eventId":""}')).toBeNull();
 });

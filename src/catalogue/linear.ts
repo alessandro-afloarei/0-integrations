@@ -25,7 +25,7 @@ export const linear = defineProvider({
   identify: { request: { graphql: 'query Me { viewer { id name email } }' }, id: 'data.viewer.id',
     name: ['data.viewer.name', 'data.viewer.email'] },
   errors: { detail: 'errors.0.extensions.code', failed: { path: 'errors.0' } },
-  webhook: { kind: 'hmac', header: 'linear-signature', deliveryId: { header: 'linear-delivery' } },
+  webhook: { kind: 'hmac', header: 'linear-signature' },
   operations: {
     'issues.list': { docs: 'https://linear.app/developers/pagination', kind: 'read',
       graphql: `query Issues($teamId: ID!, $first: Int, $after: String) { issues(filter: { team: { id: { eq: $teamId } } }, first: $first, after: $after) { nodes { ${fields} } pageInfo { hasNextPage endCursor } } }`,
