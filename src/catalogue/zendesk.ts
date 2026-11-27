@@ -8,7 +8,7 @@ const ticket = { id: 'integer', 'subject?': 'string', 'status?': 'string', 'prio
   'assignee_id?': 'integer', 'created_at?': 'string', 'updated_at?': 'string' } as const;
 const user = { id: 'integer', 'name?': 'string', 'email?': 'string', 'role?': 'string', 'organization_id?': 'integer',
   'active?': 'boolean', 'created_at?': 'string', 'updated_at?': 'string' } as const;
-const comment = { 'body?': 'string', 'html_body?': 'string', 'public?': 'boolean', 'author_id?': 'integer' } as const;
+const comment = { 'body?': 'string', 'html_body?': 'string', 'public?': 'boolean' } as const;
 const written = { 'subject?': 'string', 'status?': 'string', 'priority?': 'string', 'type?': 'string', 'requester_id?': 'integer',
   'requester?': 'unknown', 'assignee_id?': 'integer', 'group_id?': 'integer', 'tags?': ['string'], 'external_id?': 'string' } as const;
 const fields = 'The comment is the reply: `comment.public: false` keeps it an internal note, and the first comment\'s `public` holds for later ones unless changed. `status` is new, open, pending, hold, solved or closed; `priority` urgent, high, normal or low; `tags` replaces the ticket\'s tags.';
