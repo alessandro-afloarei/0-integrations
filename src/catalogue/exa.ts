@@ -5,5 +5,5 @@ export const exa = defineProvider({
   docs: 'https://exa.ai/docs/reference/search',
   categories: ['search'],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
-  http: { baseUrl: 'https://api.exa.ai', retry: { limit: 3, defaultWaitMs: 30_000 } },
+  http: { baseUrl: 'https://api.exa.ai', retry: {} },
 });

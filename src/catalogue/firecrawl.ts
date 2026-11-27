@@ -6,5 +6,5 @@ export const firecrawl = defineProvider({
   docs: 'https://docs.firecrawl.dev/api-reference/v2-introduction',
   categories: ['search'],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.firecrawl.dev', timeoutMs: 120_000, retry: { limit: 3, defaultWaitMs: 30_000 } },
+  http: { baseUrl: 'https://api.firecrawl.dev', timeoutMs: 120_000, retry: { defaultWaitMs: 60_000 } },
 });

@@ -15,7 +15,7 @@ export const chatwork = defineProvider({
     tokenUrl: 'https://oauth.chatwork.com/token', clientAuth: 'basic', authorizeParams: { response_type: 'code' } },
   { kind: 'key', send: { header: 'x-chatworktoken' } }],
   scopes: { default: ['users.profile.me:read', 'rooms.info:read', 'rooms.messages:read', 'contacts.all:read', 'offline_access'] },
-  http: { baseUrl: 'https://api.chatwork.com/v2', retry: {} },
+  http: { baseUrl: 'https://api.chatwork.com/v2', retry: { wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   identify: { request: { path: '/me' }, id: 'account_id', name: ['name', 'login_mail'] },
   operations: {
     'rooms.list': { docs: `${ref}/get-rooms`, path: '/rooms',

@@ -8,6 +8,6 @@ export const trello = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key' }, { name: 'apiToken', title: 'Token', secret: true }],
   auth: [{ kind: 'key', send: { header: 'authorization',
     value: 'OAuth oauth_consumer_key="{apiKey}", oauth_token="{apiToken}"' } }],
-  http: { baseUrl: 'https://api.trello.com/1' },
+  http: { baseUrl: 'https://api.trello.com/1', retry: { defaultWaitMs: 10_000 } },
   identify: { request: { path: '/members/me' }, id: 'id', name: ['fullName', 'username'] },
 });

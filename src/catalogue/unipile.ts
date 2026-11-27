@@ -5,7 +5,7 @@ export const unipile = defineProvider({
   docs: 'https://developer.unipile.com/v2.0/docs/api-keys',
   categories: ['mail', 'calendar'],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
-  http: { baseUrl: 'https://api.unipile.com/v2', headers: { accept: 'application/json' }, retry: { limit: 3, defaultWaitMs: 30_000 } },
+  http: { baseUrl: 'https://api.unipile.com/v2', headers: { accept: 'application/json' }, retry: { onlyStated: true } },
   // A refusal is named by its thrower and type (`provider/insufficient_permissions`); the slash reads as a dot.
   errors: { detail: 'type' },
 });

@@ -21,7 +21,7 @@ export const freshsales = defineProvider({
     help: 'The host of the bundle alias shown below your API key under Profile Settings, then API Settings: widgetz.myfreshworks.com, or widgetz.freshworks.com for an account migrated from Freshsales Classic.' },
   { name: 'apiKey', title: 'API key', secret: true, help: 'Your API key, under Profile Settings, then API Settings.' }],
   auth: [{ kind: 'key', send: { header: 'authorization', value: 'Token token={token}' } }],
-  http: { baseUrl: 'https://{host}/crm/sales/api', host: '*', headers: { 'content-type': 'application/json' }, retry: {} },
+  http: { baseUrl: 'https://{host}/crm/sales/api', host: '*', headers: { 'content-type': 'application/json' }, retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/selector/owners' } },
   paging: { contacts: { kind: 'page', send: { query: 'page' }, list: 'contacts' },
     accounts: { kind: 'page', send: { query: 'page' }, list: 'sales_accounts' },

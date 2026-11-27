@@ -17,7 +17,7 @@ export const teamleader = defineProvider({
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://focus.teamleader.eu/oauth2/authorize',
     tokenUrl: 'https://focus.teamleader.eu/oauth2/access_token', pkce: false, authorizeParams: { response_type: 'code' } }],
   scopes: { default: [] },
-  http: { baseUrl: 'https://api.focus.teamleader.eu', retry: {} },
+  http: { baseUrl: 'https://api.focus.teamleader.eu', retry: { defaultWaitMs: 60_000 } },
   identify: { request: { method: 'POST', path: '/users.me' }, id: 'data.id', name: 'data.email' },
   operations: {
     'contacts.list': { docs: `${ref}/contacts-list`, method: 'POST', path: '/contacts.list', kind: 'read',

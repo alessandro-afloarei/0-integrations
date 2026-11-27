@@ -13,7 +13,8 @@ export const rollbar = defineProvider({
   fields: [{ name: 'accessToken', title: 'Project access token', secret: true,
     help: 'A project access token with the read and write scopes, made in the project settings, under Project Access Tokens.' }],
   auth: [{ kind: 'key', send: { header: 'x-rollbar-access-token' } }],
-  http: { baseUrl: 'https://api.rollbar.com/api/1', retry: {} },
+  http: { baseUrl: 'https://api.rollbar.com/api/1',
+    retry: { wait: { header: 'x-rate-limit-remaining-seconds', unit: 's' } } },
   identify: { request: { path: '/items' } },
   paging: { page: { kind: 'page', send: { query: 'page' }, list: 'result.items' } },
   operations: {

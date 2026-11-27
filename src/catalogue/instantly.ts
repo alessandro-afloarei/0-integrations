@@ -22,7 +22,7 @@ export const instantly = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'An API v2 key, under Settings, then Integrations, then API Keys, with the workspaces:read, campaigns:read, leads:read, leads:create and leads:update scopes.' }],
   auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://api.instantly.ai/api/v2', retry: {} },
+  http: { baseUrl: 'https://api.instantly.ai/api/v2', retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/workspaces/current' }, id: 'id', name: 'name' },
   paging: { query: { kind: 'cursor', next: 'next_starting_after', send: { query: 'starting_after' } },
     body: { kind: 'cursor', next: 'next_starting_after', send: { body: 'starting_after' } } },
