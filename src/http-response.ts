@@ -82,14 +82,15 @@ export function waitOf(wait: Wait | undefined, { headers, body }: Pick<Answer, '
 export const declaredWait = (wait: Wait | undefined, answer: Pick<Answer, 'status' | 'headers' | 'body'>, now: number) =>
   (wait && ('path' in wait || answer.status === 429) ? waitOf(wait, answer, now) || undefined : undefined);
 
-/** The errors a declared rate limit makes (step 3), which a read retries as it retries a 429. */
+/** The errors a declared rate limit with no `wait` of its own makes (step 3), which a read retries as a 429. */
 const declaredLimits = new WeakSet<Error>();
 export const declaredLimit = (error: Error | null): boolean => error !== null && declaredLimits.has(error);
 
-/** A rate limit the entry declares beyond a 429: the first rule that holds, waiting its `wait`, else the default. */
-function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined } | undefined {
+/** A rate limit the entry declares beyond a 429: the first rule that holds, waiting its `wait`, else the default;
+ * retried only when the rule has no `wait`, which the retry never reads. */
+function rateLimitOf(http: Http, answer: Answer, now: number): { waitMs: number | undefined; retried: boolean } | undefined {
   const rule = http.rateLimit?.when.find(item => holds(item, answer));
-  return rule && { waitMs: waitOf(rule.wait, answer, now) ?? http.rateLimit?.defaultWaitMs };
+  return rule && { waitMs: waitOf(rule.wait, answer, now) ?? http.rateLimit?.defaultWaitMs, retried: rule.wait === undefined };
 }
 
 /** No `retry`: none. With one: a single retry, waits up to a minute, a second by default; a `limit` of 0 waits nothing. */
@@ -121,11 +122,12 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   const rule = errors.rules?.find(item => holds(item.when, answer));
   if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, { retryAfterMs: retryAfterMs(headers, now, stated) });
   const limit = rateLimitOf(entry.http, answer, now);
-  // The wait the retry read first (`statedWait`); the rate limit's only when the answer states none.
-  const metadata = { retryAfterMs: retryAfterMs(headers, now, stated ?? limit?.waitMs) };
+  // The wait the retry reads first (a header's on a rate limit as on a 429); the rule's only when none is stated.
+  const waited = limit ? declaredWait(entry.http.retry?.wait, { ...answer, status: 429 }, now) : stated;
+  const metadata = { retryAfterMs: retryAfterMs(headers, now, waited ?? limit?.waitMs) };
   if (limit) {
     const error = new ProviderHttpError('rate_limited', status, detail, metadata);
-    declaredLimits.add(error);
+    if (limit.retried) declaredLimits.add(error);
     return error;
   }
   return new ProviderHttpError(ok ? 'request_failed' : statusCode(status), status, detail, metadata);

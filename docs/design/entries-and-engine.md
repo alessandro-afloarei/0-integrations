@@ -449,7 +449,8 @@ classified in this order, and the first step that decides wins:
    the stated wait (below): never a rate limit's.
 3. `http.rateLimit.when`: a rate limit without a 429 (a 403 with `x-ratelimit-remaining: 0`). The wait reported is the
    stated wait, else the matching rule's `wait`, else `rateLimit.defaultWaitMs`. The rule's `wait` is the error's
-   alone: the retry never reads it.
+   alone: the retry never reads it, so an answer whose rule has its own `wait` is reported, not retried (GitHub's
+   403 with `x-ratelimit-remaining: 0` waits for its reset, never a shorter `Retry-After`).
 4. The status mapping of today. A failed 2xx is `request_failed`.
 
 So a failed 2xx can be a revoked grant, match a rule or be a rate limit before it falls to `request_failed`.
@@ -463,10 +464,10 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   checks the first code found, so a refused one hides a later path.
 - Only a call marked idempotent is retried: a GET unless the caller says `idempotent: false`, or any call the caller
   marks `idempotent: true` (an operation of `kind: 'read'`, an idempotent DELETE), never with a caller's `signal`. It is
-  retried after a 429, an answer step 3 decides (a `rateLimit.when` rule holds: Google's 403 `rateLimitExceeded`,
+  retried after a 429, an answer step 3 decides by a rule with no `wait` of its own (Google's 403 `rateLimitExceeded`,
   Notion's 529), a 408, 500, 502, 503 or 504, or a network failure (the connection could not be made, or was dropped
-  before an answer), up to `retry.limit` retries of any of these together. Such a rate limit is retried as a 429 is;
-  to test a rule, the body is read only when a rule's `status` is the answer's (or it names none, or `error`), within
+  before an answer), up to `retry.limit` retries of any of these together. Such a rate limit is retried as a 429 is; to
+  test a rule, the body is read only when a rule's `status` is the answer's (or it names none, or `error`), within
   `timeoutMs`. The limit counts per request sent: a redirect hop and the resend after a 401 each get their own.
 - A **wait** (`Wait`) is read from a header, or several (the longest of those present counts), holding a positive
   decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
