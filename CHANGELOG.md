@@ -42,6 +42,10 @@ Nothing here is released yet.
   place of the entry's. The engine refuses an app's entry whose first sign-in declares one, before anything is sent
   (`sign_in_own_first: <entry id>`), and `startConnect` now runs the host checks for a form too.
 - Outline lists OAuth 2 first, on app.getoutline.com; its API key, on the host you type, is `signInWith(outline, 'key')`.
+- New: `http.host` may list several patterns; the filled host must match one. `'*'` stays alone.
+- Smartsheet takes its product's host in `apiHost` (`api.smartsheet.com` by default; `.eu`, `.au`, Smartsheet Gov's
+  `api.smartsheetgov.com`). Breaking: a client never applies the default, so an existing connection is
+  `template_missing` until it passes `values: { apiHost }`.
 - GitHub lists OAuth 2 first; its personal access token is `signInWith(github, 'key')`.
 - GitLab lists OAuth 2 first, on the host the person types; its personal access token is `signInWith(gitlab, 'key')`.
   `client(gitlab, …)` on the whole entry now sends `Authorization: Bearer`; it sent `private-token`, as the key still

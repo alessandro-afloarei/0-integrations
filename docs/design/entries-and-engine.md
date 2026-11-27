@@ -147,7 +147,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
 | `save` | Values kept on the connection after sign-in: `{ hubId: 'tokenAnswer.hub_id' }`. | none |
 | `revoke` | `{ url, token: ['refresh', 'access'] }` (RFC 7009) or `{ request }`, each with `goneErrors?`. | none |
-| `http` | `baseUrl`, `host?` (the host a base filled from a value must have; `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
+| `http` | `baseUrl`, `host?` (the host a base filled from a value must have, or a list of hosts; `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
 | `errors` | Where the provider's error code is, and how answers map to error codes (below). | status only |
 | `paging` | Named paging shapes (below). | none |
 | `webhook` | The signature scheme (below). | none |
@@ -157,12 +157,14 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 A placeholder in `http.baseUrl` names a plain field or a `save` key. In the host (between `https://` and the next `/`)
 it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
-and a domain (any name ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's region is the
-first: `baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three
-hosts. In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as `a%2Fb`; a value that is
-`.` or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no placeholder in its host needs
-no `http.host`. Jira's is the first: `baseUrl: 'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value
-its `save` keeps.
+and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those when the hosts are on
+several domains (the filled host matches one), or `*` (any). Intercom's region is the first: `baseUrl:
+'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts; Smartsheet's
+products are the first list, `host: ['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu',
+'api.smartsheet.au']`. In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as
+`a%2Fb`; a value that is `.` or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no
+placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
+'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value its `save` keeps.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
@@ -175,8 +177,9 @@ its `save` keeps.
   the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
 - Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 authorize,
   token, refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
-  `http.host`, else `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then
-  never leaves the filled base's origin.
+  `http.host` (a name only itself, the URL parser's lowercase form, `*.d` only a name under `d`), else
+  `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then never leaves the
+  filled base's origin.
 - Every URL an entry declares (the base, `http.bases`, the OAuth 2 URLs, a token request's URL) is a well-formed
   template (`hostPart`): `https://`, then ASCII letters, digits, `.`, `-` and `{name}`s with an optional literal port,
   then `/` or the end. Nothing the URL parser reads otherwise (`\`, `@`, `?`, `#`, a third `/`, a tab or newline) can
@@ -184,8 +187,10 @@ its `save` keeps.
   is `base_host_refused` before anything is sent, on every path (`checkHosts`, which then runs `hostSplit`), and the
   table refuses it.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
-  placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
-  (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.
+  placeholder, never in a list (the table refuses it there, and the engine matches no host with it), and the entry is
+  reached through the address guard below. A filled host that is a blocked address (`127.0.0.1`, `2130706433`) is
+  refused before the token is read, whatever `fetch` the app passes. A list keeps the global `fetch`: every name in it
+  is the provider's own.
 - Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled by this rule, from the plain fields alone:
   a secret field or a `save` key named there is `template_missing`, since neither exists before the exchange. A URL
   with no placeholder is used as written.
@@ -631,7 +636,8 @@ other people must use OAuth, the key's `help` says the key is for the person's o
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
   scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host` with `http.host: '*'`; a documented list of regional
-  hosts on one domain is `choices` with `http.host: '*.<domain>'`.
+  hosts on one domain is `choices` with `http.host: '*.<domain>'`, on several domains `choices` with `http.host`
+  those names.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
 - `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
   authorization, the refresh token goes first.
