@@ -50,6 +50,7 @@ const plainOf = (entry: Entry, given: Values): Record<string, string> =>
 export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart<E>], []>):
   Promise<E extends Entry ? ByKind<E, Redirect<E>, Form> : never>;
 export async function startConnect(entry: Entry, options?: OAuthStart): Promise<ConnectStart> {
+  checkHosts(entry); // a form too: its fields are the sign-in's
   const [auth] = entry.auth;
   if (auth.kind !== 'oauth2') return { kind: 'form', fields: entry.fields ?? [] };
   if (!options) throw new TypeError('oauth_options_required');

@@ -297,6 +297,20 @@ test('client() refuses an entry checkHosts refuses when it is built, before it r
   expect(reads).toBe(0);
 });
 
+test("client() refuses an app's entry whose first sign-in declares its own part, before it reads the token or sends", async () => {
+  let reads = 0;
+  const fake = fakeFetch([{ url: /./u, respond: json({}) }]);
+  for (const own of [{ http: { baseUrl: 'https://{host}/api', host: '*' } }, { fields: [] }, { identify: { request: { path: '/me' } } }]) {
+    const first = { id: 'first', name: 'First', http: { baseUrl: BASE }, auth: [{ kind: 'key', ...own }] } as unknown as Entry;
+    expect(() => client(first, { get token() { reads++; return 'k'; }, fetch: fake.fetch })).toThrow(new TypeError('sign_in_own_first: first'));
+  }
+  const later = { id: 'later', name: 'Later', http: { baseUrl: BASE }, operations: { me: { path: '/me' } },
+    auth: [{ kind: 'oauth2', authorizeUrl: `${BASE}/a`, tokenUrl: `${BASE}/t` }, { kind: 'key', http: { baseUrl: 'https://{host}/api', host: '*' } }] } as Entry;
+  // Used whole, a later sign-in's part is never read: the call goes to the entry's base.
+  await (client(later, { token: 'k', fetch: fake.fetch, values: { host: 'evil.test' } }) as unknown as { me: () => Promise<unknown> }).me();
+  expect([reads, fake.calls.map(call => call.url)]).toEqual([0, [`${BASE}/me`]]);
+});
+
 test("an operation whose path's own query names the key its paging writes is refused when built; another key is the path's own", () => {
   const entry = (path: string) => ({ id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: BASE },
     paging: { offset: { kind: 'offset', send: { query: 'offset' } } }, operations: { 'things.list': { path, paging: 'offset' } } }) as Entry;

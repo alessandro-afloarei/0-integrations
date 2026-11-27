@@ -115,9 +115,11 @@ export function declaredUrls(entry: Entry): string[] {
     ...auth.kind === 'token' ? [auth.request.url] : []];
 }
 
-/** The one refusal every send runs first: a declared URL that is not a well-formed template (`base_host_refused`), then
- * hosts that split (`host_split`), each before a host is compared or anything is sent. */
+/** The one refusal every send runs first: a first sign-in that declares its own part (`sign_in_own_first`: an app's entry
+ * built without the types), a declared URL that is not a well-formed template (`base_host_refused`), then hosts that split
+ * (`host_split`), each before a host is compared or anything is sent. */
 export function checkHosts(entry: Entry): void {
+  if (['fields', 'http', 'identify'].some(name => name in entry.auth[0])) throw new TypeError(`sign_in_own_first: ${entry.id}`);
   if (declaredUrls(entry).some(url => hostPart(url) === undefined)) throw new TypeError(`base_host_refused: ${entry.id}`);
   if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
 }

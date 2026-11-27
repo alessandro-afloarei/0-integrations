@@ -91,9 +91,11 @@ export type Operation = ({ method?: Method; path: Template } | { graphql: string
 /** What a provider is for: a closed list of 20; a new value arrives with the first entry that needs it. */
 export type Category = 'tasks' | 'docs' | 'chat' | 'code' | 'monitoring' | 'crm' | 'sales' | 'mail' | 'calendar' | 'meetings'
   | 'support' | 'marketing' | 'finance' | 'hr' | 'storage' | 'ecommerce' | 'phone' | 'design' | 'analytics' | 'search';
+/** What a sign-in after the first may declare in place of the entry's; the first's part is the entry's top level. */
+export type Own = { fields?: readonly Field[]; http?: { baseUrl: Template; host?: string }; identify?: Identify };
 /** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. `categories`: the first is the main one. */
 export type Entry = { id: string; name: string; docs?: string; categories?: readonly Category[];
-  fields?: readonly Field[]; auth: readonly [Auth, ...Auth[]];
+  fields?: readonly Field[]; auth: readonly [Auth & { [K in keyof Own]?: never }, ...(Auth & Own)[]];
   scopes?: { default: readonly string[]; requireGranted?: true }; identify?: Identify;
   save?: Readonly<Record<string, Value>>; revoke?: Revoke; http: Http; errors?: Errors; webhook?: Webhook;
   paging?: Readonly<Record<string, Paging>>; operations?: Readonly<Record<string, Operation>> };
@@ -142,16 +144,23 @@ export type ValuesOption<V> = V extends unknown ? [keyof V] extends [never] ? { 
   : string extends keyof V ? { values?: V } : Partial<V> extends V ? { values?: V } : { values: V } : never;
 
 type Kinds<E extends Entry> = E['auth'][number]['kind'];
-/** An entry narrowed to one sign-in: `scopes` and `revoke` belong to OAuth 2 alone, so a key or token sign-in drops them.
- * A union of kinds gives a union of narrowings, each with what its sign-in has. */
-export type SignIn<E extends Entry, K extends Kinds<E>> = K extends unknown
-  ? Omit<E, 'auth' | (K extends 'oauth2' ? never : 'scopes' | 'revoke')> & { auth: readonly [Extract<E['auth'][number], { kind: K }>] }
-  : never;
+/** An entry narrowed to one sign-in: `scopes` and `revoke` belong to OAuth 2 alone, so a key or token sign-in drops them,
+ * and a later sign-in's own `fields`, `identify` and `http` base and host stand in place of the entry's. A union of kinds
+ * gives a union of narrowings, each with what its sign-in has. */
+export type SignIn<E extends Entry, K extends Kinds<E>> = K extends unknown ? Extract<E['auth'][number], { kind: K }> extends infer S
+  ? Omit<E, 'auth' | 'http' | (keyof S & ('fields' | 'identify')) | (K extends 'oauth2' ? never : 'scopes' | 'revoke')>
+    & Pick<S, keyof S & ('fields' | 'identify')>
+    & { http: S extends { http: infer H } ? Omit<E['http'], keyof H> & H : E['http']; auth: readonly [Omit<S, keyof Own>] }
+  : never : never;
 
-/** The entry with `auth` narrowed to its sign-in of that kind; every engine function reads the first sign-in. */
+/** The entry with `auth` narrowed to its sign-in of that kind; every engine function reads the first sign-in. A later
+ * sign-in's own part replaces the entry's; the first's is left in place, for `checkHosts` to refuse. */
 export function signInWith<const E extends Entry, K extends Kinds<E>>(entry: E, kind: K): SignIn<E, K> {
   const auth = entry.auth.find(item => item.kind === kind);
   if (auth === undefined) throw new TypeError(`sign_in_unknown: ${entry.id} ${kind}`);
   const kept = Object.entries(entry).filter(([name]) => kind === 'oauth2' || (name !== 'scopes' && name !== 'revoke'));
-  return { ...Object.fromEntries(kept), auth: [auth] } as unknown as SignIn<E, K>;
+  const { fields, http, identify, ...bare } = auth;
+  const own = auth === entry.auth[0] ? { auth: [auth] }
+    : { ...fields && { fields }, ...identify && { identify }, http: { ...entry.http, ...http }, auth: [bare] };
+  return { ...Object.fromEntries(kept), ...own } as unknown as SignIn<E, K>;
 }

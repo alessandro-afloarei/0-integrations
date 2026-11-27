@@ -18,7 +18,7 @@ import { finishConnect, startConnect, type Connected, type ConnectStart } from '
 import { ProviderHttpError } from './errors.js';
 import { fakeGoogle } from './google/fake.js';
 import * as guard from './guard.js';
-import { tokenSource } from './oauth.js';
+import { authorizeUrl as consentUrl, exchangeCode, refreshGrant, revokeGrant, tokenSource } from './oauth.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
 import { fakeFetch, fakeProvider, type Route } from './testing.js';
@@ -612,5 +612,45 @@ describe('an OAuth 2 sign-in that reads plain fields', () => {
     await expect(finish(http.fetch, {})).rejects.toMatchObject({ code: 'rejected' });
     expect(http.calls.map(call => call.url)).toEqual(['https://chat.k.test/oauth/access_token', 'https://chat.k.test/api/main/users/me',
       'https://chat.k.test/oauth/revoke']);
+  });
+});
+
+describe("a sign-in's own part", () => {
+  const anything = () => fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'a', token_type: 'bearer', id: 'u' }) }]);
+  /** App entries built without the types, whose first sign-in declares a part of its own: refused everywhere, unsent. */
+  const own = { fields: [{ name: 'host', title: 'Host' }], http: { baseUrl: 'https://{host}/api', host: '*' } };
+  const oauthFirst = { id: 'first', name: 'First', scopes: { default: [] }, http: { baseUrl: 'https://cloud.first.test/api' },
+    identify: { request: { path: '/me' }, id: 'id' }, revoke: { url: 'https://cloud.first.test/revoke', token: ['access'] },
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://cloud.first.test/authorize', tokenUrl: 'https://cloud.first.test/token', ...own }] } as unknown as Entry;
+  const tokenFirst = { id: 'first', name: 'First', fields: [{ name: 'secret', title: 'Secret', secret: true }], http: { baseUrl: 'https://cloud.first.test/api' },
+    auth: [{ kind: 'token', request: { url: 'https://cloud.first.test/token', body: { s: '{secret}' } }, ...own }] } as unknown as Entry;
+  const refused = new TypeError('sign_in_own_first: first');
+  const values = { host: 'cloud.first.test' };
+
+  it('refuses an entry whose first sign-in declares one, from every connect and grant call, with no request', async () => {
+    const http = anything();
+    await expect(startConnect(oauthFirst, { ...start, values })).rejects.toThrow(refused);
+    await expect(startConnect(tokenFirst)).rejects.toThrow(refused);
+    await expect(finishConnect(oauthFirst, { client, code: 'c', redirectUri: callback, codeVerifier: 'v'.repeat(43), values, fetch: http.fetch,
+      onRevokeFailed: vi.fn() })).rejects.toThrow(refused);
+    await expect(finishConnect(tokenFirst, { secret: { secret: 's' }, values, fetch: http.fetch })).rejects.toThrow(refused);
+    await expect(refreshGrant(oauthFirst, client, 'r', { values, fetch: http.fetch })).rejects.toThrow(refused);
+    await expect(revokeGrant(oauthFirst, { accessToken: 'a', client, values, fetch: http.fetch })).rejects.toThrow(refused);
+    await expect(exchangeCode(oauthFirst, client, { code: 'c', redirectUri: callback, codeVerifier: 'v'.repeat(43), values, fetch: http.fetch }))
+      .rejects.toThrow(refused);
+    expect(() => consentUrl(oauthFirst, { ...start, scopes: [], codeChallenge: 'c', values })).toThrow(refused);
+    await expect(tokenSource(tokenFirst, { secret: { secret: 's' }, values, fetch: http.fetch })()).rejects.toThrow(refused);
+    expect(http.calls).toEqual([]);
+  });
+
+  it('refuses a later token sign-in whose own typed base sits beside a fixed token URL: host_split, with no request', async () => {
+    const split = signInWith(defineProvider({ id: 'split', name: 'Split', scopes: { default: [] }, http: { baseUrl: 'https://cloud.split.test/api' },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://cloud.split.test/authorize', tokenUrl: 'https://cloud.split.test/token' },
+        { kind: 'token', request: { url: 'https://cloud.split.test/token', body: { s: '{secret}' } },
+          fields: [{ name: 'host', title: 'Host' }, { name: 'secret', title: 'Secret', secret: true }], http: { baseUrl: 'https://{host}/api', host: '*' } }] }), 'token');
+    const http = anything();
+    await expect(finishConnect(split, { secret: { secret: 's' }, values: { host: 'h.test' }, fetch: http.fetch })).rejects.toThrow(new TypeError('host_split: split'));
+    await expect(tokenSource(split, { secret: { secret: 's' }, values: { host: 'h.test' }, fetch: http.fetch })()).rejects.toThrow(new TypeError('host_split: split'));
+    expect(http.calls).toEqual([]);
   });
 });

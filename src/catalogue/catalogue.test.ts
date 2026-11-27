@@ -76,33 +76,39 @@ const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole d
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
 const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
 const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
+const OWN_FIRST = "no own `fields`, `http` or `identify` on the first sign-in: its part is the entry's top level";
+const fields = z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
+  secret: z.literal(true).optional(), default: z.string().optional(),
+  help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
+  choices: z.array(z.string()).optional() })).optional();
+const identify = z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
+  lowercase: z.literal(true).optional(),
+  rejectWhen: z.array(condition(whenObject.extend({ detail: z.string().optional() }))).optional() }).optional();
+/** What a later key or token sign-in may declare in place of the entry's: its fields, its base and host, its identify. */
+const own = { fields, http: z.strictObject({ baseUrl: https, host: z.string().optional() }).optional(), identify };
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
   id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1), docs: z.string().optional(),
   categories: z.array(z.enum(Object.keys(CATEGORIES) as [Category, ...Category[]])).optional(),
-  fields: z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
-    secret: z.literal(true).optional(), default: z.string().optional(),
-    help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
-    choices: z.array(z.string()).optional() })).optional(),
+  fields,
   auth: z.array(z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('key'), send: send.optional() }),
+    z.strictObject({ kind: z.literal('key'), send: send.optional(), ...own }),
     z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, refreshUrl: https.optional(),
       json: z.literal(true, '`json` is `true` or left out').optional(), pkce: z.literal(false).optional(),
       clientAuth: z.literal('basic').optional(), scopeSeparator: z.literal(',').optional(),
       authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() }),
-    z.strictObject({ kind: z.literal('token'), send: send.optional(), request: z.strictObject({ url: https,
+    z.strictObject({ kind: z.literal('token'), send: send.optional(), ...own, request: z.strictObject({ url: https,
       body: z.record(z.string(), z.string("a token request's body is a flat record of templates")), json: z.literal(true).optional(), basic: z.tuple([template, template]).optional(),
       token: z.string().regex(/\S/u, "a token request's `token` is the token's path in the answer: give it, or leave it out")
         .optional() }) }),
   ])).min(1).refine(auth => new Set(auth.map(item => item.kind)).size === auth.length, ONE_OF_EACH)
     .refine(auth => !(auth.some(item => item.kind === 'key') && auth.some(item => item.kind === 'token')), KEY_OR_TOKEN)
-    .refine(auth => auth[0]?.kind === 'oauth2' || !auth.some(item => item.kind === 'oauth2'), OAUTH_FIRST),
+    .refine(auth => auth[0]?.kind === 'oauth2' || !auth.some(item => item.kind === 'oauth2'), OAUTH_FIRST)
+    .refine(([first]) => !Object.keys(own).some(name => first !== undefined && name in first), OWN_FIRST),
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
-  identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
-    lowercase: z.literal(true).optional(),
-    rejectWhen: z.array(condition(whenObject.extend({ detail: z.string().optional() }))).optional() }).optional(),
+  identify,
   save: z.record(z.string(), value).optional(),
   revoke: z.union([z.strictObject({ url: https, token: z.array(z.enum(['refresh', 'access'])), goneErrors: z.array(z.string()).optional() }),
     z.strictObject({ request, goneErrors: z.array(z.string()).optional() })]).optional(),
@@ -758,6 +764,10 @@ test.each<[string, Record<string, unknown>, string]>([
   ['two key sign-ins', { fields: [secret], auth: [{ kind: 'key' }, { kind: 'key', send: { header: 'x-api-key' } }] }, ONE_OF_EACH],
   ['a key beside a token', { fields: [secret], auth: [{ kind: 'key' },
     { kind: 'token', request: { url: 'https://k.test/token', body: { key: '{apiKey}' } } }] }, KEY_OR_TOKEN],
+  ['an own base on its first sign-in', { fields: [secret], auth: [{ kind: 'key', http: { baseUrl: 'https://k.test/api' } }] }, OWN_FIRST],
+  ['own fields on its first sign-in', { auth: [{ kind: 'key', fields: [secret] }] }, OWN_FIRST],
+  ['a later sign-in\'s own headers', { fields: [secret], scopes: { default: [] },
+    auth: [oauth2.auth[0], { kind: 'key', http: { baseUrl: 'https://k.test/api', headers: { a: 'b' } } }] }, 'Unrecognized key: "headers"'],
 ])('an entry with %s fails the schema, with what to fix', (_, parts, message) => {
   expect(entrySchema.safeParse({ ...key, ...parts }).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
@@ -786,6 +796,10 @@ test.each<[string, Entry, string[]]>([
     http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [oauth2.auth[0], { kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }] }),
     [`${HOST_SPLIT} (oauth2)`]],
   // A field only the key reads would be asked for by the OAuth 2 connect and never used.
+  // A later token sign-in's own typed base beside its fixed token URL: the token would go to any host typed.
+  ['a later token sign-in with its own typed base beside a fixed token URL', defineProvider({ ...key, scopes: { default: [] },
+    auth: [oauth2.auth[0], { kind: 'token', request: { url: 'https://k.test/token', body: { s: '{apiKey}' } }, fields: [{ name: 'host', title: 'Host' }, secret],
+      http: { baseUrl: 'https://{host}/api', host: '*' } }] }), [`${HOST_SPLIT} (token)`]],
   ['a Basic email the key alone reads, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }],
     scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }), [`${OAUTH_READS} (oauth2)`]],
 ])('%s breaks only its rule', (_, entry, rules) => { expect(broken(entry)).toEqual(rules); });
@@ -797,6 +811,9 @@ test.each<[string, Entry]>([
   ['an OAuth 2 sign-in and a key on a typed host', defineProvider({ ...key, fields: [{ name: 'host', title: 'Host' }, secret], scopes: { default: [] },
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/token' }, { kind: 'key' }],
     revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] }, http: { baseUrl: 'https://{host}/api', host: '*' } })],
+  // Outline's shape: OAuth 2 on the cloud host, a key with its own fields on a host the person types.
+  ['OAuth 2 on a fixed host beside a key with its own typed base', defineProvider({ ...key, scopes: { default: [] }, identify: { request: { path: '/me' }, id: 'id' },
+    auth: [oauth2.auth[0], { kind: 'key', fields: [{ name: 'host', title: 'Host' }, secret], http: { baseUrl: 'https://{host}/api', host: '*' } }] })],
   // Azure DevOps' shape: fixed OAuth 2 URLs, a value only in the base's path.
   ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
     http: { baseUrl: 'https://api.k.test/{org}' } })],
