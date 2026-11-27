@@ -12,6 +12,7 @@ import { hubspot } from './catalogue/hubspot.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
 import { notion } from './catalogue/notion.js';
+import { paypal } from './catalogue/paypal.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { smartsheet } from './catalogue/smartsheet.js';
 import { trello as trelloEntry } from './catalogue/trello.js';
@@ -806,6 +807,19 @@ test.each([['app.honeybadger.io', true], ['eu-app.honeybadger.io', true], ['x.ho
   "Honeybadger's client takes %s: %s (a refusal before the token is read or anything is sent)", async (apiHost, accepted) => {
     expect(await regionTaken(honeybadger, apiHost, '/token')).toEqual(accepted ? { sent: `https://${apiHost}/v3/token`, tokenRead: 1, requests: 1 }
       : { sent: new TypeError('base_host_refused: honeybadger'), tokenRead: 0, requests: 0 });
+  });
+
+test.each([['api-m.paypal.com', true], ['api-m.sandbox.paypal.com', true], ['www.paypal.com', false], ['127.0.0.1', false]] as const)(
+  "PayPal's client and token request take %s: %s (a refusal before a credential is read or anything is sent)", async (apiHost, accepted) => {
+    expect(await regionTaken(paypal, apiHost, '/v1/x')).toEqual(accepted ? { sent: `https://${apiHost}/v1/x`, tokenRead: 1, requests: 1 }
+      : { sent: new TypeError('base_host_refused: paypal'), tokenRead: 0, requests: 0 });
+    const fake = fakeFetch([{ url: /https:/, respond: () => Response.json({ access_token: 't', expires_in: 3600 }) }]);
+    let reads = 0;
+    const secret = { get clientSecret() { reads++; return 's'; } };
+    const sent = await requestToken(paypal, { secret, values: { apiHost, clientId: 'c' }, fetch: fake.fetch })
+      .then(() => fake.calls[0]?.url, (error: unknown) => error);
+    expect({ sent, reads, requests: fake.calls.length }).toEqual(accepted ? { sent: `https://${apiHost}/v1/oauth2/token`, reads: 1, requests: 1 }
+      : { sent: new TypeError('base_host_refused: paypal'), reads: 0, requests: 0 });
   });
 
 test("a stored Smartsheet connection without `apiHost` is template_missing before anything is sent; a connect fills the default", async () => {
