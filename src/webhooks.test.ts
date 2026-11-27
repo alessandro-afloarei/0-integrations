@@ -12,6 +12,7 @@ import { gitlab } from './catalogue/gitlab.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { mailjet } from './catalogue/mailjet.js';
+import { recallai } from './catalogue/recallai.js';
 import { nylas } from './catalogue/nylas.js';
 import { slack } from './catalogue/slack.js';
 import { stripe } from './catalogue/stripe.js';
@@ -493,7 +494,6 @@ test("verifies AgentMail's webhook under Svix's header names, and the same reque
   expect(verifyWebhook(agentmail.webhook, svixSigned(good), standardSecret)).toBe(true);
   expect(verifyWebhook(agentmail.webhook, svixSigned(`v1,${Buffer.alloc(32).toString('base64')} ${good}`), standardSecret)).toBe(true);
   expect(verifyWebhook(agentmail.webhook, standardSigned(good), standardSecret)).toBe(true);
-  expect(verifyWebhook(gitlab.webhook, svixSigned(good), standardSecret)).toBe(true);
   // Svix's published example, signed at its own timestamp.
   vi.setSystemTime(1731705121 * 1000);
   const example = request({ 'svix-id': 'msg_loFOjxBNrRLzqYUf', 'svix-timestamp': '1731705121',
@@ -504,7 +504,7 @@ test("verifies AgentMail's webhook under Svix's header names, and the same reque
 
 test('a request is checked with one set of Standard Webhooks headers whole, never an id or timestamp of the other', () => {
   const good = standardSignature('msg_1', t);
-  // No `webhook-signature`: the `svix-*` set is read, and its id or timestamp is missing.
+  // No `webhook-signature`: the `svix-*` set is read, and its id or timestamp is missing; `webhook-*` ones do not stand in.
   expect(verifyWebhook(agentmail.webhook, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
   expect(verifyWebhook(agentmail.webhook, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'svix-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
   expect(verifyWebhook(agentmail.webhook, request({ 'svix-id': 'msg_1', 'webhook-timestamp': t, 'svix-signature': good }), standardSecret)).toBe(false);
@@ -514,18 +514,35 @@ test('a request is checked with one set of Standard Webhooks headers whole, neve
     'svix-signature': good, 'webhook-signature': 'v1,x' }) }, standardSecret)).toBe(false);
 });
 
-test('a request carrying headers of both sets is false: a replay cannot add a fresh id beside the signed one', () => {
+/** An app's own entry that dedupes on Svix's id header. */
+const svixDeduped: Webhook = { kind: 'standard', deliveryId: { header: 'svix-id' } };
+
+test("an entry that dedupes on a header reads only that header's set: a renamed replay is false", () => {
   const good = standardSignature('msg_1', t);
-  // A `webhook-*` delivery resent under Svix's names, with another `webhook-id` for an app that dedupes on it; and the mirror.
+  // A GitLab delivery renamed to Svix's names would verify with no `webhook-id` to dedupe on.
+  expect(verifyWebhook(gitlab.webhook, svixSigned(good), standardSecret)).toBe(false);
   expect(verifyWebhook(gitlab.webhook, request({ 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good, 'webhook-id': 'msg_2' }), standardSecret)).toBe(false);
-  expect(verifyWebhook(agentmail.webhook, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good, 'svix-id': 'msg_2' }), standardSecret)).toBe(false);
-  expect(verifyWebhook(gitlab.webhook, { ...standardSigned(good), headers: new Headers({ 'webhook-id': 'msg_1', 'webhook-timestamp': t,
-    'webhook-signature': good, 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good }) }, standardSecret)).toBe(false);
-  expect(verifyWebhook(gitlab.webhook, { ...standardSigned(good), headers: new Headers({ 'webhook-id': 'msg_1', 'webhook-timestamp': t,
-    'webhook-signature': good, 'svix-timestamp': t }) }, standardSecret)).toBe(false);
-  // Either set alone still passes.
+  expect(verifyWebhook(svixDeduped, standardSigned(good), standardSecret)).toBe(false);
+  expect(verifyWebhook(svixDeduped, request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good, 'svix-id': 'msg_2' }), standardSecret)).toBe(false);
+  // A header in neither set verifies nothing.
+  const elsewhere: Webhook = { kind: 'standard', deliveryId: { header: 'x-delivery-id' } };
+  expect(verifyWebhook(elsewhere, standardSigned(good), standardSecret)).toBe(false);
+  expect(verifyWebhook(elsewhere, svixSigned(good), standardSecret)).toBe(false);
+  // Each reads its own set, the other set's headers beside it or not, and dedupes on the id that was signed.
+  const both = request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good, 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good });
   expect(verifyWebhook(gitlab.webhook, standardSigned(good), standardSecret)).toBe(true);
-  expect(verifyWebhook(agentmail.webhook, svixSigned(good), standardSecret)).toBe(true);
+  expect(verifyWebhook(gitlab.webhook, both, standardSecret)).toBe(true);
+  expect(deliveryId(gitlab.webhook, both)).toBe('msg_1');
+  expect(verifyWebhook(svixDeduped, svixSigned(good), standardSecret)).toBe(true);
+  expect(deliveryId(svixDeduped, svixSigned(good))).toBe('msg_1');
+});
+
+test('an entry with a body id or none accepts either clean set, and both sets signed alike', () => {
+  const good = standardSignature('msg_1', t);
+  const both = request({ 'webhook-id': 'msg_1', 'webhook-timestamp': t, 'webhook-signature': good, 'svix-id': 'msg_1', 'svix-timestamp': t, 'svix-signature': good });
+  for (const webhook of [agentmail.webhook, recallai.webhook]) {
+    for (const delivery of [standardSigned(good), svixSigned(good), both]) expect(verifyWebhook(webhook, delivery, standardSecret)).toBe(true);
+  }
 });
 
 test('refuses a Svix-named request that is stale, altered or signed for another id', () => {

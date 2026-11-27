@@ -16,11 +16,11 @@ const STANDARD = (set: string): Extract<Webhook, { kind: 'hmac' }> => ({ kind: '
 
 export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret: string): boolean {
   const standard = webhook.kind === 'standard';
-  // Svix, the reference implementation, names them `svix-*`. A request carrying both sets is refused, so the id an app
-  // dedupes on is the one that was signed.
-  const carries = (set: string) => ['id', 'timestamp', 'signature'].some(name => request.headers.has(`${set}-${name}`));
-  const set = carries('webhook') ? 'webhook' : 'svix';
-  if (standard && set === 'webhook' && carries('svix')) return false;
+  // Svix, the reference implementation, names them `svix-*`: the `webhook-*` set is read when it signs, else Svix's. An
+  // entry that dedupes on a header reads only that header's set, so the id it dedupes on is the one signed.
+  const set = request.headers.has('webhook-signature') ? 'webhook' : 'svix';
+  const dedupe = webhook.deliveryId;
+  if (standard && dedupe && 'header' in dedupe && dedupe.header !== `${set}-id`) return false;
   const scheme = standard ? STANDARD(set) : webhook;
   const received = request.headers.get(scheme.kind === 'basic' ? 'authorization' : scheme.header);
   if (!received || received.length > MAX_HEADER_BYTES) return false;

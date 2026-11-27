@@ -50,11 +50,12 @@ only the older secret token (`X-Gitlab-Token`) sends no signature, and this entr
 holding a `.` is `false`: the specification says the message id must "not be allowed to include any `.`", since the
 signed content joins id, timestamp and body with dots (GitLab's ids are UUIDs).
 
-A request with no `webhook-*` header is read under Svix's names instead, `svix-id`, `svix-timestamp` and
-`svix-signature`: Svix, the reference implementation, sends these, as AgentMail's webhooks do. A request carrying
-headers of both sets is `false`, so the id header an app dedupes on is always the one the signature covers: a replay
-cannot add a fresh `webhook-id` beside a signed `svix-id`, or the reverse. An entry that dedupes on a header names the
-one its provider sends. AgentMail's entry declares the body's `event_id` as its delivery id: its `svix-id` differs
+A request with no `webhook-signature` is read under Svix's names instead, `svix-id`, `svix-timestamp` and
+`svix-signature`: Svix, the reference implementation, sends these, as AgentMail's webhooks do. One set is read whole.
+A `standard` entry that dedupes on a header reads only that header's set and is `false` for the other, so on every
+request it accepts the id header it dedupes on is the one the signature covers: a delivery renamed to the other set's
+names cannot replay without its id, or with a fresh one. An entry that dedupes on the body, or on nothing, reads
+either set. AgentMail's entry declares the body's `event_id` as its delivery id: its `svix-id` differs
 between webhooks registered for the organization, a pod and an inbox, and `event_id` does not.
 
 `kind: 'basic'` (Mailjet) signs nothing either: the provider calls the URL the app registered with a user and password
