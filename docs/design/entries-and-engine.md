@@ -565,8 +565,9 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
    (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`). The key is the secret's bytes, or
    with `secret: 'base64'` or `'hex'` its decoding (Airtable and Chatwork base64, Close hex), which must encode back to
-   exactly the secret (hex in either case): loose base64 (another alphabet, whitespace, missing or extra padding), hex
-   of odd length or with another character, and an empty decoding are `false`, never the secret's text.
+   exactly the secret (hex in either case, base64's `=` padding optional): loose base64 (another alphabet, whitespace,
+   unused bits set), hex of odd length or with another character, and a key of only zero bytes (HMAC pads a key with
+   zeros, so it is the empty key) are `false`, never the secret's text.
 2. `hmac` with `part` (Stripe's `t=…,v1=…,v1=…`): the header is split on `,`, each piece on its first `=`. Every value
    whose name is `part` is a signature, the other pieces (another scheme, debug entries) are ignored, and the request
    passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
@@ -592,7 +593,7 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 
 In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
 Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab) and `challenge`
-(Slack, Discord). A secret that keys nothing (empty, or one that does not decode exactly or decodes to nothing) is
+(Slack, Discord). A secret that keys nothing (one that does not decode exactly, or a key of only zero bytes) is
 `false`. The table test also refuses a `challenge.when` with a `status`, `header` or `detail` or without a `path`, and
 an `echo` holding a `.`.
 

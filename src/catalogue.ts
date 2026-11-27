@@ -56,9 +56,9 @@ export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
 type Timestamp = { header: string; toleranceSeconds?: number };
 /** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `secret`: the key is the secret's
- * exact `base64` or `hex` decoding (else its bytes); `part`: the header is a
- * comma-separated list of `name=value` pieces, each piece named `part` a signature, any of which may match;
- * `timestamp.part` reads the timestamp from the same list. `ed25519`: the header is the hex signature of `signed`, the
+ * exact `base64` or `hex` decoding (else its bytes); `part`: the header is a comma-separated list of `name=value`
+ * pieces, each piece named `part` a signature, any of which may match; `timestamp.part` reads the timestamp from the
+ * same list. `ed25519`: the header is the hex signature of `signed`, the
  * secret the provider's public key in hex. `token`: the header is the secret itself. `standard`: Standard Webhooks, the
  * secret base64 after an optional `whsec_`. `deliveryId` is what an app dedupes on. `challenge`: a handshake whose body
  * `when` holds is answered `{ [echo]: <the body's value> }` (Slack's `url_verification`, Discord's PING). */

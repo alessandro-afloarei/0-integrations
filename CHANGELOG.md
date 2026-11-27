@@ -11,8 +11,11 @@ Nothing here is released yet.
 - Chatwork's OAuth 2 sign-in asks `rooms.messages:write` as well: a client registered with the earlier scopes is
   registered again with the declared ones, or its authorize fails with 5003.
 - New: `webhook.secret` decodes a base64 or hex secret before it keys the HMAC; Airtable, Chatwork and Close declare
-  their webhooks. The decoding is strict, and a `standard` secret now goes through it: a secret that does not encode
-  back to itself (whitespace, the URL-safe alphabet, missing padding, odd hex) is `false`.
+  their webhooks. The decoding is strict (base64's `=` padding optional), and a key of only zero bytes keys nothing.
+- Breaking: a `standard` secret goes through the same decoding. A secret it accepted and now refuses (`false`): one
+  holding whitespace (a space or a trailing newline), the URL-safe alphabet (`-`, `_`) or another character outside
+  base64, a last character with unused bits set (`YR==`), or one that decodes to only zero bytes, as is now a plain
+  `hmac` secret of NUL characters. An unpadded secret is still accepted.
 - New: a sign-in after the first may declare its own `fields`, base and host (`http: { baseUrl, host }`, nothing else
   of `http`) and `identify`; `signInWith` puts them in place of the entry's. The engine refuses an app's entry whose
   first sign-in declares one, before anything is sent (`sign_in_own_first: <entry id>`), and `startConnect` now runs
