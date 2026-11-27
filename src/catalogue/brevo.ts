@@ -17,8 +17,10 @@ export const brevo = defineProvider({
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://oauth.brevo.com/realms/partner/oauth/authorize',
     tokenUrl: 'https://oauth.brevo.com/realms/partner/oauth/token', clientAuth: 'none', authorizeParams: { response_type: 'code' } },
   { kind: 'key', send: { header: 'api-key' } }],
-  // `:write` does not include `:read`: https://developers.brevo.com/docs/oauth-scopes
+  // Each must be registered on the app (a new app has the contacts and CRM ones; else `invalid_scope`), and `:write`
+  // does not include `:read`: https://developers.brevo.com/docs/oauth-scopes
   scopes: { default: ['account:read', 'transactional.email:read', 'transactional.email:write'] },
+  // A 429's reset header counts in the limit's own unit: https://developers.brevo.com/docs/limit-headers
   http: { baseUrl: 'https://api.brevo.com/v3', retry: { onlyStated: true } },
   errors: { detail: 'code' },
   identify: { request: { path: '/account' }, id: 'organization_id', name: ['companyName', 'email'] },
