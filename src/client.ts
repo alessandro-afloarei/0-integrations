@@ -57,7 +57,7 @@ function shaped(shape: Shape, value: unknown): unknown {
     return shape === 'unknown' || fits ? value : INVALID;
   }
   if (Array.isArray(shape)) {
-    const items = Array.isArray(value) ? value.map(item => shaped((shape as readonly [Shape])[0], item)) : [INVALID];
+    const items = Array.isArray(value) ? Array.from(value, item => shaped((shape as readonly [Shape])[0], item)) : [INVALID];
     return items.includes(INVALID) ? INVALID : items;
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return INVALID;

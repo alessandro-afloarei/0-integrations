@@ -56,6 +56,12 @@ const EMPTY_LITERAL = 'a literal type is the one value a caller sends: an empty 
 /** A type name, a literal (`true`, `false`, another string), a list or an object. */
 const shape: z.ZodType<Shape> = z.lazy(() =>
   z.union([z.string().min(1, EMPTY_LITERAL), z.boolean(), z.tuple([shape]), z.record(z.string(), shape)]));
+/** A shape's string literals, anywhere in it. */
+const stringLiterals = (item: Shape): string[] => (typeof item === 'object' ? Object.values(item as Record<string, Shape>).flatMap(stringLiterals)
+  : typeof item === 'string' && isLiteral(item) ? [item] : []);
+/** Whether two different strings are one insertion, deletion or substitution apart. */
+const oneEdit = (a: string, b: string) => { let at = 0; while (at < a.length && a[at] === b[at]) at++;
+  return a.slice(at + 1) === b.slice(at + 1) || a.slice(at + 1) === b.slice(at) || a.slice(at) === b.slice(at + 1); };
 /** Whether a shape holds a literal anywhere. */
 const literalIn = (item: Shape): boolean => (typeof item === 'object' ? Object.values(item as Record<string, Shape>).some(literalIn) : isLiteral(item));
 /** Every category once: the compiler refuses one missing from `Category` or not in it. */
@@ -227,6 +233,7 @@ const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secre
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
 const HEADERS_WRITTEN_OUT = '`http.headers` values written out in full, with no placeholder (none is ever filled: the braces would be sent)';
+const NEAR_TYPE_NAME = 'no string literal that differs from a type name by its case or one edit (`strng`, `Integer`): write the type name, or another literal';
 const RESULT_LITERAL = "no literal type in an operation's `result` (a record holding another value would be skipped, silently): give the key its type name";
 const PLACED = "a `params[].in` the operation's request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL, a header a scalar, never `nullable`, never named `content-type`, `host` or a sign-in's credential header)";
 const runnable = {
@@ -358,11 +365,14 @@ const runnable = {
   '`params[].enum` only on a `type: \'string\'` parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
   // A path segment, a query value and a form value are one string each: never null, a list or an object.
   'only a scalar, non-`nullable` parameter `in` a path, a query or a form': (entry: Entry) => params(entry).every(param =>
-    !['path', 'query', 'form'].includes(param.in) || (param.nullable === undefined && typeof param.type === 'string')),
+    !['path', 'query', 'form'].includes(param.in) || (param.nullable === undefined && typeof param.type !== 'object')),
   // The rule `client()` applies to each path, and a group worth the name: a required parameter is given anyway.
   '`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter': (entry: Entry) =>
     operations(entry).every(op => op.anyOf === undefined || (op.anyOf.length > 1 && op.anyOf.every(set => set.length > 0
       && set.every(path => argumentShape(op, path) !== undefined && op.params?.[path]?.required !== true)))),
+  // A misspelt type name would be a literal the caller must repeat: `'strng'` fits only `'strng'`.
+  [NEAR_TYPE_NAME]: (entry: Entry) => params(entry).flatMap(param => stringLiterals(param.type)).every(literal => ['string', 'integer', 'number',
+    'boolean', 'unknown'].every(name => literal.toLowerCase() !== name && !oneEdit(literal.toLowerCase(), name))),
   [RESULT_LITERAL]: (entry: Entry) => operations(entry).every(op => op.result === undefined || !literalIn(op.result)),
   // A paged operation yields its records: a 404 is no record to answer null for.
   '`notFound` only on an operation with no `paging`': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
@@ -717,6 +727,8 @@ test.each<[Rule, Entry]>([
   [HEADERS_WRITTEN_OUT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region' }],
     http: { ...key.http, headers: { 'x-region': '{region}' } } })],
   [HEADERS_WRITTEN_OUT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, headers: { 'x-api-key': 'Key {apiKey}' } } })],
+  ...(['strng', 'Integer', 'numbers', 'boolen', 'UNKNOWN', 'sting'] as const).map((name): [Rule, Entry] => [NEAR_TYPE_NAME, defineProvider({ ...key,
+    auth: [{ kind: 'key' }], fields: [secret], operations: { add: { method: 'POST', path: '/items', params: { item: { in: 'body', type: [{ kind: name }] } } } } })]),
   ["`save` keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([
@@ -1130,13 +1142,14 @@ test('an entry whose operations keep every rule passes them all', () => {
         result: { data: { items: [{ id: 'string' }] }, 'next?': 'string' } },
       'pages.events': { docs: 'https://k.test/docs/events', path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
       'requests.create': { docs: 'https://k.test/docs/requests', method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
-        state: { in: 'query', type: 'open' }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
+        state: { in: 'query', type: 'open' }, inbox: { in: 'query', type: true }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
       'then.later': { docs: 'https://k.test/docs/later', path: '/later' },
       'people.get': { docs: 'https://k.test/docs/people', method: 'POST', path: '/people', anyOf: [['email'], ['person.name', 'person.company.domain']],
         params: { email: { in: 'body', type: 'string' }, person: { in: 'body', type: { 'name?': 'string', 'company?': { domain: 'string' } }, required: true } } },
       me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
       'incidents.create': { docs: 'https://k.test/docs/incidents', method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
-        'x-version': { in: 'header', type: '2026-05-01', required: true, description: 'The version this operation needs.' } } },
+        'x-version': { in: 'header', type: '2026-05-01', required: true, description: 'The version this operation needs.' },
+        'x-dry-run': { in: 'header', type: false } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
   expect(entrySchema.safeParse(good).error).toBeUndefined();

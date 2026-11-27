@@ -155,6 +155,26 @@ test('hostile: a value beside a literal is refused before anything is sent: fals
   expect(fake.calls).toEqual([]);
 });
 
+test('a boolean literal goes where a boolean goes, sent as its text: in a query and in a header', async () => {
+  const flagged = defineProvider({ id: 'flagged', name: 'Flagged', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: {
+    'items.list': { path: '/items', params: { inbox: { in: 'query', type: true, required: true }, 'x-flag': { in: 'header', type: false, required: true } } } } });
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const api = client(flagged, { token: 'k', fetch: fake.fetch });
+  await api.items.list({ inbox: true, 'x-flag': false });
+  await expect(untyped(api.items.list)({ inbox: false, 'x-flag': false })).rejects.toThrow(new TypeError('param_invalid: inbox'));
+  await expect(untyped(api.items.list)({ inbox: true, 'x-flag': 'false' })).rejects.toThrow(new TypeError('param_invalid: x-flag'));
+  expect(fake.calls.map(call => [call.url, call.headers['x-flag']])).toEqual([[`${BASE}/items?inbox=true`, 'false']]);
+});
+
+test('hostile: a hole in a list is an element, checked as one: a literal element left out is refused', async () => {
+  const fake = fakeFetch([]);
+  const messages = new Array<{ actor_type: 'agent' }>(2);
+  messages[1] = { actor_type: 'agent' };
+  await expect(client(fixed, { token: 'k', fetch: fake.fetch }).threads.create({ messages, 'x-version': '2026-06-12' }))
+    .rejects.toThrow(new TypeError('param_invalid: messages'));
+  expect(fake.calls).toEqual([]);
+});
+
 test('hostile: an own `__proto__` key beside a literal is read by the declared keys only', async () => {
   const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
   await untyped(client(fixed, { token: 'k', fetch: fake.fetch }).messages.create)(

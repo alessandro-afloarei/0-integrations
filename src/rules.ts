@@ -48,7 +48,7 @@ export function argumentShape(op: Operation, path: Path): Shape | undefined {
  * named `content-type`, `host` or a sign-in's credential header (`authorization` unless its `send` names another). */
 export function placed(entry: Entry, op: Operation, name: string, param: Param): boolean {
   const credentials = entry.auth.map(auth => ('send' in auth && 'header' in auth.send ? auth.send.header : 'authorization').toLowerCase());
-  if (param.in === 'header') return !('graphql' in op) && param.nullable === undefined && typeof param.type === 'string'
+  if (param.in === 'header') return !('graphql' in op) && param.nullable === undefined && typeof param.type !== 'object'
     && !['content-type', 'host', ...credentials].includes(name.toLowerCase());
   return 'graphql' in op ? param.in === 'variables'
     : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))
