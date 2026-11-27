@@ -1,7 +1,7 @@
 # Providers
 
-Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers: 107 declared, 0 recorded;
-366 typed operations; webhooks: basic 3, ed25519 1, hmac 35, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
+Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers: 132 declared, 0 recorded;
+557 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -13,6 +13,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [Airtable](https://airtable.com/developers/web/api/authentication.md) | tasks | OAuth 2, key | records.list, records.get, records.create, records.update, bases.list | hmac | declared |
 | [Apollo](https://docs.apollo.io/reference/authentication) | sales | key | — | — | declared |
 | [Asana](https://developers.asana.com/docs/oauth) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, projects.list | — | declared |
+| [Atlas](https://developers.atlas.so/reference/getting-started-with-your-api) | support | key | conversations.list, conversations.get, conversations.update, messages.list, messages.create, customers.list | — | declared |
 | [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | OAuth 2, key | — | — | declared |
 | [Avoma](https://help.avoma.com/api-integration-for-avoma) | meetings | key | meetings.list, meetings.get, transcriptions.get | hmac | declared |
 | [Azure DevOps](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth?view=azure-devops) | code | OAuth 2, key | repositories.list, repositories.get, pullRequests.list, pullRequests.get, pullRequests.create, projects.list | — | declared |
@@ -24,6 +25,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [Cal.com](https://cal.com/docs/api-reference/v2/introduction) | calendar | key | eventTypes.list, bookings.list, bookings.get, bookings.create | hmac | declared |
 | [Calendly](https://developer.calendly.com/docs/authentication/creating-an-oauth-app) | calendar | OAuth 2, key | eventTypes.list, scheduledEvents.list, scheduledEvents.get, invitees.create | hmac | declared |
 | [Capsule](https://developer.capsulecrm.com/v2/overview/authentication) | crm | OAuth 2, key | parties.list, parties.get, parties.create, parties.update, parties.search, opportunities.list | — | declared |
+| [Chatwoot](https://developers.chatwoot.com/api-reference/profile/fetch-user-profile) | support | key | conversations.list, conversations.get, conversations.create, conversations.update, messages.list, messages.create, contacts.list | hmac | declared |
 | [Chatwork](https://developer.chatwork.com/docs/endpoints) | chat | OAuth 2, key | rooms.list, messages.list, messages.create, contacts.list | hmac | declared |
 | [Circleback](https://circleback.ai/docs/api) | meetings | key | meetings.list, meetings.search, meetings.get, transcripts.get | hmac | declared |
 | [CircleCI](https://circleci.com/docs/api/v3/conventions.md) | code | key | runs.list, runs.get, runs.create, projects.list | hmac | declared |
@@ -32,8 +34,13 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [Close](https://developer.close.com/api/overview/oauth-authentication) | crm | OAuth 2, key | contacts.list, contacts.get, contacts.create, contacts.update, contacts.search, leads.list, opportunities.list | hmac | declared |
 | [Superhuman Docs (formerly Coda)](https://docs.superhuman.com/developers/apis/v1#operation/whoami) | docs | key | pages.list, pages.get, pages.create, pages.update, docs.list | — | declared |
 | [Cognism](https://developers.cognism.com/#authentication) | sales | key | contacts.search, contacts.get, accounts.search, accounts.get | — | declared |
+| [Crisp](https://docs.crisp.chat/guides/rest-api/authentication/website-token/) | support | key | conversations.list, conversations.get, conversations.create, conversations.update, messages.list, messages.create, people.list | — | declared |
+| [Customerly](https://customerly.readme.io/reference/get_officialcustomerly_apipublic_v2_me_me_getme) | support | key | conversations.list, conversations.get, conversations.create, conversations.update, messages.list, messages.create, contacts.list | — | declared |
 | [Daily](https://docs.daily.co/docs/rest-api/authentication) | meetings | key | rooms.list, rooms.get, recordings.list, rooms.create, rooms.update | — | declared |
+| [DevRev](https://developer.devrev.ai/about/authentication) | support | key | works.list, works.get, works.create, works.update, timelineEntries.list, timelineEntries.create, revUsers.list | — | declared |
 | [Discord](https://docs.discord.com/developers/reference) | chat | key | — | ed25519 | declared |
+| [Dixa](https://docs.dixa.io/openapi/dixa-api/v1/organization/getorganization) | support | key | conversations.search, conversations.get, conversations.create, messages.list, messages.create, notes.create, endUsers.list | — | declared |
+| [eDesk](https://developers.edesk.com/reference/whoami) | support | key | tickets.list, tickets.get, tickets.create, tickets.update, messages.list, messages.create, contacts.list, channels.list | — | declared |
 | [Exa](https://exa.ai/docs/reference/search) | search | key | — | — | declared |
 | [Fathom](https://developers.fathom.ai/quickstart) | meetings | key | — | — | declared |
 | [Fellow](https://developers.fellow.ai/reference/authentication-1) | meetings | key | recordings.list, recordings.get | standard | declared |
@@ -41,23 +48,32 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [Firecrawl](https://docs.firecrawl.dev/api-reference/v2-introduction) | search | OAuth 2, key | — | — | declared |
 | [Fireflies](https://docs.fireflies.ai/fundamentals/authorization) | meetings | key | user | hmac | declared |
 | [folk](https://developer.folk.app/api-reference/authentication) | crm | key | people.list, people.search, people.get, people.create, people.update, companies.list, deals.list | standard | declared |
+| [Freshchat](https://developers.freshchat.com/api/#authentication) | support | key | conversations.list, conversations.get, conversations.update, messages.list, messages.create, users.list | — | declared |
+| [Freshdesk](https://developers.freshdesk.com/api/#authentication) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, conversations.list, conversations.create, notes.create, contacts.list, contacts.search | — | declared |
 | [Freshsales](https://developers.freshworks.com/crm/api/#authentication) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, accounts.list, deals.list | — | declared |
-| [Front](https://dev.frontapp.com/docs/oauth) | mail | OAuth 2, key | conversations.list, conversations.search, conversations.get, inboxes.list, drafts.create, messages.create | — | declared |
+| [Freshservice](https://api.freshservice.com/#authentication) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, conversations.list, conversations.create, notes.create, requesters.list | — | declared |
+| [Front](https://dev.frontapp.com/docs/oauth) | support, mail | OAuth 2, key | conversations.list, conversations.search, conversations.get, inboxes.list, drafts.create, messages.create, conversations.update, messages.list, replies.create, comments.create, contacts.list | — | declared |
+| [Gist](https://developers.getgist.com/docs/working-with-oauth) | support | OAuth 2, key | conversations.list, conversations.search, conversations.get, conversations.update, messages.list, contacts.list | — | declared |
 | [GitBook](https://gitbook.com/docs/developers/gitbook-api/authentication) | docs | key | pages.list, pages.get, spaces.list | — | declared |
 | [GitHub](https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api) | code | OAuth 2, key | — | — | declared |
 | [GitLab](https://docs.gitlab.com/api/rest/authentication/) | code | OAuth 2, key | — | standard | declared |
 | [Google](https://developers.google.com/identity/protocols/oauth2/web-server) | mail, calendar | OAuth 2 | — | token | declared |
 | [GoTo Meeting](https://developer.goto.com/guides/Authentication/03_HOW_accessToken/) | meetings | OAuth 2 | meetings.list, meetings.get, meetings.create, meetings.update | — | declared |
 | [Granola](https://docs.granola.ai/introduction) | meetings | key | — | — | declared |
+| [Groove](https://www.groovehq.com/docs) | support | key | tickets.list, tickets.get, tickets.create, tickets.update, messages.list, messages.create, customers.list | — | declared |
 | [Guru](https://developer.getguru.com/docs/getting-started) | docs | key | cards.search, cards.get, cards.create, cards.update, collections.list | — | declared |
-| [Help Scout](https://developer.helpscout.com/mailbox-api/overview/authentication/) | mail | OAuth 2 | conversations.list, conversations.get, inboxes.list, conversations.create | hmac | declared |
+| [HappyFox](https://support.happyfox.com/kb/article/1039-happyfox-api-documentation/) | support | key | tickets.list, tickets.get, tickets.create, tickets.update, notes.create, users.list | — | declared |
+| [HelpCrunch](https://docs.helpcrunch.com/en/rest-api-v1/api-setup-v1) | support | key | chats.list, chats.search, chats.get, chats.create, chats.update, messages.list, messages.create, applications.list, customers.list, customers.search | hmac | declared |
+| [Help Scout](https://developer.helpscout.com/mailbox-api/overview/authentication/) | support, mail | OAuth 2 | conversations.list, conversations.get, inboxes.list, conversations.create, conversations.update, threads.list, threads.create, notes.create, customers.list | hmac | declared |
+| [Helpwise](https://helpwise.io/developers/) | support | key | conversations.list, conversations.get, contacts.list, contacts.search | — | declared |
+| [Hiver](https://developer.hiverhq.com/hiver-api) | support | key | inboxes.list, conversations.list, conversations.get, conversations.update | — | declared |
 | [Honeybadger](https://docs.honeybadger.io/api/v3/authentication/) | monitoring | key | faults.list, faults.get, faults.update, projects.list | token | declared |
 | [HubSpot](https://developers.hubspot.com/docs/api-reference/legacy/authentication/oauth-tokens/v1/migration-guide) | crm | OAuth 2, key | — | — | declared |
 | [Hunter](https://hunter.io/api-documentation/v2#authentication) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
 | [incident.io](https://docs.incident.io/api-reference/introduction) | monitoring | key | incidents.list, incidents.get, incidents.create, incidents.update, severities.list | — | declared |
 | [Insightly](https://api.insightly.com/v3.1/Help) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, organisations.list, opportunities.list | — | declared |
 | [Instantly](https://developer.instantly.ai/getting-started/authorization) | sales | key | campaigns.list, leads.list, leads.get, leads.create, leads.update | — | declared |
-| [Intercom](https://developers.intercom.com/docs/references/rest-api/api.intercom.io/admins/identifyadmin) | support | OAuth 2, key | — | hmac | declared |
+| [Intercom](https://developers.intercom.com/docs/references/rest-api/api.intercom.io/admins/identifyadmin) | support | OAuth 2, key | conversations.list, conversations.search, conversations.get, conversations.update, replies.create, contacts.list | hmac | declared |
 | [Jira](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/) | tasks | OAuth 2 | — | — | declared |
 | [Krisp](https://meeting-api-docs.krisp.ai/reference/get_me) | meetings | key | meetings.list, meetings.get | token | declared |
 | [Leadfeeder (formerly Dealfront)](https://docs.leadfeeder.com/api/public/authentication-354547m0) | sales | key | contacts.search, contacts.get, companies.search, companies.get | — | declared |
@@ -65,13 +81,14 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [lemlist](https://developer.lemlist.com/api-reference/getting-started/authentication) | sales | key | campaigns.list, contacts.list, contacts.get, contacts.create, contacts.update, leads.create | — | declared |
 | [LINE](https://developers.line.biz/en/reference/messaging-api/#get-bot-info) | chat | key | messages.create, followers.list | hmac | declared |
 | [Linear](https://linear.app/developers/graphql#authentication) | tasks | OAuth 2, key | issues.list, issues.get, issues.create, issues.update, teams.list | hmac | declared |
+| [LiveAgent](https://support.liveagent.com/741982-API-key) | support | key | tickets.list, tickets.get, tickets.create, messages.list, contacts.list | — | declared |
 | [Lusha](https://docs.lusha.com/authentication) | sales | key | — | — | declared |
 | [Mailjet](https://dev.mailjet.com/openapi/openapi-mailjet/settings/get_v3_user) | mail | key | messages.list, messages.get, dns.list, messages.create | basic | declared |
 | [Mattermost](https://docs.mattermost.com/api/reference/mattermost-api) | chat | OAuth 2, key | channels.list, posts.list, posts.create, users.list | — | declared |
 | [MeetGeek](https://docs.meetgeek.ai/api/getting-started/authorization) | meetings | key | meetings.list, meetings.get, transcripts.get | hmac | declared |
 | [Metabase](https://www.metabase.com/articles/set-up-metabase-from-code-with-the-api) | analytics | token | — | — | declared |
 | [Microsoft](https://learn.microsoft.com/en-us/graph/auth-v2-user) | mail, calendar | OAuth 2 | — | — | declared |
-| [Missive](https://missiveapp.com/docs/developers/rest-api) | mail | key | conversations.list, conversations.get, sharedLabels.list, drafts.create | hmac | declared |
+| [Missive](https://missiveapp.com/docs/developers/rest-api) | mail, support | key | conversations.list, conversations.get, sharedLabels.list, drafts.create, conversations.update, messages.list, contacts.list | hmac | declared |
 | [monday.com](https://developer.monday.com/api-reference/docs/authentication) | tasks | OAuth 2, key | items.list, items.get, items.create, items.update, boards.list | — | declared |
 | [Notion](https://developers.notion.com/reference/authentication) | docs | key | pages.markdown | — | declared |
 | [Nutshell](https://developers.nutshell.com/docs/api-authentication) | crm | key | contacts.list, contacts.get, contacts.create, accounts.list, leads.list | — | declared |
@@ -82,7 +99,10 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [PayPal](https://developer.paypal.com/api/rest/authentication/) | finance | token | — | — | declared |
 | [People Data Labs](https://docs.peopledatalabs.com/docs/authentication) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
 | [Pipedrive](https://pipedrive.readme.io/docs/marketplace-oauth-authorization) | crm | OAuth 2 | persons.list, persons.search, persons.get, persons.create, persons.update, organizations.list, deals.list | basic | declared |
+| [Plain](https://www.plain.com/docs/graphql/authentication) | support | key | threads.list, threads.search, threads.get, timelineEntries.list, customers.list | hmac | declared |
 | [Postmark](https://postmarkapp.com/developer/api/overview) | mail | key | messages.list, messages.get, messages.create | basic | declared |
+| [Pylon](https://docs.usepylon.com/pylon-docs/developer/api/authentication) | support | key | issues.list, issues.search, issues.get, issues.create, issues.update, messages.list, messages.create, notes.create, contacts.list, contacts.search | hmac | declared |
+| [Re:amaze](https://www.reamaze.com/api) | support | key | conversations.list, conversations.get, conversations.create, conversations.update, messages.list, messages.create, contacts.list | — | declared |
 | [Recall.ai](https://docs.recall.ai/reference/authentication) | meetings | key | recordings.list, recordings.get, transcripts.get | standard | declared |
 | [Render](https://api-docs.render.com/reference/authentication) | code | key | deploys.list, deploys.get, deploys.create, services.list | standard | declared |
 | [Reply.io](https://docs.reply.io/api-reference/authentication) | sales | key | sequences.list, contacts.list, contacts.get, contacts.create, contacts.update, contactLinks.create | — | declared |
@@ -101,14 +121,19 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [Smartsheet](https://developers.smartsheet.com/api/smartsheet/guides/basics/authentication.md) | tasks | key | rows.list, rows.get, rows.create, rows.update, sheets.list | — | declared |
 | [Stripe](https://docs.stripe.com/api/authentication) | finance | key | — | hmac | declared |
 | [Teamleader Focus](https://developer.focus.teamleader.eu/docs/authentication) | crm | OAuth 2 | contacts.list, contacts.get, contacts.create, contacts.update, companies.list, deals.list | — | declared |
+| [Thena](https://docs.thena.ai/api-reference/introduction) | support | key | tickets.list, tickets.get, tickets.create, tickets.update, comments.list, comments.create, contacts.search | — | declared |
 | [TidyCal](https://tidycal.com/developer/docs) | calendar | key | bookingTypes.list, bookings.list, bookings.get, bookings.create | hmac | declared |
 | [Todoist](https://developer.todoist.com/api/v1/authorization.md) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, projects.list | hmac | declared |
 | [Trello](https://developer.atlassian.com/cloud/trello/guides/rest-api/oauth-2-confidential-client-usage/) | tasks | OAuth 2, key | — | — | declared |
+| [Trengo](https://developers.trengo.com/docs/rate-limiting) | support | key | tickets.list, tickets.get, tickets.create, messages.list, messages.create, contacts.list | — | declared |
 | [Unipile](https://developer.unipile.com/v2.0/docs/api-keys) | mail, calendar | key | — | — | declared |
+| [Unthread](https://docs.unthread.io/docs/api-reference) | support | key | conversations.list, conversations.get, conversations.create, conversations.update, messages.list, messages.create | hmac | declared |
 | [Vercel](https://vercel.com/docs/rest-api#authentication) | code | key | deployments.list, deployments.get, deployments.create, projects.list | hmac | declared |
 | [Webex](https://developer.webex.com/docs/authentication) | meetings | OAuth 2 | meetings.list, meetings.get, recordings.list, meetings.create | hmac | declared |
 | [Whereby](https://docs.whereby.com/getting-started/overview-of-whereby-embedded/initial-setup) | meetings | key | meetings.list, meetings.get, recordings.list, meetings.create | hmac | declared |
 | [Wrike](https://developers.wrike.com/docs/oauth-20-authorization) | tasks | OAuth 2 | tasks.list, tasks.get, tasks.create, tasks.update, folders.list | — | declared |
+| [Zammad](https://docs.zammad.org/en/latest/api/intro.html) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, articles.list, articles.create, users.list | hmac | declared |
+| [Zendesk](https://developer.zendesk.com/api-reference/introduction/security-and-auth/) | support | OAuth 2, key | tickets.list, tickets.get, tickets.create, tickets.update, comments.list, users.list, users.search | — | declared |
 | [Zoom](https://developers.zoom.us/docs/internal-apps/s2s-oauth/) | meetings | token | — | — | declared |
 | [ZoomInfo](https://docs.gtm.ai/docs/client-credentials-flow) | sales | token | contacts.search, contacts.get, companies.search, companies.get | — | declared |
 | [Zulip](https://zulip.com/api/http-headers) | chat | key | channels.list, messages.list, messages.create, users.list | — | declared |
