@@ -13,7 +13,7 @@ import { jira } from './catalogue/jira.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { smartsheet } from './catalogue/smartsheet.js';
-import { trello } from './catalogue/trello.js';
+import { trello as trelloEntry } from './catalogue/trello.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
@@ -26,6 +26,7 @@ import { fakeFetch, sequence } from './testing.js';
 
 /** GitLab's personal access token sign-in: these tests send `private-token`. */
 const gitlab = signInWith(gitlabEntry, 'key');
+const trello = signInWith(trelloEntry, 'key');
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-24T12:00:00Z')); });
 afterEach(() => vi.useRealTimers());

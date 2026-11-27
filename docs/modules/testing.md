@@ -56,8 +56,9 @@ password); for an OAuth 2 entry, the access token its token URL gives.
 
 ```ts
 // An app's test, for an entry with no module:
-const { fetch } = fakeFetch(fakeProvider(trello, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
-const { account } = await finishConnect(trello, { secret: { apiToken: 'kit-token' }, values: { apiKey: 'kit-key' }, fetch });
+const key = signInWith(trello, 'key'); // Trello lists OAuth 2 first; this is its API key and token
+const { fetch } = fakeFetch(fakeProvider(key, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
+const { account } = await finishConnect(key, { secret: { apiToken: 'kit-token' }, values: { apiKey: 'kit-key' }, fetch });
 ```
 
 ```ts

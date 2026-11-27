@@ -273,8 +273,9 @@ function webhooksReceiveCalls(request: Request, signingSecret: string, publicKey
 // docs/modules/testing.md › A fake derived from an entry (its four examples).
 async function testingDerivedFake() {
   // An app's test, for an entry with no module:
-  const { fetch } = fakeFetch(fakeProvider(trello, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
-  const { account } = await finishConnect(trello, { secret: { apiToken: 'kit-token' }, values: { apiKey: 'kit-key' }, fetch });
+  const key = signInWith(trello, 'key'); // Trello lists OAuth 2 first; this is its API key and token
+  const { fetch } = fakeFetch(fakeProvider(key, { key: 'kit-token', values: { apiKey: 'kit-key' } }));
+  const { account } = await finishConnect(key, { secret: { apiToken: 'kit-token' }, values: { apiKey: 'kit-key' }, fetch });
   return account;
 }
 async function testingDerivedOperation() {

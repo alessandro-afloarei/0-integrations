@@ -79,7 +79,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 81 providers: 
 | [Stripe](https://docs.stripe.com/api/authentication) | finance | key | — | hmac | declared |
 | [Teamleader Focus](https://developer.focus.teamleader.eu/docs/authentication) | crm | OAuth 2 | contacts.list, contacts.get, contacts.create, contacts.update, companies.list, deals.list | — | declared |
 | [Todoist](https://developer.todoist.com/api/v1/authorization.md) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, projects.list | hmac | declared |
-| [Trello](https://developer.atlassian.com/cloud/trello/guides/rest-api/authorization/) | tasks | key | — | — | declared |
+| [Trello](https://developer.atlassian.com/cloud/trello/guides/rest-api/oauth-2-confidential-client-usage/) | tasks | OAuth 2, key | — | — | declared |
 | [Unipile](https://developer.unipile.com/v2.0/docs/api-keys) | mail, calendar | key | — | — | declared |
 | [Vercel](https://vercel.com/docs/rest-api#authentication) | code | key | deployments.list, deployments.get, deployments.create, projects.list | hmac | declared |
 | [Wrike](https://developers.wrike.com/docs/oauth-20-authorization) | tasks | OAuth 2 | tasks.list, tasks.get, tasks.create, tasks.update, folders.list | — | declared |
