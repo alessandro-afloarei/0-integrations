@@ -16,7 +16,6 @@ export const todoist = defineProvider({
   categories: ['tasks'],
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
     help: 'For your own Todoist account, from your integrations settings: an app for other people connects with the OAuth 2 sign-in, as Todoist requires.' }],
-  // PKCE S256: https://developer.todoist.com/api/v1/authorization.md
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.todoist.com/oauth/authorize',
     tokenUrl: 'https://api.todoist.com/oauth/access_token', scopeSeparator: ',' }, { kind: 'key' }],
   scopes: { default: ['data:read_write'], requireGranted: true },

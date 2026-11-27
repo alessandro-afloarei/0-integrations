@@ -36,7 +36,8 @@ none and starts with a form, and an entry whose kind is not known in the types (
   cleanup (an entry whose revoke is a request on the base cannot revoke a grant whose host was refused, so that is
   reported too). An entry whose `reusesGrant` says re-consent can return a live connection's grant skips the cleanup: only
   the app knows who owns it. Should a provider's server refuse PKCE before the catalogue says so, derive an entry
-  whose sign-in says `pkce: false` and pass it to `startConnect` and `finishConnect`.
+  whose sign-in says `pkce: false` and pass it to `startConnect` and `finishConnect` (not for a public client, which
+  needs PKCE).
 
 To ask for other scopes, derive an entry: `defineProvider({ ...google, scopes: { default: [...] } })`. `defineProvider`
 does not refuse a misspelled key at compile time (the catalogue test does, for the entries in this repository), so check

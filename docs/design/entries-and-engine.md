@@ -308,9 +308,9 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   PKCE off (`pkce: false`) only where the provider's page states that the server refuses it (Slack's
   `pkce_not_allowed`), or where a real sign-in fails with it on (the entry's comment then says what was seen). A page
   that does not mention PKCE is no reason: an authorization server "MUST ignore unrecognized request parameters" at
-  its authorization and token endpoints (RFC 6749 sections 3.1 and 3.2), so a challenge a server does not know breaks
-  nothing, and one it knows protects the code; RFC 9700 (section 2.1.1) recommends PKCE for confidential clients too.
-  `failed` marks
+  its authorization and token endpoints (RFC 6749 sections 3.1 and 3.2), so a server that does not know the PKCE
+  parameters ignores them, and one that does checks the verifier against the challenge, which protects the code;
+  RFC 9700 (section 2.1.1) recommends PKCE for confidential clients too. `failed` marks
   a token answer that is an error inside a 200. `reusesGrant` means a failed identify must not revoke the grant. The
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today, and never replaces a parameter the engine sends (`client_id`, `scope`, `redirect_uri`,
