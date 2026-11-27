@@ -85,7 +85,8 @@ const identify = z.strictObject({ request: request.optional(), id: value.optiona
   lowercase: z.literal(true).optional(),
   rejectWhen: z.array(condition(whenObject.extend({ detail: z.string().optional() }))).optional() }).optional();
 /** What a later key or token sign-in may declare in place of the entry's: its fields, its base and host, its identify. */
-const own = { fields, http: z.strictObject({ baseUrl: https, host: z.string().optional() }).optional(), identify };
+const hostPatterns = z.union([z.string(), z.array(z.string())]).optional();
+const own = { fields, http: z.strictObject({ baseUrl: https, host: hostPatterns }).optional(), identify };
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
@@ -112,7 +113,7 @@ const entrySchema = z.strictObject({
   save: z.record(z.string(), value).optional(),
   revoke: z.union([z.strictObject({ url: https, token: z.array(z.enum(['refresh', 'access'])), goneErrors: z.array(z.string()).optional() }),
     z.strictObject({ request, goneErrors: z.array(z.string()).optional() })]).optional(),
-  http: z.strictObject({ baseUrl: https, host: z.union([z.string(), z.array(z.string())]).optional(), bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
+  http: z.strictObject({ baseUrl: https, host: hostPatterns, bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
     timeoutMs: z.number().int().positive().optional(), minIntervalMs: z.number().int().nonnegative().optional(),
     retry: z.strictObject({ limit: z.number().int().nonnegative().optional(), maxWaitMs: z.number().int().nonnegative().optional(),
       defaultWaitMs: z.number().int().nonnegative().optional(), onlyStated: z.literal(true).optional(), wait: wait.optional() }).optional(),
@@ -823,6 +824,10 @@ test.each<[string, Entry]>([
   ['an OAuth 2 sign-in and a key on a typed host', defineProvider({ ...key, fields: [{ name: 'host', title: 'Host' }, secret], scopes: { default: [] },
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/token' }, { kind: 'key' }],
     revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] }, http: { baseUrl: 'https://{host}/api', host: '*' } })],
+  // A later key's own base on one of several fixed domains.
+  ['a later key with its own base on a list of host patterns', defineProvider({ ...key, scopes: { default: [] }, identify: { request: { path: '/me' }, id: 'id' },
+    auth: [oauth2.auth[0], { kind: 'key', fields: [{ name: 'host', title: 'Host', choices: ['a.k.test', 'b.k.example'] }, secret],
+      http: { baseUrl: 'https://{host}', host: ['*.k.test', '*.k.example'] } }] })],
   // Outline's shape: OAuth 2 on the cloud host, a key with its own fields on a host the person types.
   ['OAuth 2 on a fixed host beside a key with its own typed base', defineProvider({ ...key, scopes: { default: [] }, identify: { request: { path: '/me' }, id: 'id' },
     auth: [oauth2.auth[0], { kind: 'key', fields: [{ name: 'host', title: 'Host' }, secret], http: { baseUrl: 'https://{host}/api', host: '*' } }] })],
@@ -833,6 +838,12 @@ test.each<[string, Entry]>([
   ['an id list from the token answer, then identify\'s answer, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret],
     scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key' }], identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } })],
 ])('%s breaks no rule', (_, entry) => { expect(broken(entry)).toEqual([]); });
+
+test("a later sign-in's own host may list several patterns, as `http.host` may", () => {
+  const listed = { ...key, fields: [secret], scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key',
+    fields: [{ name: 'host', title: 'Host' }, secret], http: { baseUrl: 'https://{host}', host: ['*.k.test', '*.k.example'] } }] };
+  expect(entrySchema.safeParse(listed).error).toBeUndefined();
+});
 
 test('a token request whose body holds an object fails the schema, with what to fix', () => {
   const bad = { ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, body: { grant: { type: 'x' } } } }] };

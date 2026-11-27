@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, signInWith, type Entry, type SignIn } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Own, type SignIn } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
 import { linear } from './catalogue/linear.js';
 import { azuredevops } from './catalogue/azuredevops.js';
@@ -219,9 +219,17 @@ function ownTypes() {
   expectTypeOf<Connected<SignIn<typeof outline, 'key'>>['values']['host']>().toEqualTypeOf<string>();
   expectTypeOf<Connected<SignIn<typeof outline, 'oauth2'>>['values']>().not.toHaveProperty('host');
   expectTypeOf<Connected<SignIn<typeof outline, 'key'>>['secret']>().toEqualTypeOf<Readonly<Record<'apiKey', string>>>();
+  // An own `http` brings only its base and host, the host typed as `http.host` is: a list of patterns too.
+  const listed = signInWith(defineProvider({ id: 'listed', name: 'Listed', scopes: { default: [] }, http: { baseUrl: 'https://cloud.listed.test',
+    bases: { b: 'https://b.listed.test' } }, auth: [owned.auth[0], { kind: 'key', fields: [{ name: 'host', title: 'Host' }, { name: 'k', title: 'K', secret: true }],
+    http: { baseUrl: 'https://{host}', host: ['*.listed.test', '*.listed.example'], bases: { b: 'https://evil.test' } } }] }), 'key');
+  expectTypeOf(listed.http.host).toEqualTypeOf<readonly ['*.listed.test', '*.listed.example']>();
+  expectTypeOf(listed.http.bases).toEqualTypeOf<{ readonly b: 'https://b.listed.test' }>();
+  const wide: Own['http'] = { baseUrl: 'https://{host}', host: ['*.a.test'] };
   defineProvider({ id: 'first', name: 'First', http: { baseUrl: 'https://first.test' },
     // @ts-expect-error the first sign-in's part is the entry's top level
     auth: [{ kind: 'key', http: { baseUrl: 'https://{host}/api', host: '*' } }] });
+  return wide;
 }
 
 test('the narrowed types compile', () => {

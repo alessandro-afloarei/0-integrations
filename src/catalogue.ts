@@ -93,7 +93,7 @@ export type Operation = ({ method?: Method; path: Template } | { graphql: string
 export type Category = 'tasks' | 'docs' | 'chat' | 'code' | 'monitoring' | 'crm' | 'sales' | 'mail' | 'calendar' | 'meetings'
   | 'support' | 'marketing' | 'finance' | 'hr' | 'storage' | 'ecommerce' | 'phone' | 'design' | 'analytics' | 'search';
 /** What a sign-in after the first may declare in place of the entry's; the first's part is the entry's top level. */
-export type Own = { fields?: readonly Field[]; http?: { baseUrl: Template; host?: string }; identify?: Identify };
+export type Own = { fields?: readonly Field[]; http?: Pick<Http, 'baseUrl' | 'host'>; identify?: Identify };
 /** What an entry declares. Only `id`, `name`, `auth` and `http.baseUrl` are required. `categories`: the first is the main one. */
 export type Entry = { id: string; name: string; docs?: string; categories?: readonly Category[];
   fields?: readonly Field[]; auth: readonly [Auth & { [K in keyof Own]?: never }, ...(Auth & Own)[]];
