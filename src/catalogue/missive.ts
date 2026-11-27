@@ -12,7 +12,7 @@ const ref = 'https://missiveapp.com/docs/developers/rest-api/endpoints';
 
 export const missive = defineProvider({
   id: 'missive', name: 'Missive', docs: 'https://missiveapp.com/docs/developers/rest-api',
-  categories: ['mail', 'support'],
+  categories: ['mail'],
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
     help: 'Create it in Missive\'s preferences, API tab, Create a new token; your organization needs the Productive plan. The token is yours and reaches every account you can open in Missive.' }],
   auth: [{ kind: 'key' }],

@@ -42,7 +42,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [Fireflies](https://docs.fireflies.ai/fundamentals/authorization) | meetings | key | user | hmac | declared |
 | [folk](https://developer.folk.app/api-reference/authentication) | crm | key | people.list, people.search, people.get, people.create, people.update, companies.list, deals.list | standard | declared |
 | [Freshsales](https://developers.freshworks.com/crm/api/#authentication) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, accounts.list, deals.list | — | declared |
-| [Front](https://dev.frontapp.com/docs/oauth) | support, mail | OAuth 2, key | conversations.list, conversations.search, conversations.get, inboxes.list, drafts.create, messages.create | — | declared |
+| [Front](https://dev.frontapp.com/docs/oauth) | mail | OAuth 2, key | conversations.list, conversations.search, conversations.get, inboxes.list, drafts.create, messages.create | — | declared |
 | [GitBook](https://gitbook.com/docs/developers/gitbook-api/authentication) | docs | key | pages.list, pages.get, spaces.list | — | declared |
 | [GitHub](https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api) | code | OAuth 2, key | — | — | declared |
 | [GitLab](https://docs.gitlab.com/api/rest/authentication/) | code | OAuth 2, key | — | standard | declared |
@@ -50,7 +50,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [GoTo Meeting](https://developer.goto.com/guides/Authentication/03_HOW_accessToken/) | meetings | OAuth 2 | meetings.list, meetings.get, meetings.create, meetings.update | — | declared |
 | [Granola](https://docs.granola.ai/introduction) | meetings | key | — | — | declared |
 | [Guru](https://developer.getguru.com/docs/getting-started) | docs | key | cards.search, cards.get, cards.create, cards.update, collections.list | — | declared |
-| [Help Scout](https://developer.helpscout.com/mailbox-api/overview/authentication/) | support, mail | OAuth 2 | conversations.list, conversations.get, inboxes.list, conversations.create | hmac | declared |
+| [Help Scout](https://developer.helpscout.com/mailbox-api/overview/authentication/) | mail | OAuth 2 | conversations.list, conversations.get, inboxes.list, conversations.create | hmac | declared |
 | [Honeybadger](https://docs.honeybadger.io/api/v3/authentication/) | monitoring | key | faults.list, faults.get, faults.update, projects.list | token | declared |
 | [HubSpot](https://developers.hubspot.com/docs/api-reference/legacy/authentication/oauth-tokens/v1/migration-guide) | crm | OAuth 2, key | — | — | declared |
 | [Hunter](https://hunter.io/api-documentation/v2#authentication) | sales | key | people.search, people.get, companies.search, companies.get | — | declared |
@@ -71,7 +71,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers:
 | [MeetGeek](https://docs.meetgeek.ai/api/getting-started/authorization) | meetings | key | meetings.list, meetings.get, transcripts.get | hmac | declared |
 | [Metabase](https://www.metabase.com/articles/set-up-metabase-from-code-with-the-api) | analytics | token | — | — | declared |
 | [Microsoft](https://learn.microsoft.com/en-us/graph/auth-v2-user) | mail, calendar | OAuth 2 | — | — | declared |
-| [Missive](https://missiveapp.com/docs/developers/rest-api) | mail, support | key | conversations.list, conversations.get, sharedLabels.list | hmac | declared |
+| [Missive](https://missiveapp.com/docs/developers/rest-api) | mail | key | conversations.list, conversations.get, sharedLabels.list | hmac | declared |
 | [monday.com](https://developer.monday.com/api-reference/docs/authentication) | tasks | OAuth 2, key | items.list, items.get, items.create, items.update, boards.list | — | declared |
 | [Notion](https://developers.notion.com/reference/authentication) | docs | key | pages.markdown | — | declared |
 | [Nutshell](https://developers.nutshell.com/docs/api-authentication) | crm | key | contacts.list, contacts.get, contacts.create, accounts.list, leads.list | — | declared |

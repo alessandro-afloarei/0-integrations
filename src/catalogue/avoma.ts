@@ -11,7 +11,7 @@ export const avoma = defineProvider({
   id: 'avoma', name: 'Avoma', docs: 'https://help.avoma.com/api-integration-for-avoma',
   categories: ['meetings'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'From Settings, Organization, Developer (admins only): the whole key string, CLIENT_KEY:CLIENT_SECRET. A user key reads that user\'s meetings, an Organization key the organization\'s non-private ones.' }],
+    help: 'From Settings, Organization, Developer (admins only): the whole key string, CLIENT_KEY:CLIENT_SECRET. A User key reads its user\'s meetings (with full access, everything that user can see, private ones included), an Organization key the organization\'s non-private ones.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.avoma.com', retry: { defaultWaitMs: 60_000 } },
   errors: { detail: 'code' },

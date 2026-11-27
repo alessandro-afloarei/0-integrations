@@ -11,7 +11,7 @@ const ref = 'https://developer.helpscout.com/mailbox-api/endpoints';
 
 export const helpscout = defineProvider({
   id: 'helpscout', name: 'Help Scout', docs: 'https://developer.helpscout.com/mailbox-api/overview/authentication/',
-  categories: ['support', 'mail'],
+  categories: ['mail'],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://secure.helpscout.net/authentication/authorizeClientApplication',
     tokenUrl: 'https://api.helpscout.net/v2/oauth2/token', pkce: false, authorizeParams: { response_type: 'code' } }],
   scopes: { default: [] },

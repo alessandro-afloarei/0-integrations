@@ -8,7 +8,7 @@ const room = { id: 'string', 'name?': 'string', 'privacy?': 'string', 'url?': 's
   'created_at?': 'string', 'config?': 'unknown' } as const;
 const page = { limit: { in: 'query', type: 'integer', description: '100 by default and at most.' },
   starting_after: { in: 'query', type: 'string', description: 'The last id of the page before: the next page.' },
-  ending_before: { in: 'query', type: 'string', description: 'OLDEST starts from the oldest.' } } as const;
+  ending_before: { in: 'query', type: 'string', description: 'The first id of the page after: the page before; OLDEST starts from the oldest.' } } as const;
 const settings = { privacy: { in: 'body', type: 'string', description: 'public by default.' },
   properties: { in: 'body', type: 'unknown', description: 'The room\'s configuration properties.' } } as const;
 const ref = 'https://docs.daily.co/reference/rest-api';

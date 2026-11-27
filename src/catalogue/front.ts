@@ -16,9 +16,10 @@ const ref = 'https://dev.frontapp.com/reference';
 
 export const front = defineProvider({
   id: 'front', name: 'Front', docs: 'https://dev.frontapp.com/docs/oauth',
-  categories: ['support', 'mail'],
+  categories: ['mail'],
   fields: [{ name: 'apiToken', title: 'API token', secret: true,
     help: 'For your own Front instance: an app for every Front customer connects with the OAuth 2 sign-in, as Front requires. An admin makes the token under Settings, Developers, API Tokens, with Access resources and the read, write and send permissions on the inboxes the app uses.' }],
+  // PKCE S256: https://app.frontapp.com/.well-known/oauth-authorization-server
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.frontapp.com/oauth/authorize', tokenUrl: 'https://app.frontapp.com/oauth/token',
     clientAuth: 'basic', authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: [] },
