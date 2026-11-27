@@ -6,7 +6,8 @@ Nothing here is released yet.
 
 - An operation that declares no result answers `null` for any 2xx with an empty body (a 202 or a 201 as well as a 204);
   a body that is not JSON is still `invalid_response`. SendGrid sends mail (`emails.create`).
-- New: `last` paging reads the next cursor from the last record of a page.
+- New: `last` paging reads the next cursor from the last record of a page (Render). Render's `deploys.list` and
+  `services.list` walk to their end; their `cursor` parameter is the walk's own and no longer an argument.
 - A cursor may be a whole number, sent as its digits (Vercel's `pagination.next`): a numeric cursor no longer ends a
   walk after its first page, or throws `cursor_missing` beside a truthy `more`. A negative or fractional one is still
   blank.
