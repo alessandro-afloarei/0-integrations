@@ -18,6 +18,7 @@ export const chatwork = defineProvider({
     'offline_access'] },
   http: { baseUrl: 'https://api.chatwork.com/v2', retry: { wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   identify: { request: { path: '/me' }, id: 'account_id', name: ['name', 'login_mail'] },
+  webhook: { kind: 'hmac', header: 'x-chatworkwebhooksignature', encoding: 'base64', secret: 'base64' },
   operations: {
     'rooms.list': { docs: `${ref}/get-rooms`, path: '/rooms',
       result: [{ room_id: 'integer', name: 'string', type: 'string', last_update_time: 'integer' }] },

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Webhook } from './catalogue.js';
 import { airtable } from './catalogue/airtable.js';
 import { breakcold } from './catalogue/breakcold.js';
+import { chatwork } from './catalogue/chatwork.js';
 import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { gitlab } from './catalogue/gitlab.js';
@@ -307,6 +308,14 @@ test("verifies Airtable's `X-Airtable-Content-MAC`: `hmac-sha256=` and the hex H
   expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': `hmac-sha256=${hmacHex(keyBytes)}` }), macSecretBase64)).toBe(true);
   expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': `hmac-sha256=${hmacHex(macSecretBase64)}` }), macSecretBase64)).toBe(false);
   expect(verifyWebhook(airtable.webhook, request({ 'x-airtable-content-mac': hmacHex(keyBytes) }), macSecretBase64)).toBe(false);
+});
+
+test("verifies Chatwork's `x-chatworkwebhooksignature`: the base64 HMAC of the body, keyed with the token decoded from base64", () => {
+  const token = keyBytes.toString('base64');
+  const base64Of = (key: Buffer | string) => createHmac('sha256', key).update(body).digest('base64');
+  expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': base64Of(keyBytes) }), token)).toBe(true);
+  expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': base64Of(token) }), token)).toBe(false);
+  expect(verifyWebhook(chatwork.webhook, request({ 'x-chatworkwebhooksignature': hmacHex(keyBytes) }), token)).toBe(false);
 });
 
 test('an empty secret accepts nothing, whatever the kind', () => {
