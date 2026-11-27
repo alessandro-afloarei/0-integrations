@@ -11,7 +11,8 @@ export const discord = defineProvider({
   auth: [{ kind: 'key', send: { header: 'authorization', value: 'Bot {token}' } }],
   // Every request names its client library in `User-Agent` and sends a `Content-Type` (the reference, "HTTP API").
   http: { baseUrl: 'https://discord.com/api/v10', headers: { 'content-type': 'application/json',
-    'user-agent': 'DiscordBot (https://www.npmjs.com/package/0-integrations, 0.13.0)' } },
+    'user-agent': 'DiscordBot (https://www.npmjs.com/package/0-integrations, 0.13.0)' },
+    retry: { onlyStated: true, wait: { path: 'retry_after', unit: 's' } } },
   identify: { request: { path: '/users/@me' }, id: 'id', name: ['global_name', 'username'] },
   webhook: { kind: 'ed25519', header: 'x-signature-ed25519', signed: '{timestamp}{body}',
     timestamp: { header: 'x-signature-timestamp' }, challenge: { when: { path: 'type', equals: 1 }, echo: 'type' } },
