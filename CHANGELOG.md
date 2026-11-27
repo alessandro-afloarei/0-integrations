@@ -53,12 +53,13 @@ Nothing here is released yet.
 - Breaking: a code exchange the server refuses is classified as a `token` sign-in's first request is. A 400, 401 or
   403, and a 200 the entry's `failed` marks, throw `ProviderHttpError` `rejected`, its detail the answer's `error` only
   when that is one of RFC 6749's codes, else null. So a bad, expired or replayed code, or a wrong `redirect_uri` or code
-  verifier (`invalid_grant`), is no longer `GrantRevoked`; a wrong client (`invalid_client`), any other OAuth code and an
-  answer with no OAuth body at those statuses are no longer `request_failed`; Slack's `ok: false` is `rejected` with no
-  detail (its own codes, such as `invalid_code`, are none of RFC 6749's). Any other refusal of the exchange is
+  verifier (`invalid_grant`), is no longer `GrantRevoked`; a wrong client (`invalid_client`), any other OAuth code and
+  an answer with no OAuth body at those statuses are no longer `request_failed`; Slack's `ok: false` is `rejected` with
+  no detail (its own codes, such as `invalid_code`, are none of RFC 6749's). Any other refusal of the exchange is
   classified as a call's answer is: a 404 is `not_found`, a 429 `rate_limited` with its wait, a 408 `unavailable`, each
-  `request_failed` before (or `GrantRevoked` before, for `invalid_grant` or a code the entry lists as revoked). A
-  refresh and a revoke are classified as before.
+  `request_failed` before (or `GrantRevoked` before, for `invalid_grant` or a code the entry lists as revoked). An app
+  that caught `GrantRevoked` or `request_failed` from `finishConnect` or `exchangeCode` to ask the person to connect
+  again catches `rejected`. A refresh and a revoke are classified as before.
 - Breaking: an OAuth refusal that carries a `WWW-Authenticate` challenge (Doorkeeper sends one on every error, RFC 6749
   asks for one beside a 401 `invalid_client`) is read from its body as any other refusal is. A refresh refused with
   `invalid_grant` that way is `GrantRevoked`, no longer `request_failed`; a revoke refused with `invalid_grant` that way
@@ -67,13 +68,16 @@ Nothing here is released yet.
   - New: a webhook timestamp may be epoch milliseconds or an ISO 8601 instant (`timestamp.unit`); Zendesk verifies its
     webhooks.
   - New: a challenge may be read from a request header (`echo: { header }`, text only); Front verifies its webhooks,
-    answers its validation request and dedupes on the signed event's `payload.id` (the validation request has none). A value read from a query or a header is never answered inside JSON, even by an
-    app's own declaration that leaves out `text`.
+    answers its validation request and dedupes on the signed event's `payload.id` (the validation request has none). A
+    value read from a query or a header is never answered inside JSON, even by an app's own declaration that leaves out
+    `text`.
   - Breaking: every catalogue entry with a signed webhook (`hmac`, `ed25519`) dedupes on a body path (the table refuses
-    a header id there). Breakcold reads `eventId`, PagerDuty `event.id` and TidyCal `id` from the signed body; PagerDuty's
-    id is now the event's, the same in every subscription's copy, where `X-Webhook-Id` was per webhook, so its values
-    change. Linear, Sentry, RocketReach and Todoist declare no `deliveryId` (no page documents a signed per-delivery id),
-    so `deliveryId()` answers null and an app dedupes them on its own key.
+    a header id there). Breakcold reads `eventId` (was the `x-webhook-delivery-id` header), PagerDuty `event.id` (was
+    `x-webhook-id`) and TidyCal `id` (was `tidycal-event-id`) from the signed body, so the ids `deliveryId()` returns
+    for them change value: a delivery first seen before the update and retried after it reads as new. PagerDuty's id
+    is now the event's, the same in every subscription's copy, where `X-Webhook-Id` was per webhook.
+    Linear, Sentry, RocketReach and Todoist declare no `deliveryId` (no page documents a signed per-delivery id), so
+    `deliveryId()` answers null and an app dedupes them on its own key.
   - Breaking: Fireflies declares no `deliveryId`: `event` and `meeting_id` name the meeting, and a resend after its notes
     change carries the same pair, so deduping on it dropped every updated transcript or summary. `deliveryId()` answers
     null; an app dedupes on its own key, for example the event, the meeting id and `reprocessed_at` (absent on a first
