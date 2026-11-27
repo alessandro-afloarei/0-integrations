@@ -19,7 +19,8 @@ export const leadiq = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'From Settings, then API, in LeadIQ, exactly as shown (it is already Base64-encoded). Searches and lookups spend the account\'s UC credits.' }],
   auth: [{ kind: 'key', send: { header: 'authorization', value: 'Basic {token}' } }],
-  http: { baseUrl: 'https://api.leadiq.com/graphql', headers: { 'content-type': 'application/json' }, retry: {} },
+  http: { baseUrl: 'https://api.leadiq.com/graphql', headers: { 'content-type': 'application/json' },
+    retry: { defaultWaitMs: 60_000 } },
   identify: { request: { graphql: 'query Account { account { plans { name product status } } }' } },
   errors: { failed: { path: 'errors.0' } },
   operations: {
