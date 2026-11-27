@@ -1,15 +1,15 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Slack: an OAuth v2 bot grant, on slack.com or GovSlack's slack-gov.com (https://docs.slack.dev/govslack). Events
- * are signed `X-Slack-Signature: v0=<hex HMAC-SHA256 of v0:{timestamp}:{body}>`, `X-Slack-Request-Timestamp` within
- * five minutes (https://docs.slack.dev/authentication/verifying-requests-from-slack); `url_verification` is answered
- * with its `challenge`, as JSON: https://docs.slack.dev/reference/events/url_verification/ */
+/** Slack: an OAuth v2 bot grant on slack.com, or GovSlack's slack-gov.com, whose page asks an app to be "approved and
+ * published in the GovSlack Marketplace" (its FAQ: public distribution installs it): https://docs.slack.dev/govslack
+ * Events signed v0 HMAC-SHA256, five minutes: https://docs.slack.dev/authentication/verifying-requests-from-slack
+ * `url_verification` is answered with its `challenge`: https://docs.slack.dev/reference/events/url_verification/ */
 export const slack = defineProvider({
   id: 'slack', name: 'Slack',
   docs: 'https://docs.slack.dev/authentication/installing-with-oauth',
   categories: ['chat'],
   fields: [{ name: 'domain', title: 'Slack instance', choices: ['slack.com', 'slack-gov.com'], default: 'slack.com',
-    help: 'slack.com, or slack-gov.com for GovSlack, whose app is registered apart on api.slack-gov.com.' }],
+    help: 'slack.com, or slack-gov.com for GovSlack, an instance of Slack designed for U.S. public sector use, whose app is registered apart on api.slack-gov.com.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://{domain}/oauth/v2/authorize', tokenUrl: 'https://{domain}/api/oauth.v2.access',
     pkce: false, scopeSeparator: ',', tokenTypes: ['bot'], failed: { path: 'ok', equals: false } }],
   scopes: { default: ['chat:write', 'chat:write.public', 'channels:read', 'groups:read'] },
