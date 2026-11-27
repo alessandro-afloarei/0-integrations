@@ -5,7 +5,7 @@ import { defineProvider } from '../catalogue.js';
  * the workspace's API key. 100 requests per 10 seconds per workspace, then a 429. A `reply` message reaches the
  * contact. The conversation and message lists' answers are not shown, so each answers one page as sent. */
 const conversation = { id: 'integer', 'title?': 'string', 'channel?': 'string', 'state?': 'string', 'open?': 'boolean',
-  'created_at?': 'integer', 'updated_at?': 'integer', 'assignee?': { 'id?': 'integer', 'type?': 'string' } } as const;
+  'created_at?': 'integer', 'updated_at?': 'integer', 'assignee?': 'unknown' } as const;
 const conversationId = { conversation_id: { in: 'path', type: 'integer', required: true } } as const;
 const listed = { order: { in: 'query', type: 'string', enum: ['asc', 'desc'], description: 'desc by default.' },
   status: { in: 'query', type: 'string', enum: ['all', 'open', 'closed', 'snoozed'], description: 'all by default.' },
@@ -54,7 +54,7 @@ export const gist = defineProvider({
         order: { in: 'query', type: 'string', enum: ['asc', 'desc'] },
         order_by: { in: 'query', type: 'string', enum: ['last_seen_at', 'created_at', 'updated_at', 'signed_up_at'] },
         email_like: { in: 'query', type: 'string' } },
-      result: { contacts: [{ id: 'unknown', 'type?': 'string', 'name?': 'string', 'email?': 'string', 'user_id?': 'string',
+      result: { contacts: [{ id: 'unknown', 'type?': 'string', 'name?': 'string', 'email?': 'string', 'user_id?': 'unknown',
         'created_at?': 'integer', 'updated_at?': 'integer', 'last_seen_at?': 'integer' }] } },
   },
 });
