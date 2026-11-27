@@ -12,6 +12,7 @@ const message = { 'href?': 'string', 'note?': 'boolean', 'body?': 'unknown', 'pl
 const number = { ticket_number: { in: 'path', type: 'integer', required: true } } as const;
 const perPage = { per_page: { in: 'query', type: 'integer', description: '25 by default, at most 50.' } } as const;
 const states = ['unread', 'opened', 'pending', 'closed', 'spam'];
+const settable = ['unread', 'opened', 'pending', 'closed'];
 const sending = { note: { in: 'body', type: 'boolean', description: 'true adds it as a private note.' },
   send_copy_to_customer: { in: 'body', type: 'boolean', description: 'true emails it to the customer; false by default.' },
   skip_notifications: { in: 'body', type: 'boolean', description: 'true skips every agent notification.' } } as const;
@@ -43,7 +44,7 @@ export const groove = defineProvider({
         state: { in: 'body', type: 'string', enum: states }, tags: { in: 'body', type: ['string'] }, ...sending },
       result: { ticket } },
     'tickets.update': { docs: `${ref}/tickets`, method: 'PUT', path: '/tickets/{ticket_number}/state',
-      params: { ...number, state: { in: 'body', type: 'string', required: true, enum: states } } },
+      params: { ...number, state: { in: 'body', type: 'string', required: true, enum: settable } } },
     'messages.list': { docs: `${ref}/messages`, path: '/tickets/{ticket_number}/messages', paging: 'messages', records: 'messages',
       params: { ...number, ...perPage }, result: { messages: [message] } },
     'messages.create': { docs: `${ref}/messages`, method: 'POST', path: '/tickets/{ticket_number}/messages',
