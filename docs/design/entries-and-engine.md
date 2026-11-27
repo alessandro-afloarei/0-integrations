@@ -555,7 +555,8 @@ type Webhook = (
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
   | { kind: 'basic' }
-) & { deliveryId?: { header: string } | { body: readonly Path[] }; challenge?: { when: When; echo: string } };
+) & { deliveryId?: { header: string } | { body: readonly Path[] };
+  challenge?: { when?: When; echo: Path | { header: string } | { query: string }; text?: true; unsigned?: true } };
 ```
 
 `verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
@@ -595,20 +596,28 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    one space, and the base64 of the secret's UTF-8 bytes, compared over the SHA-256 digests of both, as `token`
    compares. A secret with no `:`, or with an empty password, keys nothing (`false`).
 8. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
-9. `challengeAnswer(webhook, request)`, called only after `verifyWebhook` accepted the request, answers a handshake: a
-   JSON response `{ [echo]: value }` when the body is JSON, `challenge.when` holds for it and its top-level `echo` is a
-   string or a finite number; otherwise null. Slack's `url_verification` and Discord's PING are its users.
+9. `challengeAnswer(webhook, request, secret)` answers a handshake, or is null. It checks the request first with
+   `verifyWebhook`, unless the challenge is `unsigned` (Fellow's and Nylas' verification requests carry no signature).
+   The value is read at `echo`: a body path (Slack, Discord), a header (Front's `x-front-challenge`) or a query
+   parameter (Nylas' `challenge`, on a GET with no body). It answers when `when` holds (a body path needs one; a header
+   or a query may leave it out, the value's presence then deciding) and the value is a string of 1 to 512 printable
+   ASCII characters without a space, `<` or `>`, or for a JSON answer also a finite number: as JSON `{ [echo]: value }`
+   (a header's or a query parameter's name for `echo`), or with `text` as the value alone, `content-type: text/plain;
+   charset=utf-8` and `x-content-type-options: nosniff`. A challenge answer changes nothing and holds nothing secret;
+   an app calls it first, and verifies every other request.
 
 In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
 Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google), `standard` (GitLab; Svix's names:
-AgentMail), `basic` (Mailjet) and `challenge` (Slack, Discord). A secret that keys nothing (one that does not decode
+AgentMail), `basic` (Mailjet) and `challenge` (Slack, Discord; from a query, as text and `unsigned`: Nylas). A secret that keys nothing (one that does not decode
 exactly, a key of only zero bytes, or a Basic secret without a password) is `false`. The table test also refuses a
-`challenge.when` with a `status`, `header` or `detail` or without a `path`, and an `echo` holding a `.`.
+`challenge.when` with a `status` or `detail`, a body `echo` without a `when` that reads a body `path`, an `echo` path
+holding a `.`, a header `echo` that is no lowercase token and an empty query name.
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a
-provider needs them: Paddle's `;` separator, second challenge shapes (Microsoft Graph's `validationToken`, Zoom's
-`endpoint.url_validation`, Dropbox's GET, Asana's `X-Hook-Secret`) and a default `deliveryId` for `standard`.
+provider needs them: Paddle's `;` separator, the challenges of providers not declared yet (Microsoft Graph's
+`validationToken`, Zoom's `endpoint.url_validation`, Dropbox's GET, Asana's `X-Hook-Secret`) and a default `deliveryId`
+for `standard`.
 
 ### `operations`
 
@@ -785,7 +794,7 @@ The core functions keep their names and take an entry. `ProviderDefinition`, `./
 | `connect` | `startConnect(entry, …)` and `finishConnect(entry, …)` run any entry: a form or OAuth 2; an OAuth 2 start takes and returns the plain `values`, and its finish takes them back. The scopes are the entry's; `requireGranted` compares the grant with them and refuses a short one as `rejected` (`scope_missing`). Identify is generic. A failed identify revokes the fresh grant unless `reusesGrant`. `finishConnect` returns `{ secret, values, account }`, typed from the entry. Its `fetch` is optional, defaulting as `client`'s. |
 | `oauth`, `credentials` | Driven by the entry. `refreshGrant(entry, client, refreshToken, { values, fetch? })`. `revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke (`client` only for an RFC 7009 revoke); both take the connection's `values`, required for an entry with a plain field, optional with only saved keys, empty with neither: by RFC 7009 or by request, as the entry declares; a 2xx, `invalid_grant`, a revoked grant and the entry's `goneErrors` are done, and an RFC 7009 revoke's 404 (a request revoke's 404 is a missing route). |
 | `paginate` | Unchanged. The walker for the declared shapes is built on it. |
-| `webhooks` | `verifyWebhook(entry.webhook, request, secret)`, then `challengeAnswer(entry.webhook, request)` and `deliveryId(entry.webhook, request)`. |
+| `webhooks` | `challengeAnswer(entry.webhook, request, secret)`, then `verifyWebhook(entry.webhook, request, secret)` and `deliveryId(entry.webhook, request)`. |
 | `client` (new) | `client(entry, options)` takes the HTTP client's options (`token`, `values?`, `baseUrl?`, `headers?`, `minIntervalMs?`, `beforeRequest?`, `fetch?`) and returns the typed operations, plus `json`, `request` and `paginate` for raw calls. `token` is a string or a function that renews it; a missing or blank one is refused when a request needs it (`token_missing`). `fetch` is the global one by default, or `guardedFetch` for an entry whose host is typed. |
 | `vault` | Unchanged. A connection's plain values are the app's to keep. |
 

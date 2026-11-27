@@ -69,7 +69,10 @@ const timestamp = z.strictObject({ header: headerName, toleranceSeconds });
 const partName = z.string().regex(/^[^\s,=]+$/u, 'a `part` names one `name=value` piece: give it a name with no `,`, `=` or space');
 /** What every webhook kind may declare. */
 const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional(),
-  challenge: z.strictObject({ when: when.refine(item => item.equals !== undefined || item.in !== undefined, 'a `challenge.when` compares the body value: give `equals` or `in`'), echo: z.string().min(1) }).optional() };
+  challenge: z.strictObject({ when: when.refine(item => item.equals !== undefined || item.in !== undefined, 'a `challenge.when` compares the body value: give `equals` or `in`').optional(),
+    echo: z.union([z.string().min(1), z.strictObject({ header: headerName }),
+      z.strictObject({ query: z.string().min(1, 'a challenge `query` names its parameter: give the name') })]),
+    text: z.literal(true).optional(), unsigned: z.literal(true).optional() }).optional() };
 const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]);
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
@@ -372,13 +375,19 @@ const runnable = {
     if (webhook === undefined || stamp === undefined) return true;
     return 'part' in stamp ? webhook.kind !== 'hmac' || stamp.part !== webhook.part : stamp.header !== webhook.header;
   },
-  // A challenge is read from the body alone: there is no answer status, no header worth trusting and no provider code.
-  "a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`": (entry: Entry) => {
-    const when = entry.webhook?.challenge?.when;
-    return when === undefined || (when.path !== undefined && when.status === undefined && when.header === undefined && when.detail === undefined);
+  // A challenge has no answer status and no provider code; a body value counts only where the body says it is one.
+  "a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a header or a query may leave `when` out)": (entry: Entry) => {
+    const challenge = entry.webhook?.challenge;
+    if (challenge === undefined) return true;
+    const { when, echo } = challenge;
+    return when === undefined ? typeof echo !== 'string'
+      : when.status === undefined && when.detail === undefined && (typeof echo !== 'string' || when.path !== undefined);
   },
   // The echoed value is the body's top-level key of that name.
-  'a `webhook.challenge.echo` with no `.` (a top-level key of the body)': (entry: Entry) => !(entry.webhook?.challenge?.echo.includes('.') ?? false),
+  'a `webhook.challenge.echo` with no `.` (a top-level key of the body)': (entry: Entry) => {
+    const echo = entry.webhook?.challenge?.echo;
+    return typeof echo !== 'string' || !echo.includes('.');
+  },
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
@@ -552,6 +561,17 @@ const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
 const tokened = { ...key, fields: [{ name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Client secret', secret: true }],
   auth: [{ kind: 'token', request: { url: 'https://k.test/token', body: { grant_type: 'client_credentials' },
     basic: ['{clientId}', '{clientSecret}'] } }] } as const;
+test('a challenge from a header or a query, answered as text and unsigned beside any kind, passes the schema and every rule', () => {
+  for (const webhook of [{ kind: 'standard', challenge: { echo: { header: 'x-front-challenge' }, text: true } },
+    { kind: 'basic', challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } },
+    { kind: 'standard', challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge', text: true, unsigned: true } },
+    { kind: 'token', header: 'x-token', challenge: { when: { header: 'x-kind', equals: 'check' }, echo: { header: 'x-check' } } }] as const) {
+    const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook });
+    expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
+    expect(entrySchema.safeParse(good).error).toBeUndefined();
+  }
+});
+
 /** Wrike's shape: fixed sign-in URLs, the base and the refresh on the host the token answer names, under one domain. */
 const named = { ...key, scopes: { default: [] }, save: { host: 'tokenAnswer.host' }, identify: { request: { path: '/me' }, id: 'id' },
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.test/authorize', tokenUrl: 'https://login.k.test/token', refreshUrl: 'https://{host}/token' }],
@@ -721,9 +741,13 @@ test.each<[Rule, Entry]>([
       challenge: { when: { path: 'type', equals: 1 }, echo: 'a.b' } }],
   ] as const).map(([rule, webhook]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook })]),
   ...([{ status: 200, path: 'type', equals: 1 }, { header: 'x-type', equals: '1' }, { path: 'type', detail: 'ping' }, { equals: 1 }] as const)
-    .map((when): [Rule, Entry] => ["a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`",
+    .map((when): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a header or a query may leave `when` out)",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
         webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when, echo: 'type' } } })]),
+  ...([{ echo: 'challenge', unsigned: true }, { echo: 'challenge', text: true }, { echo: { header: 'x-challenge' }, when: { status: 200, header: 'x-challenge' } },
+    { echo: { query: 'challenge' }, when: { path: 'type', detail: 'ping' }, unsigned: true }] as const)
+    .map((challenge): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a header or a query may leave `when` out)",
+      defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'standard', challenge } })]),
   ["an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' }, list: 'items' } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'result.items',
@@ -936,6 +960,7 @@ test.each<[string, Record<string, unknown>]>([
   ["a webhook's header", { webhook: { kind: 'hmac', header: 'X Signature' } }],
   ['a timestamp header', { webhook: { kind: 'hmac', header: 'x-signature', signed: '{timestamp}{body}', timestamp: { header: 'x-timestamp:' } } }],
   ['a delivery id header', { webhook: { kind: 'standard', deliveryId: { header: 'Webhook-Id' } } }],
+  ["a challenge's header", { webhook: { kind: 'standard', challenge: { echo: { header: 'X-Front-Challenge' }, text: true } } }],
   ["a condition's header", { errors: { rules: [{ when: { header: 'X-Error' }, code: 'rejected' }] } }],
   ['a header the entry sends on every call', { http: { ...key.http, headers: { 'X-Api-Version': '2' } } }],
   ["a rate limit's wait header", { http: { ...key.http, rateLimit: { when: [{ status: 403, wait: { header: 'x reset', unit: 'epochSeconds' } }] } } }],
@@ -951,6 +976,8 @@ test.each<[string, Record<string, unknown>, string]>([
     'a header `value` holds no control character'],
   ['a challenge that compares nothing', { webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when: { path: 'type' }, echo: 'type' } } },
     'a `challenge.when` compares the body value: give `equals` or `in`'],
+  ['a challenge from an empty query name', { webhook: { kind: 'hmac', header: 'x-signature', challenge: { echo: { query: '' }, text: true, unsigned: true } } },
+    'a challenge `query` names its parameter: give the name'],
 ])('%s fails the schema, with what to fix', (_, parts, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], ...parts };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);

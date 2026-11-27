@@ -101,7 +101,9 @@ entry:
 - declares a webhook the engine can trust: `{body}` is signed (by default, or in `signed`), and `{timestamp}` exactly
   when a timestamp is declared, read apart from the signature (another `part` or header); a `part` name holds no `,`,
   `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, a wait's, `http.headers`
-  keys) is one lowercase HTTP token; a `challenge` compares a body `path` (`equals` or `in`) and echoes a top-level key;
+  keys) is one lowercase HTTP token; a `challenge` echoes a top-level body key where its `when` compares a body `path`
+  (`equals` or `in`), or a header or a query parameter (its `when` may be left out), and is `unsigned` only where the
+  provider's page says the handshake carries no signature;
 - retries as the engine can: a `retry.wait` or a rate-limit rule's `wait` reads one header (or a list) or one body
   path, in `s`, `ms`, `epochSeconds` or `epochMs`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000 when left
   out) and never beside `onlyStated`;

@@ -95,15 +95,26 @@ const standard: Webhook = { kind: 'standard', deliveryId: { header: 'webhook-id'
 const challenged: Webhook = { kind: 'hmac', header: 'x-slack-signature', signed: 'v0:{timestamp}:{body}', prefix: 'v0=',
   timestamp: { header: 'x-slack-request-timestamp' },
   challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge' } };
+// A `challenge` read from a GET's query and answered as text, unsigned: the secret comes after it (Nylas)
+const queried: Webhook = { kind: 'hmac', header: 'x-nylas-signature',
+  challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
 ```
 
 ## Receiving a delivery
 
-Verify first, then answer a challenge, then dedupe and handle. `challengeAnswer(entry.webhook, request)` answers a URL
-handshake the entry declares (`challenge`): Slack's `url_verification` with `{ "challenge": … }`, Discord's PING with
-`{ "type": 1 }`, each a JSON `200`. It is null for any other body, a body that is not JSON, a value that is not a string
-or a number, and an entry with no `challenge`; it copies nothing else of the body. Answer a challenge only after
-`verifyWebhook` accepted the request: an unsigned one would let anyone register your URL elsewhere.
+Answer a challenge first, then verify, then dedupe and handle. `challengeAnswer(entry.webhook, request, secret)`
+answers a URL handshake the entry declares (`challenge`) and is null for every other request. It verifies the request
+with `verifyWebhook` first, unless the entry marks the challenge `unsigned`: Slack's `url_verification` is answered
+`{ "challenge": … }` and Discord's PING `{ "type": 1 }`, each a JSON `200`, only under a valid signature (Discord also
+sends PINGs with invalid signatures, and expects the `401`). Nylas' check is a `GET` with `?challenge=…`, sent before
+Nylas makes the webhook's secret, so it is unsigned; it is answered with the value alone, as
+`text/plain; charset=utf-8` with `x-content-type-options: nosniff`. Nylas refuses an answer sent with chunked encoding.
+
+A challenge read from the body is answered only where its `when` holds; one read from a header or a query parameter
+wherever the value is present. The value comes from whoever sent the request, so it is answered only when it is 1 to
+512 printable ASCII characters with no space, `<` or `>` (in a JSON answer, a finite number too): never markup, never
+a header. The answer copies nothing else of the request, changes nothing and holds nothing secret; anyone may receive
+one for an unsigned challenge. Verify every request it does not answer.
 
 ```ts
 import type { Webhook } from '0-integrations/catalogue';
@@ -114,10 +125,11 @@ async function receive(webhook: Webhook, request: Request, secret: string,
   const rawBody = await readCappedBody(request, 1024 * 1024);
   if (rawBody === null) return new Response(null, { status: 413 });
   const delivery = { method: request.method, url: request.url, headers: request.headers, rawBody };
-  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
-  const answer = challengeAnswer(webhook, delivery);
+  const answer = challengeAnswer(webhook, delivery, secret); // a handshake, verified unless the entry marks it unsigned
   if (answer !== null) return answer;
+  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
   return handle(deliveryId(webhook, delivery), rawBody); // the app dedupes on the id, when the entry declares one
 }
-// receive(slack.webhook, request, signingSecret, …), or receive(discord.webhook, request, publicKey, …)
+// receive(slack.webhook, request, signingSecret, …), receive(discord.webhook, request, publicKey, …),
+// or receive(nylas.webhook, request, webhookSecret, …)
 ```

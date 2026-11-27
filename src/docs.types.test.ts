@@ -12,6 +12,7 @@ import { linear } from './catalogue/linear.js';
 import { mailjet } from './catalogue/mailjet.js';
 import { mattermost } from './catalogue/mattermost.js';
 import { notion } from './catalogue/notion.js';
+import { nylas } from './catalogue/nylas.js';
 import { aircall } from './catalogue/aircall.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { metabase } from './catalogue/metabase.js';
@@ -254,23 +255,27 @@ function webhooksDeclared() {
   const challenged: Webhook = { kind: 'hmac', header: 'x-slack-signature', signed: 'v0:{timestamp}:{body}', prefix: 'v0=',
     timestamp: { header: 'x-slack-request-timestamp' },
     challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge' } };
-  return [timestamped, pieces, signedWithKey, sharedToken, decoded, credentials, standard, challenged];
+  // A `challenge` read from a GET's query and answered as text, unsigned: the secret comes after it (Nylas)
+  const queried: Webhook = { kind: 'hmac', header: 'x-nylas-signature',
+    challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
+  return [timestamped, pieces, signedWithKey, sharedToken, decoded, credentials, standard, challenged, queried];
 }
 
-// docs/modules/webhooks.md › Receiving a delivery (its last line, a comment there, is the two calls below).
+// docs/modules/webhooks.md › Receiving a delivery (its last line, a comment there, is the three calls below).
 async function webhooksReceive(webhook: Webhook, request: Request, secret: string,
   handle: (id: string | null, rawBody: Buffer) => Promise<Response>): Promise<Response> {
   const rawBody = await readCappedBody(request, 1024 * 1024);
   if (rawBody === null) return new Response(null, { status: 413 });
   const delivery = { method: request.method, url: request.url, headers: request.headers, rawBody };
-  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
-  const answer = challengeAnswer(webhook, delivery);
+  const answer = challengeAnswer(webhook, delivery, secret); // a handshake, verified unless the entry marks it unsigned
   if (answer !== null) return answer;
+  if (!verifyWebhook(webhook, delivery, secret)) return new Response(null, { status: 401 }); // Discord requires a 401
   return handle(deliveryId(webhook, delivery), rawBody); // the app dedupes on the id, when the entry declares one
 }
-function webhooksReceiveCalls(request: Request, signingSecret: string, publicKey: string,
+function webhooksReceiveCalls(request: Request, signingSecret: string, publicKey: string, webhookSecret: string,
   handle: (id: string | null, rawBody: Buffer) => Promise<Response>) {
-  return [webhooksReceive(slack.webhook, request, signingSecret, handle), webhooksReceive(discord.webhook, request, publicKey, handle)];
+  return [webhooksReceive(slack.webhook, request, signingSecret, handle), webhooksReceive(discord.webhook, request, publicKey, handle),
+    webhooksReceive(nylas.webhook, request, webhookSecret, handle)];
 }
 
 // docs/modules/testing.md › A fake derived from an entry (its four examples).
@@ -315,7 +320,7 @@ test('every docs example compiles', () => {
 test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {
   // `toEqual` reads a property set to undefined as missing.
   expect(webhooksDeclared()).toEqual([breakcold.webhook, stripe.webhook, { ...discord.webhook, challenge: undefined }, google.webhook,
-    close.webhook, mailjet.webhook, gitlab.webhook, slack.webhook]);
+    close.webhook, mailjet.webhook, gitlab.webhook, slack.webhook, nylas.webhook]);
 });
 
 test("testing.md's derived-fake examples run", async () => {

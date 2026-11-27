@@ -12,6 +12,7 @@ import { gitlab } from './catalogue/gitlab.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { mailjet } from './catalogue/mailjet.js';
+import { nylas } from './catalogue/nylas.js';
 import { slack } from './catalogue/slack.js';
 import { stripe } from './catalogue/stripe.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook, type WebhookRequest } from './webhooks.js';
@@ -376,37 +377,101 @@ test('an empty secret accepts nothing, whatever the kind', () => {
   expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.alloc(0))), '')).toBe(false);
 });
 
-/** A request with this JSON body: `challengeAnswer` runs after `verifyWebhook`, so no signature is needed here. */
+/** A request with this body and no signature. */
 const posted = (json: string) => request({}, Buffer.from(json));
-const answered = async (answer: Response | null) => (answer === null ? null
-  : { status: answer.status, type: answer.headers.get('content-type'), body: await answer.json() });
+/** Slack's `url_verification`, or any body, signed as Slack signs it (with `key`). */
+const slackSigned = (json: string, key = secret) => request({ 'x-slack-request-timestamp': t,
+  'x-slack-signature': `v0=${createHmac('sha256', key).update(`v0:${t}:${json}`).digest('hex')}` }, Buffer.from(json));
+/** Discord's interaction, signed as Discord signs it. */
+const discordPing = (json: string) => request({ 'x-signature-timestamp': t,
+  'x-signature-ed25519': sign(null, Buffer.from(t + json), pair.privateKey).toString('hex') }, Buffer.from(json));
+/** Nylas' verification: a GET to the registered URL with `query`, and no body. */
+const nylasGet = (query: string) => ({ method: 'GET', url: `https://app.test/webhook${query}`, headers: new Headers(), rawBody: Buffer.alloc(0) });
+const answered = async (answer: Response | null) => (answer === null ? null : { status: answer.status,
+  type: answer.headers.get('content-type'), nosniff: answer.headers.get('x-content-type-options'), body: await answer.text() });
+const asJson = (body: unknown) => ({ status: 200, type: 'application/json', nosniff: null, body: JSON.stringify(body) });
+const asText = (body: string) => ({ status: 200, type: 'text/plain; charset=utf-8', nosniff: 'nosniff', body });
 
-test("answers Slack's `url_verification` with its challenge, and nothing else", async () => {
+test("answers Slack's `url_verification` with its challenge only when it is signed with the app's secret", async () => {
   const challenge = '3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P';
-  // A signed `url_verification` passes `verifyWebhook` first, as an app calls them.
   const json = JSON.stringify({ token: 'Jhj5dZrVaK7ZwHHjRyZWjbDl', challenge, type: 'url_verification' });
-  const digest = createHmac('sha256', secret).update(`v0:${t}:${json}`).digest('hex');
-  const verification = request({ 'x-slack-signature': `v0=${digest}`, 'x-slack-request-timestamp': t }, Buffer.from(json));
-  expect(verifyWebhook(slack.webhook, verification, secret)).toBe(true);
-  expect(await answered(challengeAnswer(slack.webhook, verification)))
-    .toEqual({ status: 200, type: 'application/json', body: { challenge } });
-  expect(challengeAnswer(slack.webhook, posted(JSON.stringify({ type: 'event_callback', challenge, event: {} })))).toBeNull();
-  expect(challengeAnswer(slack.webhook, posted(JSON.stringify({ type: 'url_verification', challenge: { value: challenge } })))).toBeNull();
+  expect(await answered(challengeAnswer(slack.webhook, slackSigned(json), secret))).toEqual(asJson({ challenge }));
+  expect(challengeAnswer(slack.webhook, slackSigned(json), 'another-secret')).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned(json, 'another-secret'), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, posted(json), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned(JSON.stringify({ type: 'event_callback', challenge, event: {} })), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned(JSON.stringify({ type: 'url_verification', challenge: { value: challenge } })), secret)).toBeNull();
 });
 
-test("answers Discord's PING with `{ type: 1 }`, and no other interaction", async () => {
-  expect(await answered(challengeAnswer(discord.webhook, posted('{"type":1}')))).toEqual({ status: 200, type: 'application/json', body: { type: 1 } });
-  expect(challengeAnswer(discord.webhook, posted('{"type":2}'))).toBeNull();
+test("answers Discord's PING with `{ type: 1 }` only under its signature, and no other interaction", async () => {
+  expect(await answered(challengeAnswer(discord.webhook, discordPing('{"type":1}'), publicKey))).toEqual(asJson({ type: 1 }));
+  // Discord checks the endpoint with invalid signatures: a PING it did not sign is no handshake.
+  const forged = discordPing('{"type":1}');
+  const good = forged.headers.get('x-signature-ed25519') ?? '';
+  forged.headers.set('x-signature-ed25519', (parseInt(good.slice(0, 1), 16) ^ 1).toString(16) + good.slice(1));
+  expect(challengeAnswer(discord.webhook, forged, publicKey)).toBeNull();
+  expect(challengeAnswer(discord.webhook, posted('{"type":1}'), publicKey)).toBeNull();
+  expect(challengeAnswer(discord.webhook, discordPing('{"type":2}'), publicKey)).toBeNull();
+});
+
+test("answers Nylas' GET `?challenge=` with the value alone, as text, unsigned", async () => {
+  const value = 'bc609b38-c81f-47fb-a275-1d9bd61a968b';
+  for (const key of ['', 'any-secret']) expect(await answered(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${value}`), key))).toEqual(asText(value));
+  expect(await answered(challengeAnswer(nylas.webhook, nylasGet('?a=1&challenge=abc'), ''))).toEqual(asText('abc'));
+  expect(await answered(challengeAnswer(nylas.webhook, { ...nylasGet('?challenge=abc'), url: '/webhook?challenge=abc' }, ''))).toEqual(asText('abc'));
+  for (const query of ['', '?', '?challenge=', '?challenge', '?Challenge=abc', '?other=abc', '#challenge=abc']) {
+    expect(challengeAnswer(nylas.webhook, nylasGet(query), '')).toBeNull();
+  }
+  // A notification is no handshake: its body is never read for a value.
+  expect(challengeAnswer(nylas.webhook, posted('{"challenge":"abc"}'), '')).toBeNull();
+});
+
+test('a challenge value is 1 to 512 printable ASCII characters with no space, `<` or `>`, or it is not answered', async () => {
+  const slackChallenge = (value: unknown) => slackSigned(JSON.stringify({ type: 'url_verification', challenge: value }));
+  for (const value of ['<script>alert(1)</script>', 'a<b', 'a>b', 'a b', 'a\nb', 'a\r\nx-evil: 1', 'a\tb', 'é', 'a\u0000', '', 'x'.repeat(513)]) {
+    expect(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${encodeURIComponent(value)}`), '')).toBeNull();
+    expect(challengeAnswer(slack.webhook, slackChallenge(value), secret)).toBeNull();
+  }
+  expect(challengeAnswer(nylas.webhook, nylasGet('?challenge=a+b'), '')).toBeNull();
+  const longest = 'x'.repeat(512);
+  expect(await answered(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${longest}`), ''))).toEqual(asText(longest));
+  const printable = '!"#$%&\'()*+,-./09:;=?@AZ[\\]^_`az{|}~';
+  expect(await answered(challengeAnswer(nylas.webhook, nylasGet(`?challenge=${encodeURIComponent(printable)}`), ''))).toEqual(asText(printable));
+  expect(await answered(challengeAnswer(slack.webhook, slackChallenge(printable), secret))).toEqual(asJson({ challenge: printable }));
+  for (const value of [null, true, {}, [], 1e400]) expect(challengeAnswer(slack.webhook, slackChallenge(value), secret)).toBeNull();
+});
+
+test('a header challenge echoes the header alone, after the request is verified unless it is unsigned', async () => {
+  const front: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: { header: 'x-front-challenge' }, text: true } };
+  const sent = (headers: Record<string, string>) => request(headers, Buffer.from('{"challenge":"from-body","secret":"s"}'));
+  expect(await answered(challengeAnswer(front, sent({ 'x-token': secret, 'x-front-challenge': 'abc' }), secret))).toEqual(asText('abc'));
+  expect(challengeAnswer(front, sent({ 'x-token': 'wrong', 'x-front-challenge': 'abc' }), secret)).toBeNull();
+  expect(challengeAnswer(front, sent({ 'x-token': secret }), secret)).toBeNull();
+  const unsigned: Webhook = { ...front, challenge: { ...front.challenge, echo: { header: 'x-front-challenge' }, unsigned: true } };
+  expect(await answered(challengeAnswer(unsigned, sent({ 'x-front-challenge': 'abc' }), ''))).toEqual(asText('abc'));
+  // A JSON answer names the header it read.
+  const json: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: { header: 'x-front-challenge' }, unsigned: true } };
+  expect(await answered(challengeAnswer(json, sent({ 'x-front-challenge': 'abc' }), ''))).toEqual(asJson({ 'x-front-challenge': 'abc' }));
+});
+
+test('a text answer is a string: a number at a body path is not answered as text', async () => {
+  const text: Webhook = { kind: 'token', header: 'x-token', challenge: { when: { path: 'type', equals: 1 }, echo: 'value', text: true, unsigned: true } };
+  expect(challengeAnswer(text, posted('{"type":1,"value":42}'), '')).toBeNull();
+  expect(await answered(challengeAnswer(text, posted('{"type":1,"value":"42"}'), ''))).toEqual(asText('42'));
+});
+
+test("a body path is answered only when `when` holds: an app's own declaration without one answers nothing", () => {
+  const loose: Webhook = { kind: 'token', header: 'x-token', challenge: { echo: 'challenge', unsigned: true } };
+  expect(challengeAnswer(loose, posted('{"challenge":"abc"}'), '')).toBeNull();
 });
 
 test('a challenge answer echoes the one declared value and nothing else of the body', async () => {
-  expect(challengeAnswer(slack.webhook, posted('type=url_verification&challenge=x'))).toBeNull();
-  expect(challengeAnswer(slack.webhook, request({}, Buffer.from([0xff, 0xfe])))).toBeNull();
-  expect(challengeAnswer(fireflies.webhook, posted('{"type":"url_verification","challenge":"x"}'))).toBeNull();
-  expect(challengeAnswer(slack.webhook, posted('[{"type":"url_verification","challenge":"x"}]'))).toBeNull();
-  expect(challengeAnswer(slack.webhook, posted('{"type":"url_verification","challenge":null}'))).toBeNull();
-  expect(await answered(challengeAnswer(slack.webhook, posted('{"type":"url_verification","challenge":"x","token":"secret","extra":{"a":1}}'))))
-    .toEqual({ status: 200, type: 'application/json', body: { challenge: 'x' } });
+  expect(challengeAnswer(slack.webhook, slackSigned('type=url_verification&challenge=x'), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned('\u00ff'), secret)).toBeNull();
+  expect(challengeAnswer(fireflies.webhook, posted('{"type":"url_verification","challenge":"x"}'), secret)).toBeNull();
+  expect(challengeAnswer(slack.webhook, slackSigned('[{"type":"url_verification","challenge":"x"}]'), secret)).toBeNull();
+  expect(await answered(challengeAnswer(slack.webhook, slackSigned('{"type":"url_verification","challenge":"x","token":"secret","extra":{"a":1}}'), secret)))
+    .toEqual(asJson({ challenge: 'x' }));
 });
 
 test('a Standard Webhooks id holding a `.` is false: the signed content cannot be split again', () => {

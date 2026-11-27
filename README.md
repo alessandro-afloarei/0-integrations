@@ -112,7 +112,7 @@ the [waiting list](docs/waiting-list.md). The providers below also have a module
 | [`oauth`](docs/modules/oauth.md) | Consent URLs, code exchange, refresh and revoke, with PKCE |
 | [`credentials`](docs/modules/credentials.md) | Reads API keys and refreshes OAuth tokens under a lock |
 | [`vault`](docs/modules/vault.md) | Seals JSON secrets under per-tenant data keys |
-| [`webhooks`](docs/modules/webhooks.md) | HMAC (SHA-256 or SHA-1, Stripe-style `t=…,v1=…` headers), Ed25519, shared-token, HTTP Basic and Standard Webhooks checks over the raw body bytes, delivery ids, and challenge answers (Slack, Discord) |
+| [`webhooks`](docs/modules/webhooks.md) | HMAC (SHA-256 or SHA-1, Stripe-style `t=…,v1=…` headers), Ed25519, shared-token, HTTP Basic and Standard Webhooks checks over the raw body bytes, delivery ids, and challenge answers (Slack, Discord, Nylas) |
 | [`paginate`](docs/modules/paginate.md) | Walks a module's pages and refuses a repeated cursor |
 | [`errors`](docs/modules/errors.md) | Coded errors such as `ProviderHttpError` and `GrantRevoked`, never carrying provider bodies or secrets |
 | [`testing`](docs/modules/testing.md) | Scripted fetch, in-memory stores and locks, and a check for your own credential store |
