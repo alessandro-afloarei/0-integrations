@@ -64,12 +64,16 @@ export function catalogueRecordings(): (Recording & { file: string })[] {
 export const GOOD_KEY = 'kit-good-key';
 export const BAD_KEY = 'kit-bad-key';
 
-/** An entry's plain fields as the kit fills them: the default, else the first choice, else `kit-<name>`; and each host
- * the token answer names, the first name its `http.host` takes (`*.wrike.com`: `kit.wrike.com`). */
+/** An entry's plain fields as the kit fills them: the default, else the first choice, else a field that is the base's
+ * whole host the first name its `http.host` takes (`*.wrike.com`: `kit.wrike.com`; with `*`, as any field), else
+ * `kit-<name>`; and each host the token answer names, that same first name. */
 export function kitValues(entry: Entry): Record<string, string> {
-  const named = Object.keys(namedHosts(entry)).map((name): [string, string] => [name, String([entry.http.host].flat()[0]).replace(/^\*/u, 'kit')]);
+  const first = String([entry.http.host].flat()[0]).replace(/^\*/u, 'kit');
+  const wholeHost = /^https:\/\/\{([^}]+)\}(?:[/:]|$)/u.exec(entry.http.baseUrl)?.[1];
+  const host = (name: string) => (name === wholeHost && entry.http.host !== '*' ? first : undefined);
+  const named = Object.keys(namedHosts(entry)).map((name): [string, string] => [name, first]);
   return Object.fromEntries([...(entry.fields ?? []).filter(field => field.secret !== true)
-    .map(({ name, default: given, choices }): [string, string] => [name, given ?? choices?.[0] ?? `kit-${name}`]), ...named]);
+    .map(({ name, default: given, choices }): [string, string] => [name, given ?? choices?.[0] ?? host(name) ?? `kit-${name}`]), ...named]);
 }
 
 /** The sign-in a recording is of: the entry's key or token sign-in when it has one (a test account's pasted key),
