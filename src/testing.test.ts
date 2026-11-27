@@ -78,6 +78,23 @@ describe('fakeProvider', () => {
     expect(() => fakeProvider(gitlab, { key: 'k' })).toThrow('template_missing: gitlab {host}');
   });
 
+  test("a fake's token answer names the host its values give, where identify, the calls and the refresh then go", async () => {
+    const named = defineProvider({ id: 'named', name: 'Named', scopes: { default: [] }, save: { host: 'tokenAnswer.host' },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.named.test/authorize', tokenUrl: 'https://login.named.test/token',
+        refreshUrl: 'https://{host}/token' }], http: { baseUrl: 'https://{host}/api', host: '*.named.test' }, identify: { request: { path: '/me' }, id: 'id' } });
+    expect(kitValues(named)).toEqual({ host: 'kit.named.test' });
+    const http = fakeFetch(fakeProvider(named, { key: 'k', values: { host: 'eu.named.test' } }));
+    const oauthClient = { clientId: 'kit-client', clientSecret: 'kit-secret' };
+    const { values } = await finishConnect(named, { client: oauthClient, code: 'kit-code', redirectUri: 'https://app.test/cb', codeVerifier: 'v'.repeat(43),
+      fetch: http.fetch, onRevokeFailed: () => undefined });
+    expect(values).toEqual({ host: 'eu.named.test' });
+    await refreshGrant(named, oauthClient, 'kit-refresh', { values, fetch: http.fetch });
+    await client(named, { token: 'k', values, fetch: http.fetch }).json('/me');
+    expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://eu.named.test/api/me', 'https://eu.named.test/token',
+      'https://eu.named.test/api/me']);
+    expect(() => fakeProvider(named, { key: 'k' })).toThrow('template_missing: named {host}');
+  });
+
   test('`account` replaces the default answer of identify', async () => {
     const { fetch } = fakeFetch(fakeProvider(serpapi, { key: 'k', account: { account_id: 'acct_1', account_email: 'a@example.test' } }));
     await expect(finishConnect(serpapi, { secret: { apiKey: 'k' }, fetch }))
