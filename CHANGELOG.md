@@ -15,8 +15,9 @@ Nothing here is released yet.
   value outside printable ASCII is `param_invalid`. `RequestOptions` takes `headers`, and the derived fake hands an
   operation's function the request's `headers` and routes by a required header the request carries.
 - PagerDuty creates and updates incidents (`incidents.create`, `incidents.update`) with the `From` header the page
-  requires. Its OAuth 2 sign-in asks `write` in place of `read`, which the writes need: a connection made before this
-  change holds `read`, and its writes are refused until the person connects again.
+  requires. Its OAuth 2 sign-in asks `write` in place of `read`, which the writes need: an app registered for Classic
+  User OAuth with `Read` access is set to `Read/Write` (else PagerDuty grants only `openid` and the connect fails), and
+  its connections are made again.
 - Cal.com lists event types and bookings (`eventTypes.list`, `bookings.list`, paged by its cursor), each taking the
   `cal-api-version` its page fixes as a required argument, sent in place of the entry's.
 - New: a wait may be an ISO 8601 time (`unit: 'iso8601'`: `2021-06-15T10:51:23.035+0100`, its zone required), waited
