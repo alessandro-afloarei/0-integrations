@@ -47,7 +47,7 @@ export const missive = defineProvider({
         type: [{ id: 'string', 'subject?': 'string', 'close?': 'boolean', 'reopen?': 'boolean', 'add_to_inbox?': 'boolean',
           'organization?': 'string', 'add_assignees?': ['string'], 'remove_assignees?': ['string'], 'add_shared_labels?': ['string'],
           'remove_shared_labels?': ['string'], 'team?': 'string', 'add_to_team_inbox?': 'boolean' }],
-        description: 'One object, its id the path\'s. organization is required with add_assignees, remove_assignees or add_shared_labels; team with add_to_team_inbox.' } },
+        description: 'One object, its id the path\'s; no post is created (system events can still appear; label change rules still run). organization is required with add_assignees, remove_assignees or add_shared_labels; team with add_to_team_inbox.' } },
       result: { conversations: [conversation] } },
     'messages.list': { docs: `${ref}#list-conversation-messages`, path: '/conversations/{id}/messages',
       params: { id: { in: 'path', type: 'string', required: true },
