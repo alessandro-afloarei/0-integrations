@@ -2,7 +2,7 @@ import { defineProvider } from '../catalogue.js';
 
 /** Zulip, zulipchat.com or the organization's own server: the host is typed, so it is reached only through the address
  * guard unless the app passes its own `fetch`. Errors carry a `code` (https://zulip.com/api/rest-error-handling).
- * Sending a message takes a form-encoded body, which the engine cannot send yet. */
+ * `messages.create` posts, as the account, to a channel or to the people it names. */
 const ref = 'https://zulip.com/api';
 
 export const zulip = defineProvider({
@@ -25,6 +25,13 @@ export const zulip = defineProvider({
         narrow: { in: 'query', type: 'string', description: 'JSON, such as [{"operator": "channel", "operand": "Denmark"}].' } },
       result: { messages: [{ id: 'integer', 'sender_id?': 'integer', 'stream_id?': 'integer', 'subject?': 'string',
         'content?': 'string', 'timestamp?': 'integer' }], 'found_newest?': 'boolean', 'found_oldest?': 'boolean' } },
+    'messages.create': { docs: `${ref}/send-message`, method: 'POST', path: '/messages',
+      params: { type: { in: 'form', type: 'string', required: true, enum: ['direct', 'channel', 'stream', 'private'] },
+        to: { in: 'form', type: 'string', required: true,
+          description: 'A channel\'s name or ID; for a direct message, a JSON list of user IDs or emails, such as [9, 10].' },
+        content: { in: 'form', type: 'string', required: true },
+        topic: { in: 'form', type: 'string', description: 'Required for a channel message (stream or channel), ignored otherwise.' } },
+      result: { id: 'integer', 'message_url?': 'string' } },
     'users.list': { docs: `${ref}/get-users`, path: '/users',
       result: { members: [{ user_id: 'integer', 'full_name?': 'string', 'email?': 'string', 'date_joined?': 'string' }] } },
   },
