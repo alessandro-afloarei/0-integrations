@@ -281,7 +281,7 @@ test('an error never carries the Basic client credential the request sent, form-
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(`Basic ${sent}`));
 });
 
-/** Basic on the RFC 7009 revoke alone, the client in the body of the token requests (Todoist's shape). */
+/** Basic on the RFC 7009 revoke alone, the client in the body of the token requests. */
 const basicRevoke = defineProvider({ id: 'basicrevoke', name: 'Basic revoke', auth: [{ kind: 'oauth2', authorizeUrl: 'https://split.test/authorize',
   tokenUrl: 'https://split.test/token', pkce: false, clientAuth: { revoke: 'basic' } }], scopes: { default: [] },
   revoke: { url: 'https://split.test/revoke', token: ['access'] }, http: { baseUrl: 'https://api.split.test' } });
@@ -310,13 +310,17 @@ test('clientAuth { refresh: basic } on one URL: the exchange sends the client in
   expect(fake.calls.map(call => new URLSearchParams(call.body).get('client_secret'))).toEqual([client.clientSecret, null]);
 });
 
-test('clientAuth as an object: no error detail echoes the Basic value its revoke sent', async () => {
+test("no error detail echoes the client's Basic value, on the requests that send it and on those that send the body", async () => {
   // `id:abcdef` encodes to base64 without padding, so an echo of it would pass the detail pattern.
   const sent = Buffer.from('id:abcdef').toString('base64');
+  const echoing = { clientId: 'id', clientSecret: 'abcdef' };
   const echo = endpoint({ error: sent }, 400);
-  await expect(revokeGrant(basicRevoke, { accessToken: 'a', client: { clientId: 'id', clientSecret: 'abcdef' }, fetch: echo.fetch }))
-    .rejects.toMatchObject({ code: 'request_failed', detail: null });
-  expect(echo.calls.map(call => call.headers.authorization)).toEqual([`Basic ${sent}`]);
+  for (const run of [
+    () => exchangeCode(basicRevoke, echoing, { ...exchange, fetch: echo.fetch }),
+    () => refreshGrant(basicRevoke, echoing, 'r', { fetch: echo.fetch }),
+    () => revokeGrant(basicRevoke, { accessToken: 'a', client: echoing, fetch: echo.fetch }),
+  ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  expect(echo.calls.map(call => call.headers.authorization)).toEqual([undefined, undefined, `Basic ${sent}`]);
 });
 
 /** A public client (RFC 6749 §2.1): its id in the body, no secret, PKCE on (Firecrawl's shape). */

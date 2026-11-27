@@ -310,9 +310,9 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   authorize URL carries only what the entry and the call state; `authorizeParams` holds `response_type` where a
   provider is sent it today.
 - `oauth2.clientAuth` says how the client authenticates: its id and secret in the body by default; `'basic'` by HTTP
-  Basic on every request; an object names the requests that use Basic, the others in the body (Todoist's RFC 7009
-  revoke, `{ revoke: 'basic' }`). The table refuses an empty object and one naming all three (write `'basic'`). The
-  values no error detail may echo are those the request sends: the secret, and the Basic value where it uses Basic.
+  Basic on every request; an object names the requests that use Basic, the others in the body (`{ refresh: 'basic' }`).
+  The table refuses an object that names no request as `'basic'`, and one naming all three (write `'basic'`). No error
+  detail echoes the secret or its Basic value, whichever the request sends.
   `'none'` is a public client (Dynamic Client Registration, a client ID metadata document): every request sends
   `client_id` in the body and no secret, whatever the app passes; it needs PKCE (the table refuses it beside
   `pkce: false`, and the engine refuses such an entry before anything is sent, `pkce_required: <entry id>`). How the app

@@ -102,9 +102,9 @@ function context(entry: Entry, credentials: AnyClient, input: Sent, request: OAu
   const client = { client_id: credentials.clientId };
   const auth = config.clientAuth === 'none' ? oauth.None()
     : (basicOn(config, request) ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(credentials.clientSecret ?? '');
-  // The Basic value this request sends (the id and secret form-encoded first), so no error detail echoes it.
+  // The secret's Basic value (id and secret form-encoded first): no error detail echoes it, whatever this request sends.
   const sent = new Headers();
-  void auth(as, client, new URLSearchParams(), sent);
+  if (config.clientAuth !== 'none') void oauth.ClientSecretBasic(credentials.clientSecret ?? '')(as, client, new URLSearchParams(), sent);
   const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
     config, as, client, auth, secrets: [credentials.clientSecret ?? '', ...(basic === undefined ? [] : [basic])],

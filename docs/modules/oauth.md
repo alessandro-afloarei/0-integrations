@@ -36,8 +36,8 @@ revoke send their parameters as one JSON object (`content-type: application/json
 header.
 
 The client sends its id and secret in the body unless the entry's `clientAuth` says otherwise: `'basic'` sends them by
-HTTP Basic on every request, and an object names the requests that do (Todoist's `{ revoke: 'basic' }`: the exchange and
-the refresh in the body, the RFC 7009 revoke by Basic alone). No error detail echoes the secret, or the Basic value a
+HTTP Basic on every request, and an object names the requests that do (`{ refresh: 'basic' }`: the exchange and an RFC
+7009 revoke in the body, the refresh by Basic alone). No error detail echoes the secret or its Basic value, whichever a
 request sent.
 
 `clientAuth: 'none'` is a public client (Firecrawl's): the exchange, the refresh and an RFC 7009 revoke send its

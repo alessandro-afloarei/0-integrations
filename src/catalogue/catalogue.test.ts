@@ -80,11 +80,13 @@ const OWN_FIRST = "no own `fields`, `http` or `identify` on the first sign-in: i
 const BASIC = "`clientAuth` is `'basic'` or `'none'`, or names each request that uses Basic as `'basic'`";
 const PUBLIC_PKCE = "a public client (`clientAuth: 'none'`) needs PKCE: leave `pkce` out";
 /** `clientAuth`: Basic on every request, or the requests that use it, at least one and not all three. */
-const basicOn = z.literal('basic').optional();
+const basicValue = z.literal('basic').optional();
 const clean = { when: ({ issues }: { issues: readonly unknown[] }) => issues.length === 0 };
-const clientAuth = z.union([z.literal('basic'), z.literal('none'), z.strictObject({ exchange: basicOn, refresh: basicOn, revoke: basicOn })
-  .refine(requests => Object.keys(requests).length > 0, { ...clean, error: '`clientAuth` names at least one request that uses Basic: name one, or leave it out' })
-  .refine(requests => Object.keys(requests).length < 3, { ...clean, error: "`clientAuth` naming every request is `'basic'`: write that" })], BASIC);
+/** The requests an object names as `'basic'`: a key left `undefined` names none. */
+const basics = (requests: Record<string, unknown>) => Object.values(requests).filter(value => value === 'basic').length;
+const clientAuth = z.union([z.literal('basic'), z.literal('none'), z.strictObject({ exchange: basicValue, refresh: basicValue, revoke: basicValue })
+  .refine(requests => basics(requests) > 0, { ...clean, error: '`clientAuth` names at least one request that uses Basic: name one, or leave it out' })
+  .refine(requests => basics(requests) < 3, { ...clean, error: "`clientAuth` naming every request is `'basic'`: write that" })], BASIC);
 const fields = z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
   secret: z.literal(true).optional(), default: z.string().optional(),
   help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
@@ -820,9 +822,10 @@ test.each([[{ refreshUrl: 'http://k.test/refresh' }, 'refreshUrl', 'Invalid stri
   });
 
 test.each([[{}, '`clientAuth` names at least one request that uses Basic: name one, or leave it out'],
+  [{ revoke: undefined }, '`clientAuth` names at least one request that uses Basic: name one, or leave it out'],
   [{ exchange: 'basic', refresh: 'basic', revoke: 'basic' }, "`clientAuth` naming every request is `'basic'`: write that"],
   ['post', BASIC], [{ revoke: 'post' }, BASIC], [{ revoke: 'none' }, BASIC], [{ revoke: true }, BASIC], [{ authorize: 'basic' }, 'Unrecognized key: "authorize"']])(
-  'clientAuth %j fails the schema, with what to fix', (value, message) => {
+  'clientAuth %o fails the schema, with what to fix', (value, message) => {
     const bad = { ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], clientAuth: value }] };
     expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
   });
@@ -832,7 +835,8 @@ test('a public client beside `pkce: false` fails the schema, with what to fix', 
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([PUBLIC_PKCE]);
 });
 
-test.each(['basic', 'none', { revoke: 'basic' }, { exchange: 'basic', refresh: 'basic' }])('clientAuth %j passes the schema', value => {
+test.each(['basic', 'none', { revoke: 'basic' }, { exchange: 'basic', refresh: 'basic' },
+  { exchange: 'basic', refresh: 'basic', revoke: undefined }])('clientAuth %o passes the schema', value => {
   expect(entrySchema.safeParse({ ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], clientAuth: value }] }).error).toBeUndefined();
 });
 
