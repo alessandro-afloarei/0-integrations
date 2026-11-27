@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers: 132 declared, 0 recorded;
-559 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
+558 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -13,7 +13,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers:
 | [Airtable](https://airtable.com/developers/web/api/authentication.md) | tasks | OAuth 2, key | records.list, records.get, records.create, records.update, bases.list | hmac | declared |
 | [Apollo](https://docs.apollo.io/reference/authentication) | sales | key | — | — | declared |
 | [Asana](https://developers.asana.com/docs/oauth) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, projects.list | — | declared |
-| [Atlas](https://developers.atlas.so/reference/getting-started-with-your-api) | support | key | conversations.list, conversations.get, conversations.create, conversations.update, messages.list, messages.create, customers.list | — | declared |
+| [Atlas](https://developers.atlas.so/reference/getting-started-with-your-api) | support | key | conversations.list, conversations.get, conversations.update, messages.list, messages.create, customers.list | — | declared |
 | [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | OAuth 2, key | — | — | declared |
 | [Avoma](https://help.avoma.com/api-integration-for-avoma) | meetings | key | meetings.list, meetings.get, transcriptions.get | hmac | declared |
 | [Azure DevOps](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth?view=azure-devops) | code | OAuth 2, key | repositories.list, repositories.get, pullRequests.list, pullRequests.get, pullRequests.create, projects.list | — | declared |
