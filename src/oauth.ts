@@ -7,7 +7,10 @@ import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-res
 import { basicOn, checkHosts, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath, type OAuthRequest } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
-export type OAuthClient = { clientId: string; clientSecret: string };
+/** The app's OAuth 2 client: a public client's (`clientAuth: 'none'`) has no secret. */
+export type OAuthClient<E extends Entry = Entry> = E['auth'][0] extends { clientAuth: 'none' } ? { clientId: string }
+  : { clientId: string; clientSecret: string };
+type AnyClient = { clientId: string; clientSecret?: string }; // an untyped caller's secret for a public client is never sent
 /** A refresh's input, which may be left out only when its values may. */
 type RefreshInput<E extends Entry, I = { fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>> = Partial<I> extends I ? [input?: I] : [input: I];
 
@@ -17,6 +20,7 @@ function endpoints(entry: Entry, values: Values = {}) {
   const [auth] = entry.auth;
   const urls = oauthUrls(entry);
   if (auth.kind !== 'oauth2' || urls === undefined) throw new TypeError('oauth_unsupported');
+  if (auth.clientAuth === 'none' && auth.pkce === false) throw new TypeError(`pkce_required: ${entry.id}`); // a public client's code needs it
   checkHosts(entry, values);
   const pick = (names: string[]) => Object.fromEntries(names.map(name => [name, values[name]]));
   const plain = pick(plainFields(entry).map(({ name }) => name));
@@ -89,20 +93,21 @@ type Sent = { values?: Values; fetch?: typeof globalThis.fetch };
 /** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. The app's
  * `fetch`, else the entry's default: the address guard for a typed host. The client authenticates as the entry says
  * for this request. */
-function context(entry: Entry, credentials: OAuthClient, input: Sent, request: OAuthRequest) {
+function context(entry: Entry, credentials: AnyClient, input: Sent, request: OAuthRequest) {
   // Each URL passes the one check every URL the library sends to passes, before anything is sent.
   const { config, token, refresh: renew, revoke } = endpoints(entry, input.values);
   const fetch = input.fetch ?? defaultFetch(entry);
   const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (request === 'refresh' ? renew() : token).href,
     ...(revoke ? { revocation_endpoint: revoke.href } : {}) };
   const client = { client_id: credentials.clientId };
-  const auth = (basicOn(config, request) ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(credentials.clientSecret);
+  const auth = config.clientAuth === 'none' ? oauth.None()
+    : (basicOn(config, request) ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(credentials.clientSecret ?? '');
   // The Basic value this request sends (the id and secret form-encoded first), so no error detail echoes it.
   const sent = new Headers();
   void auth(as, client, new URLSearchParams(), sent);
   const basic = sent.get('authorization')?.slice('Basic '.length);
   return {
-    config, as, client, auth, secrets: [credentials.clientSecret, ...(basic === undefined ? [] : [basic])],
+    config, as, client, auth, secrets: [credentials.clientSecret ?? '', ...(basic === undefined ? [] : [basic])],
     options: { [oauth.customFetch]: bearerByDefault(config.json ? jsonBodies(fetch) : fetch), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) },
     processing: { recognizedTokenTypes: Object.fromEntries((config.tokenTypes ?? []).map(type => [type.toLowerCase(), () => undefined])) },
   };
@@ -152,7 +157,7 @@ function grant(answer: oauth.TokenEndpointResponse, fallback: string | null): Gr
     expiresAt: answer.expires_in === undefined ? null : new Date(Date.now() + answer.expires_in * 1000).toISOString() };
 }
 
-export async function exchangeCode<const E extends Entry>(entry: E, client: OAuthClient, input: { code: string; redirectUri: string;
+export async function exchangeCode<const E extends Entry>(entry: E, client: OAuthClient<E>, input: { code: string; redirectUri: string;
   codeVerifier?: string | undefined; fetch?: typeof globalThis.fetch } & ValuesOption<Plain<E>>): Promise<{ grant: Grant; extras: Record<string, unknown> }> {
   const c = context(entry, client, input, 'exchange');
   if (c.config.pkce !== false && !input.codeVerifier?.trim()) throw new TypeError('code_verifier_required');
@@ -168,7 +173,7 @@ export async function exchangeCode<const E extends Entry>(entry: E, client: OAut
   }
 }
 
-export async function refreshGrant<const E extends Entry>(entry: E, client: OAuthClient, refreshToken: string,
+export async function refreshGrant<const E extends Entry>(entry: E, client: OAuthClient<E>, refreshToken: string,
   ...[input]: RefreshInput<E>): Promise<Grant> {
   const c = context(entry, client, input ?? {}, 'refresh');
   const secrets = [...c.secrets, refreshToken];
@@ -180,7 +185,7 @@ export async function refreshGrant<const E extends Entry>(entry: E, client: OAut
   }
 }
 
-async function revokeToken(entry: Entry, client: OAuthClient, token: string, input: Sent): Promise<void> {
+async function revokeToken(entry: Entry, client: AnyClient, token: string, input: Sent): Promise<void> {
   const c = context(entry, client, input, 'revoke');
   const secrets = [...c.secrets, token];
   const response = await send(c, entry, secrets, () => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options));
@@ -198,7 +203,7 @@ async function revokeToken(entry: Entry, client: OAuthClient, token: string, inp
  * revoke's 404 (a request revoke's 404 is a missing route, not a gone token).
  * `client` is the OAuth app, sent only by an RFC 7009 revoke, which refuses to start without it. */
 export async function revokeGrant<const E extends Entry>(entry: E, input: { accessToken?: string; refreshToken?: string | null;
-  client?: OAuthClient; fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>): Promise<void> {
+  client?: OAuthClient<E>; fetch?: typeof globalThis.fetch } & ValuesOption<Kept<E>>): Promise<void> {
   const { revoke } = entry;
   checkHosts(entry, input.values);
   if (revoke === undefined) return;

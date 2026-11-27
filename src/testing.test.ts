@@ -366,6 +366,27 @@ describe('fakeProvider', () => {
     await expect(revokeGrant(split, { refreshToken: 'kit-refresh', client: kitClient, fetch })).resolves.toBeUndefined();
   });
 
+  test("clientAuth 'none': each request is answered with the client's id alone, and refused with a secret or Basic", async () => {
+    const open = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize',
+      tokenUrl: 'https://basicjson.test/token', clientAuth: 'none' }], revoke: { url: 'https://basicjson.test/revoke', token: ['refresh'] } });
+    const { fetch } = fakeFetch(fakeProvider(open, { key: 'k', client: { clientId: 'app' } }));
+    const requests = { exchange: [{ grant_type: 'authorization_code', code: 'kit-code', redirect_uri: redirectUri, code_verifier: 'v' }, 'https://basicjson.test/token'],
+      refresh: [{ grant_type: 'refresh_token', refresh_token: 'kit-refresh' }, 'https://basicjson.test/token'],
+      revoke: [{ token: 'kit-refresh' }, 'https://basicjson.test/revoke'] } as const;
+    for (const [params, url] of Object.values(requests)) {
+      const sent = (extra: Record<string, string>, headers: Record<string, string> = {}) =>
+        fetch(url, { method: 'POST', headers, body: new URLSearchParams({ ...params, client_id: 'app', ...extra }) });
+      expect((await sent({})).status).toBe(200);
+      for (const refused of [await sent({ client_secret: 'secret' }), await sent({}, { authorization: `Basic ${btoa('app:secret')}` })]) {
+        expect(await answer(refused)).toEqual({ status: 401, body: { error: 'invalid_client' } });
+      }
+    }
+    await expect(exchangeCode(open, { clientId: 'app' }, { code: 'kit-code', redirectUri, codeVerifier: 'v', fetch })).resolves.toMatchObject({ grant: { accessToken: 'k' } });
+    await expect(refreshGrant(open, { clientId: 'app' }, 'kit-refresh', { fetch })).resolves.toMatchObject({ accessToken: 'k' });
+    await expect(revokeGrant(open, { refreshToken: 'kit-refresh', client: { clientId: 'app' }, fetch })).resolves.toBeUndefined();
+    await expect(exchangeCode(open, { clientId: 'other' }, { code: 'kit-code', redirectUri, codeVerifier: 'v', fetch })).rejects.toMatchObject({ status: 401 });
+  });
+
   test('a PKCE entry is answered only with a code verifier, its client in the form body, and a given code and client', async () => {
     const pkce = defineProvider({ ...basicJson, auth: [{ kind: 'oauth2', authorizeUrl: 'https://basicjson.test/authorize', tokenUrl: 'https://basicjson.test/token' }] });
     const client = { clientId: 'app', clientSecret: 'secret' };

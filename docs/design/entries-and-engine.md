@@ -288,7 +288,7 @@ accepts only a string or a number from them.
 type Auth =
   | { kind: 'key'; send?: Send }
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
-      clientAuth?: 'basic' | { exchange?: 'basic'; refresh?: 'basic'; revoke?: 'basic' };
+      clientAuth?: 'basic' | 'none' | { exchange?: 'basic'; refresh?: 'basic'; revoke?: 'basic' };
       scopeSeparator?: ','; authorizeParams?: Record<string, string>;
       tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true; send?: Send }
   | { kind: 'token'; request: TokenRequest; send?: Send };
@@ -313,6 +313,11 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   Basic on every request; an object names the requests that use Basic, the others in the body (Todoist's RFC 7009
   revoke, `{ revoke: 'basic' }`). The table refuses an empty object and one naming all three (write `'basic'`). The
   values no error detail may echo are those the request sends: the secret, and the Basic value where it uses Basic.
+  `'none'` is a public client (Dynamic Client Registration, a client ID metadata document): every request sends
+  `client_id` in the body and no secret, whatever the app passes; it needs PKCE (the table refuses it beside
+  `pkce: false`, and the engine refuses such an entry before anything is sent, `pkce_required: <entry id>`). How the app
+  obtains its `client_id` is the app's (the engine registers no client), and `OAuthClient<typeof entry>` has no
+  `clientSecret` (Firecrawl).
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object

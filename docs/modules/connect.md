@@ -28,7 +28,8 @@ none and starts with a form, and an entry whose kind is not known in the types (
   `values`
   ([on the person's own server](#oauth-2-on-the-persons-own-server)).
   `finishConnect(entry, { client, code, redirectUri, codeVerifier?, values?, fetch?, onRevokeFailed })` reads `values`
-  again, exchanges the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
+  again (`client` is typed by the entry: a public client's, `clientAuth: 'none'`, is `{ clientId }` alone, and
+  [oauth](oauth.md) sends it no secret), exchanges the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
   `scope_missing`; the granted scopes are split on the entry's `scopeSeparator`), and identifies the account. If that
   fails it revokes the new grant best-effort and throws the original error; `onRevokeFailed(error)` reports a failed
   cleanup (an entry whose revoke is a request on the base cannot revoke a grant whose host was refused, so that is

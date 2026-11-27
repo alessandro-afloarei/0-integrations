@@ -40,6 +40,14 @@ HTTP Basic on every request, and an object names the requests that do (Todoist's
 the refresh in the body, the RFC 7009 revoke by Basic alone). No error detail echoes the secret, or the Basic value a
 request sent.
 
+`clientAuth: 'none'` is a public client (Firecrawl's): the exchange, the refresh and an RFC 7009 revoke send its
+`client_id` in the body and no secret, even one an untyped caller passes. The app obtains its `client_id` itself (Dynamic
+Client Registration, or the URL of a client ID metadata document); nothing here registers one. Each function types its
+client by the entry, `OAuthClient<typeof firecrawl>` being `{ clientId }`, so a typed caller cannot pass a secret, and a
+confidential entry's client must have one (`OAuthClient` alone, for an entry typed `Entry`, has one too). A public client
+needs PKCE: an entry that declares `'none'` beside `pkce: false` is refused before anything is built or sent
+(`TypeError('pkce_required: <entry id>')`).
+
 `revokeGrant(entry, { accessToken?, refreshToken?, client?, values, fetch? })` is the one revoke: an RFC 7009 revoke of the
 first token the entry's `revoke.token` names (it needs `client`, else `oauth_client_required`), or the entry's
 `revoke.request` sent with the access token, to the `http.bases` entry its `base` names, if any. A 2xx,

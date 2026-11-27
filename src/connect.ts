@@ -23,7 +23,7 @@ export type Connected<E extends Entry = Entry> = E extends Entry ? {
 /** The plain fields an input takes: required unless each has a default, none for an entry that declares none. */
 type ValuesIn<E extends Entry> = E extends Entry ? ValuesOption<Entered<E>> : never;
 type OAuthStart<E extends Entry = Entry> = { clientId: string; redirectUri: string; state: string } & ValuesIn<E>;
-type OAuthFinish<E extends Entry = Entry> = { client: OAuthClient; code: string; redirectUri: string; codeVerifier?: string | undefined;
+type OAuthFinish<E extends Entry = Entry> = { client: OAuthClient<E>; code: string; redirectUri: string; codeVerifier?: string | undefined;
   fetch?: typeof fetch; onRevokeFailed: (error: unknown) => void } & ValuesIn<E>;
 /** A form entry's finish (key or token): its secret fields by name, and its plain fields; one per form member of a union,
  * none for an OAuth 2 member. */
@@ -63,7 +63,7 @@ export async function startConnect(entry: Entry, options?: OAuthStart): Promise<
 }
 
 export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish<E>, FormFinish<E>>): Promise<Connected<E>>;
-export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
+export async function finishConnect(entry: Entry, input: Omit<OAuthFinish, 'client'> & { client: { clientId: string } } | FormFinish): Promise<Connected> {
   checkHosts(entry, input.values); // before a credential is read, for every kind: identify may send nothing to check it later
   const [auth] = entry.auth;
   const fetch = input.fetch ?? defaultFetch(entry);
@@ -88,7 +88,8 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
   if (!('code' in input)) throw new TypeError('oauth_options_required');
   // Read again, as a stored value is trusted no more than a typed one: the token URL is filled from these.
   const values = plainOf(entry, input.values ?? {});
-  const { grant, extras } = await exchangeCode(entry, input.client, { ...input, values, fetch });
+  const client = input.client as OAuthClient; // typed by its entry (a public client's has no secret), sent as it says
+  const { grant, extras } = await exchangeCode(entry, client, { ...input, values, fetch });
   // A host the token answer names (Wrike's data centre) is kept before identify, which sends to it; never a caller's.
   const named = Object.fromEntries(Object.entries(namedHosts(entry)).map(([name, path]) => [name, readPath({ tokenAnswer: extras }, path)]));
   try {
@@ -105,7 +106,7 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     if (auth.reusesGrant) throw error;
     // Cleanup must not hide the original refusal.
     try {
-      await revokeGrant(entry, { ...grant, client: input.client, values: { ...values, ...named }, fetch });
+      await revokeGrant(entry, { ...grant, client, values: { ...values, ...named }, fetch });
     } catch (revokeError) { input.onRevokeFailed(revokeError); }
     throw error;
   }

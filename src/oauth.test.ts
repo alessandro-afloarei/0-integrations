@@ -319,6 +319,44 @@ test('clientAuth as an object: no error detail echoes the Basic value its revoke
   expect(echo.calls.map(call => call.headers.authorization)).toEqual([`Basic ${sent}`]);
 });
 
+/** A public client (RFC 6749 §2.1): its id in the body, no secret, PKCE on (Firecrawl's shape). */
+const publicClient = defineProvider({ id: 'publicclient', name: 'Public', auth: [{ kind: 'oauth2', authorizeUrl: 'https://public.test/authorize',
+  tokenUrl: 'https://public.test/token', clientAuth: 'none' }], scopes: { default: [] },
+  revoke: { url: 'https://public.test/revoke', token: ['refresh'] }, http: { baseUrl: 'https://api.public.test' } });
+
+test("clientAuth 'none': the exchange, the refresh and the revoke send the client's id, and no secret or authorization", async () => {
+  const fake = endpoint(token);
+  await exchangeCode(publicClient, { clientId: 'id' }, { ...exchange, codeVerifier: 'v', fetch: fake.fetch });
+  await refreshGrant(publicClient, { clientId: 'id' }, 'r', { fetch: fake.fetch });
+  await revokeGrant(publicClient, { refreshToken: 'r', client: { clientId: 'id' }, fetch: fake.fetch });
+  expect(fake.calls.map(call => call.headers.authorization)).toEqual([undefined, undefined, undefined]);
+  expect(fake.calls.map(call => Object.fromEntries(new URLSearchParams(call.body)))).toEqual([
+    { code: exchange.code, redirect_uri: exchange.redirectUri, code_verifier: 'v', grant_type: 'authorization_code', client_id: 'id' },
+    { refresh_token: 'r', grant_type: 'refresh_token', client_id: 'id' },
+    { token: 'r', client_id: 'id' },
+  ]);
+});
+
+test("clientAuth 'none': a secret an untyped caller passes anyway is never sent", async () => {
+  const untyped = client as unknown as { clientId: string };
+  const fake = endpoint(token);
+  await exchangeCode(publicClient, untyped, { ...exchange, codeVerifier: 'v', fetch: fake.fetch });
+  await refreshGrant(publicClient, untyped, 'r', { fetch: fake.fetch });
+  await revokeGrant(publicClient, { refreshToken: 'r', client: untyped, fetch: fake.fetch });
+  expect(fake.calls).toHaveLength(3);
+  for (const call of fake.calls) expect(JSON.stringify(call)).not.toContain(client.clientSecret);
+});
+
+test("clientAuth 'none' beside `pkce: false` is refused before anything is sent: a public client needs PKCE", async () => {
+  const bare = defineProvider({ ...publicClient, auth: [{ ...publicClient.auth[0], pkce: false }] });
+  const fake = endpoint(token);
+  expect(() => authorizeUrl(bare, { clientId: 'id', redirectUri: exchange.redirectUri, scopes: [], state: 's' })).toThrow('pkce_required: publicclient');
+  await expect(exchangeCode(bare, { clientId: 'id' }, { ...exchange, fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
+  await expect(refreshGrant(bare, { clientId: 'id' }, 'r', { fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
+  await expect(revokeGrant(bare, { refreshToken: 'r', client: { clientId: 'id' }, fetch: fake.fetch })).rejects.toThrow('pkce_required: publicclient');
+  expect(fake.calls).toEqual([]);
+});
+
 /** A token endpoint that takes JSON, the client id and secret in the body, no PKCE (Atlassian's shape). */
 const jsonBodied = defineProvider({ id: 'jsonbodied', name: 'JSON', auth: [{ kind: 'oauth2', authorizeUrl: 'https://json.test/authorize',
   tokenUrl: 'https://json.test/token', json: true, pkce: false }], scopes: { default: [] },

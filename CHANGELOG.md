@@ -4,8 +4,9 @@
 
 Nothing here is released yet.
 
-- New: `clientAuth` may name the requests that use HTTP Basic (`{ revoke: 'basic' }`); the others send the client's id
-  and secret in the body. Todoist revokes its grant: the access token, at its RFC 7009 revoke, by Basic.
+- New: `clientAuth` may name the requests that use HTTP Basic (`{ revoke: 'basic' }`), the others sending the client's
+  id and secret in the body, or be `'none'` for a public client: its id alone, PKCE required (`OAuthClient<typeof
+  entry>` then has no secret). Todoist revokes its grant: the access token, at its RFC 7009 revoke, by Basic.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
   sendgrid, tidycal, webex, whereby), each with its category's operations. Every entry is `declared`.

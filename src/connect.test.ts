@@ -480,6 +480,25 @@ describe('connect review regressions', () => {
     expect(revoked?.body).toBe('token=k');
   });
 
+  it('a public client connects and, after a failed identify, revokes with its id alone, never a secret', async () => {
+    const open = defineProvider({ id: 'open', name: 'Open', http: { baseUrl: 'https://api.open.test' }, scopes: { default: [] },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://open.test/authorize', tokenUrl: 'https://open.test/token', clientAuth: 'none' }],
+      revoke: { url: 'https://open.test/revoke', token: ['refresh'] }, identify: { request: { path: '/me' }, id: 'id' } });
+    const http = fakeFetch([{ url: 'https://api.open.test/me', respond: () => Response.json({}, { status: 401 }) },
+      ...fakeProvider(open, { key: 'k', client: { clientId: 'client' } })]);
+    const onRevokeFailed = vi.fn();
+    const { codeVerifier } = await startConnect(open, { clientId: 'client', redirectUri: callback, state: 's' });
+    await expect(finishConnect(open, { client: { clientId: 'client' }, code: 'kit-code', redirectUri: callback, codeVerifier, fetch: http.fetch, onRevokeFailed }))
+      .rejects.toMatchObject({ code: 'rejected' });
+    expect(onRevokeFailed).not.toHaveBeenCalled();
+    const [exchanged, , revoked] = http.calls;
+    expect([exchanged?.url, revoked?.url]).toEqual(['https://open.test/token', 'https://open.test/revoke']);
+    expect([exchanged?.headers.authorization, revoked?.headers.authorization]).toEqual([undefined, undefined]);
+    expect(new URLSearchParams(exchanged?.body).get('client_id')).toBe('client');
+    expect(new URLSearchParams(exchanged?.body).has('client_secret')).toBe(false);
+    expect(Object.fromEntries(new URLSearchParams(revoked?.body))).toEqual({ token: 'kit-refresh', client_id: 'client' });
+  });
+
   it('skips failed-identity cleanup only for a provider declaring reusesGrant true', async () => {
     const http = fakeFetch(fakeSlack(noTeam));
     const onRevokeFailed = vi.fn();

@@ -27,11 +27,12 @@ export type TokenRequest = { url: Template; body: Readonly<Record<string, Templa
 /** `oauth2.refreshUrl`: where a refresh posts (else `tokenUrl`). `json`: the token endpoint, its refresh and an RFC 7009
  * revoke take the parameters as one JSON object instead of a form. `clientAuth`: the client's id and secret go in the
  * body, unless `'basic'` sends them by HTTP Basic on every request, or an object names the requests that do (Todoist's
- * revoke). `token`: one declared request gives the token. */
+ * revoke); `'none'` is a public client, its id alone in the body and PKCE required. `token`: one declared request
+ * gives the token. */
 export type Auth =
   | { kind: 'key'; send?: Send }
   | { kind: 'oauth2'; authorizeUrl: string; tokenUrl: string; refreshUrl?: string; json?: true; pkce?: false;
-    clientAuth?: 'basic' | { readonly exchange?: 'basic'; readonly refresh?: 'basic'; readonly revoke?: 'basic' };
+    clientAuth?: 'basic' | 'none' | { readonly exchange?: 'basic'; readonly refresh?: 'basic'; readonly revoke?: 'basic' };
     scopeSeparator?: ','; authorizeParams?: Readonly<Record<string, string>>;
     tokenTypes?: readonly string[]; failed?: When; reusesGrant?: true }
   | { kind: 'token'; request: TokenRequest; send?: Send };
