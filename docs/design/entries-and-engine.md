@@ -689,8 +689,7 @@ a provider whose OAuth 2 cannot be declared yet is not declared with a key alone
   `choices` with `http.host` those names (Intercom's three), never the wider domain. A host the token answer names is
   no field but a `save` key, `http.host` the narrowest the pages support.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them. A
-  scope the provider grants only after an audit or a review (Gmail's restricted scopes) is declared, and the leading
-  comment names that gate.
+  scope the provider grants only after an audit or a review is declared, and the leading comment names that gate.
 - `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
   authorization, the refresh token goes first.
 - `identify`: the documented request that answers who the credential is, `id` its id path, `name` its display name,
@@ -730,8 +729,9 @@ way to list it). No `delete`.
 | `meetings` | conferencing: `<meetings>.list`, `<meetings>.get`, `<recordings>.list`, `<meetings>.create`, `<meetings>.update`; note-takers: `<meetings>.list` (or `<transcripts>.list` when the transcript is the object), `<meetings>.get`, `<transcripts>.get` (a conference's meetings: meetings, rooms, sessions, webinars, events; a note-taker's meetings: meetings, calls, recordings, conversations; transcripts: transcripts, transcriptions) |
 
 A category gains its template with the batch that first writes it; its entries written before then (Google, Microsoft,
-Fathom, Fireflies, Granola and Zoom for `mail`, `calendar` and `meetings`) are not reshaped to it. `<containers>.list`
-may instead be the list a create's required parameter is chosen from (incident.io's severities, Shortcut's workflows).
+Unipile, Fathom, Fireflies, Granola and Zoom for `mail`, `calendar` and `meetings`) are not reshaped to it.
+`<containers>.list` may instead be the list a create's required parameter is chosen from (incident.io's severities,
+Shortcut's workflows).
 `<drafts>.create` is declared where the provider has drafts: an app prepares a message the person sends.
 
 A `search` beside `list` is the usual CRM case: an app finds a contact by email, so declare it when the docs give a
@@ -757,12 +757,13 @@ only as an acknowledgement, or not at all, has no `result`. Parameters: path ids
 it to its container and the page size; on a write, the body fields the docs mark required and the record fields they
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
 A send that needs a multipart body (attachments) or a raw RFC 5322 message is declared with only the plain fields its
-page lets it take (a base64url `raw` string is a plain `body` parameter); a multipart body waits.
+page lets it take; a multipart body waits.
 When a page states that at least one of several equal inputs is required to find or create one record (in a sentence, a
 schema's "one of", or an error documented for a call with none), none is `required`: the operation declares the
 page's sets as `anyOf`, and the descriptions do not repeat them. A rule that reads two ways gives the sets of the
 reading that refuses fewer calls. A page that only lists ways to identify a record declares no group, and its
-descriptions do not claim one either. For a list, the filter that scopes it stays required.
+descriptions do not claim one either. For a list, the filter that scopes it to its one container stays required; a
+list whose page requires one of several equal filters, none of them its container, declares them as `anyOf`.
 
 ## The engine
 
