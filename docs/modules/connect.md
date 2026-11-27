@@ -23,14 +23,16 @@ none and starts with a form, and an entry whose kind is not known in the types (
   `secret` is the secret fields; the token is never returned.
 - An OAuth 2 entry starts with a redirect asking for the entry's `scopes.default`, with PKCE unless the entry says
   `pkce: false`. It reads the entry's plain fields from `values` as a key entry does (defaults, choices), fills and
-  checks every OAuth 2 URL and the base with them before the URL is returned (the base only when it needs no value the
-  exchange saves, such as Jira's cloud id), and returns them in `values`
+  checks every OAuth 2 URL but the refresh URL (filled when a refresh is sent), and the base, with them before the URL
+  is returned (the base only when it needs no value the exchange saves, such as Jira's cloud id), and returns them in
+  `values`
   ([on the person's own server](#oauth-2-on-the-persons-own-server)).
   `finishConnect(entry, { client, code, redirectUri, codeVerifier?, values?, fetch?, onRevokeFailed })` reads `values`
   again, exchanges the code, refuses a grant short of a requested scope when the entry says `requireGranted` (`rejected`,
   `scope_missing`; the granted scopes are split on the entry's `scopeSeparator`), and identifies the account. If that
   fails it revokes the new grant best-effort and throws the original error; `onRevokeFailed(error)` reports a failed
-  cleanup. An entry whose `reusesGrant` says re-consent can return a live connection's grant skips the cleanup: only
+  cleanup (an entry whose revoke is a request on the base cannot revoke a grant whose host was refused, so that is
+  reported too). An entry whose `reusesGrant` says re-consent can return a live connection's grant skips the cleanup: only
   the app knows who owns it.
 
 To ask for other scopes, derive an entry: `defineProvider({ ...google, scopes: { default: [...] } })`. `defineProvider`
@@ -124,7 +126,14 @@ const later = client(signInWith(linear, kept.kind), { token: kept.token });
 ```
 
 Narrowed with a stored kind, the entry is a union: TypeScript gives `scopes` only once it knows the kind (`'scopes' in
-entry`, or a branch on the kind kept). Either sign-in's `values` hold the entry's plain fields and what `save` keeps.
+entry`, or a branch on the kind kept). Either sign-in's `values` hold its plain fields and what `save` keeps.
+
+A later sign-in may have its own fields and base. Outline's OAuth 2 is on app.getoutline.com; its key,
+`signInWith(outline, 'key')`, asks for the host of the person's own server and goes there. Keep the kind with the
+connection, beside the sealed secret, and narrow with that same kind for every later call: the library cannot tell an
+OAuth 2 token from a key, so a cloud token used with the key's narrowing would go to the host the values name. A value
+the entry's sign-in does not declare is refused (`value_undeclared`), so a connection kept from another sign-in never
+reaches the wrong host: a key connection's `host` given to the whole entry, or to its OAuth 2 narrowing, sends nothing.
 
 Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
 The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and
@@ -140,8 +149,12 @@ to `finishConnect`, `refreshGrant`, `revokeGrant` and `client`. Never read a val
 callback is the person's browser, which can carry anything. Every OAuth 2 URL is filled and checked as a base is (a
 host name with no port, never a blocked address), and the exchange, refresh, revoke and calls all go to the host the
 `values` name.
-The values and the grant are one record: a token is sent to whatever host the `values` name, and the library cannot
-know which host issued it. Keep the host with the sealed grant, never apart.
+The values and the grant are one record. At connect the engine reads the host from the person's entry (or, for a
+named host, from the issuer's token answer); afterwards the app gives it the connection's kept `values`, and a kept
+host is checked against the entry's declared pattern again whenever a request's destination uses it (every call on
+the base, and a refresh or revoke whose URL names it; one whose URL is fixed goes to its literal host). It does not, and cannot, verify
+that a kept value is the one that connection was issued with (the library keeps no state): store a connection's
+values with its tokens and pass them back unchanged.
 
 ```ts
 import { mattermost } from '0-integrations/catalogue/mattermost';
@@ -174,6 +187,20 @@ The client belongs to its server: the server's administrator (or the person) reg
 Admin enables the OAuth 2.0 service provider. Key the app's clients by the host value and never send one server's
 client to another: an app that looks its client up by the stored host also finds none for a host it never registered
 on.
+
+## OAuth 2 on the host its token answer names
+
+Wrike keeps each account in one of its data centres, and its token answer names the host. `startConnect(wrike, …)`
+asks for nothing and fills nothing on it; `finishConnect(wrike, …)` reads it from the token answer before identify,
+which goes there, and returns it in `values` (`{ host: 'app-eu.wrike.com' }`). Keep those `values` with the sealed
+grant and pass them to `client`, `refreshGrant` and `revokeGrant`, as for a host the person types. The host is checked
+against the hosts the entry declares (Wrike's four data centres) before identify, before every call and before every
+refresh, never read from the callback or from the `values` an app passes to `finishConnect`. A token answer naming
+another host is refused (`base_host_refused`, or `base_value_invalid` for one that is no host name) and one naming
+none is `invalid_response` (`missing_fields`); either way the fresh grant is revoked when the entry declares a revoke
+URL on a fixed host (Wrike declares no revoke: a person revokes the token by hand), and an entry whose revoke is a
+request on the base cannot revoke it (`onRevokeFailed` reports it). A refresh answer's host is not
+read: an account that moves to another data centre connects again.
 
 ## Google and Microsoft
 

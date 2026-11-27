@@ -114,7 +114,7 @@ function operationRequest(id: string, op: Operation, args: Given, signal?: Abort
 /** The client of an entry: its operations, nested by id, and `json`, `request` and `paginate` for raw calls. A wrong
  * entry throws here, as the table test refuses one of this library's; a wrong argument throws when it is called. */
 export function client<const E extends Entry>(entry: E, options: ClientOptions): Client<E> {
-  checkHosts(entry); // before the token is read
+  checkHosts(entry, options.values); // before the token is read
   const { token } = options;
   const operations = Object.entries(entry.operations ?? {});
   const clash = clashing(operations.map(([id]) => id));

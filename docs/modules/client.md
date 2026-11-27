@@ -107,7 +107,7 @@ What the guard does not cover:
 - A proxy: `guardedFetch` dials through its own agent and never through a proxy, even when Node is told to follow
   `HTTPS_PROXY` (`NODE_USE_ENV_PROXY=1`); a proxy an app's own `fetch` sends through resolves and dials for it,
   unchecked.
-- An app's own `baseUrl` on an entry whose host is fixed, used as given (on a typed host it keeps the filled origin).
+- An app's own `baseUrl` on an entry whose host is fixed, used as given (on a typed or named host it keeps the filled origin).
 
 ## Raw calls
 

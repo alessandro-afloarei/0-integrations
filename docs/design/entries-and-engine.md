@@ -147,7 +147,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
 | `save` | Values kept on the connection after sign-in: `{ hubId: 'tokenAnswer.hub_id' }`. | none |
 | `revoke` | `{ url, token: ['refresh', 'access'] }` (RFC 7009) or `{ request }`, each with `goneErrors?`. | none |
-| `http` | `baseUrl`, `host?` (the host a base filled from a value must have; `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
+| `http` | `baseUrl`, `host?` (the host a base filled from a value must have, or a list of hosts; `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
 | `errors` | Where the provider's error code is, and how answers map to error codes (below). | status only |
 | `paging` | Named paging shapes (below). | none |
 | `webhook` | The signature scheme (below). | none |
@@ -155,28 +155,35 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 #### A base filled from a value
 
-A placeholder in `http.baseUrl` names a plain field or a `save` key. In the host (between `https://` and the next `/`)
+A placeholder in `http.baseUrl` names a plain field or a `save` key (in the host, one read from the token answer is a
+named host, below). In the host (between `https://` and the next `/`)
 it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
-and a domain (any name ending in `.example.com`, never `example.com` itself), or `*` (any). Intercom's region is the
-first: `baseUrl: 'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three
-hosts. In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as `a%2Fb`; a value that is
-`.` or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no placeholder in its host needs
-no `http.host`. Jira's is the first: `baseUrl: 'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value
-its `save` keeps.
+and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those when the hosts are on
+several domains (the filled host matches one), or `*` (any). Intercom's region is the first: `baseUrl:
+'https://{apiHost}', host: '*.intercom.io'`, with `apiHost` a field whose `choices` are its three hosts; Smartsheet's
+products are the first list, `host: ['api.smartsheet.com', 'api.smartsheetgov.com', 'api.smartsheet.eu',
+'api.smartsheet.au']`. In the path it is one segment: `encodeURIComponent` of the value, so `a/b` is sent as
+`a%2Fb`; a value that is `.` or `..` is `TypeError('base_value_invalid: <entry id> {<name>}')`, and a base with no
+placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
+'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value its `save` keeps.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
-  after the one check below that every URL the library sends to passes; on a typed host it must keep the filled base's
-  origin.
+  after the one check below that every URL the library sends to passes; on a typed or named host it must keep the
+  filled base's origin (else `base_host_refused`, before the token is read); on a fixed base it is the app's own
+  explicit choice of origin.
 - The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
   one) is `template_missing`. Only `startConnect` and `finishConnect` apply a field's `default` (and return it in
   `values`): a client, a refresh and a revoke never do, so they need the connection's `values`. A value in the host
   that is not a host part (ASCII letters, digits and `-` in dot-separated labels; no port, since `http.host` checks only
-  the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`.
+  the name) is `TypeError('base_value_invalid: <entry id> {<name>}')`. A value the entry's sign-in does not declare
+  (neither a field nor a `save` key) is refused, `TypeError('value_undeclared: <entry id> <name>')`, before a
+  credential is read or anything is sent, so a connection kept from another sign-in never reaches the wrong host.
 - Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 authorize,
   token, refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
-  `http.host`, else `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then
-  never leaves the filled base's origin.
+  `http.host` (a name only itself, the URL parser's lowercase form, `*.d` only a name under `d`), else
+  `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then never leaves the
+  filled base's origin.
 - Every URL an entry declares (the base, `http.bases`, the OAuth 2 URLs, a token request's URL) is a well-formed
   template (`hostPart`): `https://`, then ASCII letters, digits, `.`, `-` and `{name}`s with an optional literal port,
   then `/` or the end. Nothing the URL parser reads otherwise (`\`, `@`, `?`, `#`, a third `/`, a tab or newline) can
@@ -184,20 +191,54 @@ its `save` keeps.
   is `base_host_refused` before anything is sent, on every path (`checkHosts`, which then runs `hostSplit`), and the
   table refuses it.
 - `host: '*'` is a host the person types (GitLab's own server). It is allowed only on a base whose whole host is one
-  placeholder, and the entry is reached through the address guard below. A filled host that is a blocked address
-  (`127.0.0.1`, `2130706433`) is refused before the token is read, whatever `fetch` the app passes.
+  placeholder, never in a list (the table refuses it there, and the engine matches no host with it), and the entry is
+  reached through the address guard below. A filled host that is a blocked address (`127.0.0.1`, `2130706433`) is
+  refused before the token is read, whatever `fetch` the app passes. A name and a list keep the global `fetch`: each
+  name in them is the provider's own, a domain name whose last label holds a letter, never an address (the table
+  refuses `127.0.0.1` and `*.0.1`). A public suffix (`*.co.uk`) is not refused: that needs a suffix list.
 - Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled by this rule, from the plain fields alone:
   a secret field or a `save` key named there is `template_missing`, since neither exists before the exchange. A URL
-  with no placeholder is used as written.
+  with no placeholder is used as written. The refresh URL alone may also name a host the token answer names, as its whole host (below),
+  and is filled and checked when a refresh is sent.
 - **On a typed host, a credential goes only to that host.** When the base, an `http.bases` value, an OAuth 2 URL or a
-  token request's URL takes its host from a value, every one of them has exactly the same host part (`https://{host}`):
-  on a person's own server the registration, the sign-in and the calls all belong to that server. So a cloud's fixed
-  token URL never pairs with a typed base (a cloud token would go to any host), nor a typed token URL with a fixed base,
-  nor a key on a typed host with a fixed second base, nor a fixed token request with a typed base. `hostSplit(entry)` is
-  the check: the engine refuses such an entry with `TypeError('host_split: <entry id>')` in `authorizeUrl`, before every
-  exchange, refresh, revoke and token request, and where a call chooses a named base, before anything is built or sent,
-  and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed (a value only in the base's path)
-  is unaffected. No value is ever read from the callback's query: the callback is the person's browser.
+  token request's URL takes its host from a value the person types, every one of them has exactly the same host part
+  (`https://{host}`): on a person's own server the registration, the sign-in and the calls all belong to that server. So
+  a cloud's fixed token URL never pairs with a typed base (a cloud token would go to any host), nor a typed token URL
+  with a fixed base, nor a key on a typed host with a fixed second base, nor a fixed token request with a typed base.
+  `hostSplit(entry)` is the check: the engine refuses such an entry with `TypeError('host_split: <entry id>')` in
+  `authorizeUrl`, before every exchange, refresh, revoke and token request, and where a call chooses a named base,
+  before anything is built or sent, and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed
+  (a value only in the base's path) is unaffected. No value is ever read from the callback's query: the callback is the
+  person's browser.
+- **A host the token answer names.** On an OAuth 2 sign-in alone (on a key or token sign-in it is a typed host), a
+  placeholder that is the base's whole host (`https://{host}/…`) and names a `save` key whose value is one
+  `tokenAnswer.*` path, and no field, is a *named* host: the token endpoint that issued the grant chose it (Wrike's
+  data centre: `baseUrl: 'https://{host}/api/v4'`, `save: { host: 'tokenAnswer.host' }`). At connect the engine reads
+  that host from the issuer's token answer; afterwards the app gives it the connection's kept `values`, and the kept
+  host is checked against the entry's declared pattern again whenever a request's destination uses it: every call on
+  the base, a revoke sent as a request on the base, and a refresh whose URL names it. A refresh or revoke whose URL is
+  fixed goes to its literal host and does not read it. It does not, and cannot, verify that a kept value is the
+  one that connection was issued with (the library keeps no state): an app stores a connection's values with its
+  tokens and passes them back unchanged. The rules:
+  - it needs an `http.host` with a domain (a name, `*.` and a domain, or a list), never `*` (nor an app's `[]`, `['*']`
+    or `''`), else `base_host_refused` before anything is sent (`checkHosts`), and the table refuses it;
+  - its value is checked as a typed host's is (`filledBase`), and may be an https origin (Pipedrive's `api_domain`):
+    `https://`, the host and at most a `/`, whose host is used; a port, a path, a query, a fragment, userinfo or
+    `http:` is `base_value_invalid`;
+  - it is no typed host: beside fixed OAuth 2 URLs it is no split, but a typed host beside it is `host_split`, and so is
+    the placeholder composed into another host (`https://api-{host}.example.com`), which is then typed;
+  - `finishConnect` reads it from the token answer and checks it before identify, whether or not identify sends a
+    request, and never from the caller's `values`; a token answer without one (or with one that is no string or
+    number) is `invalid_response` (`missing_fields`), and a refused one is refused as a typed host is. Either way, as
+    after any failure once the code is exchanged, the engine attempts to revoke the fresh grant, unless the entry
+    marks its grants `reusesGrant` (re-consent may return a live connection's grant, which only the app may revoke).
+    The attempt reaches the provider only through a revoke URL on a fixed host: a revoke sent as a request on the base
+    cannot reach a refused or missing host. A failed attempt goes to `onRevokeFailed`, and the original refusal is
+    thrown, never the revoke's error;
+  - a client, a request revoke and a refresh read it from the connection's `values`, checked before the token is read
+    or the refresh token sent; none is `template_missing`. Only the refresh URL among the OAuth 2 URLs may name it, as
+    its whole host, so calls and the refresh share one checked host (Wrike refreshes on its data centre); a refresh
+    answer's host is not read, so an account that moves reconnects.
 
 #### The address guard
 
@@ -319,17 +360,26 @@ is not a second sign-in.
    for apps that connect other people's accounts, which is what providers ask OAuth 2 for (ClickUp: "OAuth 2.0:
    Required for building apps for other users"). The key is `signInWith(entry, 'key')`. The rule constrains only an
    entry with two sign-ins.
-4. A narrowed entry keeps every field. An OAuth 2 sign-in reads the entry's plain fields: `startConnect` asks for them
-   and returns them; the app keeps them with `state`; every later call takes them (`finishConnect`, `refreshGrant`,
-   `revokeGrant`, `client`). It reads every one (in its URLs, the base, or `connection.*`), so a plain field only the
-   key reads (a Basic email beside OAuth 2) waits.
-5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `identify`, `save`,
-   `errors`, `http`, `paging`, `webhook` and `operations` are shared by every sign-in; `send` is per sign-in already.
+4. A sign-in after the first may declare its own part, `fields`, `http: { baseUrl, host? }` and `identify`, and
+   `signInWith` puts it in place of the entry's: its `fields` and `identify` for the entry's, its `baseUrl` and `host`
+   in the entry's `http` (headers, bases, retry and timeouts stay shared), and `auth` the sign-in without it. Outline's
+   OAuth 2 is on its cloud host, and its key, second, has its own `host` field and base `https://{host}/api`. The first
+   sign-in has none: its part is the entry's top level, so the entry used whole and its first narrowing are one.
+   `checkHosts`, which every send and `startConnect` run first, refuses a first sign-in that declares one (an app's
+   entry built without the types) with `TypeError('sign_in_own_first: <entry id>')`. Every rule then runs on each
+   narrowed entry: a later token sign-in with its own typed base beside a fixed token URL is `host_split`. An OAuth 2
+   sign-in reads its plain fields: `startConnect` asks for them and returns them; the app keeps them with `state`;
+   every later call takes them (`finishConnect`, `refreshGrant`, `revokeGrant`, `client`). It reads every one (in its
+   URLs, the base, or `connection.*`), so a plain field only the key reads (a Basic email beside OAuth 2) is the key's
+   own.
+5. `scopes` and `revoke` belong to the OAuth 2 sign-in: narrowed to `key`, the entry drops them. `save`, `errors`,
+   `paging`, `webhook` and `operations` are shared by every sign-in, and `identify`, `fields` and the base and host of
+   `http` too, except what a later sign-in declares for itself; `send` is per sign-in already.
 6. The table test runs the schema once, and every rule and the derived fake's sign-in (a good key and a bad one) once
    per sign-in: an entry with several on `signInWith(entry, kind)`, each test named with its kind, and an entry with
    one as it is. The replay runs on the recorded sign-in only (rule 9).
 7. The schema takes `auth` of one or more sign-ins with unique kinds, not `key` with `token`, and OAuth 2 first when
-   there is one.
+   there is one, and an own part only on a later key or token sign-in, its `http` only `baseUrl` and `host`.
 8. `catalogue.json` holds the entry as declared, every sign-in in its order; the providers page's Sign-in column lists
    their kinds in that order.
 9. A recording is of the entry's key or token sign-in when it has one, else of its first (`recordedSignIn`, in the
@@ -337,7 +387,9 @@ is not a second sign-in.
    and the entry is `recorded` when that sign-in is. An OAuth 2 alternative is proven by its derived fake, and by a
    recording once the recorder learns the OAuth exchange.
 10. An app keeps the kind it chose with the connection (the secret's shape already differs: a grant, or the key's
-    fields) and narrows again for every later `client`, `refreshGrant` or `revokeGrant`.
+    fields) and narrows again for every later `client`, `refreshGrant` or `revokeGrant`. The engine cannot see a
+    connection used with another narrowing (a token is a string): Outline's OAuth 2 access token used with its key's
+    narrowing would go to the host the values name. Each narrowing sends only to its own base.
 
 ### `identify` and `save`
 
@@ -611,16 +663,17 @@ out: a smaller true entry beats a larger guessed one. What the engine cannot say
 wrong shape, and the mechanism it needs goes on the [waiting list](../waiting-list.md).
 
 **Sign-in.** Every sign-in the provider documents, in one pass: its self-serve OAuth 2 authorization code grant
-(`oauth2`) first, when it reaches the key's base and `identify` and its hosts keep the host rule, then its personal key or token
-(`key`, its `send` as the docs show it); a documented one-request token (`token`) takes the key's place when there is
-no key. [Sign-in alternatives](#sign-in-alternatives) gives the rules. When the provider's own rules say an app for
-other people must use OAuth, the key's `help` says the key is for the person's own account, and a provider whose OAuth
-2 cannot be declared yet is not declared with a key alone: it goes on the waiting list.
+(`oauth2`) first, when its hosts keep the host rule, then its personal key or token (`key`, its `send` as the docs show
+it; its own fields, base and `identify` when they differ from OAuth 2's); a documented one-request token (`token`) takes
+the key's place when there is no key. [Sign-in alternatives](#sign-in-alternatives) gives the rules. When the provider's
+own rules say an app for other people must use OAuth, the key's `help` says the key is for the person's own account, and
+a provider whose OAuth 2 cannot be declared yet is not declared with a key alone: it goes on the waiting list.
 
 - `fields`: the secret named as the docs name it (`apiKey`, `accessToken`, `apiToken`); a plain field only for what the
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
   scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host` with `http.host: '*'`; a documented list of regional
-  hosts on one domain is `choices` with `http.host: '*.<domain>'`.
+  hosts on one domain is `choices` with `http.host: '*.<domain>'`, on several domains `choices` with `http.host`
+  those names. A host the token answer names is no field but a `save` key, `http.host` the narrowest the pages support.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them.
 - `revoke`: only what the docs state. When either token is accepted and the docs do not say which ends the
   authorization, the refresh token goes first.
@@ -804,9 +857,8 @@ its docs, and engine tests as proof:
    five-step guide to adding a provider (`CONTRIBUTING.md`).
 
 Arriving later, each when a provider needs it: extra token parameters, token paths and a default expiry in the OAuth
-code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; a base per sign-in
-(an OAuth 2 sign-in whose base differs from its key's; the [waiting list](../waiting-list.md) names who waits and
-why); `Operation.base`; placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
+code flow; a nested `token` request body and an `expiresIn` path; a revoke for the `token` kind; `Operation.base`;
+placeholders in `bases`; `{ value, title }` choices; retry of writes with an `Idempotency-Key`; second challenge shapes; webhook schemes that are code
 (Twilio, HubSpot v3, PayPal, SendGrid); a recorder for webhooks and the OAuth exchange.
 
 Cut from Stage B: a DNS pre-check for an app's own `fetch` (the guarded fetch is the default instead); typed arguments

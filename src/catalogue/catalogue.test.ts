@@ -12,7 +12,7 @@ import { callBase, createClient, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { argumentShape, clashing, declaredUrls, hostPart, hostSplit, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { argumentShape, clashing, declaredUrls, hostPart, hostSplit, namedHosts, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -76,37 +76,44 @@ const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole d
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
 const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
 const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
+const OWN_FIRST = "no own `fields`, `http` or `identify` on the first sign-in: its part is the entry's top level";
+const fields = z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
+  secret: z.literal(true).optional(), default: z.string().optional(),
+  help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
+  choices: z.array(z.string()).optional() })).optional();
+const identify = z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
+  lowercase: z.literal(true).optional(),
+  rejectWhen: z.array(condition(whenObject.extend({ detail: z.string().optional() }))).optional() }).optional();
+/** What a later key or token sign-in may declare in place of the entry's: its fields, its base and host, its identify. */
+const hostPatterns = z.union([z.string(), z.array(z.string())]).optional();
+const own = { fields, http: z.strictObject({ baseUrl: https, host: hostPatterns }).optional(), identify };
 /** The entry types as a schema. Tests only: no published declaration may name zod. */
 const entrySchema = z.strictObject({
   // An id is the name its file exports it under, so it holds no `-`.
   id: z.string().regex(/^[a-z][a-z0-9]*$/u), name: z.string().min(1), docs: z.string().optional(),
   categories: z.array(z.enum(Object.keys(CATEGORIES) as [Category, ...Category[]])).optional(),
-  fields: z.array(z.strictObject({ name: z.string(), title: z.string().min(1, "a field's title says what to enter: give it words"),
-    secret: z.literal(true).optional(), default: z.string().optional(),
-    help: z.string().min(1, "a field's help is a line a person reads: give it words, or leave it out").optional(),
-    choices: z.array(z.string()).optional() })).optional(),
+  fields,
   auth: z.array(z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('key'), send: send.optional() }),
+    z.strictObject({ kind: z.literal('key'), send: send.optional(), ...own }),
     z.strictObject({ kind: z.literal('oauth2'), authorizeUrl: https, tokenUrl: https, refreshUrl: https.optional(),
       json: z.literal(true, '`json` is `true` or left out').optional(), pkce: z.literal(false).optional(),
       clientAuth: z.literal('basic').optional(), scopeSeparator: z.literal(',').optional(),
       authorizeParams: z.record(z.string(), z.string()).optional(), tokenTypes: z.array(z.string()).optional(),
       failed: when.optional(), reusesGrant: z.literal(true).optional() }),
-    z.strictObject({ kind: z.literal('token'), send: send.optional(), request: z.strictObject({ url: https,
+    z.strictObject({ kind: z.literal('token'), send: send.optional(), ...own, request: z.strictObject({ url: https,
       body: z.record(z.string(), z.string("a token request's body is a flat record of templates")), json: z.literal(true).optional(), basic: z.tuple([template, template]).optional(),
       token: z.string().regex(/\S/u, "a token request's `token` is the token's path in the answer: give it, or leave it out")
         .optional() }) }),
   ])).min(1).refine(auth => new Set(auth.map(item => item.kind)).size === auth.length, ONE_OF_EACH)
     .refine(auth => !(auth.some(item => item.kind === 'key') && auth.some(item => item.kind === 'token')), KEY_OR_TOKEN)
-    .refine(auth => auth[0]?.kind === 'oauth2' || !auth.some(item => item.kind === 'oauth2'), OAUTH_FIRST),
+    .refine(auth => auth[0]?.kind === 'oauth2' || !auth.some(item => item.kind === 'oauth2'), OAUTH_FIRST)
+    .refine(([first]) => !Object.keys(own).some(name => first !== undefined && name in first), OWN_FIRST),
   scopes: z.strictObject({ default: z.array(z.string()), requireGranted: z.literal(true).optional() }).optional(),
-  identify: z.strictObject({ request: request.optional(), id: value.optional(), name: value.optional(),
-    lowercase: z.literal(true).optional(),
-    rejectWhen: z.array(condition(whenObject.extend({ detail: z.string().optional() }))).optional() }).optional(),
+  identify,
   save: z.record(z.string(), value).optional(),
   revoke: z.union([z.strictObject({ url: https, token: z.array(z.enum(['refresh', 'access'])), goneErrors: z.array(z.string()).optional() }),
     z.strictObject({ request, goneErrors: z.array(z.string()).optional() })]).optional(),
-  http: z.strictObject({ baseUrl: https, host: z.string().optional(), bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
+  http: z.strictObject({ baseUrl: https, host: hostPatterns, bases: z.record(z.string(), https).optional(), headers: z.record(headerName, z.string(), { error: issue => (issue.code === 'invalid_key' ? headerMessage : undefined) }).optional(),
     timeoutMs: z.number().int().positive().optional(), minIntervalMs: z.number().int().nonnegative().optional(),
     retry: z.strictObject({ limit: z.number().int().nonnegative().optional(), maxWaitMs: z.number().int().nonnegative().optional(),
       defaultWaitMs: z.number().int().nonnegative().optional(), onlyStated: z.literal(true).optional(), wait: wait.optional() }).optional(),
@@ -193,9 +200,10 @@ const secretField = (entry: Entry) => (entry.fields ?? []).find(field => field.s
 const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
 const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (1 000 and 60 000 when left out): the cap would cut a longer default';
 const RETRY_ONLY_STATED = "no `http.retry.defaultWaitMs` beside `onlyStated`: an answer that states no wait is not retried, so the default is never read";
-const HOST_PATTERN = "an `http.host` pattern (a name, `*.` and a domain, or `*`) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
+const HOST_PATTERN = "an `http.host` pattern (a domain name, never an address; `*.` and a domain; a non-empty list of those; or `*` alone) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
+const ANY_HOST = "`http.host: '*'` only on a base whose whole host is one placeholder a person types: a host the token answer names needs a domain";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
-const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange)';
+const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
 const runnable = {
@@ -223,11 +231,16 @@ const runnable = {
   [RETRY_DEFAULT]: ({ http: { retry } }: Entry) => { const { defaultWaitMs, maxWaitMs } = retryPolicy(retry); return defaultWaitMs <= maxWaitMs; },
   [RETRY_ONLY_STATED]: ({ http: { retry } }: Entry) => retry?.onlyStated !== true || retry.defaultWaitMs === undefined,
   // A typed host is checked against a pattern before the token is read; a fixed one, or a value in the path, needs none.
-  [HOST_PATTERN]: (entry: Entry) => (declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
-    ? /^(\*|(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+)$/u.test(entry.http.host ?? '') : entry.http.host === undefined),
+  // `*` stays alone, and a name's last label holds a letter: a list or a name takes the plain fetch, never the address guard.
+  [HOST_PATTERN]: (entry: Entry) => {
+    const patterns = [entry.http.host ?? []].flat();
+    return declaredUrls(entry).some(url => placeholders(hostPart(url) ?? '').length > 0)
+      ? entry.http.host === '*' || (patterns.length > 0 && patterns.every(host => /^(\*\.)?([a-z0-9-]+\.)+[a-z0-9-]*[a-z][a-z0-9-]*$/u.test(host)))
+      : entry.http.host === undefined;
+  },
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
-  "`http.host: '*'` only on a base whose whole host is one placeholder": (entry: Entry) => entry.http.host !== '*'
-    || /^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? ''),
+  [ANY_HOST]: (entry: Entry) => entry.http.host !== '*'
+    || (/^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? '') && Object.keys(namedHosts(entry)).length === 0),
   // A URL is filled from plain values, never a secret; the body and Basic from either.
   // What the engine cannot fill is `template_missing` at the first sign-in.
   "a token request names only the entry's fields, a plain one in its `url`": (entry: Entry) => {
@@ -369,7 +382,8 @@ const runnable = {
   [OAUTH_READS]: (entry: Entry) => entry.auth[0].kind !== 'oauth2'
     || plainFields(entry).every(name => [...oauthUrlList(entry).flatMap(placeholders), ...plainReads(entry)].includes(name)),
   // What the engine cannot fill is `template_missing` at the start.
-  [OAUTH_PLAIN_URLS]: (entry: Entry) => oauthUrlList(entry).flatMap(placeholders).every(name => plainFields(entry).includes(name)),
+  [OAUTH_PLAIN_URLS]: (entry: Entry) => Object.entries(oauthUrls(entry) ?? {}).every(([which, url]) => placeholders(url)
+    .every(name => plainFields(entry).includes(name) || (which === 'refresh' && Object.hasOwn(namedHosts(entry), name)))),
   // The rule the engine runs before every OAuth 2 request and every call on a named base.
   [HOST_SPLIT]: (entry: Entry) => !hostSplit(entry),
   // The walk stops on the shape's list; records read elsewhere would end the list after its first page, silently.
@@ -425,9 +439,9 @@ describe.each(entries)('%s', (id, entry) => {
         expect(account === null).toBe(one.identify?.id === undefined);
         const grant = { accessToken: GOOD_KEY, refreshToken: 'kit-refresh' };
         expect(secret).toMatchObject(grant);
-        // A token answer's value is `kit-<path>`; a value read from identify's answer is the kit's.
+        // A token answer's value is the kit's for a named host, else `kit-<path>`; a value read from identify's answer is the kit's.
         expect(values).toMatchObject(Object.fromEntries(Object.entries(one.save ?? {}).map(([name, read]) => [name,
-          typeof read === 'string' && read.startsWith('tokenAnswer.') ? `kit-${read.slice('tokenAnswer.'.length)}` : expect.anything()])));
+          typeof read === 'string' && read.startsWith('tokenAnswer.') ? kitValues(one)[name] ?? `kit-${read.slice('tokenAnswer.'.length)}` : expect.anything()])));
         await expect(refreshGrant(one, client, 'kit-refresh', { fetch, values })).resolves.toMatchObject(grant);
         const { revoke } = one;
         if (revoke === undefined) return;
@@ -447,6 +461,23 @@ describe.each(entries)('%s', (id, entry) => {
           const [name = '', value] = credentialOf(one, GOOD_KEY, values).header ?? [];
           expect(sent[0]?.headers[name]).toBe(value);
         }
+      });
+    }
+    // A token answer naming a host outside `http.host` connects nothing: the token request alone, then a fixed revoke.
+    const hosts = Object.values(namedHosts(one));
+    if (hosts.length > 0) {
+      test(`refuses a token answer that names a host outside \`http.host\`${named}`, async () => {
+        const values = kitValues(one);
+        const token = new URL(filledBase(one, values, oauthUrls(one)?.token)).href;
+        const answer = { access_token: GOOD_KEY, refresh_token: 'kit-refresh', token_type: 'bearer',
+          ...Object.fromEntries(hosts.map(path => [path.slice('tokenAnswer.'.length), 'evil.test'])) };
+        const { fetch, calls } = fakeFetch([{ url: token, respond: () => Response.json(answer) }, { url: /./u, respond: () => new Response(null) }]);
+        const start = await startConnect(one, { clientId: 'kit-client', redirectUri: 'https://app.example.test/callback', state: 'kit-state', values });
+        if (start.kind !== 'redirect') throw new Error('an OAuth 2 sign-in starts with a redirect');
+        await expect(finishConnect(one, { client: { clientId: 'kit-client', clientSecret: 'kit-secret' }, code: 'kit-code', redirectUri: 'https://app.example.test/callback',
+          codeVerifier: start.codeVerifier, values: start.values, fetch, onRevokeFailed: () => undefined })).rejects.toThrow(new TypeError(`base_host_refused: ${one.id}`));
+        const revoke = one.revoke !== undefined && 'url' in one.revoke ? [new URL(filledBase(one, values, one.revoke.url)).href] : [];
+        expect(calls.map(call => call.url)).toEqual([token, ...revoke]);
       });
     }
   }
@@ -517,6 +548,10 @@ const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
 const tokened = { ...key, fields: [{ name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Client secret', secret: true }],
   auth: [{ kind: 'token', request: { url: 'https://k.test/token', body: { grant_type: 'client_credentials' },
     basic: ['{clientId}', '{clientSecret}'] } }] } as const;
+/** Wrike's shape: fixed sign-in URLs, the base and the refresh on the host the token answer names, under one domain. */
+const named = { ...key, scopes: { default: [] }, save: { host: 'tokenAnswer.host' }, identify: { request: { path: '/me' }, id: 'id' },
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.test/authorize', tokenUrl: 'https://login.k.test/token', refreshUrl: 'https://{host}/token' }],
+  http: { baseUrl: 'https://{host}/api', host: '*.k.test' } } as const;
 test.each<[Rule, Entry]>([
   ['a `docs` link to the provider\'s page, https', defineProvider({ id: 'k', name: 'K', http: key.http, auth: [{ kind: 'key' }], fields: [secret] })],
   ['a `docs` link to the provider\'s page, https', defineProvider({ ...key, docs: 'http://k.test/docs', auth: [{ kind: 'key' }], fields: [secret] })],
@@ -598,7 +633,17 @@ test.each<[Rule, Entry]>([
     [HOST_PATTERN, { baseUrl: 'https://{region}', host: 'example.com/x' }],
     [HOST_PATTERN, { baseUrl: 'https://{region}', host: '*.com' }],
     [HOST_PATTERN, { baseUrl: 'https://api.k.test/{region}', host: 'api.k.test' }],
-    ["`http.host: '*'` only on a base whose whole host is one placeholder", { baseUrl: 'https://{region}.example.com', host: '*' }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['*', 'api.k.test'] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['*'] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: [] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['api.k.test', '*.com'] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['api.k.test', 'API.K.EU'] }],
+    [HOST_PATTERN, { baseUrl: 'https://api.k.test', host: ['api.k.test'] }],
+    // An address is no name: a list keeps the plain fetch, so the address guard would never see it.
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: '127.0.0.1' }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['127.0.0.1'] }],
+    [HOST_PATTERN, { baseUrl: 'https://{region}', host: ['*.0.1'] }],
+    [ANY_HOST, { baseUrl: 'https://{region}.example.com', host: '*' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{zone}.k.test', host: '*.k.test' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://api.k.test/{zone}' }],
     ['a plain field (not secret) or a `save` key for every `http.baseUrl` placeholder', { baseUrl: 'https://{apiKey}.k.test', host: '*.k.test' }],
@@ -614,6 +659,7 @@ test.each<[Rule, Entry]>([
     [{ choices: ['api.mailgun.net'] }, 'mailgun.net'],
     [{ choices: ['api.mailgun.net', 'api.eu.mailgun.com'] }, '*.mailgun.net'],
     [{ default: 'api.mailgun.net' }, '*.mailgun.com'],
+    [{ choices: ['api.mailgun.net', 'api.eu.mailgun.net'] }, ['api.mailgun.net', 'api.eu.mailgun.com']],
   ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill the base to a host `http.host` takes",
     defineProvider({ ...key, http: { baseUrl: 'https://{region}', host }, auth: [{ kind: 'key' }],
       fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
@@ -723,6 +769,17 @@ test.each<[Rule, Entry]>([
     defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, retry } })]),
   [RETRY_ONLY_STATED, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
     http: { ...key.http, retry: { onlyStated: true, defaultWaitMs: 5000 } } })],
+  // A host the token answer names: never any host, never beside a typed one, and in no URL sent before the answer exists.
+  [ANY_HOST, defineProvider({ ...named, http: { ...named.http, host: '*' } })],
+  [HOST_PATTERN, defineProvider({ ...named, http: { baseUrl: named.http.baseUrl } })],
+  [HOST_SPLIT, defineProvider({ ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' } })],
+  ...(['authorizeUrl', 'tokenUrl'] as const).map((part): [Rule, Entry] => [OAUTH_PLAIN_URLS,
+    defineProvider({ ...named, auth: [{ ...named.auth[0], [part]: 'https://{host}/oauth' }] })]),
+  [OAUTH_PLAIN_URLS, defineProvider({ ...named, revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] } })],
+  // A named host is the base's whole host: composed into another, it is typed, so split from the fixed sign-in URLs.
+  ...['https://api-{host}.k.test/api', 'https://{host}.k.test/api'].map((baseUrl): [Rule, Entry] => [HOST_SPLIT,
+    defineProvider({ ...named, http: { ...named.http, baseUrl } })]),
+  [HOST_SPLIT, defineProvider({ ...named, auth: [{ ...named.auth[0], refreshUrl: 'https://auth.{host}/token' }] })],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
 test.each([
@@ -758,6 +815,10 @@ test.each<[string, Record<string, unknown>, string]>([
   ['two key sign-ins', { fields: [secret], auth: [{ kind: 'key' }, { kind: 'key', send: { header: 'x-api-key' } }] }, ONE_OF_EACH],
   ['a key beside a token', { fields: [secret], auth: [{ kind: 'key' },
     { kind: 'token', request: { url: 'https://k.test/token', body: { key: '{apiKey}' } } }] }, KEY_OR_TOKEN],
+  ['an own base on its first sign-in', { fields: [secret], auth: [{ kind: 'key', http: { baseUrl: 'https://k.test/api' } }] }, OWN_FIRST],
+  ['own fields on its first sign-in', { auth: [{ kind: 'key', fields: [secret] }] }, OWN_FIRST],
+  ['a later sign-in\'s own headers', { fields: [secret], scopes: { default: [] },
+    auth: [oauth2.auth[0], { kind: 'key', http: { baseUrl: 'https://k.test/api', headers: { a: 'b' } } }] }, 'Unrecognized key: "headers"'],
 ])('an entry with %s fails the schema, with what to fix', (_, parts, message) => {
   expect(entrySchema.safeParse({ ...key, ...parts }).error?.issues.map(issue => issue.message)).toEqual([message]);
 });
@@ -786,6 +847,17 @@ test.each<[string, Entry, string[]]>([
     http: { baseUrl: 'https://{site}.k.test', host: '*.k.test' }, auth: [oauth2.auth[0], { kind: 'key', send: { header: 'x-site', value: '{site} {apiKey}' } }] }),
     [`${HOST_SPLIT} (oauth2)`]],
   // A field only the key reads would be asked for by the OAuth 2 connect and never used.
+  // A later token sign-in's own typed base beside its fixed token URL: the token would go to any host typed.
+  ['a later token sign-in with its own typed base beside a fixed token URL', defineProvider({ ...key, scopes: { default: [] },
+    auth: [oauth2.auth[0], { kind: 'token', request: { url: 'https://k.test/token', body: { s: '{apiKey}' } }, fields: [{ name: 'host', title: 'Host' }, secret],
+      http: { baseUrl: 'https://{host}/api', host: '*' } }] }), [`${HOST_SPLIT} (token)`]],
+  // A named host is OAuth 2's alone: a token sign-in's base read from its token answer is typed, beside a fixed token URL.
+  ['a token entry whose base host its token answer names', defineProvider({ ...key, fields: [secret], save: { host: 'tokenAnswer.host' },
+    auth: [{ kind: 'token', request: { url: 'https://login.k.test/token', body: { s: '{apiKey}' } } }], http: { baseUrl: 'https://{host}/api', host: '*.k.test' } }),
+    [`${HOST_SPLIT} (token)`]],
+  ['a later token sign-in whose own base host its token answer names', defineProvider({ ...key, scopes: { default: [] }, save: { host: 'tokenAnswer.host' },
+    auth: [oauth2.auth[0], { kind: 'token', request: { url: 'https://login.k.test/token', body: { s: '{apiKey}' } }, fields: [secret],
+      http: { baseUrl: 'https://{host}/api', host: '*.k.test' } }] }), [`${HOST_SPLIT} (token)`]],
   ['a Basic email the key alone reads, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret, { name: 'email', title: 'Email' }],
     scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key', send: { basic: ['{email}', '{apiKey}'] } }] }), [`${OAUTH_READS} (oauth2)`]],
 ])('%s breaks only its rule', (_, entry, rules) => { expect(broken(entry)).toEqual(rules); });
@@ -797,13 +869,30 @@ test.each<[string, Entry]>([
   ['an OAuth 2 sign-in and a key on a typed host', defineProvider({ ...key, fields: [{ name: 'host', title: 'Host' }, secret], scopes: { default: [] },
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://{host}/oauth/authorize', tokenUrl: 'https://{host}/oauth/token' }, { kind: 'key' }],
     revoke: { url: 'https://{host}/oauth/revoke', token: ['refresh'] }, http: { baseUrl: 'https://{host}/api', host: '*' } })],
+  // A later key's own base on one of several fixed domains.
+  ['a later key with its own base on a list of host patterns', defineProvider({ ...key, scopes: { default: [] }, identify: { request: { path: '/me' }, id: 'id' },
+    auth: [oauth2.auth[0], { kind: 'key', fields: [{ name: 'host', title: 'Host', choices: ['a.k.test', 'b.k.example'] }, secret],
+      http: { baseUrl: 'https://{host}', host: ['*.k.test', '*.k.example'] } }] })],
+  // Outline's shape: OAuth 2 on the cloud host, a key with its own fields on a host the person types.
+  ['OAuth 2 on a fixed host beside a key with its own typed base', defineProvider({ ...key, scopes: { default: [] }, identify: { request: { path: '/me' }, id: 'id' },
+    auth: [oauth2.auth[0], { kind: 'key', fields: [{ name: 'host', title: 'Host' }, secret], http: { baseUrl: 'https://{host}/api', host: '*' } }] })],
   // Azure DevOps' shape: fixed OAuth 2 URLs, a value only in the base's path.
   ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
     http: { baseUrl: 'https://api.k.test/{org}' } })],
+  ["Wrike's shape: the base and the refresh on the host the token answer names", defineProvider(named)],
+  ["Pipedrive's shape: the base on the origin the token answer names, the refresh fixed", defineProvider({ ...named,
+    save: { apiDomain: 'tokenAnswer.api_domain' }, auth: [{ ...named.auth[0], refreshUrl: 'https://login.k.test/token' }],
+    http: { baseUrl: 'https://{apiDomain}/api/v1', host: '*.k.test' } })],
   // HubSpot's shape: OAuth 2's id from the token answer, the key's from identify's answer, which the engine reads next.
   ['an id list from the token answer, then identify\'s answer, beside OAuth 2 and a key', defineProvider({ ...key, fields: [secret],
     scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key' }], identify: { request: { path: '/me' }, id: ['tokenAnswer.hub_id', 'portalId'] } })],
 ])('%s breaks no rule', (_, entry) => { expect(broken(entry)).toEqual([]); });
+
+test("a later sign-in's own host may list several patterns, as `http.host` may", () => {
+  const listed = { ...key, fields: [secret], scopes: { default: [] }, auth: [oauth2.auth[0], { kind: 'key',
+    fields: [{ name: 'host', title: 'Host' }, secret], http: { baseUrl: 'https://{host}', host: ['*.k.test', '*.k.example'] } }] };
+  expect(entrySchema.safeParse(listed).error).toBeUndefined();
+});
 
 test('a token request whose body holds an object fails the schema, with what to fix', () => {
   const bad = { ...tokened, auth: [{ ...tokened.auth[0], request: { ...tokened.auth[0].request, body: { grant: { type: 'x' } } } }] };

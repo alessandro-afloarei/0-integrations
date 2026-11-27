@@ -99,13 +99,24 @@ export function oauthUrls(entry: Entry): { authorize: string; token: string; ref
     ...(entry.revoke && 'url' in entry.revoke ? { revoke: entry.revoke.url } : {}) };
 }
 
+/** The base's named host by name, with its path: on an OAuth 2 sign-in, the base's whole host one placeholder, a `save`
+ * key read from one `tokenAnswer.*` path, never a field. */
+export function namedHosts(entry: Entry): Readonly<Record<string, Path>> {
+  if (entry.auth[0].kind !== 'oauth2') return {};
+  return Object.fromEntries((/^https:\/\/\{([^{}]+)\}$/u.exec(hostPart(entry.http.baseUrl) ?? '')?.slice(1) ?? []).flatMap(name => { const path = entry.save?.[name];
+    return typeof path === 'string' && /^tokenAnswer\.[^{]+$/u.test(path) && !entry.fields?.some(field => field.name === name) ? [[name, path]] : []; }));
+}
+
 /** Whether the entry's base, its `http.bases`, an OAuth 2 sign-in's URLs and a token request's URL differ in their host
- * part when any of them takes its host from a value: on a typed host a credential goes only to that host, and a cloud's
- * never reaches it. */
+ * part when any of them takes its host from a typed value, or a typed host sits beside a named one: on a typed host a
+ * credential goes only to that host, and a cloud's never reaches it. A named host, the whole host of each URL that names
+ * it, beside fixed URLs is no split; composed into another host it is typed. */
 export function hostSplit(entry: Entry): boolean {
   // One not well formed is kept whole: never equal to a host part, so it counts as another host.
   const hosts = declaredUrls(entry).map(url => hostPart(url) ?? url);
-  return hosts.some(host => placeholders(host).length > 0) && new Set(hosts).size > 1;
+  const named = namedHosts(entry);
+  const typed = hosts.some(host => placeholders(host).some(name => !Object.hasOwn(named, name) || host !== `https://{${name}}`));
+  return typed && (new Set(hosts).size > 1 || Object.keys(named).length > 0);
 }
 
 /** Every URL an entry declares: the base, `http.bases`, the OAuth 2 URLs (an RFC 7009 revoke's too) and a token request's. */
@@ -115,11 +126,18 @@ export function declaredUrls(entry: Entry): string[] {
     ...auth.kind === 'token' ? [auth.request.url] : []];
 }
 
-/** The one refusal every send runs first: a declared URL that is not a well-formed template (`base_host_refused`), then
- * hosts that split (`host_split`), each before a host is compared or anything is sent. */
-export function checkHosts(entry: Entry): void {
+/** The one refusal every send runs first: a first sign-in that declares its own part (`sign_in_own_first`: an app's entry
+ * built without the types), a declared URL that is not a well-formed template or a named host with no domain to match
+ * (`base_host_refused`), hosts that split (`host_split`), then a value that is neither a field nor a `save` key
+ * (`value_undeclared`: a connection kept from another sign-in), each before a credential is read or anything is sent. */
+export function checkHosts(entry: Entry, values: Values = {}): void {
+  if (['fields', 'http', 'identify'].some(name => name in entry.auth[0])) throw new TypeError(`sign_in_own_first: ${entry.id}`);
   if (declaredUrls(entry).some(url => hostPart(url) === undefined)) throw new TypeError(`base_host_refused: ${entry.id}`);
+  const domainless = [entry.http.host ?? '*'].flat().every(host => host === '*' || host === ''); // an app's `[]` or `['*']` too
+  if (Object.keys(namedHosts(entry)).length > 0 && domainless) throw new TypeError(`base_host_refused: ${entry.id}`);
   if (hostSplit(entry)) throw new TypeError(`host_split: ${entry.id}`);
+  const undeclared = Object.keys(values).find(name => !entry.fields?.some(field => field.name === name) && !Object.hasOwn(entry.save ?? {}, name));
+  if (undeclared !== undefined) throw new TypeError(`value_undeclared: ${entry.id} ${undeclared}`);
 }
 
 /** Replaces each `{name}` with a string or a finite number; anything else throws, naming `where` and the key. */

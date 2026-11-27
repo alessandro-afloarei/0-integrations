@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Outline, app.getoutline.com or the person's own server: the host is typed, so it is reached only through the address
- * guard unless the app passes its own `fetch`. Every method is a POST with a JSON body; a 429 names its wait in
- * `Retry-After`. Lists page by an `offset` in the body (https://www.getoutline.com/developers). Types:
- * https://www.getoutline.com/openapi.json */
+/** Outline: OAuth 2 on app.getoutline.com, its app registered under Settings, then Applications, and `published` to
+ * sign in other workspaces (https://www.getoutline.com/openapi.json, with the types); or the key, on the cloud or the
+ * person's own server, behind the address guard. Each method is a POST with a JSON body; a 429 waits `Retry-After`;
+ * lists page by a body `offset`; revoke: https://app.getoutline.com/.well-known/oauth-authorization-server */
 const document = { id: 'string', 'title?': 'string', 'collectionId?': 'string', 'parentDocumentId?': 'string',
   'path?': 'string', 'createdAt?': 'string', 'updatedAt?': 'string' } as const;
 const limit = { limit: { in: 'body', type: 'number' } } as const;
@@ -13,14 +13,18 @@ const fields = { title: { in: 'body', type: 'string' }, text: { in: 'body', type
 const ref = 'https://www.getoutline.com/developers#tag';
 
 export const outline = defineProvider({
-  id: 'outline', name: 'Outline', docs: 'https://www.getoutline.com/developers#description/api-key',
+  id: 'outline', name: 'Outline', docs: 'https://www.getoutline.com/developers#description/oauth-20',
   categories: ['docs'],
-  fields: [{ name: 'host', title: 'Outline host', default: 'app.getoutline.com',
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.getoutline.com/oauth/authorize', tokenUrl: 'https://app.getoutline.com/oauth/token',
+    authorizeParams: { response_type: 'code' } },
+  { kind: 'key', fields: [{ name: 'host', title: 'Outline host', default: 'app.getoutline.com',
     help: 'app.getoutline.com, or the host name of your own Outline, with no port.' },
   { name: 'apiKey', title: 'API key', secret: true,
     help: 'Create it under Settings, then API & Apps. If you limit its scopes, give it this space-separated list of endpoints: auth.info documents.list documents.info documents.create documents.update collections.list.' }],
-  auth: [{ kind: 'key' }],
-  http: { baseUrl: 'https://{host}/api', host: '*', headers: { 'content-type': 'application/json' }, retry: {} },
+  http: { baseUrl: 'https://{host}/api', host: '*' } }],
+  scopes: { default: ['read', 'write'] },
+  revoke: { url: 'https://app.getoutline.com/oauth/revoke', token: ['refresh'] },
+  http: { baseUrl: 'https://app.getoutline.com/api', headers: { 'content-type': 'application/json' }, retry: {} },
   identify: { request: { method: 'POST', path: '/auth.info' }, id: 'data.user.id', name: ['data.user.name', 'data.user.email'] },
   errors: { detail: 'error' },
   paging: { offset: { kind: 'offset', send: { body: 'offset' }, list: 'data' } },

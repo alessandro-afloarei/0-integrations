@@ -1,7 +1,7 @@
 # Providers
 
-Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 80 declared, 0 recorded;
-247 typed operations; webhooks: ed25519 1, hmac 20, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
+Generated from `src/catalogue/` by `pnpm providers`: do not edit. 81 providers: 81 declared, 0 recorded;
+252 typed operations; webhooks: ed25519 1, hmac 20, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -59,7 +59,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 
 | [monday.com](https://developer.monday.com/api-reference/docs/authentication) | tasks | OAuth 2, key | items.list, items.get, items.create, items.update, boards.list | — | declared |
 | [Notion](https://developers.notion.com/reference/authentication) | docs | key | pages.markdown | — | declared |
 | [Nutshell](https://developers.nutshell.com/docs/api-authentication) | crm | key | contacts.list, contacts.get, contacts.create, accounts.list, leads.list | — | declared |
-| [Outline](https://www.getoutline.com/developers#description/api-key) | docs | key | documents.list, documents.get, documents.create, documents.update, collections.list | — | declared |
+| [Outline](https://www.getoutline.com/developers#description/oauth-20) | docs | OAuth 2, key | documents.list, documents.get, documents.create, documents.update, collections.list | — | declared |
 | [Outreach](https://developers.outreach.io/api/getting-started) | sales | OAuth 2 | sequences.list, prospects.list, prospects.get, prospects.create, prospects.update, sequenceStates.create | hmac | declared |
 | [PagerDuty](https://docs.pagerduty.com/developer/authentication) | monitoring | OAuth 2, key | incidents.list, incidents.get, services.list | hmac | declared |
 | [PayPal](https://developer.paypal.com/api/rest/authentication/) | finance | token | — | — | declared |
@@ -82,6 +82,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 80 providers: 
 | [Trello](https://developer.atlassian.com/cloud/trello/guides/rest-api/authorization/) | tasks | key | — | — | declared |
 | [Unipile](https://developer.unipile.com/v2.0/docs/api-keys) | mail, calendar | key | — | — | declared |
 | [Vercel](https://vercel.com/docs/rest-api#authentication) | code | key | deployments.list, deployments.get, deployments.create, projects.list | hmac | declared |
+| [Wrike](https://developers.wrike.com/docs/oauth-20-authorization) | tasks | OAuth 2 | tasks.list, tasks.get, tasks.create, tasks.update, folders.list | — | declared |
 | [Zoom](https://developers.zoom.us/docs/internal-apps/s2s-oauth/) | meetings | token | — | — | declared |
 | [ZoomInfo](https://docs.gtm.ai/docs/client-credentials-flow) | sales | token | contacts.search, contacts.get, companies.search, companies.get | — | declared |
 | [Zulip](https://zulip.com/api/http-headers) | chat | key | channels.list, messages.list, users.list | — | declared |

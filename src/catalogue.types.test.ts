@@ -1,9 +1,10 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, signInWith, type Entry, type SignIn } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Own, type SignIn } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
 import { linear } from './catalogue/linear.js';
 import { azuredevops } from './catalogue/azuredevops.js';
 import { mattermost } from './catalogue/mattermost.js';
+import { outline } from './catalogue/outline.js';
 import { client } from './client.js';
 import { finishConnect, startConnect, type Connected } from './connect.js';
 import { slack } from './catalogue/slack.js';
@@ -182,7 +183,56 @@ async function valuesWide(wide: Entry, own: OAuthClient, refreshToken: string, c
   authorizeUrl(either, { ...start, values: { site: 's' } });
 }
 
+/** OAuth 2 on a cloud host, then a key with its own fields, base on a host the person types, and identify. */
+const owned = defineProvider({ id: 'owned', name: 'Owned',
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://cloud.owned.test/authorize', tokenUrl: 'https://cloud.owned.test/token' },
+    { kind: 'key', send: { header: 'x-api-key' }, fields: [{ name: 'host', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
+      http: { baseUrl: 'https://{host}/api', host: '*' }, identify: { request: { path: '/key' }, id: 'key.id' } }],
+  scopes: { default: ['read'] }, http: { baseUrl: 'https://cloud.owned.test/api', headers: { accept: 'application/json' }, retry: {} },
+  identify: { request: { path: '/me' }, id: 'id' } });
+
+test("signInWith puts a later sign-in's own fields, base, host and identify in place of the entry's", () => {
+  const [oauth, key] = owned.auth;
+  expect(signInWith(owned, 'key')).toEqual({ id: 'owned', name: 'Owned', fields: key.fields, auth: [{ kind: 'key', send: key.send }],
+    http: { ...owned.http, ...key.http }, identify: key.identify });
+  // The OAuth 2 sign-in, first, is the entry's top level: the entry used whole.
+  expect(signInWith(owned, 'oauth2')).toEqual({ ...owned, auth: [oauth] });
+});
+
+// Never called: the types are the test.
+function ownTypes() {
+  const key = signInWith(owned, 'key');
+  const oauth = signInWith(owned, 'oauth2');
+  // Each key the run time puts in place, as it puts it.
+  expectTypeOf(key.fields).toEqualTypeOf(owned.auth[1].fields);
+  expectTypeOf(key.identify).toEqualTypeOf(owned.auth[1].identify);
+  expectTypeOf(key.http.baseUrl).toEqualTypeOf<'https://{host}/api'>();
+  expectTypeOf(key.http.host).toEqualTypeOf<'*'>();
+  expectTypeOf(key.http.headers).toEqualTypeOf(owned.http.headers);
+  expectTypeOf(key.http.retry).toEqualTypeOf(owned.http.retry);
+  expectTypeOf(key.auth).toEqualTypeOf<readonly [{ readonly kind: 'key'; readonly send: { readonly header: 'x-api-key' } }]>();
+  expectTypeOf(oauth).not.toHaveProperty('fields');
+  expectTypeOf(oauth.http).toEqualTypeOf(owned.http);
+  expectTypeOf(oauth.identify).toEqualTypeOf(owned.identify);
+  expectTypeOf(oauth.auth).toEqualTypeOf<readonly [typeof owned.auth[0]]>();
+  // Outline: its key's connection keeps the host typed; its OAuth 2 one has none.
+  expectTypeOf<Connected<SignIn<typeof outline, 'key'>>['values']['host']>().toEqualTypeOf<string>();
+  expectTypeOf<Connected<SignIn<typeof outline, 'oauth2'>>['values']>().not.toHaveProperty('host');
+  expectTypeOf<Connected<SignIn<typeof outline, 'key'>>['secret']>().toEqualTypeOf<Readonly<Record<'apiKey', string>>>();
+  // An own `http` brings only its base and host, the host typed as `http.host` is: a list of patterns too.
+  const listed = signInWith(defineProvider({ id: 'listed', name: 'Listed', scopes: { default: [] }, http: { baseUrl: 'https://cloud.listed.test',
+    bases: { b: 'https://b.listed.test' } }, auth: [owned.auth[0], { kind: 'key', fields: [{ name: 'host', title: 'Host' }, { name: 'k', title: 'K', secret: true }],
+    http: { baseUrl: 'https://{host}', host: ['*.listed.test', '*.listed.example'], bases: { b: 'https://evil.test' } } }] }), 'key');
+  expectTypeOf(listed.http.host).toEqualTypeOf<readonly ['*.listed.test', '*.listed.example']>();
+  expectTypeOf(listed.http.bases).toEqualTypeOf<{ readonly b: 'https://b.listed.test' }>();
+  const wide: Own['http'] = { baseUrl: 'https://{host}', host: ['*.a.test'] };
+  defineProvider({ id: 'first', name: 'First', http: { baseUrl: 'https://first.test' },
+    // @ts-expect-error the first sign-in's part is the entry's top level
+    auth: [{ kind: 'key', http: { baseUrl: 'https://{host}/api', host: '*' } }] });
+  return wide;
+}
+
 test('the narrowed types compile', () => {
-  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide].every(item => typeof item === 'function')).toBe(true);
+  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide, ownTypes].every(item => typeof item === 'function')).toBe(true);
   expect(mailed.auth.map(auth => auth.kind)).toEqual(['oauth2', 'key']);
 });

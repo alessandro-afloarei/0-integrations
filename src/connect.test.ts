@@ -10,6 +10,7 @@ import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { jira } from './catalogue/jira.js';
 import { metabase } from './catalogue/metabase.js';
+import { outline } from './catalogue/outline.js';
 import { paypal } from './catalogue/paypal.js';
 import { slack } from './catalogue/slack.js';
 import { zoom } from './catalogue/zoom.js';
@@ -18,7 +19,8 @@ import { finishConnect, startConnect, type Connected, type ConnectStart } from '
 import { ProviderHttpError } from './errors.js';
 import { fakeGoogle } from './google/fake.js';
 import * as guard from './guard.js';
-import { tokenSource } from './oauth.js';
+import { filledBase } from './http.js';
+import { authorizeUrl as consentUrl, exchangeCode, refreshGrant, revokeGrant, tokenSource } from './oauth.js';
 import { hubspot } from './catalogue/hubspot.js';
 import { fakeSlack } from './slack/fake.js';
 import { fakeFetch, fakeProvider, type Route } from './testing.js';
@@ -162,7 +164,10 @@ describe('connect', () => {
 
   it('keeps and sends only the fields the entry declares, each in its own record', async () => {
     const http = fakeFetch([{ url: 'https://api.aircall.io/v1/company', respond: () => Response.json({ company: { name: 'Lumen' } }) }]);
-    const form = { apiId: '12', apiToken: 'plain-copy', note: 'extra' };
+    const form = { apiId: '12', apiToken: 'plain-copy' };
+    // A value no field or `save` key names is refused, unsent.
+    await expect(finishConnect(looseAircall, { secret: { apiToken: 'token' }, values: { ...form, note: 'extra' }, fetch: http.fetch }))
+      .rejects.toThrow(new TypeError('value_undeclared: aircall note'));
     const result = await finishConnect(looseAircall, { secret: { apiToken: 'token', apiId: 'secret-copy', other: 'extra' }, values: form, fetch: http.fetch });
     expect(result).toEqual({ secret: { apiToken: 'token' }, values: { apiId: '12' }, account: { id: '12', name: 'Lumen' } });
     expect(http.calls).toHaveLength(1);
@@ -612,5 +617,224 @@ describe('an OAuth 2 sign-in that reads plain fields', () => {
     await expect(finish(http.fetch, {})).rejects.toMatchObject({ code: 'rejected' });
     expect(http.calls.map(call => call.url)).toEqual(['https://chat.k.test/oauth/access_token', 'https://chat.k.test/api/main/users/me',
       'https://chat.k.test/oauth/revoke']);
+  });
+});
+
+describe("a sign-in's own part", () => {
+  const anything = () => fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'a', token_type: 'bearer', id: 'u' }) }]);
+  /** App entries built without the types, whose first sign-in declares a part of its own: refused everywhere, unsent. */
+  const own = { fields: [{ name: 'host', title: 'Host' }], http: { baseUrl: 'https://{host}/api', host: '*' } };
+  const oauthFirst = { id: 'first', name: 'First', scopes: { default: [] }, http: { baseUrl: 'https://cloud.first.test/api' },
+    identify: { request: { path: '/me' }, id: 'id' }, revoke: { url: 'https://cloud.first.test/revoke', token: ['access'] },
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://cloud.first.test/authorize', tokenUrl: 'https://cloud.first.test/token', ...own }] } as unknown as Entry;
+  const tokenFirst = { id: 'first', name: 'First', fields: [{ name: 'secret', title: 'Secret', secret: true }], http: { baseUrl: 'https://cloud.first.test/api' },
+    auth: [{ kind: 'token', request: { url: 'https://cloud.first.test/token', body: { s: '{secret}' } }, ...own }] } as unknown as Entry;
+  const refused = new TypeError('sign_in_own_first: first');
+  const values = { host: 'cloud.first.test' };
+
+  it('refuses an entry whose first sign-in declares one, from every connect and grant call, with no request', async () => {
+    const http = anything();
+    await expect(startConnect(oauthFirst, { ...start, values })).rejects.toThrow(refused);
+    await expect(startConnect(tokenFirst)).rejects.toThrow(refused);
+    await expect(finishConnect(oauthFirst, { client, code: 'c', redirectUri: callback, codeVerifier: 'v'.repeat(43), values, fetch: http.fetch,
+      onRevokeFailed: vi.fn() })).rejects.toThrow(refused);
+    await expect(finishConnect(tokenFirst, { secret: { secret: 's' }, values, fetch: http.fetch })).rejects.toThrow(refused);
+    await expect(refreshGrant(oauthFirst, client, 'r', { values, fetch: http.fetch })).rejects.toThrow(refused);
+    await expect(revokeGrant(oauthFirst, { accessToken: 'a', client, values, fetch: http.fetch })).rejects.toThrow(refused);
+    await expect(exchangeCode(oauthFirst, client, { code: 'c', redirectUri: callback, codeVerifier: 'v'.repeat(43), values, fetch: http.fetch }))
+      .rejects.toThrow(refused);
+    expect(() => consentUrl(oauthFirst, { ...start, scopes: [], codeChallenge: 'c', values })).toThrow(refused);
+    await expect(tokenSource(tokenFirst, { secret: { secret: 's' }, values, fetch: http.fetch })()).rejects.toThrow(refused);
+    expect(http.calls).toEqual([]);
+  });
+
+  it('Outline narrowed to OAuth 2 sends only to app.getoutline.com, and refuses a host in the values, unsent', async () => {
+    const oauth = signInWith(outline, 'oauth2');
+    const kit = { clientId: 'kit-client', clientSecret: 'kit-secret' };
+    const http = fakeFetch(fakeProvider(oauth, { key: 'kit', code: 'c', operations: { 'documents.get': () => ({ data: { id: 'd' } }) } }));
+    const started = await startConnect(oauth, start);
+    expect(new URL(started.url).host).toBe('app.getoutline.com');
+    const { secret } = await finishConnect(oauth, { client: kit, code: 'c', redirectUri: callback, codeVerifier: started.codeVerifier,
+      fetch: http.fetch, onRevokeFailed: vi.fn() });
+    await refreshGrant(oauth, kit, secret.refreshToken ?? '', { fetch: http.fetch });
+    await revokeGrant(oauth, { ...secret, client: kit, fetch: http.fetch });
+    await apiClient(oauth, { token: 'kit', fetch: http.fetch }).documents.get({ id: 'd' });
+    expect(new Set(http.calls.map(call => new URL(call.url).host))).toEqual(new Set(['app.getoutline.com']));
+    expect(http.calls.map(call => new URL(call.url).pathname)).toEqual(['/oauth/token', '/api/auth.info', '/oauth/token', '/oauth/revoke',
+      '/api/documents.info']);
+    // The refresh token is the one revoked.
+    expect(new URLSearchParams(http.calls[3]?.body).get('token')).toBe(secret.refreshToken);
+    http.calls.length = 0;
+    // A key connection's values, which a call on the whole entry would have sent to the cloud.
+    const typed = { values: { host: 'docs.example.com' } } as object;
+    const refused = new TypeError('value_undeclared: outline host');
+    let reads = 0;
+    const token = () => { reads++; return Promise.resolve('k'); };
+    for (const entry of [outline, oauth]) {
+      expect(() => apiClient(entry, { token, fetch: http.fetch, ...typed })).toThrow(refused);
+      await expect(startConnect(entry, { ...start, ...typed })).rejects.toThrow(refused);
+      await expect(finishConnect(entry, { client: kit, code: 'c', redirectUri: callback, codeVerifier: started.codeVerifier,
+        fetch: http.fetch, onRevokeFailed: vi.fn(), ...typed })).rejects.toThrow(refused);
+      expect(() => consentUrl(entry, { ...start, scopes: [], codeChallenge: 'c', ...typed })).toThrow(refused);
+      await expect(exchangeCode(entry, kit, { code: 'c', redirectUri: callback, codeVerifier: started.codeVerifier, fetch: http.fetch, ...typed }))
+        .rejects.toThrow(refused);
+      await expect(refreshGrant(entry, kit, 'r', { fetch: http.fetch, ...typed })).rejects.toThrow(refused);
+      await expect(revokeGrant(entry, { refreshToken: 'r', client: kit, fetch: http.fetch, ...typed })).rejects.toThrow(refused);
+    }
+    expect([reads, http.calls]).toEqual([0, []]);
+    // The key's narrowing declares the host: there the same values reach the host typed.
+    const key = fakeFetch(fakeProvider(signInWith(outline, 'key'), { key: 'k', values: { host: 'docs.example.com' },
+      operations: { 'documents.get': () => ({ data: { id: 'd' } }) } }));
+    await apiClient(signInWith(outline, 'key'), { token, fetch: key.fetch, values: { host: 'docs.example.com' } }).documents.get({ id: 'd' });
+    expect([reads, key.calls.map(call => call.url)]).toEqual([1, ['https://docs.example.com/api/documents.info']]);
+  });
+
+  it('refuses a token sign-in value it does not declare, before a secret is read or anything is sent', async () => {
+    const http = anything();
+    let reads = 0;
+    const secret = { get clientSecret() { reads++; return 's'; } };
+    const values = { accountId: 'a', clientId: 'c', host: 'evil.test' } as unknown as { accountId: string; clientId: string };
+    await expect(tokenSource(zoom, { secret, values, fetch: http.fetch })()).rejects.toThrow(new TypeError('value_undeclared: zoom host'));
+    await expect(finishConnect(zoom, { secret, values, fetch: http.fetch })).rejects.toThrow(new TypeError('value_undeclared: zoom host'));
+    expect([reads, http.calls]).toEqual([0, []]);
+  });
+
+  it("Outline narrowed to its key asks for the key's own fields, and refuses a host that is an address before the key is read", async () => {
+    const key = signInWith(outline, 'key');
+    expect(await startConnect(key)).toEqual({ kind: 'form', fields: key.fields });
+    expect(key.fields.map(field => field.name)).toEqual(['host', 'apiKey']);
+    const http = anything();
+    let reads = 0;
+    const token = () => { reads++; return Promise.resolve('k'); };
+    await expect(apiClient(key, { token, values: { host: '127.0.0.1' }, fetch: http.fetch }).documents.get({ id: 'd' }))
+      .rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
+    const secret = { get apiKey() { reads++; return 'k'; } };
+    await expect(finishConnect(key, { secret, values: { host: '127.0.0.1' }, fetch: http.fetch }))
+      .rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
+    expect([reads, http.calls]).toEqual([0, []]);
+  });
+
+  it.each(([['none', undefined], ['empty', {}], ['one reading only what was entered', { id: 'connection.host' }]] as const)
+    .flatMap(([shape, identify]) => ([['*.k.test', 'evil.test', new TypeError('base_host_refused: typed')],
+      ['*', '127.0.0.1', new ProviderHttpError('request_failed', null, 'address_blocked')]] as const)
+      .map(([pattern, host, refusal]) => [shape, host, pattern, identify, refusal] as const)))(
+    'a key connect whose identify is %s refuses the typed host %j (`http.host: %j`) before the key is read, unsent', async (_, host, pattern, identify, refusal) => {
+      const typed = defineProvider({ id: 'typed', name: 'Typed', auth: [{ kind: 'key' }], ...identify && { identify },
+        fields: [{ name: 'host', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
+        http: { baseUrl: 'https://{host}/api', host: pattern } });
+      const http = anything();
+      let reads = 0;
+      const secret = { get apiKey() { reads++; return 'k'; } };
+      await expect(finishConnect(typed, { secret, values: { host }, fetch: http.fetch })).rejects.toEqual(refusal);
+      expect([reads, http.calls]).toEqual([0, []]);
+    });
+
+  it("takes only a later sign-in's own base and host: an app's own headers and bases there are never read", async () => {
+    const smuggled = { id: 'sm', name: 'Sm', fields: [{ name: 'apiKey', title: 'API key', secret: true }], scopes: { default: [] },
+      http: { baseUrl: 'https://cloud.sm.test', headers: { accept: 'application/json' } },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://cloud.sm.test/authorize', tokenUrl: 'https://cloud.sm.test/token' },
+        { kind: 'key', http: { baseUrl: 'https://own.sm.test', headers: { accept: 'text/evil' }, bases: { b: 'https://evil.test' } },
+          identify: { request: { base: 'b', path: '/me' }, id: 'id' } }] } as unknown as Entry;
+    const key = signInWith(smuggled, 'key');
+    expect(key.http).toEqual({ baseUrl: 'https://own.sm.test', headers: { accept: 'application/json' } });
+    const http = anything();
+    await expect(finishConnect(key, { secret: { apiKey: 'k' }, fetch: http.fetch })).rejects.toThrow(new TypeError('base_unknown: b'));
+    expect(http.calls).toEqual([]);
+  });
+
+  it('refuses a later token sign-in whose own typed base sits beside a fixed token URL: host_split, with no request', async () => {
+    const split = signInWith(defineProvider({ id: 'split', name: 'Split', scopes: { default: [] }, http: { baseUrl: 'https://cloud.split.test/api' },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://cloud.split.test/authorize', tokenUrl: 'https://cloud.split.test/token' },
+        { kind: 'token', request: { url: 'https://cloud.split.test/token', body: { s: '{secret}' } },
+          fields: [{ name: 'host', title: 'Host' }, { name: 'secret', title: 'Secret', secret: true }], http: { baseUrl: 'https://{host}/api', host: '*' } }] }), 'token');
+    const http = anything();
+    await expect(finishConnect(split, { secret: { secret: 's' }, values: { host: 'h.test' }, fetch: http.fetch })).rejects.toThrow(new TypeError('host_split: split'));
+    await expect(tokenSource(split, { secret: { secret: 's' }, values: { host: 'h.test' }, fetch: http.fetch })()).rejects.toThrow(new TypeError('host_split: split'));
+    expect(http.calls).toEqual([]);
+  });
+});
+
+describe('a host the token answer names', () => {
+  /** Wrike's shape: fixed sign-in URLs, the base and the refresh on the host the token answer names, under one domain. */
+  const unidentified = { id: 'named', name: 'Named', scopes: { default: [] },
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.named.test/authorize', tokenUrl: 'https://login.named.test/token',
+      refreshUrl: 'https://{host}/token' }],
+    revoke: { url: 'https://login.named.test/revoke', token: ['refresh'] }, save: { host: 'tokenAnswer.host' },
+    http: { baseUrl: 'https://{host}/api', host: '*.named.test' } } as const;
+  const named = defineProvider({ ...unidentified, identify: { request: { path: '/me' }, id: 'id' } });
+  /** The same base on a host a person types: a named value is checked as this one's is. */
+  const typed = defineProvider({ ...named, fields: [{ name: 'host', title: 'Host' }], save: {} });
+  const answering = (host: unknown) => fakeFetch([
+    { url: 'https://login.named.test/token', respond: () => Response.json({ access_token: 'a', refresh_token: 'r', token_type: 'bearer',
+      user_id: 'u1', ...(host === undefined ? {} : { host }) }) },
+    { url: 'https://login.named.test/revoke', respond: () => new Response(null, { status: 200 }) },
+    { url: /./u, respond: () => Response.json({ id: 'u1' }) }]);
+  const finish = (fetch: typeof globalThis.fetch, extra: object = {}, entry: Entry = named) => finishConnect(entry, { client, code: 'c', redirectUri: callback,
+    codeVerifier: 'v'.repeat(43), fetch, onRevokeFailed: error => { throw error; }, ...extra });
+  const refusalOf = (run: () => unknown) => { try { run(); } catch (error) { return error; } return undefined; };
+
+  it.each([['a.named.test', 'a.named.test'], ['A.NAMED.TEST', 'a.named.test'], ['xn--4ca.named.test', 'xn--4ca.named.test'],
+    ['https://a.named.test', 'a.named.test'], ['https://x.named.test/', 'x.named.test']])(
+    'a token answer naming %j sends identify there, and keeps it', async (host, sent) => {
+      const http = answering(host);
+      const connected = await finish(http.fetch);
+      expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', `https://${sent}/api/me`]);
+      expect(connected.values).toEqual({ host });
+      expect(connected.account).toEqual({ id: 'u1', name: 'u1' });
+    });
+
+  it.each(['evil.test', 'named.test', 'a.named.test.evil.test', 'evilnamed.test', '127.0.0.1', '2130706433', '0x7f.1', '[::1]',
+    'a.named.test.', ' a.named.test', 'a.named.test ', 'ä.named.test', 'a.named.test:8443', 'a%2enamed.test', 5,
+    'https://a.named.test@evil.test', 'https://a.named.test:8443', 'https://a.named.test/x', 'https://portal.named.test/rest/',
+    'https://a.named.test?x=1', 'https://a.named.test#f', 'http://a.named.test', 'HTTPS://a.named.test', 'https://'])(
+    'a token answer naming %j is refused as a typed host is, before identify sends; the fresh grant is revoked', async host => {
+      const http = answering(host);
+      const refused = refusalOf(() => filledBase(typed, { host }));
+      expect(refused).toBeInstanceOf(TypeError);
+      await expect(finish(http.fetch)).rejects.toEqual(refused);
+      expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://login.named.test/revoke']);
+      expect(new URLSearchParams(http.calls[1]?.body).get('token')).toBe('r');
+    });
+
+  it.each(['https://evil.test', 'https://127.0.0.1', 'https://a.named.test.evil.test/'])(
+    'a token answer naming the origin %j is refused as its host typed is, before identify sends; the fresh grant is revoked', async host => {
+      const http = answering(host);
+      await expect(finish(http.fetch)).rejects.toEqual(new TypeError('base_host_refused: named'));
+      expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://login.named.test/revoke']);
+    });
+
+  it.each([undefined, '', '  ', null, {}, [], ['a.named.test'], { host: 'a.named.test' }, true])(
+    'a token answer whose host is %j is invalid_response (missing_fields) before identify sends; the fresh grant is revoked', async host => {
+      const http = answering(host);
+      await expect(finish(http.fetch)).rejects.toEqual(new ProviderHttpError('invalid_response', 200, 'missing_fields'));
+      expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://login.named.test/revoke']);
+    });
+
+  it.each(([['reads the token answer alone', { id: 'tokenAnswer.user_id' }], ['is empty', {}], ['is not declared', undefined]] as const)
+    .flatMap(([shape, identify]) => ['evil.test', '127.0.0.1', 'https://a.named.test:8443'].map(host => [shape, host, identify] as const)))(
+    'an identify that %s, sending nothing on the base: a token answer naming %j is refused all the same; the grant is revoked', async (_, host, identify) => {
+      const http = answering(host);
+      await expect(finish(http.fetch, {}, defineProvider({ ...unidentified, ...identify && { identify } })))
+        .rejects.toEqual(refusalOf(() => filledBase(typed, { host })));
+      expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://login.named.test/revoke']);
+    });
+
+  it('after a failed identify, a revoke on the base goes to the host the token answer named', async () => {
+    const requested = defineProvider({ ...named, revoke: { request: { method: 'POST', path: '/revoke' } } });
+    const http = fakeFetch([
+      { url: 'https://login.named.test/token', respond: () => Response.json({ access_token: 'a', refresh_token: 'r', token_type: 'bearer', host: 'a.named.test' }) },
+      { url: 'https://a.named.test/api/me', respond: () => Response.json({}) },
+      { url: 'https://a.named.test/api/revoke', respond: () => new Response(null, { status: 200 }) }]);
+    await expect(finish(http.fetch, {}, requested)).rejects.toMatchObject({ code: 'invalid_response' });
+    expect(http.calls.map(call => call.url)).toEqual(['https://login.named.test/token', 'https://a.named.test/api/me', 'https://a.named.test/api/revoke']);
+  });
+
+  it("never takes the host from a caller's values: the start fills nothing named, the finish sends where the token answer says", async () => {
+    const offered = { values: { host: 'evil.test' } } as object;
+    const started = await startConnect(named, { ...start, ...offered });
+    expect([new URL(started.url).host, started.values]).toEqual(['login.named.test', {}]);
+    const http = answering('a.named.test');
+    expect((await finish(http.fetch, offered)).values).toEqual({ host: 'a.named.test' });
+    expect(http.calls.map(call => new URL(call.url).host)).toEqual(['login.named.test', 'a.named.test']);
   });
 });

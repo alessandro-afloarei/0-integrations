@@ -9,7 +9,7 @@ import { finishConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import { paginate, type Page } from './paginate.js';
 import { safeDetail } from './http-response.js';
-import { parseJson } from './rules.js';
+import { namedHosts, parseJson } from './rules.js';
 import { fakeFetch, type Route } from './testing.js';
 
 /** One request and its answer. `key` says which key sent it: the scenario's good key or a bad one. */
@@ -64,10 +64,12 @@ export function catalogueRecordings(): (Recording & { file: string })[] {
 export const GOOD_KEY = 'kit-good-key';
 export const BAD_KEY = 'kit-bad-key';
 
-/** An entry's plain fields as the kit fills them: the default, else the first choice, else `kit-<name>`. */
+/** An entry's plain fields as the kit fills them: the default, else the first choice, else `kit-<name>`; and each host
+ * the token answer names, the first name its `http.host` takes (`*.wrike.com`: `kit.wrike.com`). */
 export function kitValues(entry: Entry): Record<string, string> {
-  return Object.fromEntries((entry.fields ?? []).filter(field => field.secret !== true)
-    .map(({ name, default: given, choices }) => [name, given ?? choices?.[0] ?? `kit-${name}`]));
+  const named = Object.keys(namedHosts(entry)).map((name): [string, string] => [name, String([entry.http.host].flat()[0]).replace(/^\*/u, 'kit')]);
+  return Object.fromEntries([...(entry.fields ?? []).filter(field => field.secret !== true)
+    .map(({ name, default: given, choices }): [string, string] => [name, given ?? choices?.[0] ?? `kit-${name}`]), ...named]);
 }
 
 /** The sign-in a recording is of: the entry's key or token sign-in when it has one (a test account's pasted key),

@@ -7,9 +7,10 @@ default); none asked sends no `scope` parameter. `exchangeCode` returns only the
 (`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
 condition marks is refused with the entry's own code.
 
-Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` and
-checked as a base is, and a URL that names a value not given is `template_missing` before anything is sent. Each
-function types `values` by the entry, as `startConnect` and `finishConnect` do. `authorizeUrl(entry, { …, values })`
+Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` (the
+refresh URL also from a host the token answer named, below) and checked as a base is, and a URL that names a value not
+given is `template_missing` before anything is sent. Each function types `values` by the entry, as `startConnect` and
+`finishConnect` do. `authorizeUrl(entry, { …, values })`
 and `exchangeCode(entry, client, { …, values })` take the plain fields, since nothing is saved before the exchange;
 `refreshGrant(entry, client, refreshToken, { values, fetch? })`, `revokeGrant(entry, { …, values })` and `tokenSource`
 take the connection's `values` as `finishConnect` returned them, plain and saved. `values` is required when the entry
@@ -25,7 +26,12 @@ refresh and an RFC 7009 revoke never follow a redirect (a 3xx is `request_failed
 call, which follows a redirect only on the same origin, never to another host.
 
 `refreshGrant` posts to the entry's `refreshUrl` when it names one (Figma), else to `tokenUrl`; a refresh answer
-without a `refresh_token` keeps the one sent. With `json: true` (Atlassian) the exchange, the refresh and an RFC 7009
+without a `refresh_token` keeps the one sent. The refresh URL alone may be on the host the token answer named (Wrike's
+data centre, `https://{host}/oauth2/token`, the base's whole host): it is filled from the connection's kept `values`
+and checked against the entry's pattern as the base is when the refresh is sent, before the refresh token is, and a
+refresh answer's host is never read. The engine cannot verify that a kept value is the one the token answer named (it
+keeps no state): an app passes back the `values` it stored with the grant, unchanged. The other OAuth 2
+URLs never name one, since no token answer exists before them (`template_missing`). With `json: true` (Atlassian) the exchange, the refresh and an RFC 7009
 revoke send their parameters as one JSON object (`content-type: application/json`); Basic client authentication stays a
 header.
 

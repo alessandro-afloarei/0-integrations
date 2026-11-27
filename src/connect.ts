@@ -3,7 +3,7 @@ import type { Entered, Entry, Field, Kept, Plain, Secrets, Value, Values, Values
 import { ProviderHttpError } from './errors.js';
 import { defaultFetch, filledBase } from './http.js';
 import { authorizeUrl, exchangeCode, pkcePair, requestToken, revokeGrant, type Grant, type OAuthClient } from './oauth.js';
-import { checkHosts, placeholders, plainFields } from './rules.js';
+import { checkHosts, hostPart, namedHosts, placeholders, plainFields, plainValue, readPath } from './rules.js';
 
 type Redirect<E extends Entry = Entry> = { kind: 'redirect'; url: string; codeVerifier?: string; values: Plain<E> };
 type Form = { kind: 'form'; fields: readonly Field[] };
@@ -46,10 +46,11 @@ const plainOf = (entry: Entry, given: Values): Record<string, string> =>
   Object.fromEntries(plainFields(entry).map(field => read(field, given)));
 
 /** A form of the entry's fields, or the provider's authorization URL with the PKCE verifier and the plain values read,
- * every OAuth 2 URL and the base filled and checked with them first. */
+ * every OAuth 2 URL but the refresh URL, and the base, filled and checked with them first. */
 export function startConnect<const E extends Entry>(entry: E, ...options: ByKind<E, [options: OAuthStart<E>], []>):
   Promise<E extends Entry ? ByKind<E, Redirect<E>, Form> : never>;
 export async function startConnect(entry: Entry, options?: OAuthStart): Promise<ConnectStart> {
+  checkHosts(entry, options?.values); // a form too: its fields are the sign-in's
   const [auth] = entry.auth;
   if (auth.kind !== 'oauth2') return { kind: 'form', fields: entry.fields ?? [] };
   if (!options) throw new TypeError('oauth_options_required');
@@ -63,7 +64,7 @@ export async function startConnect(entry: Entry, options?: OAuthStart): Promise<
 
 export function finishConnect<const E extends Entry>(entry: E, input: ByKind<E, OAuthFinish<E>, FormFinish<E>>): Promise<Connected<E>>;
 export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinish): Promise<Connected> {
-  checkHosts(entry); // before a credential is read, for every kind: identify may send nothing to check it later
+  checkHosts(entry, input.values); // before a credential is read, for every kind: identify may send nothing to check it later
   const [auth] = entry.auth;
   const fetch = input.fetch ?? defaultFetch(entry);
   if (auth.kind !== 'oauth2') {
@@ -71,10 +72,13 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     // Only the declared fields, each filled, all checked before anything is sent: an entry's templates read them. Each
     // field is read once, so identify is sent the very credential returned. The first secret field is the credential;
     // an app's own entry may declare none, its fault before the caller's.
-    const [credential, ...others] = (entry.fields ?? []).filter(field => field.secret).map(field => read(field, secrets));
-    if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
+    const [first, ...rest] = (entry.fields ?? []).filter(field => field.secret);
+    if (first === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const values = plainOf(entry, plain);
-    const secret = Object.fromEntries([credential, ...others]);
+    // The typed host is checked as a call checks it, before a secret is read: identify may send nothing on the base.
+    filledBase(entry, values, hostPart(entry.http.baseUrl) ?? '');
+    const credential = read(first, secrets);
+    const secret = Object.fromEntries([credential, ...rest.map(field => read(field, secrets))]);
     if (auth.kind === 'key') return { secret, ...await identifyAccount(entry, { fetch, token: credential[1], values }) };
     // The token request is the credential check, sent the very secret fields returned; only the answer's keys the entry
     // names reach identify, and no token is returned.
@@ -85,19 +89,23 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
   // Read again, as a stored value is trusted no more than a typed one: the token URL is filled from these.
   const values = plainOf(entry, input.values ?? {});
   const { grant, extras } = await exchangeCode(entry, input.client, { ...input, values, fetch });
+  // A host the token answer names (Wrike's data centre) is kept before identify, which sends to it; never a caller's.
+  const named = Object.fromEntries(Object.entries(namedHosts(entry)).map(([name, path]) => [name, readPath({ tokenAnswer: extras }, path)]));
   try {
+    if (Object.keys(named).some(name => plainValue(named, name) === undefined)) throw new ProviderHttpError('invalid_response', 200, 'missing_fields');
+    filledBase(entry, { ...values, ...named }, hostPart(entry.http.baseUrl) ?? ''); // here too: identify may send nothing on the base
     // RFC 6749 §5.1: a token answer without `scope` granted the scopes requested.
     const granted = typeof extras.scope === 'string' ? new Set(extras.scope.split(auth.scopeSeparator ?? ' ')) : undefined;
     if (entry.scopes?.requireGranted && granted && !entry.scopes.default.every(scope => granted.has(scope))) {
       throw new ProviderHttpError('rejected', null, 'scope_missing');
     }
-    return { secret: grant, ...await identifyAccount(entry, { fetch, token: grant.accessToken, values, tokenAnswer: extras }) };
+    return { secret: grant, ...await identifyAccount(entry, { fetch, token: grant.accessToken, values: { ...values, ...named }, tokenAnswer: extras }) };
   } catch (error) {
     // A reused grant may belong to a live connection; only the app can decide ownership.
     if (auth.reusesGrant) throw error;
     // Cleanup must not hide the original refusal.
     try {
-      await revokeGrant(entry, { ...grant, client: input.client, values, fetch });
+      await revokeGrant(entry, { ...grant, client: input.client, values: { ...values, ...named }, fetch });
     } catch (revokeError) { input.onRevokeFailed(revokeError); }
     throw error;
   }

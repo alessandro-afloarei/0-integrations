@@ -24,8 +24,9 @@ one takes five steps:
 2. Fill it from the provider's own documentation, and put the page that states what the entry declares in `docs`.
    State only what differs from the defaults: [catalogue](docs/modules/catalogue.md) lists every field, and the
    design's [`auth` section](docs/design/entries-and-engine.md#auth) gives every sign-in rule. Declare every sign-in
-   the provider documents in one pass: its OAuth 2 grant first, when it reaches the same base and the same `identify`,
-   then its key or token ([sign-in alternatives](docs/design/entries-and-engine.md#sign-in-alternatives)). Start from
+   the provider documents in one pass: its OAuth 2 grant first, then its key or token, which may declare its own
+   `fields`, `http.baseUrl` and `host`, and `identify` when they differ from OAuth 2's (Outline's key on a host the
+   person types; [sign-in alternatives](docs/design/entries-and-engine.md#sign-in-alternatives)). Start from
    the entry of the same sign-ins: a key, `src/catalogue/serpapi.ts`; OAuth 2 and a key, `src/catalogue/linear.ts`; an
    OAuth 2 grant alone, `src/catalogue/microsoft.ts` (drop the skeleton's secret field: the grant is the secret);
    a token request, `src/catalogue/zoom.ts`. Write every header name
@@ -81,13 +82,15 @@ entry:
   the entry's fields; a send's `value` holds no control character and never spells out a default (`'{token}'`, or
   `authorization: Bearer {token}`), and no field is named `token`;
 - names in each template only what that place allows;
-- lists one or more sign-ins, at most one of each kind, never a key beside a token, OAuth 2 first when there is one;
+- lists one or more sign-ins, at most one of each kind, never a key beside a token, OAuth 2 first when there is one,
+  and an own part (`fields`, `http` of only `baseUrl` and `host`, `identify`) only on a later key or token sign-in;
 - is one the engine can run, each sign-in on its own: a key or token entry has exactly one secret field, a key entry
   reads no token answer (except in an `id` or `name` list ending on a path of identify's requested answer, beside an
   OAuth 2 or token sign-in), and neither declares scopes or an RFC 7009 revoke; an OAuth entry declares scopes; no `identify` or `save` value reads
   the token itself from `tokenAnswer.*`; a value read from identify's answer has a request to read it from; no `save`
   key is a field's name; each placeholder in the base names a plain field or a `save` key, either in its host, with
-  `http.host` declared (`'*'` only when the whole host is one placeholder), or as one segment of its path; `http.bases`
+  `http.host` declared (`'*'` only when the whole host is one placeholder a person types, never a host the token
+  answer names, which only the refresh URL among the OAuth 2 URLs may also name), or as one segment of its path; `http.bases`
   hold no placeholder, and a call's `base` names one of them; a token request names only the entry's fields (a plain
   one in its `url`, whose host placeholder needs `http.host`), sends the secret field in its body or Basic, and its
   `send` names no secret field; a field's `choices` are a non-empty list of unique values holding its `default`, each
@@ -104,9 +107,9 @@ entry:
   names a declared shape and no `notFound`, a records path leads to a list (on a `page` or `offset` shape, the shape's
   `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id
   is a client call or a dotted prefix of another;
-- has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields,
-  and whose URLs, base and `http.bases` share one host when any of them is typed: a token goes only to the host that
-  issued it.
+- has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields
+  (the refresh URL may also name a host the token answer names), and whose URLs, base and `http.bases` share one host
+  when any of them is typed: a token goes only to the host that issued it.
 
 A recording beside the entry, `src/catalogue/<id>.recording.json` (or `<id>.<part>.recording.json`), adds a replay:
 the test signs in once with a good key and once with a bad one (a `token` entry's token request, then identify's when a
