@@ -124,10 +124,10 @@ printf 'Key: ' && read -rs RECORD_KEY && RECORD_KEY=$RECORD_KEY RECORD_PROVIDER=
   nothing to record, and the recorder refuses it.
 - `RECORD_VALUES` holds the test account's plain values, which are not secret. A field left out takes its kit value
   (its `default`, else its first choice, else, for a field that is the base's whole host, the first host its
-  `http.host` allows, such as `kit.myfreshworks.com`, else `kit-<name>`). Every value in the base's host must be given
-  but a field's with a default or a choice: a field with neither, or a host the token answer names (Pipedrive's
-  `apiDomain`). Without it the recorder refuses before anything is sent, so a real key never goes to a host the kit
-  made up. Each value given is written as its kit value, so a recording made on a sandbox or another region is written
+  `http.host` allows, such as `kit.myfreshworks.com`, else `kit-<name>`). Every value in the base's host must be given:
+  a field's, even one with a default or choices (Intercom's `apiHost`: the account may live in another region), and a
+  host the token answer names (Pipedrive's `apiDomain`). Without it the recorder refuses before anything is sent, so a
+  real key never goes to a host the kit chose. Each value given is written as its kit value, so a recording made on a sandbox or another region is written
   with the default host.
 - A module's scenario of that name is recorded first. A provider with a module but no such scenario is refused before
   anything is sent. Otherwise the recorder signs in to the entry (a `token` entry's token request, then identify) with

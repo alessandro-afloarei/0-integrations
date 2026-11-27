@@ -125,8 +125,8 @@ To record an entry with no module from a test account, read the key at a prompt 
 For an OAuth entry, `RECORD_KEY` is an access token from signing in to a test account with your app's own OAuth client.
 An entry with OAuth 2 and a key is recorded with its key: a recording is of the key or token sign-in when there is one.
 The recorder refuses a provider with a module but no kit scenario of that name, an entry that sends no request when it
-signs in, and, before anything is sent, a value in the base's host (a field with no default or choice, or a host the
-token answer names) that `RECORD_VALUES` does not give. Otherwise it signs in with the key and with a bad key, and
+signs in, and, before anything is sent, a value in the base's host (a field's, even one with a default or choices,
+or a host the token answer names) that `RECORD_VALUES` does not give. Otherwise it signs in with the key and with a bad key, and
 writes `src/catalogue/<id>.recording.json`, replacing any recording of that name. Each exchange keeps its method, URL,
 request body, status, `retry-after` and the entry's declared wait headers (no other header), and from the answer only
 the paths the entry reads; at an error or condition path, only a provider code, a number or a boolean. It swaps the key,

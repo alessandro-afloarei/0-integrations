@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { lookupNames } from './account.js';
 import { defineProvider, type Entry, type Value } from './catalogue.js';
+import { intercom } from './catalogue/intercom.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { trello } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
@@ -84,11 +85,10 @@ const identityPaths = (value: Value | undefined) => (value === undefined ? [] : 
  * result is replayed as the table test replays it, and written only when both sign-ins end as they did live. */
 async function recordEntry(whole: Entry, secret: string, given: Readonly<Record<string, string>>, real: typeof fetch): Promise<Exchange[]> {
   const entry = recordedSignIn(whole);
-  // A host the kit fills in (a field with no default or choice, or a host the token answer names) may be a real one: a
-  // real key goes only to the host the owner names, or to a field's documented default or first choice.
+  // A real key goes only to the host the owner names: one the kit fills in may be another's, and a field's default or
+  // first choice another region's than the account's.
   const typed = placeholders(/^https:\/\/[^/]*/u.exec(entry.http.baseUrl)?.[0] ?? '');
-  const unnamed = typed.find(name => { const field = entry.fields?.find(each => each.name === name);
-    return field?.default === undefined && field?.choices === undefined && given[name] === undefined; });
+  const unnamed = typed.find(name => given[name] === undefined);
   if (unnamed !== undefined) throw new Error(`recording refused: give ${unnamed}, in the base's host, in RECORD_VALUES`);
   const [auth] = entry.auth;
   if (auth.kind !== 'token' && entry.identify?.request === undefined) throw new Error(`${entry.id} sends no request when it signs in: nothing to record`);
@@ -259,6 +259,12 @@ describe('recording an entry with no module, on its derived fake standing in for
     expect(refused).toBeUndefined();
     expect(sent[0]).toBe('https://eu.acme.test/api/me');
     expect(recording?.exchanges[0]?.url).toBe('https://kit.acme.test/api/me');
+  });
+
+  test('a host field with a default and choices (Intercom\'s region) is refused before any request too', async () => {
+    const sent = vi.fn<typeof fetch>();
+    await expect(recordEntry(intercom, 'real-key-1', {}, sent)).rejects.toThrow('recording refused: give apiHost, in the base\'s host, in RECORD_VALUES');
+    expect(sent).not.toHaveBeenCalled();
   });
 
   test('a declared wait header is kept beside `retry-after`, and no other header the answer carries', async () => {

@@ -52,7 +52,7 @@ Nothing here is released yet.
 - New entry: Pipedrive (`crm`), OAuth 2 alone (PKCE, Basic client authentication), its calls on the `api_domain` its
   token answer names: persons (list, search, get, create, update), organizations and deals. `declared`.
 - For contributors: the recorder refuses, before any request, an entry whose base's host holds a value
-  `RECORD_VALUES` does not give: a field with no default or choice, or a host the token answer names.
+  `RECORD_VALUES` does not give: a field's, even one with a default or choices, or a host the token answer names.
 - New: a sign-in after the first may declare its own `fields`, base and host (`http: { baseUrl, host }`, nothing else
   of `http`) and `identify`; `signInWith` puts them in place of the entry's. The engine refuses an app's entry whose
   first sign-in declares one, before anything is sent (`sign_in_own_first: <entry id>`), and `startConnect` now runs
