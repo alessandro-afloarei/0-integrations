@@ -80,7 +80,7 @@ test("accepts Slack's bot token and its team", async () => {
 
 test("Slack's ok:false is a refusal, not a token", async () => {
   await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch, values: { domain: 'slack.com' } }))
-    .rejects.toMatchObject({ name: 'ProviderHttpError', code: 'request_failed', status: 200, detail: 'invalid_code' });
+    .rejects.toMatchObject({ name: 'ProviderHttpError', code: 'rejected', status: 200, detail: 'invalid_code' });
   await expect(refreshGrant(slack, client, 'old', { fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch, values: { domain: 'slack.com' } }))
     .rejects.toBeInstanceOf(GrantRevoked);
 });
@@ -117,6 +117,43 @@ test('a refresh without a new refresh token keeps the old one', async () => {
 test('invalid_grant is GrantRevoked', async () => {
   await expect(refreshGrant(hubspot, client, 'old', { fetch: endpoint({ error: 'invalid_grant' }, 400).fetch }))
     .rejects.toBeInstanceOf(GrantRevoked);
+});
+
+test('a code exchange the server refuses is `rejected` with the RFC 6749 code: no grant existed to revoke', async () => {
+  // A bad, expired or replayed code, a wrong `redirect_uri` or code verifier: RFC 7636 §4.6 answers `invalid_grant`.
+  const codeVerifier = 'private-code-verifier-0123456789';
+  for (const status of [400, 401]) {
+    await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier, fetch: endpoint({ error: 'invalid_grant' }, status).fetch }))
+      .rejects.toEqual(new ProviderHttpError('rejected', status, 'invalid_grant'));
+  }
+  await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier, fetch: endpoint({ error: 'invalid_client' }, 401).fetch }))
+    .rejects.toEqual(new ProviderHttpError('rejected', 401, 'invalid_client'));
+  // A code the entry lists as revoked, and a 200 its `failed` marks, are refusals of the exchange too.
+  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch, values: { domain: 'slack.com' } }))
+    .rejects.toEqual(new ProviderHttpError('rejected', 200, 'token_revoked'));
+  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch, values: { domain: 'slack.com' } }))
+    .rejects.toEqual(new ProviderHttpError('rejected', 200, 'invalid_code'));
+  // A refresh still ends a grant that existed; a 5xx and an answer with no OAuth code are classified as before.
+  await expect(refreshGrant(slack, client, 'old', { fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch, values: { domain: 'slack.com' } }))
+    .rejects.toBeInstanceOf(GrantRevoked);
+  await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier, fetch: endpoint({ error: 'invalid_grant' }, 500).fetch }))
+    .rejects.toEqual(new ProviderHttpError('unavailable', 500));
+  const page = fakeFetch([{ url: /https:/, respond: () => new Response('<html>bad request</html>', { status: 400 }) }]);
+  await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier, fetch: page.fetch }))
+    .rejects.toEqual(new ProviderHttpError('request_failed', 400));
+});
+
+test("a refused exchange's detail never echoes the code, the verifier or the client's secret", async () => {
+  const verifier = 'private-code-verifier-0123456789';
+  for (const echoed of [exchange.code, verifier, client.clientSecret]) {
+    await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier: verifier, fetch: endpoint({ error: echoed }, 400).fetch }))
+      .rejects.toEqual(new ProviderHttpError('rejected', 400, null));
+  }
+  // Slack sends no verifier (`pkce: false`); its 200 refusal is read through `failed`.
+  for (const echoed of [exchange.code, client.clientSecret]) {
+    await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: echoed }).fetch, values: { domain: 'slack.com' } }))
+      .rejects.toEqual(new ProviderHttpError('rejected', 200, null));
+  }
 });
 
 test('a 502 proxy page is unavailable, and the token endpoint is never retried', async () => {
@@ -256,13 +293,13 @@ test('revokeGrant: an entry with no revoke (Microsoft) sends nothing', async () 
 
 test("a token answer refused inside a 200 is read through the entry's own condition and code", async () => {
   await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch, values: { domain: 'slack.com' } }))
-    .rejects.toMatchObject({ code: 'request_failed', detail: 'invalid_code' });
+    .rejects.toMatchObject({ code: 'rejected', detail: 'invalid_code' });
   // A `failed` other than `ok: false`: today's hard-coded check would accept this answer.
   const strict = defineProvider({ id: 'strict', name: 'Strict', auth: [{ kind: 'oauth2', authorizeUrl: 'https://strict.test/authorize',
     tokenUrl: 'https://strict.test/token', pkce: false, failed: { path: 'error' } }], http: { baseUrl: 'https://api.strict.test' },
     errors: { detail: 'reason' } });
   await expect(exchangeCode(strict, client, { ...exchange, fetch: endpoint({ ...token, error: 'refused', reason: 'code_used' }).fetch }))
-    .rejects.toMatchObject({ code: 'request_failed', detail: 'code_used' });
+    .rejects.toMatchObject({ code: 'rejected', detail: 'code_used' });
 });
 
 test('an error never carries the Basic client credential the request sent, form-encoded as on the wire', async () => {
@@ -273,11 +310,12 @@ test('an error never carries the Basic client credential the request sent, form-
     tokenUrl: 'https://basic.test/token', pkce: false, clientAuth: 'basic' }], scopes: { default: [] },
     revoke: { url: 'https://basic.test/revoke', token: ['refresh'] }, http: { baseUrl: 'https://api.basic.test' } });
   const echo = endpoint({ error: sent }, 400);
-  for (const run of [
-    () => exchangeCode(basic, basicClient, { ...exchange, fetch: echo.fetch }),
-    () => refreshGrant(basic, basicClient, 'r', { fetch: echo.fetch }),
-    () => revokeGrant(basic, { refreshToken: 'r', client: basicClient, fetch: echo.fetch }),
-  ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  // A refused exchange is `rejected`, a refused refresh or revoke `request_failed`: neither echoes the value.
+  for (const [run, code] of [
+    [() => exchangeCode(basic, basicClient, { ...exchange, fetch: echo.fetch }), 'rejected'],
+    [() => refreshGrant(basic, basicClient, 'r', { fetch: echo.fetch }), 'request_failed'],
+    [() => revokeGrant(basic, { refreshToken: 'r', client: basicClient, fetch: echo.fetch }), 'request_failed'],
+  ] as const) await expect(run()).rejects.toMatchObject({ code, detail: null });
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(`Basic ${sent}`));
 });
 
@@ -304,11 +342,11 @@ test("no error detail echoes the client's Basic value, even from a request that 
   const sent = Buffer.from('id:abcdef').toString('base64');
   const echoing = { clientId: 'id', clientSecret: 'abcdef' };
   const echo = endpoint({ error: sent }, 400);
-  for (const run of [
-    () => exchangeCode(bodied, echoing, { ...exchange, fetch: echo.fetch }),
-    () => refreshGrant(bodied, echoing, 'r', { fetch: echo.fetch }),
-    () => revokeGrant(bodied, { accessToken: 'a', client: echoing, fetch: echo.fetch }),
-  ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  for (const [run, code] of [
+    [() => exchangeCode(bodied, echoing, { ...exchange, fetch: echo.fetch }), 'rejected'],
+    [() => refreshGrant(bodied, echoing, 'r', { fetch: echo.fetch }), 'request_failed'],
+    [() => revokeGrant(bodied, { accessToken: 'a', client: echoing, fetch: echo.fetch }), 'request_failed'],
+  ] as const) await expect(run()).rejects.toMatchObject({ code, detail: null });
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(undefined));
 });
 

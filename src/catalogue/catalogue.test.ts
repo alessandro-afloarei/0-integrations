@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value, type Webhook } from '../catalogue.js';
 import { finishConnect, startConnect } from '../connect.js';
-import { GrantRevoked } from '../errors.js';
+import { ProviderHttpError } from '../errors.js';
 import { callBase, createClient, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
@@ -476,7 +476,8 @@ describe.each(entries)('%s', (id, entry) => {
         if (start.kind !== 'redirect') throw new Error('an OAuth 2 sign-in starts with a redirect');
         const connected = finishConnect(one, { client, code: code === 'good' ? 'kit-code' : 'kit-bad-code',
           redirectUri, codeVerifier: start.codeVerifier, values: start.values, fetch, onRevokeFailed: error => { throw error; } });
-        if (code === 'bad') return expect(connected).rejects.toBeInstanceOf(GrantRevoked);
+        // A refused code connects nothing: no grant existed, so it is `rejected`, never a revoked grant.
+        if (code === 'bad') return expect(connected).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
         const { secret, values, account } = await connected;
         expect(account === null).toBe(one.identify?.id === undefined);
         const grant = { accessToken: GOOD_KEY, refreshToken: 'kit-refresh' };

@@ -50,6 +50,8 @@ Nothing here is released yet.
 - An entry's `authorizeParams` no longer replace a parameter the engine sends (`client_id`, `scope`, `redirect_uri`,
   `state`, `code_challenge`, `code_challenge_method`): an app's own entry that named one sent its value in place of the
   engine's, and now sends the engine's. No catalogue entry names one, and the table refuses it.
+- Breaking: a refused code exchange (a bad, expired or replayed code, a wrong `redirect_uri` or code verifier) throws
+  `ProviderHttpError` `rejected` with the RFC 6749 code as its detail, no longer `GrantRevoked`.
 - Webhooks:
   - New: a webhook timestamp may be epoch milliseconds or an ISO 8601 instant (`timestamp.unit`); Zendesk verifies its
     webhooks.

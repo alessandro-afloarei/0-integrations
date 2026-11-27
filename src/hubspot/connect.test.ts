@@ -148,11 +148,12 @@ describe('HubSpot sign-in', () => {
     const onRevokeFailed = vi.fn();
     await expect(finishConnect(hubspot, { client: { ...client, clientId: 'wrong-client' },
       redirectUri: callback, code, codeVerifier: verifiers.get(code), fetch: http.fetch, onRevokeFailed }))
-      .rejects.toEqual(new ProviderHttpError('request_failed', 401, 'invalid_client'));
+      .rejects.toEqual(new ProviderHttpError('rejected', 401, 'invalid_client'));
+    // A refused code is `rejected`: no grant existed to revoke.
     await expect(finishConnect(hubspot, { client, redirectUri: `${callback}?changed=1`, code,
-      codeVerifier: verifiers.get(code), fetch: http.fetch, onRevokeFailed })).rejects.toBeInstanceOf(GrantRevoked);
+      codeVerifier: verifiers.get(code), fetch: http.fetch, onRevokeFailed })).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
     await finish(http, code);
-    await expect(finish(http, code)).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(finish(http, code)).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
     expect(http.calls.some(call => call.url === revokeUrl)).toBe(false);
     expect(onRevokeFailed).not.toHaveBeenCalled();
   });
@@ -341,9 +342,9 @@ describe('HubSpot sign-in', () => {
     const oldCode = await authorize(original);
     const restarted = fakeFetch(fakeHubSpot(portal));
     const newCode = await authorize(restarted);
-    await expect(finish(restarted, oldCode)).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(finish(restarted, oldCode)).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
     expect((await finish(restarted, newCode)).account).toEqual({ id: '42', name: 'Portal 42' });
-    await expect(finish(restarted, newCode)).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(finish(restarted, newCode)).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
     expect(newCode).not.toBe(oldCode);
   });
 

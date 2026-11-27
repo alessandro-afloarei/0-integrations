@@ -31,7 +31,9 @@ none and starts with a form, and an entry whose kind is not known in the types (
   again (`client` is typed by the entry: a public client's, `clientAuth: 'none'`, is `{ clientId }` alone, and
   [oauth](oauth.md) sends it no secret), exchanges the code, refuses a grant short of a requested scope when the entry
   says `requireGranted` (`rejected`, `scope_missing`; the granted scopes are split on the entry's `scopeSeparator`), and
-  identifies the account. If that fails it revokes the new grant best-effort and throws the original error;
+  identifies the account. A code the server refuses (bad, expired or replayed, or a wrong `redirect_uri` or verifier) is
+  `ProviderHttpError` `rejected` with the RFC 6749 code as its detail, never `GrantRevoked`: no grant existed. If the
+  scope check or identify fails it revokes the new grant best-effort and throws the original error;
   `onRevokeFailed(error)` reports a failed
   cleanup (an entry whose revoke is a request on the base cannot revoke a grant whose host was refused, so that is
   reported too). An entry whose `reusesGrant` says re-consent can return a live connection's grant skips the cleanup: only

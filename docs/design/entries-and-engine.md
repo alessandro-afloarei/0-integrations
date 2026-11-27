@@ -324,6 +324,9 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   `OAuthClient<typeof entry>` has no `clientSecret` (Firecrawl, Brevo).
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
+- A code exchange the server refuses (an error answer with an OAuth code, or a 200 its `failed` marks) is `rejected`, its
+  detail the RFC 6749 code as `safeDetail` keeps it, as a `token` sign-in's first request is: no grant existed.
+  `GrantRevoked` means a grant that existed (a refresh, a call).
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
   (Atlassian) with `content-type: application/json`, the client's parameters in it as `clientAuth` says (Basic stays a
   header). The answer is read as a form-bodied one is.
