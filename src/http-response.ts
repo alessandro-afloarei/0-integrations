@@ -40,10 +40,12 @@ export function responseJson(entry: Pick<Entry, 'http' | 'errors'>, response: Pr
   return response.data;
 }
 
-/** The provider's own code: the first of `detail`'s paths holding a non-empty string, kept only if `allow` lists it. */
+/** The provider's own code: the first of `detail`'s paths holding a non-empty string or a non-negative safe integer (read
+ * as its digits), kept only if `allow` lists it. */
 export function codeOf(errors: Errors | undefined, body: unknown): string | undefined {
   const paths = typeof errors?.detail === 'string' ? [errors.detail] : errors?.detail ?? [];
-  const code = paths.map(path => readPath(body, path)).find(value => typeof value === 'string' && value !== '');
+  const code = paths.map(path => readPath(body, path)).map(value => (Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : value))
+    .find(value => typeof value === 'string' && value !== '');
   return typeof code === 'string' && (errors?.allow?.includes(code) ?? true) ? code : undefined;
 }
 

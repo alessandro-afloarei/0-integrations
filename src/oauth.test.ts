@@ -239,6 +239,15 @@ test('revokeGrant: a request revoke reads its answer as any JSON call does: a 40
   await expect(revokeGrant(slack, { accessToken: 'a', fetch: plain.fetch })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
 });
 
+test("revokeGrant: a `goneErrors` code that is a number is compared as its digits", async () => {
+  const numbered = defineProvider({ id: 'numbered', name: 'Numbered', auth: [{ kind: 'oauth2', authorizeUrl: 'https://auth.test/authorize',
+    tokenUrl: 'https://auth.test/token' }], http: { baseUrl: 'https://api.auth.test' }, errors: { detail: 'error.code' },
+    revoke: { request: { method: 'POST', path: '/revoke' }, goneErrors: ['2001'] } });
+  const answer = (code: number) => fakeFetch([{ url: 'https://api.auth.test/revoke', respond: () => Response.json({ error: { code } }, { status: 400 }) }]);
+  await expect(revokeGrant(numbered, { accessToken: 'a', fetch: answer(2001).fetch })).resolves.toBeUndefined();
+  await expect(revokeGrant(numbered, { accessToken: 'a', fetch: answer(2002).fetch })).rejects.toMatchObject({ code: 'request_failed', detail: '2002' });
+});
+
 test('revokeGrant: an entry with no revoke (Microsoft) sends nothing', async () => {
   const none = fakeFetch([]);
   await expect(revokeGrant(microsoft, { accessToken: 'a', refreshToken: 'r', client, fetch: none.fetch })).resolves.toBeUndefined();
