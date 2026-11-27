@@ -1367,6 +1367,20 @@ test.each([[{ host: 'a.named.test' }, 'https://a.named.test/api/me'], [{ host: '
   expect(fake.calls.map(call => call.url)).toEqual([url]);
 });
 
+test("an app's own `baseUrl` on a named base keeps the kept host's origin: another origin is refused before the token is read", async () => {
+  const fake = fakeFetch([{ url: /./u, respond: () => Response.json({ id: '1' }) }]);
+  let reads = 0;
+  const token = () => { reads++; return Promise.resolve('t'); };
+  const values = { host: 'a.named.test' };
+  for (const baseUrl of ['https://evil.test/api', 'https://b.named.test/api', 'https://a.named.test:8443/api']) {
+    await expect(client(named, { token, values, baseUrl, fetch: fake.fetch }).json('/me')).rejects.toThrow(new TypeError('base_host_refused: named'));
+  }
+  expect([reads, fake.calls]).toEqual([0, []]);
+  // The same origin may move the path.
+  await client(named, { token, values, baseUrl: 'https://a.named.test/api/v2', fetch: fake.fetch }).json('/me');
+  expect([reads, fake.calls.map(call => call.url)]).toEqual([1, ['https://a.named.test/api/v2/me']]);
+});
+
 test("Pipedrive's shape: an origin the token answer names fills as its host", async () => {
   const origin = defineProvider({ ...named, save: { apiDomain: 'tokenAnswer.api_domain' }, http: { baseUrl: 'https://{apiDomain}/api/v1', host: '*.pipedrive.com' } });
   const fake = filled(origin, { apiDomain: 'https://x.pipedrive.com' });

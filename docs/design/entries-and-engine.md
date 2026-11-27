@@ -169,8 +169,9 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
-  after the one check below that every URL the library sends to passes; on a typed host it must keep the filled base's
-  origin.
+  after the one check below that every URL the library sends to passes; on a typed or named host it must keep the
+  filled base's origin (else `base_host_refused`, before the token is read); on a fixed base it is the app's own
+  explicit choice of origin.
 - The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
   one) is `template_missing`. Only `startConnect` and `finishConnect` apply a field's `default` (and return it in
   `values`): a client, a refresh and a revoke never do, so they need the connection's `values`. A value in the host
