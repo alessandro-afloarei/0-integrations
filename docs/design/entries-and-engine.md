@@ -326,7 +326,7 @@ is not a second sign-in.
    entry with two sign-ins.
 4. A sign-in after the first may declare its own part, `fields`, `http: { baseUrl, host? }` and `identify`, and
    `signInWith` puts it in place of the entry's: its `fields` and `identify` for the entry's, its `baseUrl` and `host`
-   over the entry's `http` (headers, bases, retry and timeouts stay shared), and `auth` the sign-in without it. Outline's
+   in the entry's `http` (headers, bases, retry and timeouts stay shared), and `auth` the sign-in without it. Outline's
    OAuth 2 is on its cloud host, and its key, second, has its own `host` field and base `https://{host}/api`. The first
    sign-in has none: its part is the entry's top level, so the entry used whole and its first narrowing are one.
    `checkHosts`, which every send and `startConnect` run first, refuses a first sign-in that declares one (an app's
