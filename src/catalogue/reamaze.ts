@@ -45,7 +45,7 @@ export const reamaze = defineProvider({
     'conversations.update': { docs: `${ref}/put_conversations`, method: 'PUT', path: '/conversations/{slug}',
       params: { ...slug, conversation: { in: 'body', required: true, type: { 'status?': 'integer', 'tag_list?': ['string'],
         'assignee?': { 'email?': 'string' }, 'category?': 'string' },
-      description: `Each key optional. status: ${statuses}. assignee.email: a staff user's email. category: an email channel's slug to move it to.` } },
+      description: `Each key optional. status: 0 Open, 1 Responded, 2 Done, 4 Archived, 5 On Hold, 6 Auto-Done, 7 AI Agent Assigned, 8 AI Agent Done (3 and 9 mark it spam: not for an update). assignee.email: a staff user's email. category: an email channel's slug to move it to.` } },
       result: conversation },
     'messages.list': { docs: `${ref}/get_messages`, path: '/conversations/{slug}/messages',
       params: { ...slug, filter: { in: 'query', type: 'string', enum: ['staff', 'customer'] }, ...page },
