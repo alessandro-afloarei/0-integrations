@@ -1,14 +1,14 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 81 providers: 81 declared, 0 recorded;
-255 typed operations; webhooks: ed25519 1, hmac 20, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
+255 typed operations; webhooks: ed25519 1, hmac 23, standard 3, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
 | [Affinity](https://developer.affinity.co/pages/external-api-v2/authentication) | crm | key | persons.list, persons.get, persons.create, persons.update, companies.list, opportunities.list | — | declared |
 | [Agile CRM](https://github.com/agilecrm/rest-api#authentication-) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, companies.list, deals.list | — | declared |
 | [Aircall](https://developers.aircall.io/api-references) | phone | key | calls.transcript | — | declared |
-| [Airtable](https://airtable.com/developers/web/api/authentication.md) | tasks | OAuth 2, key | records.list, records.get, records.create, records.update, bases.list | — | declared |
+| [Airtable](https://airtable.com/developers/web/api/authentication.md) | tasks | OAuth 2, key | records.list, records.get, records.create, records.update, bases.list | hmac | declared |
 | [Apollo](https://docs.apollo.io/reference/authentication) | sales | key | — | — | declared |
 | [Asana](https://developers.asana.com/docs/oauth) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, projects.list | — | declared |
 | [Attio](https://docs.attio.com/rest-api/guides/authentication) | crm | OAuth 2, key | — | — | declared |
@@ -18,11 +18,11 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 81 providers: 
 | [Breakcold](https://docs.breakcold.com/api/authentication) | crm | key | — | hmac | declared |
 | [Buildkite](https://buildkite.com/docs/apis/rest-api#authentication) | code | key | builds.list, builds.get, builds.create, pipelines.list | hmac | declared |
 | [Capsule](https://developer.capsulecrm.com/v2/overview/authentication) | crm | OAuth 2, key | parties.list, parties.get, parties.create, parties.update, parties.search, opportunities.list | — | declared |
-| [Chatwork](https://developer.chatwork.com/docs/endpoints) | chat | OAuth 2, key | rooms.list, messages.list, messages.create, contacts.list | — | declared |
+| [Chatwork](https://developer.chatwork.com/docs/endpoints) | chat | OAuth 2, key | rooms.list, messages.list, messages.create, contacts.list | hmac | declared |
 | [CircleCI](https://circleci.com/docs/api/v3/conventions.md) | code | key | runs.list, runs.get, runs.create, projects.list | hmac | declared |
 | [Clay](https://developers.clay.com/public-api/authentication) | sales | key | — | hmac | declared |
 | [ClickUp](https://developer.clickup.com/docs/authentication) | tasks | OAuth 2, key | tasks.list, tasks.get, tasks.create, tasks.update, lists.list | hmac | declared |
-| [Close](https://developer.close.com/api/overview/oauth-authentication) | crm | OAuth 2, key | contacts.list, contacts.get, contacts.create, contacts.update, contacts.search, leads.list, opportunities.list | — | declared |
+| [Close](https://developer.close.com/api/overview/oauth-authentication) | crm | OAuth 2, key | contacts.list, contacts.get, contacts.create, contacts.update, contacts.search, leads.list, opportunities.list | hmac | declared |
 | [Superhuman Docs (formerly Coda)](https://docs.superhuman.com/developers/apis/v1#operation/whoami) | docs | key | pages.list, pages.get, pages.create, pages.update, docs.list | — | declared |
 | [Cognism](https://developers.cognism.com/#authentication) | sales | key | contacts.search, contacts.get, accounts.search, accounts.get | — | declared |
 | [Discord](https://docs.discord.com/developers/reference) | chat | key | — | ed25519 | declared |
