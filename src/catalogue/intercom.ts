@@ -13,7 +13,7 @@ export const intercom = defineProvider({
     help: 'For your own Intercom workspace: the Access Token in your app\'s Configure > Authentication section in the Developer Hub. Intercom requires OAuth for an app that reaches other people\'s workspaces.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{apiHost}', host: '*.intercom.io', headers: { accept: 'application/json' },
-    retry: { defaultWaitMs: 10_000 } },
+    retry: { defaultWaitMs: 10_000, wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   errors: { detail: 'errors.0.code' },
   identify: { request: { path: '/me' }, id: 'app.id_code', name: 'app.name' },
   webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha1=', hash: 'sha1' },
