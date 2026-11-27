@@ -1,7 +1,7 @@
 # Providers
 
-Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers: 106 declared, 0 recorded;
-356 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
+Generated from `src/catalogue/` by `pnpm providers`: do not edit. 107 providers: 107 declared, 0 recorded;
+360 typed operations; webhooks: ed25519 1, hmac 35, standard 4, token 2. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -19,6 +19,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 106 providers:
 | [Better Stack](https://betterstack.com/docs/uptime/api/getting-started-with-uptime-api/) | monitoring | key | incidents.list, incidents.get, incidents.create, incidents.update, monitors.list | — | declared |
 | [Bitbucket](https://developer.atlassian.com/cloud/bitbucket/rest/intro/#authentication) | code | OAuth 2, key | repositories.list, repositories.get, pullRequests.list, pullRequests.get, pullRequests.create | hmac | declared |
 | [Breakcold](https://docs.breakcold.com/api/authentication) | crm | key | — | hmac | declared |
+| [Brevo](https://developers.brevo.com/docs/apps-public-apps) | mail | OAuth 2, key | emails.list, emails.get, domains.list, emails.create | — | declared |
 | [Buildkite](https://buildkite.com/docs/apis/rest-api#authentication) | code | key | builds.list, builds.get, builds.create, pipelines.list | hmac | declared |
 | [Cal.com](https://cal.com/docs/api-reference/v2/introduction) | calendar | key | bookings.get, bookings.create | hmac | declared |
 | [Calendly](https://developer.calendly.com/docs/authentication/creating-an-oauth-app) | calendar | OAuth 2, key | eventTypes.list, scheduledEvents.list, scheduledEvents.get, invitees.create | hmac | declared |
