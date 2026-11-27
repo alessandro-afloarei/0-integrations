@@ -68,6 +68,36 @@ test('an operation with a body parameter sends a JSON object, {} when given none
   expect(fake.calls[0]?.headers['content-type']).toBe('application/json');
 });
 
+/** Form parameters on a POST, under an entry whose every request names JSON. */
+const former = defineProvider({ id: 'former', name: 'Former', auth: [{ kind: 'key' }],
+  http: { baseUrl: BASE, headers: { 'content-type': 'application/json' } },
+  operations: { 'messages.create': { method: 'POST', path: '/rooms/{room}/messages', anyOf: [['text'], ['file']],
+    params: { room: { in: 'path', type: 'integer', required: true }, to: { in: 'form', type: 'integer', required: true },
+      text: { in: 'form', type: 'string' }, file: { in: 'form', type: 'string' }, unread: { in: 'form', type: 'boolean' },
+      extra: { in: 'form', type: 'unknown' } } } } });
+const FORM = 'application/x-www-form-urlencoded;charset=UTF-8';
+
+test("form parameters are sent as a form, each a string, its content type over the entry's and the app's", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  await client(former, { token: 'k', fetch: fake.fetch }).messages.create({ room: 7, to: 1, text: 'x' });
+  const own = client(former, { token: 'k', fetch: fake.fetch, headers: { 'content-type': 'text/plain' } });
+  await own.messages.create({ room: 7, to: 2, text: 'a & b=c', unread: true, extra: 3 });
+  expect(wire(fake)).toEqual([['POST', `${BASE}/rooms/7/messages`, 'to=1&text=x'],
+    ['POST', `${BASE}/rooms/7/messages`, 'to=2&text=a+%26+b%3Dc&unread=true&extra=3']]);
+  expect(fake.calls.map(call => call.headers['content-type'])).toEqual([FORM, FORM]);
+});
+
+test('a form parameter is a scalar, required and grouped as a body one is, all checked before anything is sent', async () => {
+  const fake = fakeFetch([]);
+  const create = untyped(client(former, { token: 'k', fetch: fake.fetch }).messages.create);
+  for (const [args, message] of [[{ room: 7, to: 1, text: 'x', extra: { a: 1 } }, 'param_invalid: extra'],
+    [{ room: 7, to: 1, text: 'x', extra: ['a'] }, 'param_invalid: extra'], [{ room: 7, to: '1', text: 'x' }, 'param_invalid: to'],
+    [{ room: 7, text: 'x' }, 'param_missing: to'], [{ room: 7, to: 1, text: ' ' }, 'param_group_missing: messages.create']] as const) {
+    await expect(create(args)).rejects.toThrow(new TypeError(message));
+  }
+  expect(fake.calls).toEqual([]);
+});
+
 test('a nullable argument with an enum sends null, and is held to its enum otherwise', async () => {
   const { fake, api } = setup(json({}));
   await api.issues.create({ title: 'Ship', status: null });
@@ -275,6 +305,10 @@ test("an app's entry that would send a wrong request is refused when its client 
     [{ path: '/f', params: { q: { in: 'body', type: 'string' } } }, 'param_unplaced: op q'],
     [{ path: '/g', paging: 'cursor', notFound: 'null' }, 'not_found_paged: op'],
     [{ method: 'GET', path: '/f', params: { q: { in: 'body', type: 'string' } } }, 'param_unplaced: op q'],
+    [{ path: '/f', params: { q: { in: 'form', type: 'string' } } }, 'param_unplaced: op q'],
+    [{ method: 'POST', path: '/f', params: { q: { in: 'form', type: 'string' }, r: { in: 'body', type: 'string' } } }, 'param_unplaced: op q'],
+    [{ method: 'POST', path: '/f', params: { r: { in: 'body', type: 'string' }, q: { in: 'form', type: 'string' } } }, 'param_unplaced: op r'],
+    [{ graphql: 'query { a }', params: { q: { in: 'form', type: 'string' } } }, 'param_unplaced: op q'],
   ] as const) expect(() => client(entry(op), { token: 'k' })).toThrow(new TypeError(message));
 });
 

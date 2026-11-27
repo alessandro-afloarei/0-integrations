@@ -251,6 +251,7 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
       headers = new Headers(entry.http.headers);
       for (const [key, header] of Object.entries(input.headers ?? {})) headers.set(key, header);
       if (credential) headers.set(...credential);
+      if (options.form) headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8'); // over the entry's and the app's
     } catch {
       throw new ProviderHttpError('request_failed', null);
     }

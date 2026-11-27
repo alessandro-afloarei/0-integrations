@@ -37,11 +37,13 @@ export function argumentShape(op: Operation, path: Path): Shape | undefined {
 }
 
 /** Whether a parameter has a place in its operation's request: GraphQL takes only variables; a path operation takes no
- * variables, a path parameter only where its path names it, and a body parameter only when it is not a GET. */
+ * variables, a path parameter only where its path names it, and a body or form parameter only when it is not a GET and
+ * the operation has no parameter of the other of the two. */
 export function placed(op: Operation, name: string, param: Param): boolean {
   return 'graphql' in op ? param.in === 'variables'
     : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))
-      && (param.in !== 'body' || (op.method ?? 'GET') !== 'GET');
+      && ((param.in !== 'body' && param.in !== 'form') || ((op.method ?? 'GET') !== 'GET'
+        && !Object.values(op.params ?? {}).some(each => each.in === (param.in === 'body' ? 'form' : 'body'))));
 }
 
 /** Whether a paged operation reads its records where its shape walks: on a `page` or `offset` shape, at the shape's

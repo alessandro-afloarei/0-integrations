@@ -82,7 +82,8 @@ export function fakeFetch(routes: readonly Route[]): { fetch: typeof fetch; call
   };
 }
 
-/** What a derived fake hands an operation's answer function: the request's path parameters, query and JSON body. */
+/** What a derived fake hands an operation's answer function: the request's path parameters, query and body (JSON, or a
+ * form's fields as strings). */
 export type FakeCall = { path: Readonly<Record<string, string>>; query: Readonly<Record<string, string>>; body: unknown };
 type Answer = (call: FakeCall) => unknown;
 
@@ -141,8 +142,10 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
       }
       for (const [name] of query) url.searchParams.delete(name);
       const params = pattern.exec(target(url))?.slice(1) ?? [];
+      const text = await request.clone().text();
+      const form = request.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded');
       const value = await answer({ path: Object.fromEntries(placeholders(template).map((name, at) => [name, decodeURIComponent(params[at] ?? '')])),
-        query: Object.fromEntries(url.searchParams), body: parseJson(await request.clone().text()) }, request);
+        query: Object.fromEntries(url.searchParams), body: form ? Object.fromEntries(new URLSearchParams(text)) : parseJson(text) }, request);
       return value instanceof Response ? value : value === undefined ? Response.json({ error: 'not_found' }, { status: 404 }) : Response.json(value);
     } }];
   };
@@ -212,12 +215,12 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     const client = { headers: new Headers(), body: new URLSearchParams() };
     void (auth.clientAuth === 'basic' ? oauth.ClientSecretBasic : oauth.ClientSecretPost)(clientSecret)({ issuer: '' }, { client_id: clientId }, client.body, client.headers);
     for (const url of new Set([urls.token, urls.refresh, urls.revoke ?? urls.token])) {
-      routes.push(route('POST', target(new URL(filledBase(entry, values, url))), '', async (call, sent) => {
+      routes.push(route('POST', target(new URL(filledBase(entry, values, url))), '', async (_call, sent) => {
         // A grant comes in the encoding the entry declares, as the engine sends it: checked before its body is read.
         const type = sent.headers.get('content-type')?.split(';')[0];
         const revokeOnly = url === urls.revoke && url !== urls.token && url !== urls.refresh;
         if (!revokeOnly && type !== (auth.json ? 'application/json' : 'application/x-www-form-urlencoded')) return Response.json({ error: 'invalid_request' }, { status: 400 });
-        const body = new URLSearchParams(auth.json ? call.body as Record<string, string> : await sent.text());
+        const body = new URLSearchParams(auth.json ? parseJson(await sent.text()) as Record<string, string> : await sent.text());
         // One method per request (RFC 6749 §2.3.1): with Basic, no client secret in the body.
         const sameClient = sent.headers.get('authorization') === client.headers.get('authorization') && [...client.body].every(([name, value]) => body.get(name) === value)
           && (auth.clientAuth !== 'basic' || !body.has('client_secret'));

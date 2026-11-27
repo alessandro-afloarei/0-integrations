@@ -58,7 +58,7 @@ const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true
   sales: true, mail: true, calendar: true, meetings: true, support: true, marketing: true, finance: true, hr: true,
   storage: true, ecommerce: true, phone: true, design: true, analytics: true, search: true };
 const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 'delete']).optional(),
-  params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'variables']), type: shape,
+  params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'form', 'variables']), type: shape,
     required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
     description: z.string().optional() })).optional(),
   result: shape.optional(), records: z.string().optional(), paging: z.string().optional(), notFound: z.literal('null').optional(),
@@ -327,13 +327,13 @@ const runnable = {
   // `json` or `then` would hide one of the client's own.
   '`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)': (entry: Entry) => clashing(Object.keys(entry.operations ?? {})) === undefined,
   // A parameter with no place in the request would be left off it silently.
-  'a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)': (entry: Entry) => operations(entry).every(op =>
+  'a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)': (entry: Entry) => operations(entry).every(op =>
     Object.entries(op.params ?? {}).every(([name, param]) => placed(op, name, param))),
   // The client checks an argument against its enum as a string.
   '`params[].enum` only on a `type: \'string\'` parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
-  // A path segment and a query value are one string each: never null, a list or an object.
-  'only a scalar, non-`nullable` parameter `in` a path or a query': (entry: Entry) => params(entry).every(param =>
-    (param.in !== 'path' && param.in !== 'query') || (param.nullable === undefined && typeof param.type === 'string')),
+  // A path segment, a query value and a form value are one string each: never null, a list or an object.
+  'only a scalar, non-`nullable` parameter `in` a path, a query or a form': (entry: Entry) => params(entry).every(param =>
+    !['path', 'query', 'form'].includes(param.in) || (param.nullable === undefined && typeof param.type === 'string')),
   // The rule `client()` applies to each path, and a group worth the name: a required parameter is given anyway.
   '`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter': (entry: Entry) =>
     operations(entry).every(op => op.anyOf === undefined || (op.anyOf.length > 1 && op.anyOf.every(set => set.length > 0
@@ -677,17 +677,22 @@ test.each<[Rule, Entry]>([
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { pages: { path: '/pages' }, 'pages.markdown': { path: '/md' } }],
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { '': { path: '/a' } }],
     ['`operations` ids a client can hold (no empty segment, no dotted prefix of another, not json, request, paginate or then)', { 'a..b': { path: '/a' } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
-    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body on a GET, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { id: { in: 'path', type: 'string', required: true } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { first: { in: 'variables', type: 'integer' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'body', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { id: { in: 'query', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { get: { path: '/items', params: { q: { in: 'form', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: 'string' }, r: { in: 'body', type: 'string' } } } }],
+    ['a `params[].in` the operation\'s request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL)', { me: { graphql: 'query { me { id } }', params: { q: { in: 'form', type: 'string' } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: { a: 'string' } } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { add: { method: 'POST', path: '/items', params: { q: { in: 'form', type: 'string', nullable: true } } } }],
     ['`notFound` only on an operation with no `paging`', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
     ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],
-    ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
-    ['only a scalar, non-`nullable` parameter `in` a path or a query', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
-    ['only a scalar, non-`nullable` parameter `in` a path or a query', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
+    ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
     ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email']], params: { email: { in: 'body', type: 'string' } } } }],
     ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], []], params: { email: { in: 'body', type: 'string' } } } }],
     ['`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter', { get: { method: 'POST', path: '/p', anyOf: [['email'], ['emial']], params: { email: { in: 'body', type: 'string' } } } }],

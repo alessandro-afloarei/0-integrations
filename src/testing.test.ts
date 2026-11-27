@@ -283,6 +283,20 @@ describe('fakeProvider', () => {
     expect(await ids(api.people.search({ 'filter[emails][eq]': 'a@example.test' }))).toEqual(['found']);
   });
 
+  test("a form operation's function receives its form body, and two on one route choose by a required form parameter", async () => {
+    const formed = defineProvider({ id: 'formed', name: 'Formed', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.formed.test' },
+      operations: { 'notes.create': { method: 'POST', path: '/notes', params: { text: { in: 'form', type: 'string', required: true },
+        pinned: { in: 'form', type: 'boolean' } } },
+      'notes.update': { method: 'POST', path: '/notes', params: { id: { in: 'form', type: 'integer', required: true } } } } });
+    const calls: FakeCall[] = [];
+    const { fetch } = fakeFetch(fakeProvider(formed, { key: 'k', operations: {
+      'notes.create': call => { calls.push(call); return { by: 'create' }; }, 'notes.update': () => ({ by: 'update' }) } }));
+    const api = client(formed, { token: 'k', fetch });
+    await expect(api.notes.create({ text: 'a & b', pinned: true })).resolves.toEqual({ by: 'create' });
+    await expect(api.notes.update({ id: 7 })).resolves.toEqual({ by: 'update' });
+    expect(calls).toEqual([{ path: {}, query: {}, body: { text: 'a & b', pinned: 'true' } }]);
+  });
+
   test("lemlist's create and update share a route: the update answers a body carrying its required contactId", async () => {
     const { fetch } = fakeFetch(fakeProvider(lemlist, { key: 'k', operations: {
       'contacts.create': () => ({ data: { _id: 'created' } }), 'contacts.update': () => ({ data: { _id: 'updated' } }) } }));
