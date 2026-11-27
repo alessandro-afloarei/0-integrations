@@ -20,6 +20,9 @@ export const acuity = defineProvider({
   http: { baseUrl: 'https://acuityscheduling.com/api/v1', retry: { defaultWaitMs: 1_000 } },
   identify: { request: { path: '/me' }, id: 'id', name: ['name', 'email'] },
   errors: { detail: 'error' },
+  // Keyed by the account's API key, which an OAuth 2 connection does not hold:
+  // https://developers.acuityscheduling.com/docs/webhooks
+  webhook: { kind: 'hmac', header: 'x-acuity-signature', encoding: 'base64' },
   operations: {
     'appointmentTypes.list': { docs: `${ref}/appointment-types`, path: '/appointment-types',
       params: { includeDeleted: { in: 'query', type: 'boolean' } },
