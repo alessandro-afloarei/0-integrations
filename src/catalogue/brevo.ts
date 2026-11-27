@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Brevo: an API key in `api-key` (its OAuth 2 for other accounts is a public app Brevo reviews first). A 429 waits the
- * x-sib-ratelimit-reset seconds, per-hour windows reported: https://developers.brevo.com/docs/limit-headers. The email
- * list answers one page (`limit`, `offset`). A send emails its recipients and spends the plan's email credits:
- * https://developers.brevo.com/reference/get-account */
+/** Brevo: an API key for your own account; its Developer Terms bar an app from collecting or disclosing other accounts'
+ * API keys (https://developers.brevo.com/docs/apps-developer-terms), and an app for other accounts is a public app
+ * Brevo reviews: https://developers.brevo.com/docs/apps-public-apps. The email list answers one page; a send emails
+ * its recipients, spending the plan's email credits: https://developers.brevo.com/reference/get-account */
 const email = { 'uuid?': 'string', 'messageId?': 'string', 'email?': 'string', 'subject?': 'string', 'date?': 'string',
   'from?': 'string', 'templateId?': 'integer' } as const;
 const recipient = { email: 'string', 'name?': 'string' } as const;
@@ -15,7 +15,7 @@ export const brevo = defineProvider({
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
     help: 'For your own Brevo account: an API key from SMTP & API settings, then API keys (shown once). Every send uses the plan\'s email credits.' }],
   auth: [{ kind: 'key', send: { header: 'api-key' } }],
-  http: { baseUrl: 'https://api.brevo.com/v3', retry: { onlyStated: true, wait: { header: 'x-sib-ratelimit-reset', unit: 's' } } },
+  http: { baseUrl: 'https://api.brevo.com/v3', retry: { onlyStated: true } },
   errors: { detail: 'code' },
   identify: { request: { path: '/account' }, id: 'organization_id', name: ['companyName', 'email'] },
   operations: {
@@ -31,7 +31,7 @@ export const brevo = defineProvider({
       result: { domains: [{ id: 'string', 'domain_name?': 'string', 'authenticated?': 'boolean', 'verified?': 'boolean',
         'provider?': 'string' }] } },
     'emails.create': { docs: `${ref}/send-transac-email`, method: 'POST', path: '/smtp/email', kind: 'write',
-      params: { sender: { in: 'body', type: { 'email?': 'string', 'name?': 'string' }, required: true,
+      params: { sender: { in: 'body', type: { email: 'string', 'name?': 'string' }, required: true,
         description: 'The sender\'s address, and its name.' },
       to: { in: 'body', type: [recipient], required: true }, subject: { in: 'body', type: 'string', required: true },
       htmlContent: { in: 'body', type: 'string', required: true }, textContent: { in: 'body', type: 'string' } },
