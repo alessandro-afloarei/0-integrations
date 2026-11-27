@@ -1,6 +1,6 @@
 import { defineProvider } from '../catalogue.js';
 
-/** GitHub: 5,000 requests an hour per person, shared with their other tokens and apps, and calling on while limited can get
+/** GitHub: 5,000 requests an hour per person, shared with their other tokens and apps; calling on while limited can get
  * an integration banned: a read is retried only after the Retry-After it names. A limit answers 403 or 429. The
  * hourly one has `x-ratelimit-remaining: 0` and lasts until `x-ratelimit-reset` (epoch seconds); a secondary one says
  * so in its message and asks for a minute when no Retry-After names its wait. */
