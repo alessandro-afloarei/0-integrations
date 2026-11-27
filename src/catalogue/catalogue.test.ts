@@ -69,7 +69,10 @@ const timestamp = z.strictObject({ header: headerName, toleranceSeconds });
 const partName = z.string().regex(/^[^\s,=]+$/u, 'a `part` names one `name=value` piece: give it a name with no `,`, `=` or space');
 /** What every webhook kind may declare. */
 const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName }), z.strictObject({ body: z.array(z.string()).min(1) })]).optional(),
-  challenge: z.strictObject({ when: when.refine(item => item.equals !== undefined || item.in !== undefined, 'a `challenge.when` compares the body value: give `equals` or `in`'), echo: z.string().min(1) }).optional() };
+  challenge: z.strictObject({ when: when.refine(item => item.equals !== undefined || item.in !== undefined, 'a `challenge.when` compares a value: give `equals` or `in`').optional(),
+    echo: z.union([z.string().min(1), z.strictObject({ query: z.string().min(1, 'a challenge `query` names its parameter: give the name') })]),
+    text: z.literal(true).optional(), unsigned: z.literal(true).optional() })
+    .refine(item => typeof item.echo === 'string' || item.text === true, 'a challenge read from a query is answered as text: give `text: true`').optional() };
 const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]);
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
@@ -141,6 +144,9 @@ const entrySchema = z.strictObject({
     // The header is compared whole: nothing is signed, so nothing to fill, prefix or time.
     z.strictObject({ kind: z.literal('token'), header: headerName, ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
       ? 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out' : undefined) }),
+    // The header is `authorization`, and nothing is signed.
+    z.strictObject({ kind: z.literal('basic'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
+      ? 'a `basic` webhook takes only `deliveryId` and `challenge`: its header is `authorization`, leave the rest out' : undefined) }),
     // The scheme fixes its headers, its signed content and its timestamp.
     z.strictObject({ kind: z.literal('standard'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys' && issue.keys.every(name => ['header', 'signed', 'timestamp', 'prefix', 'secret'].includes(name))
       ? 'a `standard` webhook takes no `header`, `signed`, `timestamp`, `prefix` or `secret`: Standard Webhooks fixes them' : undefined) }),
@@ -372,13 +378,19 @@ const runnable = {
     if (webhook === undefined || stamp === undefined) return true;
     return 'part' in stamp ? webhook.kind !== 'hmac' || stamp.part !== webhook.part : stamp.header !== webhook.header;
   },
-  // A challenge is read from the body alone: there is no answer status, no header worth trusting and no provider code.
-  "a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`": (entry: Entry) => {
-    const when = entry.webhook?.challenge?.when;
-    return when === undefined || (when.path !== undefined && when.status === undefined && when.header === undefined && when.detail === undefined);
+  // A challenge has no answer status and no provider code; a body value counts only where the body says it is one.
+  "a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query may leave `when` out)": (entry: Entry) => {
+    const challenge = entry.webhook?.challenge;
+    if (challenge === undefined) return true;
+    const { when, echo } = challenge;
+    return when === undefined ? typeof echo !== 'string'
+      : when.status === undefined && when.detail === undefined && (typeof echo !== 'string' || when.path !== undefined);
   },
   // The echoed value is the body's top-level key of that name.
-  'a `webhook.challenge.echo` with no `.` (a top-level key of the body)': (entry: Entry) => !(entry.webhook?.challenge?.echo.includes('.') ?? false),
+  'a `webhook.challenge.echo` with no `.` (a top-level key of the body)': (entry: Entry) => {
+    const echo = entry.webhook?.challenge?.echo;
+    return typeof echo !== 'string' || !echo.includes('.');
+  },
   // Otherwise the records are typed `unknown`.
   "an `operations[].records` path to a list in the operation's `result`": (entry: Entry) => operations(entry).every(op =>
     op.records === undefined || op.result === undefined || Array.isArray(shapeAt(op.result, op.records))),
@@ -552,6 +564,17 @@ const secret = { name: 'apiKey', title: 'API key', secret: true } as const;
 const tokened = { ...key, fields: [{ name: 'clientId', title: 'Client ID' }, { name: 'clientSecret', title: 'Client secret', secret: true }],
   auth: [{ kind: 'token', request: { url: 'https://k.test/token', body: { grant_type: 'client_credentials' },
     basic: ['{clientId}', '{clientSecret}'] } }] } as const;
+test('a challenge from a query or the body, answered as text and unsigned beside any kind, passes the schema and every rule', () => {
+  for (const webhook of [{ kind: 'standard', challenge: { echo: { query: 'challenge' }, text: true } },
+    { kind: 'basic', challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } },
+    { kind: 'standard', challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge', text: true, unsigned: true } },
+    { kind: 'token', header: 'x-token', challenge: { when: { header: 'x-kind', equals: 'check' }, echo: { query: 'check' }, text: true } }] as const) {
+    const good = defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook });
+    expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
+    expect(entrySchema.safeParse(good).error).toBeUndefined();
+  }
+});
+
 /** Wrike's shape: fixed sign-in URLs, the base and the refresh on the host the token answer names, under one domain. */
 const named = { ...key, scopes: { default: [] }, save: { host: 'tokenAnswer.host' }, identify: { request: { path: '/me' }, id: 'id' },
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.test/authorize', tokenUrl: 'https://login.k.test/token', refreshUrl: 'https://{host}/token' }],
@@ -721,9 +744,14 @@ test.each<[Rule, Entry]>([
       challenge: { when: { path: 'type', equals: 1 }, echo: 'a.b' } }],
   ] as const).map(([rule, webhook]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook })]),
   ...([{ status: 200, path: 'type', equals: 1 }, { header: 'x-type', equals: '1' }, { path: 'type', detail: 'ping' }, { equals: 1 }] as const)
-    .map((when): [Rule, Entry] => ["a `webhook.challenge.when` that reads a body `path`, with no `status`, `header` or `detail`",
+    .map((when): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query may leave `when` out)",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
         webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when, echo: 'type' } } })]),
+  // (A body `echo` without `when` does not compile.)
+  ...([{ echo: { query: 'challenge' }, when: { status: 200, header: 'x-challenge' }, text: true },
+    { echo: { query: 'challenge' }, when: { path: 'type', detail: 'ping' }, text: true, unsigned: true }] as const)
+    .map((challenge): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query may leave `when` out)",
+      defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'standard', challenge } })]),
   ["an operation on a `page` or `offset` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' }, list: 'items' } },
     operations: { 'items.list': { docs: 'https://k.test/docs/items', path: '/items', paging: 'page', records: 'result.items',
@@ -964,7 +992,11 @@ test.each<[string, Record<string, unknown>, string]>([
   ['a send value with a control character', { auth: [{ kind: 'key', send: { header: 'x-api-key', value: 'k{token}\r\nx-evil: 1' } }] },
     'a header `value` holds no control character'],
   ['a challenge that compares nothing', { webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when: { path: 'type' }, echo: 'type' } } },
-    'a `challenge.when` compares the body value: give `equals` or `in`'],
+    'a `challenge.when` compares a value: give `equals` or `in`'],
+  ['a challenge from an empty query name', { webhook: { kind: 'hmac', header: 'x-signature', challenge: { echo: { query: '' }, text: true, unsigned: true } } },
+    'a challenge `query` names its parameter: give the name'],
+  ['a challenge from a query answered as JSON', { webhook: { kind: 'standard', challenge: { echo: { query: 'challenge' }, unsigned: true } } },
+    'a challenge read from a query is answered as text: give `text: true`'],
 ])('%s fails the schema, with what to fix', (_, parts, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], ...parts };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
@@ -1014,6 +1046,9 @@ test.each<[string, Record<string, unknown>, string]>([
   ['token', {}, 'Invalid input: expected string, received undefined'],
   ['token', { header: 'x-goog-channel-token', secret: 'hex' }, 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out'],
   ['ed25519', { header: 'x-signature-ed25519', secret: 'hex' }, 'Unrecognized key: "secret"'],
+  ...([{ header: 'authorization' }, { prefix: 'Basic ' }, { signed: '{body}' }, { timestamp: { header: 'x-t' } }, { secret: 'base64' },
+    { deliveryld: { header: 'x-id' } }] as const).map((parts): [string, Record<string, unknown>, string] => ['basic', parts,
+      'a `basic` webhook takes only `deliveryId` and `challenge`: its header is `authorization`, leave the rest out']),
   ['standard', { deliveryld: { header: 'webhook-id' } }, 'Unrecognized key: "deliveryld"'],
   ...['header', 'signed', 'timestamp', 'prefix', 'secret'].map((part): [string, Record<string, unknown>, string] => ['standard',
     { [part]: part === 'timestamp' ? { header: 'webhook-timestamp' } : 'x' },

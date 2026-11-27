@@ -25,6 +25,10 @@ export const agentmail = defineProvider({
   identify: { request: { path: '/auth/me' }, id: '{organization_id}:{scope_id}' },
   errors: { detail: 'code' },
   paging: { cursor: { kind: 'cursor', next: 'next_page_token', send: { query: 'page_token' } } },
+  // Svix's `svix-*` headers, the endpoint's `whsec_` secret, a 5-minute tolerance; dedupe on the body's `event_id`:
+  // https://agentmail.to/docs/webhook-verification, https://agentmail.to/docs/webhooks-overview. Signed as Svix signs:
+  // https://docs.svix.com/receiving/verifying-payloads/how-manual
+  webhook: { kind: 'standard', deliveryId: { body: ['event_id'] } },
   operations: {
     'messages.list': { docs: `${ref}/messages/list`, path: '/inboxes/{inbox_id}/messages', paging: 'cursor', records: 'messages',
       params: { ...inboxId, before: { in: 'query', type: 'string' }, after: { in: 'query', type: 'string' }, ...page },

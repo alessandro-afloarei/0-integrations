@@ -38,7 +38,9 @@ export const nylas = defineProvider({
   http: { baseUrl: 'https://{apiHost}/v3/grants/me', host: hosts, retry: { defaultWaitMs: 1_000 } },
   identify: { id: 'tokenAnswer.grant_id', name: 'tokenAnswer.email' },
   errors: { detail: 'error.type' },
-  webhook: { kind: 'hmac', header: 'x-nylas-signature' },
+  // The endpoint check is a GET with `?challenge=`, answered with the value alone; it comes before Nylas makes the
+  // secret, so it is unsigned: https://developer.nylas.com/docs/v3/notifications/
+  webhook: { kind: 'hmac', header: 'x-nylas-signature', challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } },
   paging: { cursor: { kind: 'cursor', next: 'next_cursor', send: { query: 'page_token' } } },
   operations: {
     'messages.list': { docs: `${ref}/messages/get-messages/`, path: '/messages', paging: 'cursor', records: 'data',
