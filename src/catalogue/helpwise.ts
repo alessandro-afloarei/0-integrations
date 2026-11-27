@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Helpwise: the API key and secret as HTTP Basic on API V1; identify only checks them. 100 requests a minute per key;
- * a 429 waits `X-RateLimit-Reset`, in epoch seconds. V1 lists no inboxes (an inbox id comes from Helpwise) and has no
- * conversation create, update, reply or note; V0's notes, email send and inbox list take another credential form and
- * are not declared. The contact lists answer one page (`limit`, `offset`, and `nextPage` in the answer). */
+/** Helpwise: the API key and secret as HTTP Basic on API V1, Premium and Advanced plans (https://helpwise.io/pricing);
+ * identify only checks them. Helpwise states 100 requests a minute. No V1 inbox list, conversation create, update,
+ * reply or note; V0's notes, email send and inbox list take another credential form. Contacts: one page. Webhooks:
+ * https://docs.helpwise.io/articles/221885-setup-webhooks-in-your-helpwise-account */
 const tags = { 'tags?': [{ 'id?': 'integer', 'name?': 'string' }] } as const;
 const contact = { id: 'integer', 'firstname?': 'string', 'lastname?': 'string', 'emails?': ['string'], 'phones?': 'unknown',
   'company?': 'string', 'jobTitle?': 'string' } as const;
@@ -15,10 +15,10 @@ const docs = 'https://helpwise.io/developers/';
 export const helpwise = defineProvider({
   id: 'helpwise', name: 'Helpwise', docs,
   categories: ['support'],
-  fields: [{ name: 'apiKey', title: 'API key', help: 'On Helpwise\'s Settings page, API section, with its secret.' },
+  fields: [{ name: 'apiKey', title: 'API key', help: 'API access is on Helpwise\'s Premium and Advanced plans. The key is on the Settings page, API section, with its secret.' },
     { name: 'apiSecret', title: 'API secret', secret: true, help: 'The secret shown beside the API key on Helpwise\'s Settings page, API section.' }],
   auth: [{ kind: 'key', send: { basic: ['{apiKey}', '{apiSecret}'] } }],
-  http: { baseUrl: 'https://apis.helpwise.io', minIntervalMs: 600, retry: { wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
+  http: { baseUrl: 'https://apis.helpwise.io' },
   identify: { request: { path: '/tags' } },
   paging: { threads: { kind: 'cursor', next: 'nextPageToken', send: { query: 'pageToken' } } },
   operations: {
