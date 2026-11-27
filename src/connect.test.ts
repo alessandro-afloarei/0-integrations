@@ -708,10 +708,26 @@ describe("a sign-in's own part", () => {
     const token = () => { reads++; return Promise.resolve('k'); };
     await expect(apiClient(key, { token, values: { host: '127.0.0.1' }, fetch: http.fetch }).documents.get({ id: 'd' }))
       .rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
-    await expect(finishConnect(key, { secret: { apiKey: 'k' }, values: { host: '127.0.0.1' }, fetch: http.fetch }))
+    const secret = { get apiKey() { reads++; return 'k'; } };
+    await expect(finishConnect(key, { secret, values: { host: '127.0.0.1' }, fetch: http.fetch }))
       .rejects.toEqual(new ProviderHttpError('request_failed', null, 'address_blocked'));
     expect([reads, http.calls]).toEqual([0, []]);
   });
+
+  it.each(([['none', undefined], ['empty', {}], ['one reading only what was entered', { id: 'connection.host' }]] as const)
+    .flatMap(([shape, identify]) => ([['*.k.test', 'evil.test', new TypeError('base_host_refused: typed')],
+      ['*', '127.0.0.1', new ProviderHttpError('request_failed', null, 'address_blocked')]] as const)
+      .map(([pattern, host, refusal]) => [shape, host, pattern, identify, refusal] as const)))(
+    'a key connect whose identify is %s refuses the typed host %j (`http.host: %j`) before the key is read, unsent', async (_, host, pattern, identify, refusal) => {
+      const typed = defineProvider({ id: 'typed', name: 'Typed', auth: [{ kind: 'key' }], ...identify && { identify },
+        fields: [{ name: 'host', title: 'Host' }, { name: 'apiKey', title: 'API key', secret: true }],
+        http: { baseUrl: 'https://{host}/api', host: pattern } });
+      const http = anything();
+      let reads = 0;
+      const secret = { get apiKey() { reads++; return 'k'; } };
+      await expect(finishConnect(typed, { secret, values: { host }, fetch: http.fetch })).rejects.toEqual(refusal);
+      expect([reads, http.calls]).toEqual([0, []]);
+    });
 
   it("takes only a later sign-in's own base and host: an app's own headers and bases there are never read", async () => {
     const smuggled = { id: 'sm', name: 'Sm', fields: [{ name: 'apiKey', title: 'API key', secret: true }], scopes: { default: [] },

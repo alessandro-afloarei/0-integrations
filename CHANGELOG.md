@@ -16,6 +16,9 @@ Nothing here is released yet.
   host the person types, is `signInWith(outline, 'key')`. Breaking: a key connection that still calls the whole entry
   with its `host` (`client(outline, { token, values: { host } })`) is now refused (`value_undeclared: outline host`),
   never sent to app.getoutline.com; an app narrows it with `signInWith(outline, 'key')` for every call.
+- A key or token `finishConnect` checks its typed host before it reads a secret from its input, whether or not identify
+  sends a request: a host outside `http.host`, or an address under `'*'` (`address_blocked`), is refused and nothing is
+  returned to store; before, a connection whose identify sent nothing kept the host unchecked.
 - New: `http.host` may list several patterns; the filled host must match one. `'*'` stays alone.
 - Smartsheet takes its product's host in `apiHost` (`api.smartsheet.com` by default; `api.smartsheetgov.com`,
   `api.smartsheet.eu`, `api.smartsheet.au`). Breaking: a client never applies the default, so an existing connection

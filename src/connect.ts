@@ -72,10 +72,13 @@ export async function finishConnect(entry: Entry, input: OAuthFinish | FormFinis
     // Only the declared fields, each filled, all checked before anything is sent: an entry's templates read them. Each
     // field is read once, so identify is sent the very credential returned. The first secret field is the credential;
     // an app's own entry may declare none, its fault before the caller's.
-    const [credential, ...others] = (entry.fields ?? []).filter(field => field.secret).map(field => read(field, secrets));
-    if (credential === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
+    const [first, ...rest] = (entry.fields ?? []).filter(field => field.secret);
+    if (first === undefined) throw new TypeError(`connect_secret_field_missing: ${entry.id}`);
     const values = plainOf(entry, plain);
-    const secret = Object.fromEntries([credential, ...others]);
+    // The typed host is checked as a call checks it, before a secret is read: identify may send nothing on the base.
+    filledBase(entry, values, hostPart(entry.http.baseUrl) ?? '');
+    const credential = read(first, secrets);
+    const secret = Object.fromEntries([credential, ...rest.map(field => read(field, secrets))]);
     if (auth.kind === 'key') return { secret, ...await identifyAccount(entry, { fetch, token: credential[1], values }) };
     // The token request is the credential check, sent the very secret fields returned; only the answer's keys the entry
     // names reach identify, and no token is returned.
