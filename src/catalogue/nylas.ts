@@ -32,6 +32,8 @@ export const nylas = defineProvider({
     help: 'The region your Nylas application was created in, which cannot change: api.us.nylas.com for the U.S., api.eu.nylas.com for Europe.' }],
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://{apiHost}/v3/connect/auth', tokenUrl: 'https://{apiHost}/v3/connect/token',
     authorizeParams: { response_type: 'code', access_type: 'offline' } }],
+  // No scope is sent: the connector's default scopes in the Nylas Dashboard must include the mail and calendar scopes.
+  // https://developer.nylas.com/docs/dev-guide/scopes/
   scopes: { default: [] },
   http: { baseUrl: 'https://{apiHost}/v3/grants/me', host: hosts, retry: { defaultWaitMs: 1_000 } },
   identify: { id: 'tokenAnswer.grant_id', name: 'tokenAnswer.email' },
