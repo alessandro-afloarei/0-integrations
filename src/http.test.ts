@@ -1166,8 +1166,8 @@ describe('a read is retried after a 5xx, a 408 or a network failure, waiting wit
     expect(literal.calls).toHaveLength(0);
   });
 
-  test('Fireflies (limit 0) on a 500 is sent once, unavailable by its rules', async () => {
-    const fake = script(fireflies, answer(500), ok);
+  test('a limit of 0 on a 500 is sent once, unavailable by its rules', async () => {
+    const fake = script(retrying({ limit: 0 }, { errors: { rules: [{ when: { status: 'error' }, code: 'unavailable' }] } }), answer(500), ok);
     const result = fake.client.json('').catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(await result).toMatchObject({ code: 'unavailable', status: 500 });

@@ -6,7 +6,7 @@ export const fireflies = defineProvider({
   categories: ['meetings'],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.fireflies.ai/graphql',
-    retry: { limit: 0, wait: { path: 'errors.0.extensions.metadata.retryAfter', unit: 'epochMs' } } },
+    retry: { onlyStated: true, wait: { path: 'errors.0.extensions.metadata.retryAfter', unit: 'epochMs' } } },
   // A GraphQL code outranks the status: Fireflies sends auth_failed with HTTP 500.
   errors: { detail: ['errors.0.code', 'errors.0.extensions.code'], failed: { path: 'errors.0' }, rules: [
     { when: { detail: 'auth_failed' }, code: 'rejected' }, { when: { status: 401 }, code: 'rejected' },
