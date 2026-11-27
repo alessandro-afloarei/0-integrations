@@ -813,7 +813,7 @@ test.each([[{ refreshUrl: 'http://k.test/refresh' }, 'refreshUrl', 'Invalid stri
     expect(entrySchema.safeParse(bad).error?.issues.map(issue => [issue.path.at(-1), issue.message])).toEqual([[key, message]]);
   });
 
-test.each(['post', { revoke: 'basic' }, true])('clientAuth %o fails the schema, with what to fix', value => {
+test.each(['post', {}, true])('clientAuth %o fails the schema, with what to fix', value => {
   const bad = { ...oauth2, scopes: { default: [] }, auth: [{ ...oauth2.auth[0], clientAuth: value }] };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([CLIENT_AUTH]);
 });

@@ -318,8 +318,8 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
-  (Atlassian) with `content-type: application/json`, the client id and secret in it unless `clientAuth: 'basic'`. The
-  answer is read as a form-bodied one is.
+  (Atlassian) with `content-type: application/json`, the client's parameters in it as `clientAuth` says (Basic stays a
+  header). The answer is read as a form-bodied one is.
 - `token` turns what the person entered into a short-lived token with one request: client credentials (Zoom, PayPal) or
   a session sign-in (Metabase). It has no refresh: a new request is the refresh.
   - The request's URL is filled by the base rule from the plain values alone (a host placeholder's result must match

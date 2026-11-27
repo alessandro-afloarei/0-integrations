@@ -4,11 +4,17 @@
 
 Nothing here is released yet.
 
-- New: `clientAuth` may be `'none'` for a public client: its id alone, PKCE required (`OAuthClient<typeof entry>` then
-  has no secret). Firecrawl lists OAuth 2 first, a public client that revokes with its refresh token; its key is
-  `signInWith(firecrawl, 'key')`.
-- New entry: brevo (mail), OAuth 2 first as a public app Brevo reviews before other accounts authorize it, its API key
-  second, for your own account.
+- New: `clientAuth: 'none'`, a public client: the code exchange, the refresh and an RFC 7009 revoke send its
+  `client_id` in the body and no secret, even one an untyped caller passes; PKCE is required (an app's entry that
+  declares `'none'` beside `pkce: false` throws `pkce_required: <entry id>` before anything is sent); and
+  `OAuthClient<typeof entry>` then has no `clientSecret`.
+- Firecrawl lists OAuth 2 first, a public client that revokes the whole connection with its refresh token; its API key
+  is `signInWith(firecrawl, 'key')`. Breaking: `startConnect(firecrawl)` and `finishConnect(firecrawl, { secret })` on
+  the whole entry now connect by OAuth 2 and throw `oauth_options_required` without its options, nothing sent; an app
+  connects a key with `signInWith(firecrawl, 'key')`. A stored key's calls send the same `Authorization: Bearer`.
+- New entry: Brevo (`mail`), `emails.list`, `emails.get`, `domains.list` and `emails.create`: OAuth 2 first, a public
+  client whose app Brevo reviews before other accounts authorize it, and its API key second, for your own Brevo
+  account, `signInWith(brevo, 'key')`. `declared`.
 - An OAuth 2 error detail never echoes the client's Basic value, also from a request that sent the client in the body.
 - New entries: 24 mail, calendar and meetings providers (acuity, agentmail, avoma, calcom, calendly, circleback, daily,
   fellow, front, gotomeeting, helpscout, krisp, mailjet, meetgeek, missive, nylas, postmark, recallai, resend, savvycal,
