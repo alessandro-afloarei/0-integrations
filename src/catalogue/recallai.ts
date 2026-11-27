@@ -5,8 +5,8 @@ const hosts = ['us-east-1.recall.ai', 'us-west-2.recall.ai', 'eu-central-1.recal
 
 /** Recall.ai: a workspace's API key on its region's host; no endpoint names the account. Bots, billed by active time,
  * are not here. A 429 carries `Retry-After` in seconds: https://docs.recall.ai/reference/errors. Webhooks: `webhook-*`
- * headers, the workspace verification secret (accounts made from 15 December 2025; older Svix headers fail):
- * https://docs.recall.ai/docs/authenticating-requests-from-recallai */
+ * headers and the workspace verification secret; an account made before 15 December 2025 signs its Svix webhooks under
+ * `svix-*` with each endpoint's own secret: https://docs.recall.ai/docs/authenticating-requests-from-recallai */
 const status = { code: 'string', 'sub_code?': 'string', updated_at: 'string' } as const;
 const recording = { id: 'string', created_at: 'string', 'started_at?': 'string', 'completed_at?': 'string', 'expires_at?': 'string',
   status, 'bot?': { id: 'string' }, media_shortcuts: { 'transcript?': { id: 'string' } } } as const;
