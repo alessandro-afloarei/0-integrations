@@ -252,6 +252,54 @@ test('refuses a Standard Webhooks request that is not a fresh `v1` signature of 
   expect(verifyWebhook(gitlab.webhook, standardSigned(`${'v1a,x '.repeat(1400)}${good}`), standardSecret)).toBe(false);
 });
 
+/** An `hmac` webhook keyed with the secret's decoding: the hex digest of the body, and the same with base64. */
+const decodedHex: Webhook = { kind: 'hmac', header: 'x-signature', secret: 'hex' };
+const decodedBase64: Webhook = { kind: 'hmac', header: 'x-signature', secret: 'base64' };
+const keyBytes = Buffer.from('0123456789abcdef0123456789abcdef', 'hex');
+const hmacHex = (key: Buffer | string, content: Buffer | string = body) => createHmac('sha256', key).update(content).digest('hex');
+
+test('`secret` keys the HMAC with the hex or base64 decoding of the secret, never its text', () => {
+  const hexSecret = keyBytes.toString('hex');
+  const base64Secret = keyBytes.toString('base64');
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': hmacHex(keyBytes) }), hexSecret)).toBe(true);
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': hmacHex(keyBytes) }), hexSecret.toUpperCase())).toBe(true);
+  expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(keyBytes) }), base64Secret)).toBe(true);
+  // Signed with the secret's text where the entry decodes it, or with the decoding where it does not: false.
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': hmacHex(hexSecret) }), hexSecret)).toBe(false);
+  expect(verifyWebhook(decodedBase64, request({ 'x-signature': hmacHex(base64Secret) }), base64Secret)).toBe(false);
+  const plain: Webhook = { kind: 'hmac', header: 'x-signature' };
+  expect(verifyWebhook(plain, request({ 'x-signature': hmacHex(keyBytes) }), hexSecret)).toBe(false);
+  expect(verifyWebhook(plain, request({ 'x-signature': hmacHex(hexSecret) }), hexSecret)).toBe(true);
+});
+
+test.each<[string, 'base64' | 'hex']>([
+  ['ab$c', 'base64'], ['YWJj ZGVm', 'base64'], [' YWJjZGVm', 'base64'], ['YWJjZGVm\n', 'base64'], ['YWI', 'base64'], ['YWI==', 'base64'],
+  ['-_8-', 'base64'], ['YQ=', 'base64'], ['', 'base64'], ['====', 'base64'],
+  ['abc', 'hex'], ['0g', 'hex'], ['zz', 'hex'], ['ab cd', 'hex'], ['0x00ff', 'hex'], ['', 'hex'],
+])('a %j secret that is no exact %s keys nothing: false, never its loose decoding or its text', (bad, encoding) => {
+  const webhook = encoding === 'hex' ? decodedHex : decodedBase64;
+  for (const key of [Buffer.from(bad, encoding), Buffer.from(bad)]) {
+    expect(verifyWebhook(webhook, request({ 'x-signature': hmacHex(key) }), bad)).toBe(false);
+  }
+});
+
+test('a decoded secret keeps the signature rules: one header, the whole digest, these bytes', () => {
+  const hexSecret = keyBytes.toString('hex');
+  const good = hmacHex(keyBytes);
+  const flipped = (parseInt(good.slice(0, 1), 16) ^ 1).toString(16) + good.slice(1);
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': flipped }), hexSecret)).toBe(false);
+  expect(verifyWebhook(decodedHex, request({}), hexSecret)).toBe(false);
+  // Two signature headers arrive joined (`a, b`): neither alone is the header.
+  expect(verifyWebhook(decodedHex, { ...request({}), headers: new Headers([['x-signature', good], ['x-signature', good]]) }, hexSecret)).toBe(false);
+  expect(verifyWebhook(decodedHex, request({ 'x-signature': good }, Buffer.from('{"event":"deleted"}')), hexSecret)).toBe(false);
+});
+
+test('a Standard Webhooks secret is decoded as strictly: loose base64 after `whsec_` is false', () => {
+  for (const loose of [`whsec_${standardKey.toString('base64')} `, `whsec_${standardKey.toString('base64url')}-`, `whsec_${standardKey.toString('base64').slice(0, -1)}`]) {
+    expect(verifyWebhook(gitlab.webhook, standardSigned(standardSignature('msg_1', t, Buffer.from(loose.slice(6), 'base64'))), loose)).toBe(false);
+  }
+});
+
 test('an empty secret accepts nothing, whatever the kind', () => {
   const unkeyed = createHmac('sha256', '').update(`${t}.`).update(body).digest('hex');
   expect(verifyWebhook(stripe.webhook, request({ 'stripe-signature': `t=${t},v1=${unkeyed}` }), '')).toBe(false);

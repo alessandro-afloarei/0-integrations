@@ -12,7 +12,7 @@ const sha256 = (value: string) => createHash('sha256').update(value).digest();
 /** Standard Webhooks read as the HMAC it is: `webhook-signature` lists `v1,<base64>` pieces with spaces between, over
  * `<webhook-id>.<webhook-timestamp>.<body>`, keyed with the secret's base64. */
 const STANDARD: Extract<Webhook, { kind: 'hmac' }> = { kind: 'hmac', header: 'webhook-signature', signed: '{timestamp}.{body}',
-  encoding: 'base64', part: 'v1', timestamp: { header: 'webhook-timestamp' } };
+  encoding: 'base64', secret: 'base64', part: 'v1', timestamp: { header: 'webhook-timestamp' } };
 
 export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret: string): boolean {
   const standard = webhook.kind === 'standard';
@@ -50,9 +50,12 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
       return false;
     }
   }
-  // An empty key, which anyone can sign with, accepts nothing.
-  const key = standard ? Buffer.from(secret.replace(/^whsec_/u, ''), 'base64') : secret;
-  if (key.length === 0) return false;
+  // The key is the secret's bytes, or its decoding, which must encode back to it exactly (hex in either case); a key
+  // that decodes loosely, or is empty (anyone can sign with it), accepts nothing.
+  const text = standard ? secret.replace(/^whsec_/u, '') : secret;
+  const key = Buffer.from(text, scheme.secret ?? 'utf8');
+  const exact = scheme.secret === undefined || key.toString(scheme.secret) === (scheme.secret === 'hex' ? text.toLowerCase() : text);
+  if (!exact || key.length === 0) return false;
   const hmac = createHmac(scheme.hash ?? 'sha256', key).update(content);
   const expected = Buffer.from((scheme.prefix ?? '') + hmac.digest(scheme.encoding ?? 'hex'));
   return (scheme.part === undefined ? [received] : named(scheme.part)).some(candidate => {

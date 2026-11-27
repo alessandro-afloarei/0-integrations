@@ -55,7 +55,8 @@ export type Http = { baseUrl: Template;
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
   revoked?: readonly string[]; rules?: readonly { when: When; code: ProviderErrorCode; detail?: string }[] };
 type Timestamp = { header: string; toleranceSeconds?: number };
-/** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `part`: the header is a
+/** How a delivery is signed. `hmac`: `hash: 'sha1'` is HMAC-SHA1 (else SHA-256); `secret`: the key is the secret's
+ * exact `base64` or `hex` decoding (else its bytes); `part`: the header is a
  * comma-separated list of `name=value` pieces, each piece named `part` a signature, any of which may match;
  * `timestamp.part` reads the timestamp from the same list. `ed25519`: the header is the hex signature of `signed`, the
  * secret the provider's public key in hex. `token`: the header is the secret itself. `standard`: Standard Webhooks, the
@@ -63,7 +64,7 @@ type Timestamp = { header: string; toleranceSeconds?: number };
  * `when` holds is answered `{ [echo]: <the body's value> }` (Slack's `url_verification`, Discord's PING). */
 export type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
-    part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+    secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }

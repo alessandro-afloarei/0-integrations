@@ -127,6 +127,7 @@ const entrySchema = z.strictObject({
   webhook: z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('hmac'), header: headerName, signed: template.optional(), prefix: z.string().optional(),
       encoding: z.literal('base64').optional(), hash: z.literal('sha1', "`hash` is 'sha1' or left out (SHA-256)").optional(),
+      secret: z.enum(['base64', 'hex'], "`secret` is 'base64', 'hex' or left out (the key is the secret's own bytes)").optional(),
       part: partName.optional(),
       timestamp: z.union([timestamp, z.strictObject({ part: partName, toleranceSeconds })]).optional(),
       ...webhookParts }),
@@ -138,8 +139,8 @@ const entrySchema = z.strictObject({
     z.strictObject({ kind: z.literal('token'), header: headerName, ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys'
       ? 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out' : undefined) }),
     // The scheme fixes its headers, its signed content and its timestamp.
-    z.strictObject({ kind: z.literal('standard'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys' && issue.keys.every(name => ['header', 'signed', 'timestamp', 'prefix'].includes(name))
-      ? 'a `standard` webhook takes no `header`, `signed`, `timestamp` or `prefix`: Standard Webhooks fixes them' : undefined) }),
+    z.strictObject({ kind: z.literal('standard'), ...webhookParts }, { error: issue => (issue.code === 'unrecognized_keys' && issue.keys.every(name => ['header', 'signed', 'timestamp', 'prefix', 'secret'].includes(name))
+      ? 'a `standard` webhook takes no `header`, `signed`, `timestamp`, `prefix` or `secret`: Standard Webhooks fixes them' : undefined) }),
   ]).optional(),
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(), send: where }),
@@ -914,6 +915,12 @@ test("a webhook `hash` other than 'sha1' fails the schema, with what to fix", ()
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual(["`hash` is 'sha1' or left out (SHA-256)"]);
 });
 
+test.each(['base64url', 'utf8', ''])("a webhook `secret` of %j fails the schema, with what to fix", value => {
+  const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'hmac', header: 'x-signature', secret: value } };
+  expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message))
+    .toEqual(["`secret` is 'base64', 'hex' or left out (the key is the secret's own bytes)"]);
+});
+
 test.each(['prefix', 'encoding', 'hash', 'part'])('an `ed25519` webhook with `%s` fails the schema, with what to fix', part => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret],
     webhook: { kind: 'ed25519', header: 'x-signature-ed25519', [part]: part === 'encoding' ? 'base64' : 'x' } };
@@ -988,10 +995,12 @@ test.each<[string, Record<string, unknown>, string]>([
   ['token', { header: 'x-goog-channel-token', prefix: 'x' }, 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out'],
   ['token', { header: 'x-goog-channel-token', timestamp: { header: 'x-t' } }, 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out'],
   ['token', {}, 'Invalid input: expected string, received undefined'],
+  ['token', { header: 'x-goog-channel-token', secret: 'hex' }, 'a `token` webhook takes only its `header` (and `deliveryId` and `challenge`): leave the rest out'],
+  ['ed25519', { header: 'x-signature-ed25519', secret: 'hex' }, 'Unrecognized key: "secret"'],
   ['standard', { deliveryld: { header: 'webhook-id' } }, 'Unrecognized key: "deliveryld"'],
-  ...['header', 'signed', 'timestamp', 'prefix'].map((part): [string, Record<string, unknown>, string] => ['standard',
+  ...['header', 'signed', 'timestamp', 'prefix', 'secret'].map((part): [string, Record<string, unknown>, string] => ['standard',
     { [part]: part === 'timestamp' ? { header: 'webhook-timestamp' } : 'x' },
-    'a `standard` webhook takes no `header`, `signed`, `timestamp` or `prefix`: Standard Webhooks fixes them']),
+    'a `standard` webhook takes no `header`, `signed`, `timestamp`, `prefix` or `secret`: Standard Webhooks fixes them']),
 ])('a `%s` webhook with %j fails the schema, with what to fix', (kind, parts, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind, ...parts } };
   expect(entrySchema.safeParse(bad).error?.issues.map(issue => issue.message)).toEqual([message]);
