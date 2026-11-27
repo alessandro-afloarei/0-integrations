@@ -39,7 +39,8 @@ export const zendesk = defineProvider({
   errors: { detail: 'error' },
   // `base64(HMACSHA256(TIMESTAMP + BODY))` with the signing secret's text; the timestamp is an ISO 8601 instant
   // (`2021-03-25T05:09:27Z`). Zendesk states no window: the library's 300 seconds apply.
-  // https://developer.zendesk.com/documentation/webhooks/verifying/
+  // https://developer.zendesk.com/documentation/webhooks/verifying/,
+  // https://developer.zendesk.com/documentation/webhooks/anatomy-of-a-webhook-request/
   webhook: { kind: 'hmac', header: 'x-zendesk-webhook-signature', signed: '{timestamp}{body}', encoding: 'base64',
     timestamp: { header: 'x-zendesk-webhook-signature-timestamp', unit: 'iso8601' } },
   // Cursor paging, turned on by `page[size]`: https://developer.zendesk.com/api-reference/introduction/pagination/
