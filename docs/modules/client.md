@@ -16,10 +16,10 @@ const me = await api.json('/users/me');
 ## Options
 
 - `token`: a string, or a function `(rejected?: string) => Promise<string>`. The client calls the function once, and
-  again with the refused token after a 401, so it can renew the token and the request is sent once more. A missing or
-  blank token is `TypeError('token_missing')`, thrown when a request needs it, before anything is sent. For a `token`
-  entry (Zoom, PayPal, Metabase) pass `tokenSource(entry, { secret, values })` from `0-integrations/oauth`
-  ([oauth](oauth.md#a-token-entry-tokensource)).
+  again with the refused token after a 401 (not one a `rateLimit` rule marks), so it can renew the token and the
+  request is sent once more. A missing or blank token is `TypeError('token_missing')`, thrown when a request needs it,
+  before anything is sent. For a `token` entry (Zoom, PayPal, Metabase) pass `tokenSource(entry, { secret, values })`
+  from `0-integrations/oauth` ([oauth](oauth.md#a-token-entry-tokensource)).
 - `fetch`: the global one by default, or `guardedFetch` for an entry whose host the person types (`http.host: '*'`,
   GitLab). See [The address guard](#the-address-guard).
 - `values`: the connection's plain values, as `finishConnect` returned them, for a credential or a base built from

@@ -140,6 +140,24 @@ test("a request with the caller's signal never waits", async () => {
   expect(fake.calls).toHaveLength(1);
 });
 
+test('a 401 a rate-limit rule marks is not renewed and sent again before its stated time; an ordinary 401 is', async () => {
+  const limited401 = defineProvider({ id: 'limited-401', name: 'Limited 401', auth: [{ kind: 'key' }],
+    http: { baseUrl: 'https://api.limited-401.test', retry: {},
+      rateLimit: { when: [{ status: 401, header: 'x-reset', wait: { header: 'x-reset', unit: 's' } }] } } });
+  for (const method of ['GET', 'POST'] as const) {
+    const fake = script(limited401, () => Response.json({}, { status: 401, headers: { 'retry-after': '90', 'x-reset': '120' } }), ok);
+    fake.token.mockResolvedValueOnce('old').mockResolvedValue('new');
+    const result = fake.client.json('/items', { method }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(await result).toMatchObject({ code: 'rate_limited', status: 401, retryAfterMs: 120_000 });
+    expect(fake.calls).toHaveLength(1);
+  }
+  const ordinary = script(limited401, () => Response.json({}, { status: 401 }), ok);
+  ordinary.token.mockResolvedValueOnce('old').mockResolvedValue('new');
+  expect(await ordinary.client.json('/items')).toEqual({ ok: true });
+  expect(ordinary.calls.map(call => call.headers.authorization)).toEqual(['Bearer old', 'Bearer new']);
+});
+
 test('a 401 asks once for a fresh token', async () => {
   const fake = script(hubspot, () => Response.json({}, { status: 401 }), ok);
   fake.token.mockResolvedValueOnce('old').mockResolvedValue('new');
@@ -247,7 +265,7 @@ test('invalid token headers fail without carrying the token', async () => {
   expect(fake.calls).toHaveLength(0);
 });
 
-test('a hanging 429 body times out and is cancelled', async () => {
+test("a hanging 429 body times out twice (the retry's read, then the error's), is cancelled and is rate_limited, sent once", async () => {
   const cancel = vi.fn();
   const body = new ReadableStream<Uint8Array>({ cancel });
   const fake = fakeFetch([{ url: /https:/, respond: () => new Response(body, { status: 429 }) }]);
@@ -255,11 +273,11 @@ test('a hanging 429 body times out and is cancelled', async () => {
   const client = createClient(slow, { token: () => Promise.resolve('t'), fetch: fake.fetch });
   let settled = false;
   const result = client.json('/items').catch((error: unknown) => { settled = true; return error; });
-  await vi.advanceTimersByTimeAsync(19);
+  await vi.advanceTimersByTimeAsync(39);
   expect(settled).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
   expect(settled).toBe(true);
-  expect(await result).toMatchObject({ code: 'unavailable', status: null });
+  expect(await result).toMatchObject({ code: 'rate_limited', status: 429, retryAfterMs: null });
   expect(cancel).toHaveBeenCalledTimes(1);
   expect(fake.calls).toHaveLength(1);
 });
@@ -1413,6 +1431,15 @@ describe('an answer a rate-limit rule marks is retried as a 429 is', () => {
     retrying(retry, { http: { baseUrl: 'https://api.retrying.test', retry, rateLimit: when }, errors: { detail: 'error.errors.0.reason' } });
   const reason = (status: number, code: string, headers: Record<string, string> = {}) => () =>
     Response.json({ error: { errors: [{ reason: code }] } }, { status, headers });
+  const endless = (status: number, headers: Record<string, string>) => () =>
+    new Response(new ReadableStream({ pull: () => new Promise(() => undefined) }), { status, headers });
+
+  test('a body that never arrives keeps the stated wait: rate_limited, sent once, the rule unread is not retried', async () => {
+    const google = marked({}, { when: [{ status: 429 }, { status: 403, detail: 'rateLimitExceeded' }] });
+    expect(await sentOnce(google, endless(429, { 'retry-after': '90' }))).toMatchObject({ code: 'rate_limited', status: 429, retryAfterMs: 90_000 });
+    expect(await sentOnce(github, endless(403, { 'retry-after': '2' }))).toMatchObject({ code: 'rate_limited', status: 403, retryAfterMs: 2000 });
+  });
+
 
   test('a 403 the rule holds for waits the default second, a Retry-After of 2 its two, one of 90 is sent once with its wait', async () => {
     await retriesAfter(marked({}), reason(403, 'rateLimitExceeded'), 1000);

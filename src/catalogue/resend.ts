@@ -43,7 +43,7 @@ export const resend = defineProvider({
         subject: { in: 'body', type: 'string', required: true }, html: { in: 'body', type: 'string' },
         text: { in: 'body', type: 'string' },
         'idempotency-key': { in: 'header', type: 'string',
-          description: 'Up to 256 characters, unique per send: within 24 hours a repeat answers as the first did and sends nothing; another body is a 409.' } },
+          description: 'Up to 256 characters, unique per send: within 24 hours a repeat of a finished send answers as the first did; a 409 if the body differs or the first is in progress.' } },
       result: { id: 'string' } },
   },
 });

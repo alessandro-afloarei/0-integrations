@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Vercel: a full-account token names a team's resources with `teamId` (https://vercel.com/docs/accounts/access-tokens);
- * a 429 past a limit; error codes: https://vercel.com/docs/rest-api/errors. Deployments walk by `pagination.next`, a
- * timestamp sent as `until`, per the access-tokens page. Webhooks: hex HMAC-SHA1 of the body in `x-vercel-signature`
+ * a 429 past a limit; error codes: https://vercel.com/docs/rest-api/errors. Deployments walk by `pagination.next`,
+ * a timestamp as `until` (inferred: the token list's rule). Webhooks: hex HMAC-SHA1 of the body in `x-vercel-signature`
  * (https://vercel.com/docs/webhooks/webhooks-api#securing-webhooks). */
 const deployment = { id: 'string', readyState: 'string', 'name?': 'string', 'projectId?': 'string', 'url?': 'string',
   'inspectorUrl?': 'string', 'createdAt?': 'number' } as const;

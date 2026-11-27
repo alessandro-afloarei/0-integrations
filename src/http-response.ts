@@ -122,10 +122,11 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
   if (rule) return new ProviderHttpError(rule.code, status, rule.detail ?? detail, { retryAfterMs: retryAfterMs(headers, now, stated) });
   const limit = rateLimitOf(entry.http, answer, now);
   // The wait the retry reads (a header's on a rate limit as on a 429), raised to the rule's own when that is later, else
-  // the rule's default: an app that waits it never calls before a stated time.
-  const waited = limit ? declaredWait(entry.http.retry?.wait, { ...answer, status: 429 }, now) ?? limit.own ?? entry.http.rateLimit?.defaultWaitMs
+  // `rateLimit.defaultWaitMs` (a past reset states none): an app that waits it never calls before a stated time.
+  const waited = limit
+    ? declaredWait(entry.http.retry?.wait, { ...answer, status: 429 }, now) ?? (limit.own || undefined) ?? entry.http.rateLimit?.defaultWaitMs
     : stated;
-  const own = limit?.own === undefined ? null : retryAfterMs(new Headers(), now, limit.own);
+  const own = limit?.own ? retryAfterMs(new Headers(), now, limit.own) : null;
   const carried = retryAfterMs(headers, now, waited);
   const metadata = { retryAfterMs: own === null ? carried : Math.max(carried ?? 0, own) };
   if (limit) {

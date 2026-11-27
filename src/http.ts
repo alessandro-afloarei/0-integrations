@@ -35,12 +35,13 @@ export type HttpClient = {
   request(path: string, options?: RequestOptions): Promise<ProviderResponse>;
 };
 
-async function retryBody(response: Response, timeoutMs: number): Promise<string> {
+/** The body of an answer the retry reads, or null when it does not arrive within `timeoutMs`. */
+async function retryBody(response: Response, timeoutMs: number): Promise<string | null> {
   const reader = response.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
   if (!reader) return '';
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => { reject(new ProviderHttpError('unavailable', null)); }, timeoutMs);
+  const timeout = new Promise<null>(resolve => {
+    timer = setTimeout(() => { resolve(null); }, timeoutMs);
   });
   const body = (async () => {
     const chunks: Uint8Array[] = [];
@@ -268,7 +269,10 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
             if ((!RETRIED.includes(status) && !mayLimit) || retryCount >= limit) return;
             const now = Date.now();
             const read = mayLimit || (wait !== undefined && 'path' in wait && !retryAfterMs(headers, now));
-            const body = read ? parseJson(await retryBody(response, timeoutMs)) : undefined;
+            const text = read ? await retryBody(response, timeoutMs) : '';
+            // A body that never arrives is not retried: the answer is classified by its status and headers.
+            if (text === null) return;
+            const body = parseJson(text);
             const declared = mayLimit ? declaredLimit(classify(entry, { status, headers, data: body }, now)) : undefined;
             const limited = status === 429 || declared !== undefined;
             if (!limited && !RETRIED.includes(status)) return;
@@ -331,7 +335,8 @@ export function createClient(entry: Entry, input: HttpOptions): HttpClient {
     const sendAs = (bearer: string) => follow(url, bearer, credentialOf(entry, bearer, input.values ?? {}), options);
     const bearer = await token();
     const response = await sendAs(bearer);
-    if (response.status !== 401) return response;
+    // A 401 a rate-limit rule marks is a limit, not a refused token: never renewed and sent before its stated time.
+    if (response.status !== 401 || declaredLimit(classify(entry, response))) return response;
     const renewed = await renew(bearer);
     return renewed === bearer ? response : sendAs(renewed);
   };
