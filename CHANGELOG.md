@@ -90,9 +90,9 @@ Nothing here is released yet.
     `retry.wait`) and the matching `rateLimit` rule's own `wait`. GitHub's primary limit (a 403 or a 429 with
     `x-ratelimit-remaining: 0`) is never sent again before its reset: with a reset past a minute it is reported,
     carrying the reset, where a shorter `Retry-After` was retried and carried. `onlyStated` still asks for a
-    `Retry-After` (or `retry.wait`); a rule's own wait alone is carried, not retried. A 429 that a rule of the entry may
-    hold for (Google's, GitHub's, Jira's) has its body read, and one whose body does not arrive within `timeoutMs` is
-    `unavailable`, with no wait.
+    `Retry-After` (or `retry.wait`); a rule's own wait alone is carried, not retried. An answer a rule of the entry may
+    hold for (Google's, GitHub's, Jira's) has its body read; one whose body does not arrive within `timeoutMs` is not
+    retried, and is classified by its status and headers (a 429 `rate_limited` with its `Retry-After`, as before).
   - Google's 403 `quotaExceeded` (Calendar's usage limits, which last hours) is still `rate_limited` but never retried,
     and its error carries only a wait the answer states (it carried a minute no page states).
   - For contributors: a recording keeps a declared wait header holding an ISO 8601 instant the engine reads, as it
@@ -272,7 +272,7 @@ Nothing here is released yet.
   now gets `rate_limited` with `retryAfterMs` and waits it itself. Every error's `retryAfterMs` is that stated wait: a
   `Retry-After` of 0 no longer hides Breakcold's or Fireflies' body wait.
 - New: `retry.wait` reads a wait from a header (seconds, milliseconds or an epoch time; of several headers, the longest
-  present; counted on a 429 only) or a body field (on any answer that holds it), and `retry.onlyStated` retries only an
+  present; counted on a 429, or an answer a `rateLimit` rule marks) or a body field (on any answer that holds it), and `retry.onlyStated` retries only an
   answer that states its wait, and no network failure. A wait already past, or 0, counts as none (Breakcold's body 0
   now waits its default minute).
 - Breaking: `retry.waitFromBody` and a rate-limit rule's `resetAt` are gone. An app's own entry writes

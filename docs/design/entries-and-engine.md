@@ -473,10 +473,9 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
   retried after a 429, an answer step 3 decides (Google's 403 `rateLimitExceeded`, Notion's 529), a 408, 500, 502, 503
   or 504, or a network failure (the connection could not be made, or was dropped before an answer), up to `retry.limit`
   retries of any of these together. Such a rate limit is retried as a 429 is; to test a rule, the body is read only when
-  a rule's `status` is the answer's (or it names none, or `error`), within `timeoutMs`. A body that does not arrive in
-  that time is `unavailable` with no wait, so a 429 that a rule of the entry may hold for (Google's, GitHub's, Jira's)
-  is reported so when its body never arrives. The limit counts per request
-  sent: a redirect hop and the resend after a 401 each get their own.
+  a rule's `status` is the answer's (or it names none, or `error`), within `timeoutMs`. An answer whose body does not
+  arrive in that time is not retried, and is classified by its status and headers (a 429 is `rate_limited`, carrying
+  its `Retry-After`). The limit counts per request sent: a redirect hop and the resend after a 401 each get their own.
 - A **wait** (`Wait`) is read from a header, or several (the longest of those present counts), holding a positive
   decimal number, or from a body path holding a number from 0. `s` and `ms` are durations; `epochSeconds` and `epochMs`
   instants, whose wait is the instant minus now, at least 0. An `iso8601` wait is the header's or the path's string read

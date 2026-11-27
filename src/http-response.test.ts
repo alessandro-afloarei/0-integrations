@@ -255,8 +255,9 @@ test.each(['a b', 'a@b.test', 'error\nprivate', 'x'.repeat(65)])('an unsafe prov
   expect(gone).toMatchObject({ detail: null });
 });
 
-test('a reset already past waits 0; one beyond the safe range once in milliseconds the largest; a negative body wait none', () => {
-  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: 0 });
+test('a reset already past states none, so the default; one beyond the safe range the largest; a negative body wait none', () => {
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10) })).toMatchObject({ code: 'rate_limited', retryAfterMs: 60_000 });
+  expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(NOW / 1000 - 10), 'Retry-After': '3' })).toMatchObject({ retryAfterMs: 3000 });
   expect(fail(limits, 403, {}, { 'x-left': '0', 'x-reset': String(Number.MAX_SAFE_INTEGER) }))
     .toMatchObject({ code: 'rate_limited', retryAfterMs: Number.MAX_SAFE_INTEGER });
   const chat: Rules = { http: { ...BASE, retry: { wait: { path: 'waitMs', unit: 'ms' } } } };
