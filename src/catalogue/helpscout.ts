@@ -1,8 +1,8 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Help Scout: OAuth 2 (its app made under Your Profile, My apps). Webhooks: https://developer.helpscout.com/webhooks/
- * A 429 waits `X-RateLimit-Retry-After` seconds: https://developer.helpscout.com/mailbox-api/overview/rate-limiting/.
- * A conversation created with a reply thread emails the customer (`imported` sends nothing; a thread's `draft` drafts).
+/** Help Scout: OAuth 2 on a paid plan (app under My apps): https://docs.helpscout.com/article/1140-mailbox-api
+ * A 429 waits `X-RateLimit-Retry-After` seconds: https://developer.helpscout.com/mailbox-api/overview/rate-limiting/
+ * A reply thread emails the customer (`imported` sends none). Webhooks: https://developer.helpscout.com/webhooks/
  * Lists follow `_links.next`: https://developer.helpscout.com/mailbox-api/overview/pagination/ */
 const conversation = { id: 'integer', 'number?': 'integer', 'type?': 'string', 'status?': 'string', 'state?': 'string',
   'subject?': 'string', 'mailboxId?': 'integer', 'createdAt?': 'string' } as const;
