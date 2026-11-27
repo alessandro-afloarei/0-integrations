@@ -1,12 +1,14 @@
 # `slack`
 
-`slack` exports `slackClient({ token, fetch })`. Sign in with `startConnect(slack, …)` and `finishConnect(slack, …)` (the
-entry at `0-integrations/catalogue/slack`): the account is the team (an org-level install's organization), read from
-the token answer with no request, and
+`slack` exports `slackClient({ token, fetch })`, on slack.com. Sign in with `startConnect(slack, …)` and
+`finishConnect(slack, …)` (the entry at `0-integrations/catalogue/slack`): on slack.com by default, or on GovSlack
+with `values: { domain: 'slack-gov.com' }` (an app registered on api.slack-gov.com). The account is the team (an
+org-level install's organization), read from the token answer with no request; `values.domain` is the instance, and
 `values.botUserId` is the bot user when Slack names one. The client posts once, lists up to
 five pages of 200 channels (`{ items, skipped, channelsCut }`) with a workspace-level token (an org-wide token must send
 `team_id`, which the list does not). `channelsCut` says more pages remain. Revoke a grant
-with `revokeGrant(slack, { accessToken, fetch })` from `0-integrations/oauth`; an already-gone token is a successful
+with `revokeGrant(slack, { accessToken, fetch, values: { domain: 'slack.com' } })` (the connection's `values`) from
+`0-integrations/oauth`; an already-gone token is a successful
 revoke. Token-gone responses from OAuth and the Web API are `GrantRevoked`, with the provider code in `detail`. The fake at `slack/fake` requires the registered
 absolute `redirectUri`, refuses other destinations, and issues one-use codes bound to the authorization's client and
 callback. Tests must authorize before exchanging a fake code.
