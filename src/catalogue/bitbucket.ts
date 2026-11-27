@@ -22,7 +22,7 @@ export const bitbucket = defineProvider({
     tokenUrl: 'https://bitbucket.org/site/oauth2/access_token', clientAuth: 'basic', pkce: false,
     authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   scopes: { default: [] },
-  http: { baseUrl: 'https://api.bitbucket.org/2.0' },
+  http: { baseUrl: 'https://api.bitbucket.org/2.0', retry: {} },
   identify: { request: { path: '/user' }, id: 'uuid', name: ['display_name', 'nickname'] },
   paging: { next: { kind: 'nextUrl', next: 'next' } },
   webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha256=' },
