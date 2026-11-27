@@ -49,7 +49,8 @@ export const freshdesk = defineProvider({
         order_by: { in: 'query', type: 'string', enum: ['created_at', 'due_by', 'updated_at', 'status'] },
         order_type: { in: 'query', type: 'string', enum: ['asc', 'desc'] }, ...perPage },
       result: [ticket] },
-    // Pages of 30 to the answer's `total`; a page past the 10th is refused.
+    // Pages of 30 to the answer's `total`; the page number "should not exceed 10" (300 results), and a search with
+    // more results than ten pages hold does not end quietly.
     'tickets.search': { docs: `${ref}filter_tickets`, path: '/search/tickets', paging: 'search', records: 'results',
       params: { query: { in: 'query', type: 'string', required: true,
         description: 'Ticket fields in double quotes, up to 512 characters: "priority:3 AND status:2".' } },
