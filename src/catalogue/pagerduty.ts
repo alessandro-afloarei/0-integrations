@@ -3,7 +3,7 @@ import { defineProvider } from '../catalogue.js';
 /** PagerDuty: OAuth 2 (Classic User OAuth, Bearer) or an API token as `Token token=`; every account's requests, EU ones
  * too, go to api.pagerduty.com (https://docs.pagerduty.com/developer/rest-api-overview). A created or reopened incident
  * notifies its on-call users (https://docs.pagerduty.com/developer/api-concepts). Webhooks: `v1=` hex HMAC-SHA256
- * pieces; `X-Webhook-Id` repeats across retries (https://docs.pagerduty.com/developer/webhook-behavior). */
+ * pieces, deduped on the signed body's `event.id` (`X-Webhook-Id` is not signed). */
 const incident = { id: 'string', 'title?': 'string', 'status?': 'string', 'html_url?': 'string', 'created_at?': 'string',
   'updated_at?': 'string', 'service?': { 'id?': 'string' } } as const;
 const limit = { limit: { in: 'query', type: 'integer', description: 'Results per page, at most 100.' } } as const;

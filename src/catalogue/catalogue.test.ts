@@ -390,7 +390,7 @@ const runnable = {
     return 'part' in stamp ? webhook.kind !== 'hmac' || stamp.part !== webhook.part : stamp.header !== webhook.header;
   },
   // A challenge has no answer status and no provider code; a body value counts only where the body says it is one.
-  "a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query may leave `when` out)": (entry: Entry) => {
+  "a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query or a header may leave `when` out)": (entry: Entry) => {
     const challenge = entry.webhook?.challenge;
     if (challenge === undefined) return true;
     const { when, echo } = challenge;
@@ -789,13 +789,13 @@ test.each<[Rule, Entry]>([
       .map((webhook): [Rule, Webhook] => ["a `webhook.challenge.echo` header apart from the webhook's signature and timestamp headers", webhook]),
   ] as const).map(([rule, webhook]): [Rule, Entry] => [rule, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook })]),
   ...([{ status: 200, path: 'type', equals: 1 }, { header: 'x-type', equals: '1' }, { path: 'type', detail: 'ping' }, { equals: 1 }] as const)
-    .map((when): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query may leave `when` out)",
+    .map((when): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query or a header may leave `when` out)",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
         webhook: { kind: 'ed25519', header: 'x-signature-ed25519', challenge: { when, echo: 'type' } } })]),
   // (A body `echo` without `when` does not compile.)
   ...([{ echo: { query: 'challenge' }, when: { status: 200, header: 'x-challenge' }, text: true },
     { echo: { query: 'challenge' }, when: { path: 'type', detail: 'ping' }, text: true, unsigned: true }] as const)
-    .map((challenge): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query may leave `when` out)",
+    .map((challenge): [Rule, Entry] => ["a `webhook.challenge.when` with no `status` or `detail`, reading a body `path` when `echo` is one (a query or a header may leave `when` out)",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], webhook: { kind: 'standard', challenge } })]),
   ["an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)", defineProvider({ ...key,
     auth: [{ kind: 'key' }], fields: [secret], paging: { page: { kind: 'page', send: { query: 'page' }, list: 'items' } },

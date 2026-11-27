@@ -649,8 +649,8 @@ sign nothing, so a header is no weaker than the body there.
    `verifyWebhook`, unless the challenge is `unsigned` (Fellow's and Nylas' verification requests carry no signature).
    The value is read at `echo`: a body path (Slack, Discord, Fellow) or a query parameter (Nylas' `challenge`, on a GET
    with no body; a request with a body is no query handshake). The value may be read from a request header
-   (`echo: { header }`, Front's `x-front-challenge`), answered only as `text`, after the request verifies, where `when`
-   holds when given. It answers when `when` holds (a body path needs one; a query or a header may leave it out, the
+   (`echo: { header }`, Front's `x-front-challenge`), answered only as `text`, after the request verifies (unless the
+   challenge is `unsigned`), where `when` holds when given. It answers when `when` holds (a body path needs one; a query or a header may leave it out, the
    value's presence then deciding) and the value is a string of 1 to 512 printable ASCII characters without a space,
    `<` or `>`, or for a JSON answer also a finite number: as JSON `{ [echo]: value }` (a value read from a query or a
    header is answered only as `text`), or with `text` as the value alone, `content-type: text/plain; charset=utf-8`, its

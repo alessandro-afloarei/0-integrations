@@ -4,8 +4,9 @@
 `verifyWebhook(entry.webhook, request, secret)` over the exact raw body bytes, and answers URL challenges with
 `challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification.
 `deliveryId(entry.webhook, request)` reads what the entry declares an app dedupes on: a header, or body paths joined
-with `:`, null when one is missing; a signed scheme (`hmac`, `ed25519`) dedupes on a body path only, since its
-signature covers no header and a replay could rename one. Read it only after `verifyWebhook` accepted the request: an
+with `:`, null when one is missing. A catalogue entry on a signed scheme (`hmac`, `ed25519`) declares a body path,
+never a header (the table refuses a header id there): its signature covers no header, so a replay could rename one.
+Read it only after `verifyWebhook` accepted the request: an
 id such as Fireflies' `event:meeting_id` can be guessed, so deduplicating before verifying lets a forged post suppress
 the real delivery.
 Routing, replay protection, dedupe and the inbox remain in the app.

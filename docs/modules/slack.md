@@ -9,7 +9,8 @@ five pages of 200 channels (`{ items, skipped, channelsCut }`) with a workspace-
 `team_id`, which the list does not). `channelsCut` says more pages remain. Revoke a grant
 with `revokeGrant(slack, { accessToken, fetch, values: { domain: 'slack.com' } })` (the connection's `values`) from
 `0-integrations/oauth`; an already-gone token is a successful
-revoke. Token-gone responses from OAuth and the Web API are `GrantRevoked`, with the provider code in `detail`. The fake at `slack/fake` requires the registered
+revoke. Token-gone responses from a refresh, a revoke and the Web API are `GrantRevoked`, with the provider code in
+`detail`; a refused code exchange is `rejected`, with no detail (Slack's codes are none of RFC 6749's). The fake at `slack/fake` requires the registered
 absolute `redirectUri`, refuses other destinations, and issues one-use codes bound to the authorization's client and
 callback. Tests must authorize before exchanging a fake code.
 
