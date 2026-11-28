@@ -19,6 +19,8 @@ export const klaviyo = defineProvider({
   categories: ['marketing'],
   fields: [{ name: 'apiKey', title: 'Private API key', secret: true,
     help: 'For your own Klaviyo account (an app for other accounts connects with the OAuth 2 sign-in, which Klaviyo requires of its published partners): a private key (pk_) made under Settings, API keys, by an Owner, Admin or Manager, with read access to Accounts, Campaigns, Lists and Profiles and write access to Events, Lists, Profiles and Subscriptions. A key\'s scopes cannot be changed once it is made.' }],
+  // A company-scoped app (Klaviyo's default): a user-scoped app's token acts as the user who installed it.
+  // https://developers.klaviyo.com/en/docs/user_scoped_apps
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://www.klaviyo.com/oauth/authorize', tokenUrl: 'https://a.klaviyo.com/oauth/token',
     clientAuth: 'basic', authorizeParams: { response_type: 'code' } },
   { kind: 'key', send: { header: 'authorization', value: 'Klaviyo-API-Key {apiKey}' } }],
@@ -47,8 +49,9 @@ export const klaviyo = defineProvider({
       params: { 'page[size]': { ...size, description: '10 by default, at most 10.' } },
       result: { data: [{ id: 'string', attributes: { 'name?': 'string', 'created?': 'string', 'updated?': 'string',
         'opt_in_process?': 'string' } }] } },
-    // Subscribes people to email marketing: on a list with double opt-in each is first emailed a confirmation, and the
-    // list's "Added to list" flows start; `historical_import: true` sends neither.
+    // Subscribes people to email marketing and lifts their unsubscribe, spam-report and user suppressions: on a list
+    // with double opt-in each is first emailed a confirmation, and its "Added to list" flows start;
+    // `historical_import: true` sends neither.
     'subscriptions.create': { docs: `${ref}/bulk_subscribe_profiles`, method: 'POST', path: '/profile-subscription-bulk-create-jobs',
       params: { data: { in: 'body', required: true, type: { type: 'profile-subscription-bulk-create-job',
         attributes: { profiles: { data: [{ type: 'profile', 'id?': 'string', attributes: { 'email?': 'string',
