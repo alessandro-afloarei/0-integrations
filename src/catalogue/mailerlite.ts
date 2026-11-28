@@ -45,7 +45,7 @@ export const mailerlite = defineProvider({
       params: { email: { in: 'body', type: 'string', required: true }, ...fields,
         groups: { in: 'body', type: ['string'], description: 'Group ids to add the subscriber to; none is removed.' },
         status: { in: 'body', type: 'string', enum: ['active', 'unsubscribed', 'unconfirmed', 'bounced'],
-          description: 'New subscribers default to active, or unconfirmed with double opt-in; junk is not offered. For an unsubscribed, bounced or junk subscriber active is ignored (resubscribe, which reactivates them, is not declared).' } },
+          description: 'New subscribers default to active, or unconfirmed with double opt-in; junk is not offered. For an existing unsubscribed, bounced or junk subscriber the request fails with 422 if status is left out; active is ignored and any other status is applied (resubscribe, which reactivates them, is not declared; subscribers.update changes their other fields).' } },
       result: { data: subscriber } },
     // Adding a group or changing a field can start an automation the account set up, which can email the subscriber:
     // https://developers.mailerlite.com/api/automation-triggers
