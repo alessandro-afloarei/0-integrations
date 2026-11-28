@@ -346,7 +346,9 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     codes (`invalid_grant`, `invalid_client`, …), else none; any other answer is classified as a call's is (a 404
     `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`, the rest `request_failed`), no code
     reading as a revoked grant: the entry's `errors.revoked` list is not read, since no grant existed. An answer whose
-    body breaks while it is read, refused or not, is `unavailable`. No detail holds a secret field, a body value filled from one, or the
+    body breaks while it is read, refused or not, is `unavailable`. A refused answer is read up to 10 MiB, the bound
+    the HTTP library puts on a call's error body; a larger one is classified from its status and headers alone, with
+    no detail. A 2xx is read whole (an exchange's by oauth4webapi), with no bound. No detail holds a secret field, a body value filled from one, or the
     Basic value sent.
     The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps

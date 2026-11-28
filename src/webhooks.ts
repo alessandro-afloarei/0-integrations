@@ -1,8 +1,9 @@
 import { createHash, createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
-import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { Webhook } from './catalogue.js';
 import { instantMs } from './http-response.js';
 import { holds, parseJson, readPath } from './rules.js';
+
+export { readCappedBody } from './http-response.js';
 
 export type WebhookRequest = { method: string; url: string; headers: Headers; rawBody: Uint8Array };
 
@@ -113,21 +114,4 @@ export function challengeAnswer(webhook: Webhook, request: WebhookRequest, secre
   // ASCII, so its length is its byte count: stated, an adapter that streams the answer sends no chunks (Nylas refuses them).
   return text ? new Response(String(value), { headers: { 'content-type': 'text/plain; charset=utf-8',
     'content-length': String(String(value).length), 'x-content-type-options': 'nosniff' } }) : Response.json({ [name]: value });
-}
-
-export async function readCappedBody(request: Request, maxBytes: number): Promise<Buffer | null> {
-  const reader = request.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
-  if (!reader) return Buffer.alloc(0);
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return Buffer.concat(chunks, bytes);
-    bytes += value.byteLength;
-    if (bytes > maxBytes) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(Buffer.from(value));
-  }
 }

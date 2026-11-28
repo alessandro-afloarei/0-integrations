@@ -1,3 +1,4 @@
+import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { Entry, Errors, Http, Retry, Wait } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError, type ProviderErrorCode } from './errors.js';
 import type { ProviderResponse } from './http.js';
@@ -135,4 +136,22 @@ export function classify(entry: Pick<Entry, 'http' | 'errors'>, response: Provid
     return error;
   }
   return new ProviderHttpError(ok ? 'request_failed' : statusCode(status), status, detail, metadata);
+}
+
+/** A body of at most `maxBytes`, or null past them (the read stops there); a webhook's, or a refused token answer's. */
+export async function readCappedBody(request: Pick<Request, 'body'>, maxBytes: number): Promise<Buffer | null> {
+  const reader = request.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
+  if (!reader) return Buffer.alloc(0);
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return Buffer.concat(chunks, bytes);
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(Buffer.from(value));
+  }
 }

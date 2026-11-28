@@ -254,6 +254,63 @@ test("a 200 the `failed` rule marks takes its detail as a 400 does: the body's `
     new ProviderHttpError('rejected', 400, 'invalid_grant')]);
 });
 
+/** 10 MiB: the bound the HTTP library puts on a call's error body, and on a first token request's refused answer. */
+const LIMIT = 10 * 1024 * 1024;
+/** Answers of `padding` spaces then `tail`, in 1 MiB chunks pulled one at a time; each answer counts the bytes read from it. */
+function counted(status: number, padding: number, tail: string, headers: Record<string, string> = {}) {
+  const reads: number[] = [];
+  const chunk = new Uint8Array(1024 * 1024).fill(32);
+  const end = new TextEncoder().encode(tail);
+  const answer = () => {
+    const at = reads.push(0) - 1;
+    let sent = 0;
+    return new Response(new ReadableStream<Uint8Array>({ pull(controller) {
+      const part = sent < padding ? chunk.subarray(0, Math.min(chunk.length, padding - sent)) : end;
+      controller.enqueue(part);
+      sent += part.length;
+      reads[at] = (reads[at] ?? 0) + part.length;
+      if (part === end) controller.close();
+    } }, { highWaterMark: 0 }), { status, headers: { 'content-type': 'application/json', ...headers } });
+  };
+  return { answer, reads };
+}
+
+test("a first token request's refused answer is read up to 10 MiB; past it, classified by status and headers alone, on both paths", async () => {
+  const pair = firstRequests({ detail: 'error' });
+  // The reviewer's 503: its JSON error after more than the limit of padding; its wait is a header's.
+  const busy = counted(503, LIMIT + 2 * 1024 * 1024, '{"error":"invalid_grant"}', { 'retry-after': '30' });
+  const unavailable = await pair(busy.answer);
+  expect(unavailable.exchange).toEqual(unavailable.token);
+  expect(unavailable.exchange).toMatchObject({ code: 'unavailable', status: 503, detail: null, retryAfterMs: 30_000 });
+  // The read stops at the limit (one chunk past it at most), on each path.
+  for (const bytes of busy.reads) expect(bytes).toBeLessThanOrEqual(LIMIT + 1024 * 1024);
+  const refused = counted(400, LIMIT + 1, '{"error":"invalid_grant"}');
+  const rejected = await pair(refused.answer);
+  expect(rejected.exchange).toEqual(rejected.token);
+  expect(rejected.exchange).toEqual(new ProviderHttpError('rejected', 400, null));
+  for (const bytes of refused.reads) expect(bytes).toBeLessThanOrEqual(LIMIT + 1024 * 1024);
+  // Exactly at the limit: read whole, and classified with its detail.
+  const tail = '{"error":"invalid_grant"}';
+  const atLimit = await pair(counted(400, LIMIT - tail.length, tail).answer);
+  expect(atLimit.exchange).toEqual(atLimit.token);
+  expect(atLimit.exchange).toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
+  // A refusal that breaks while it is read is `unavailable`, on each path.
+  const broken = await pair(() => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode('{"err'));
+    controller.error(new TypeError('terminated'));
+  } }), { status: 400, headers: { 'content-type': 'application/json' } }));
+  expect(broken.exchange).toEqual(broken.token);
+  expect(broken.exchange).toEqual(new ProviderHttpError('unavailable', null));
+});
+
+test('a successful token answer past 10 MiB is read whole, on both paths, and an exchange checks `failed` without refusing it', async () => {
+  const large = counted(200, LIMIT + 1024 * 1024, '{"access_token":"a","token_type":"bearer","ok":true}');
+  for (const failed of [undefined, { path: 'ok', equals: false }] as const) {
+    const answered = await firstRequests({}, failed)(large.answer);
+    expect(answered).toEqual({ token: 'answered', exchange: 'answered' });
+  }
+});
+
 test("a refused exchange's detail never echoes the code, the verifier or the client's secret", async () => {
   const verifier = 'private-code-verifier-0123456789';
   for (const echoed of [exchange.code, verifier, client.clientSecret]) {

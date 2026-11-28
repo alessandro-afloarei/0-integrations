@@ -65,6 +65,9 @@ Nothing here is released yet.
   `token` sign-in's, no longer reads the entry's own `errors.revoked` list, so an app's own `token` entry that lists a
   code there gets no `GrantRevoked` from it on a first request. An app that caught `GrantRevoked` or `request_failed`
   from `finishConnect` or `exchangeCode` to ask the person to connect again catches `rejected`.
+- A first token request's refused answer, an exchange's or a `token` sign-in's, is read up to 10 MiB, the bound a call's
+  error body has; a larger one is classified from its status and headers alone, with no detail (a 503 keeps its wait).
+  A successful answer is read whole, as before.
 - Breaking: an OAuth refusal that carries a `WWW-Authenticate` challenge (Doorkeeper sends one on every error, RFC 6749
   asks for one beside a 401 `invalid_client`) is read from its body as any other refusal is. A refresh refused that way
   with `invalid_grant` or a code the entry lists as revoked is `GrantRevoked`, no longer `request_failed`: the

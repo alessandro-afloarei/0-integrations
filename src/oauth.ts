@@ -3,7 +3,7 @@ import { lookupNames } from './account.js';
 import type { Entry, Kept, Plain, Values, ValuesOption, When } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
-import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
+import { classify, codeOf, readCappedBody, responseJson, safeDetail, sentWith } from './http-response.js';
 import { checkHosts, ENGINE_PARAMS, fill, holds, namedHosts, oauthUrls, parseJson, placeholders, plainFields, plainValue, readPath } from './rules.js';
 
 export type Grant = { accessToken: string; refreshToken: string | null; expiresAt: string | null };
@@ -170,9 +170,7 @@ export async function exchangeCode<const E extends Entry>(entry: E, client: OAut
   if (codeVerifier) params.set('code_verifier', codeVerifier);
   const secrets = [...c.secrets, code, codeVerifier ?? ''];
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options), true);
-  // Read whole as a `token` sign-in's first answer is: one that breaks while it is read is `unavailable`.
-  const text = await response.clone().text().catch(() => { throw new ProviderHttpError('unavailable', null); });
-  const refused = firstTokenError(entry, sentWith({ status: response.status, headers: response.headers, data: parseJson(text) }, secrets), secrets, c.config.failed);
+  const refused = firstTokenError(entry, await firstAnswer(response.ok ? response.clone() : response, secrets), secrets, c.config.failed);
   if (refused) throw refused;
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
@@ -238,6 +236,13 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
 }
 
 const RFC6749_ERRORS = ['invalid_request', 'invalid_client', 'invalid_grant', 'unauthorized_client', 'unsupported_grant_type', 'invalid_scope'];
+/** A first token answer: a refusal read up to 10 MiB (the bound the HTTP library puts on a call's error body), else no body
+ * and so no detail; a 2xx whole (an exchange's from a clone, oauth4webapi reading it after). A broken read is `unavailable`. */
+async function firstAnswer(response: Response, secrets: readonly string[]): Promise<ProviderResponse> {
+  const read = response.ok ? response.text() : readCappedBody(response, 10 * 1024 * 1024).then(bytes => bytes?.toString('utf8') ?? '');
+  const text = await read.catch(() => { throw new ProviderHttpError('unavailable', null); });
+  return sentWith({ status: response.status, headers: response.headers, data: parseJson(text) }, secrets);
+}
 /** A first token request's answer (a code exchange, a `token` sign-in) as its error, or null: RFC 6749 §5.2's 400, 401,
  * 403 and a 200 `failed` marks are `rejected`, the detail the answer's `error` if one of the RFC's codes; any other is
  * classified as a call's answer is, but no code reads as a revoked grant: none existed. */
@@ -279,7 +284,7 @@ export async function requestToken(entry: Entry, input: TokenInput): Promise<{ t
   try {
     const answer = await (input.fetch ?? defaultFetch(entry))(url, { method: 'POST', headers, redirect: 'manual',
       body: request.json ? JSON.stringify(body) : new URLSearchParams(body), signal: AbortSignal.timeout(entry.http.timeoutMs ?? 30_000) });
-    response = sentWith({ status: answer.status, headers: answer.headers, data: parseJson(await answer.text()) }, secrets);
+    response = await firstAnswer(answer, secrets);
   } catch (error) {
     if (error instanceof ProviderHttpError) throw error; // the address guard's refusal
     throw new ProviderHttpError('unavailable', null);
