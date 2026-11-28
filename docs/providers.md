@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 161 providers: 161 declared, 0 recorded;
-745 typed operations; webhooks: basic 4, ed25519 1, hmac 53, standard 8, token 5. What waits is in the [waiting list](waiting-list.md).
+744 typed operations; webhooks: basic 4, ed25519 1, hmac 54, standard 8, token 5. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -50,7 +50,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 161 providers:
 | [Discord](https://docs.discord.com/developers/reference) | chat | key | — | ed25519 | declared |
 | [Dixa](https://docs.dixa.io/openapi/dixa-api/v1/organization/getorganization) | support | key | conversations.search, conversations.get, conversations.create, messages.list, messages.create, notes.create, endUsers.list | — | declared |
 | [eDesk](https://developers.edesk.com/reference/whoami) | support | key | tickets.list, tickets.get, tickets.create, tickets.update, messages.list, messages.create, contacts.list, channels.list | — | declared |
-| [EmailOctopus](https://emailoctopus.com/api-documentation/v2) | marketing | key | lists.list, contacts.list, contacts.get, contacts.create, contacts.update, campaigns.list, campaigns.get | — | declared |
+| [EmailOctopus](https://emailoctopus.com/api-documentation/v2) | marketing | key | lists.list, contacts.list, contacts.get, contacts.create, contacts.update, campaigns.list, campaigns.get | hmac | declared |
 | [Exa](https://exa.ai/docs/reference/search) | search | key | — | — | declared |
 | [Fathom](https://developers.fathom.ai/quickstart) | meetings | key | — | — | declared |
 | [Fellow](https://developers.fellow.ai/reference/authentication-1) | meetings | key | recordings.list, recordings.get | standard | declared |
@@ -89,7 +89,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 161 providers:
 | [Iterable](https://api.iterable.com/api/docs) | marketing | key | lists.list, users.get, users.create, subscriptions.create, events.create, campaigns.list, campaigns.get, campaigns.create | token | declared |
 | [Jira](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/) | tasks | OAuth 2 | — | — | declared |
 | [Jotform](https://api.jotform.com/docs/) | marketing | key | forms.list, forms.get, submissions.list, submissions.get | — | declared |
-| [Kit](https://developers.kit.com/api-reference/authentication) | marketing | OAuth 2, key | tags.list, subscribers.list, subscribers.get, subscribers.create, subscribers.update, broadcasts.list, broadcasts.get, broadcasts.create | hmac | declared |
+| [Kit](https://developers.kit.com/api-reference/authentication) | marketing | OAuth 2, key | tags.list, subscribers.list, subscribers.get, subscribers.create, subscribers.update, broadcasts.list, broadcasts.get | hmac | declared |
 | [Klaviyo](https://developers.klaviyo.com/en/docs/set_up_oauth) | marketing | OAuth 2, key | profiles.list, profiles.get, profiles.create, profiles.update, lists.list, subscriptions.create, campaigns.list, campaigns.get, events.create | — | declared |
 | [Krisp](https://meeting-api-docs.krisp.ai/reference/get_me) | meetings | key | meetings.list, meetings.get | token | declared |
 | [Leadfeeder (formerly Dealfront)](https://docs.leadfeeder.com/api/public/authentication-354547m0) | sales | key | contacts.search, contacts.get, companies.search, companies.get | — | declared |
