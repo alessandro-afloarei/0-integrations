@@ -28,6 +28,8 @@ export const zernio = defineProvider({
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://zernio.com/oauth/authorize', tokenUrl: 'https://zernio.com/api/oauth/token',
     clientAuth: 'none', authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   // `posts:write` includes `posts:read`.
+  // Each declared read of posts takes `posts:read` or `posts:write`, and `posts.create` `posts:write`; accounts and
+  // `/users/me` take `accounts:read` (`x-oauth-scopes`): https://zernio.com/openapi.json
   scopes: { default: ['accounts:read', 'posts:write'] },
   // RFC 7009, "to end the grant": the refresh token, which ends the whole connection.
   revoke: { url: 'https://zernio.com/api/oauth/revoke', token: ['refresh'] },
