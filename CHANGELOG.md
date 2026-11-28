@@ -5,19 +5,22 @@
 Nothing here is released yet.
 
 - New: a host chosen from a field's own `choices` (a URL's whole host, `https://{name}`) may sit beside fixed OAuth 2
-  URLs and other chosen hosts; its value is checked against those choices on every send (a call, identify, an
-  authorize URL, an exchange, a refresh, a revoke, a token request), before a credential is read or anything is sent.
+  URLs and other chosen hosts; its value is checked against those choices on every send whose URL it fills (a call,
+  identify, an authorize URL, an exchange, a refresh, a revoke, a token request), before a credential is read or
+  anything is sent.
   Intercom's OAuth 2 sign-in chooses its region's authorize host (`appHost`: `app.intercom.com`, `app.eu.intercom.com`
   or `app.au.intercom.com`), which an EU or Australian workspace signing in with Google needs; its token URL and base
   stay on `api.intercom.io`.
 - Breaking: a stored value of a field with `choices` that is not exactly one of them, one differing only in case
-  included (`API.EU.INTERCOM.IO`), is `base_host_refused` on a call, identify, a refresh and a revoke, where its host
-  used to pass because the URL parser lowercases it. `startConnect` and `finishConnect` already refused it
-  (`connect_field_invalid`), so every connection they made is unchanged. An RFC 7009 revoke fills and checks its URLs
-  before it reads a token, so one given no token is refused too when its `values` are.
-- Breaking: Intercom's OAuth 2 connections keep `appHost`. `authorizeUrl`, `refreshGrant` and `revokeGrant` require it
-  in `values` (`'app.intercom.com'` for a connection made before, the host it signed in on), and a refresh without it
-  is `template_missing` before anything is sent. `client()` takes it too; its calls stay on `api.intercom.io`.
+  included (`API.EU.INTERCOM.IO`), is `base_host_refused` on a call, identify, an authorize URL, an exchange, a refresh
+  and a revoke, where its host used to pass because the URL parser lowercases it. `startConnect` and `finishConnect`
+  already refused it (`connect_field_invalid`), so every connection they made is unchanged. A revoke now fills and
+  checks its URLs (an RFC 7009 revoke's, a request revoke's base) before it reads a token: one given no token whose
+  `values` are missing or refused is `template_missing` or `base_host_refused` where it used to be done; pass the
+  connection's `values`.
+- Breaking: Intercom's OAuth 2 connections keep `appHost`. `authorizeUrl`, `exchangeCode` and `refreshGrant` need it in
+  `values` (`'app.intercom.com'` for a connection made before, the host it signed in on), else `template_missing`
+  before anything is sent; `revokeGrant` and `client()` take it, and their calls stay on `api.intercom.io`.
 - A `page`, `offset` or `last` walk whose list has the same JSON text as its first page's is `page_repeated`, as one
   with the page before's is: a provider that answers its first page's text again past the end no longer has it yielded
   a second time, or walks on forever. A `last` walk that met its first page's text again now reports `page_repeated`

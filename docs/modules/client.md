@@ -31,7 +31,7 @@ const me = await api.json('/users/me');
   built.
 - `baseUrl` replaces the entry's base, for a test server or another path or version on the provider's host: used as
   given, neither filled nor checked against `http.host`, but like every URL the library sends to it must parse and be
-  https with no username or password, and for an entry whose host is typed it must keep the filled base's origin
+  https with no username or password, and for an entry whose host is templated it must keep the filled base's origin
   (`TypeError('base_host_refused: <entry id>')`, before the token is read).
 - `minIntervalMs` replaces the entry's.
 - `headers` are merged with the entry's, a header of the same name winning; an operation's header parameters go over

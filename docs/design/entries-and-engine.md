@@ -157,7 +157,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 A placeholder in `http.baseUrl` names a plain field or a `save` key (in the host, one read from the token answer is a
 named host, below). In the host (between `https://` and the next `/`)
-it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
+it is a host part, and the base needs `http.host`, the hosts a templated URL of the entry may have: a name (`api.example.com`), `*.`
 and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those (the filled host
 matches one), or `*` (any). Intercom's region is the first: its access token's `baseUrl: 'https://{apiHost}'`, with
 `apiHost` a field whose `choices` are its three API hosts and `host` those three names; Smartsheet's products are the
@@ -169,7 +169,7 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
   is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
-  after the one check below that every URL the library sends to passes; on a typed or named host it must keep the
+  after the one check below that every URL the library sends to passes; on a typed, chosen or named host it must keep the
   filled base's origin (else `base_host_refused`, before the token is read); on a fixed base it is the app's own
   explicit choice of origin.
 - The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
@@ -212,7 +212,8 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   person's browser.
 - **A host chosen from a field's own list.** A placeholder that is a URL's whole host (`https://{name}`) and names a
   plain field with `choices` is a *chosen* host: the entry wrote every host it may take. It is no typed host: beside
-  fixed OAuth 2 URLs, and beside other chosen hosts, it is no split (`hostSplit`). Beside a named host, or composed
+  fixed URLs (OAuth 2's, a token request's; a call on a fixed `http.bases` value is still refused, since an own base
+  must keep the filled base's origin), and beside other chosen hosts, it is no split (`hostSplit`). Beside a named host, or composed
   into another host (`https://api.{region}.example.com`), it is typed, and the split rule applies. Intercom's OAuth 2
   sign-in is the first: `authorizeUrl: 'https://{appHost}/oauth'` beside its fixed token URL and base.
   - Its value must be exactly one of the field's choices, case included, wherever it fills a host: the base, an OAuth 2
