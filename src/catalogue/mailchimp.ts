@@ -47,7 +47,7 @@ export const mailchimp = defineProvider({
     // Adds a member: on a double opt-in audience `pending` sends Mailchimp's confirmation email, which no parameter
     // stops; an audience with a welcome automation connected (`has_welcome`) emails the person who joins:
     // https://mailchimp.com/developer/marketing/build/quickstarts/import-and-export-contacts/
-    'members.create': { docs: `${ref}/lists/members/create-member`, method: 'POST', path: '/lists/{list_id}/members',
+    'members.create': { docs: `${ref}/lists/members/create-member`, method: 'POST', path: '/lists/{list_id}/members', kind: 'write',
       params: { ...listId, email_address: { in: 'body', type: 'string', required: true },
         status: { in: 'body', type: 'string', required: true, enum: ['subscribed', 'unsubscribed', 'cleaned', 'pending', 'transactional'],
           description: 'On a double opt-in audience, pending sends the confirmation email; subscribed skips it.' },
@@ -55,7 +55,7 @@ export const mailchimp = defineProvider({
     'members.update': { docs: `${ref}/lists/members/update-member`, method: 'PATCH', path: '/lists/{list_id}/members/{subscriber_hash}',
       params: { ...listId, ...subscriberHash, email_address: { in: 'body', type: 'string' },
         status: { in: 'body', type: 'string', enum: ['subscribed', 'unsubscribed', 'cleaned', 'transactional'],
-          description: 'pending, which can send the confirmation email, is not offered.' }, ...written }, result: member },
+          description: 'pending, which can send the confirmation email, is not offered; no page says whether subscribed re-subscribes a person who unsubscribed.' }, ...written }, result: member },
     'campaigns.list': { docs: `${ref}/campaigns/list`, path: '/campaigns',
       params: { ...page, list_id: { in: 'query', type: 'string' },
         status: { in: 'query', type: 'string', enum: ['save', 'paused', 'schedule', 'sending', 'sent'] } },
