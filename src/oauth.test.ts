@@ -190,6 +190,22 @@ test('a refusal that carries a `WWW-Authenticate` challenge is read from its bod
   await expect(refreshed(granted)).resolves.toMatchObject({ accessToken: 'a', refreshToken: 'r' });
 });
 
+test('a refused answer whose body breaks while it is read is `unavailable`, never the platform\'s own error', async () => {
+  const codeVerifier = 'private-code-verifier-0123456789';
+  // A cut connection, and the request's own timeout firing while the body streams.
+  for (const reason of [new TypeError('terminated'), new DOMException('The operation was aborted due to timeout', 'TimeoutError')]) {
+    const broken = () => new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"err'));
+      controller.error(reason);
+    } }), { status: 400, headers: { 'content-type': 'application/json' } });
+    const fetch = fakeFetch([{ url: /https:/, respond: broken }]).fetch;
+    await expect(exchangeCode(pkced, client, { ...exchange, codeVerifier, fetch })).rejects.toEqual(new ProviderHttpError('unavailable', null));
+    // The refresh and the revoke read the body inside oauth4webapi, as before.
+    await expect(refreshGrant(pkced, client, 'r', { fetch })).rejects.toBeInstanceOf(ProviderHttpError);
+    await expect(revokeGrant(bodied, { accessToken: 'private-access-token-0123456789', client, fetch })).rejects.toBeInstanceOf(ProviderHttpError);
+  }
+});
+
 test("a refused exchange's detail never echoes the code, the verifier or the client's secret", async () => {
   const verifier = 'private-code-verifier-0123456789';
   for (const echoed of [exchange.code, verifier, client.clientSecret]) {

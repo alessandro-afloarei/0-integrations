@@ -118,11 +118,9 @@ function context(entry: Entry, credentials: AnyClient, input: Sent, refresh = fa
 
 type Context = ReturnType<typeof context>;
 
-/** An OAuth refusal: of a code exchange `rejected` (no grant existed), else `invalid_grant` or a revoked code is a gone
- * grant; the detail never holds what the request sent. */
-function refusal(code: string, entry: Entry, status: number, secrets: readonly string[], exchange: boolean): Error {
+/** An OAuth refusal: `invalid_grant` or a revoked code is a gone grant; the detail never holds what the request sent. */
+function refusal(code: string, entry: Entry, status: number, secrets: readonly string[]): Error {
   const detail = safeDetail(code, secrets);
-  if (exchange) return new ProviderHttpError('rejected', status, rfcDetail(code, secrets));
   if (code === 'invalid_grant' || entry.errors?.revoked?.includes(code)) return new GrantRevoked(detail);
   return new ProviderHttpError('request_failed', status, detail);
 }
@@ -146,14 +144,14 @@ async function send(c: Context, entry: Entry, secrets: readonly string[], work: 
     }
     const code = codeOf(entry.errors, body);
     if (holds(failed, { status: response.status, headers: response.headers, body, code })) {
-      throw refusal(code ?? '', entry, response.status, secrets, exchange);
+      throw exchange ? new ProviderHttpError('rejected', response.status, rfcDetail(code, secrets)) : refusal(code ?? '', entry, response.status, secrets);
     }
   }
   return response;
 }
 
 function processingError(error: unknown, entry: Entry, status: number, secrets: readonly string[]): Error {
-  if (error instanceof oauth.ResponseBodyError) return refusal(error.error, entry, status, secrets, false);
+  if (error instanceof oauth.ResponseBodyError) return refusal(error.error, entry, status, secrets);
   return new ProviderHttpError(status >= 200 && status < 300 ? 'invalid_response' : 'request_failed', status);
 }
 
@@ -171,9 +169,8 @@ export async function exchangeCode<const E extends Entry>(entry: E, client: OAut
   if (codeVerifier) params.set('code_verifier', codeVerifier);
   const secrets = [...c.secrets, code, codeVerifier ?? ''];
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options), true);
-  // Refused as a `token` sign-in's first request is: no grant existed.
   const refused = response.ok ? null : firstTokenError(entry, sentWith({ status: response.status, headers: response.headers,
-    data: parseJson(await response.text()) }, secrets), secrets);
+    data: parseJson(await response.text().catch(() => { throw new ProviderHttpError('unavailable', null); })) }, secrets), secrets);
   if (refused) throw refused;
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
