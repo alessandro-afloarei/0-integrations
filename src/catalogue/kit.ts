@@ -26,10 +26,10 @@ export const kit = defineProvider({
   scopes: { default: [] },
   http: { baseUrl: 'https://api.kit.com/v4', retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/account' }, id: 'account.id', name: ['account.name', 'user.email'] },
-  // `v1` is a hex HMAC-SHA256 of `{t}.{raw_body}` keyed with the endpoint's secret; `delivery_id` is reused by a retry:
+  // `v1` is a hex HMAC-SHA256 of `{t}.{raw_body}` keyed with the endpoint's secret. No delivery id: Kit says to dedupe
+  // on each event's `id` in `events` (1 to 100 a delivery), not on `delivery_id`, so an app dedupes event by event:
   // https://developers.kit.com/webhooks/verifying-signatures, https://developers.kit.com/webhooks/delivery-format
-  webhook: { kind: 'hmac', header: 'x-kit-signature', part: 'v1', timestamp: { part: 't' }, signed: '{timestamp}.{body}',
-    deliveryId: { body: ['delivery_id'] } },
+  webhook: { kind: 'hmac', header: 'x-kit-signature', part: 'v1', timestamp: { part: 't' }, signed: '{timestamp}.{body}' },
   paging: { cursor: { kind: 'cursor', next: 'pagination.end_cursor', more: 'pagination.has_next_page', send: { query: 'after' } } },
   operations: {
     'tags.list': { docs: `${ref}/tags/list-tags`, path: '/tags', paging: 'cursor', records: 'tags', params: perPage,
