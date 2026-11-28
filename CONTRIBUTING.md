@@ -127,8 +127,9 @@ entry:
   when left out) and never beside `onlyStated`;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body) and none sits where its paging shape's `send` writes, no `result` holds a
-  literal type and no literal is empty or differs from a type name by its case or one edit (`'strng'`, `'Integer'`), a
-  paged operation names a declared shape and no `notFound`, a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's
+  literal type, no literal is empty or differs from a type name by its case or one edit (`'strng'`, `'Integer'`), no
+  parameter whose type is a literal is `nullable` (it would send `null` beside its one value), a paged operation names
+  a declared shape and no `notFound`, a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's
   `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id is
   a client call or a dotted prefix of another;
 - has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields
