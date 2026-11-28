@@ -36,19 +36,21 @@ export const iterable = defineProvider({
       result: { 'user?': { email: 'string', 'userId?': 'string', 'dataFields?': 'unknown' } } },
     // Can enter the user into a journey whose entry source is a profile update or a new user, which can message them:
     // https://support.iterable.com/hc/en-us/articles/15934993720468-Start-Tile
-    'users.create': { docs: spec, method: 'POST', path: '/api/users/update', anyOf: [['email'], ['userId']],
+    'users.create': { docs: spec, method: 'POST', kind: 'write', path: '/api/users/update', anyOf: [['email'], ['userId']],
       params: { ...user, dataFields: { in: 'body', type: 'unknown', description: 'The data stored on the user profile; merged, so missing fields are kept.' },
         mergeNestedObjects: { in: 'body', type: 'boolean' },
         preferUserId: { in: 'body', type: 'boolean', description: 'Creates a user whose new userId the request names (email-based projects).' } },
       result: answer },
     // Can enter each subscriber into a journey started by subscribing to the list (a welcome series, same page).
-    'subscriptions.create': { docs: spec, method: 'POST', path: '/api/lists/subscribe',
+    'subscriptions.create': { docs: spec, method: 'POST', kind: 'write', path: '/api/lists/subscribe',
       params: { listId: { in: 'body', type: 'integer', required: true },
         subscribers: { in: 'body', type: [{ 'email?': 'string', 'userId?': 'string', 'dataFields?': 'unknown' }], required: true,
-          description: 'Each subscriber names an email or a userId, as the project identifies users.' },
+          description: 'Each subscriber names an email or a userId, as the project identifies users; no page says whether this re-subscribes a person who unsubscribed.' },
         updateExistingUsersOnly: { in: 'body', type: 'boolean', description: 'true skips users who do not exist yet (userID-based and hybrid projects).' } },
       result: { successCount: 'integer', failCount: 'integer' } },
-    'events.create': { docs: spec, method: 'POST', path: '/api/events/track', anyOf: [['email'], ['userId']],
+    // Can enter the user into a journey its event triggers, which can message them:
+    // https://support.iterable.com/hc/en-us/articles/15934993720468-Start-Tile
+    'events.create': { docs: spec, method: 'POST', kind: 'write', path: '/api/events/track', anyOf: [['email'], ['userId']],
       params: { eventName: { in: 'body', type: 'string', required: true }, ...user, dataFields: { in: 'body', type: 'unknown' },
         createdAt: { in: 'body', type: 'integer', description: 'When the event happened, a Unix timestamp; the time received by default.' },
         id: { in: 'body', type: 'string', description: 'An event of that id is updated.' } },
@@ -60,7 +62,9 @@ export const iterable = defineProvider({
       result: { campaigns: [campaign] } },
     'campaigns.get': { docs: spec, path: '/api/campaigns/{id}', notFound: 'null',
       params: { id: { in: 'path', type: 'integer', required: true } }, result: campaign },
-    'campaigns.create': { docs: spec, method: 'POST', path: '/api/campaigns/create',
+    // Creates a blast campaign without scheduling it (`scheduleSend: false`): nothing is sent until it is sent or
+    // scheduled in Iterable.
+    'campaigns.create': { docs: spec, method: 'POST', kind: 'write', path: '/api/campaigns/create',
       params: { name: { in: 'body', type: 'string', required: true },
         templateId: { in: 'body', type: 'number', required: true, description: 'The campaign gets a copy of this template.' },
         listIds: { in: 'body', type: ['integer'], required: true, description: 'The lists the campaign is for (a blast campaign).' },

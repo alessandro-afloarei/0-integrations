@@ -34,20 +34,26 @@ export const onesignal = defineProvider({
       result: { segments: [{ id: 'string', 'name?': 'string', 'description?': 'string', 'is_active?': 'boolean', 'read_only?': 'boolean',
         'created_at?': 'string', 'updated_at?': 'string' }] } },
     'users.get': { docs: `${ref}/view-user`, path: '/users/by/{alias_label}/{alias_id}', notFound: 'null', params: alias, result: user },
-    'users.create': { docs: `${ref}/create-user`, method: 'POST', path: '/users',
+    // A user it creates or changes can enter a Journey by its segment and be messaged; an email or SMS subscription it
+    // sends with enabled true (the default) is subscribed, again for one that unsubscribed:
+    // https://documentation.onesignal.com/docs/en/subscriptions
+    'users.create': { docs: `${ref}/create-user`, method: 'POST', kind: 'write', path: '/users',
       anyOf: [['identity.external_id'], ['subscriptions']],
       params: { identity: { in: 'body', type: { 'external_id?': 'string' },
         description: 'external_id, the user\'s main id, unique across users.' },
       properties: { in: 'body', type: properties, description: 'tags: string keys and values.' },
       subscriptions: { in: 'body', type: [{ type: 'string', token: 'string', 'enabled?': 'boolean' }],
-        description: 'Each subscription a type (Email, SMS, iOSPush, AndroidPush, ChromePush and the other push types) and its token: the email address, the E.164 phone number or the push token; subscribed unless enabled is false.' } },
+        description: 'Each subscription a type (Email, SMS, iOSPush, AndroidPush, ChromePush and the other push types) and its token: the email address, the E.164 phone number or the push token; subscribed unless enabled is false; enabled true (the default) resubscribes an unsubscribed email or SMS subscription.' } },
       result: user },
-    'users.update': { docs: `${ref}/update-user`, method: 'PATCH', path: '/users/by/{alias_label}/{alias_id}',
+    // A user whose properties change can enter a Journey by its segment and be messaged:
+    // https://documentation.onesignal.com/docs/en/journeys-settings
+    'users.update': { docs: `${ref}/update-user`, method: 'PATCH', kind: 'write', path: '/users/by/{alias_label}/{alias_id}',
       params: { ...alias, properties: { in: 'body', type: properties, description: 'tags: string keys and values.' } },
       result: { 'properties?': properties } },
-    // Needs a paid plan; sending is free, and the events an app stores (when storage is on) are billed:
+    // Can enter its user into a Journey, which can message them (journeys-settings, as above). Needs a paid plan;
+    // sending is free, and the events an app stores (when storage is on) are billed:
     // https://documentation.onesignal.com/docs/en/custom-event-storage
-    'events.create': { docs: `${ref}/create-custom-events`, method: 'POST', path: '/custom_events',
+    'events.create': { docs: `${ref}/create-custom-events`, method: 'POST', kind: 'write', path: '/custom_events',
       params: { events: { in: 'body', required: true, type: [{ name: 'string', 'external_id?': 'string', 'onesignal_id?': 'string',
         'timestamp?': 'string', 'idempotency_key?': 'string', 'properties?': 'unknown' }],
       description: 'Each event names its user by external_id or onesignal_id; timestamp is ISO 8601; an event repeated with the same idempotency_key is not processed again.' } } },
