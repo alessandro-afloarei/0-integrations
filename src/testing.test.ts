@@ -333,6 +333,26 @@ describe('fakeProvider', () => {
       [{ actor: 'agent', draft: false }], [{ actor: 'agent ' }], ['agent']].map(sent))).toEqual(['reply', 'thread', 'thread', 'thread', 'thread']);
   });
 
+  test('a literal that arrives as text holds as its text: a boolean in a query, a header or a form, and a string in a query', async () => {
+    const shared = defineProvider({ id: 'shared', name: 'Shared', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.shared.test' }, operations: {
+      'items.list': { path: '/items' }, 'items.inbox': { path: '/items', params: { inbox: { in: 'query', type: true, required: true } } },
+      'items.mine': { path: '/items', params: { 'x-mine': { in: 'header', type: true, required: true } } },
+      'items.old': { path: '/items', params: { version: { in: 'query', type: 'v2', required: true } } },
+      'notes.create': { method: 'POST', path: '/notes', params: { text: { in: 'form', type: 'string', required: true } } },
+      'notes.pin': { method: 'POST', path: '/notes', params: { text: { in: 'form', type: 'string', required: true }, pinned: { in: 'form', type: true, required: true } } } } });
+    const by = (name: string) => () => ({ by: name });
+    const { fetch } = fakeFetch(fakeProvider(shared, { key: 'k', operations: { 'items.list': by('list'), 'items.inbox': by('inbox'),
+      'items.mine': by('mine'), 'items.old': by('old'), 'notes.create': by('create'), 'notes.pin': by('pin') } }));
+    const api = client(shared, { token: 'k', fetch });
+    await expect(api.items.inbox({ inbox: true })).resolves.toEqual({ by: 'inbox' });
+    await expect(api.items.mine({ 'x-mine': true })).resolves.toEqual({ by: 'mine' });
+    await expect(api.items.old({ version: 'v2' })).resolves.toEqual({ by: 'old' });
+    await expect(api.notes.pin({ text: 'a', pinned: true })).resolves.toEqual({ by: 'pin' });
+    await expect(api.notes.create({ text: 'a' })).resolves.toEqual({ by: 'create' });
+    const sent = (query: string) => fetch(`https://api.shared.test/items${query}`, { headers: { authorization: 'Bearer k' } }).then(answer);
+    for (const query of ['?inbox=false', '?inbox=1', '?version=v1']) await expect(sent(query)).resolves.toEqual({ status: 200, body: { by: 'list' } });
+  });
+
   test('a function receives the headers; of two operations on one route, the one whose required header the call carries answers', async () => {
     const versioned = defineProvider({ id: 'versioned', name: 'Versioned', auth: [{ kind: 'key' }],
       http: { baseUrl: 'https://api.versioned.test', headers: { 'x-version': '1' } }, operations: {

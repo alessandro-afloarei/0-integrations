@@ -301,6 +301,15 @@ function literals() {
   defineProvider({ ...base, operations: { 'drafts.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', type: sent } } } } });
   defineProvider({ ...base, operations: { 'items.get': { path: '/items', result: { id: 'string', count: 'integer' } },
     'drafts.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', type: { send: true } } } } } });
+  // The refusal's own words: the operation must then be that message, which no operation is.
+  type Checked<D extends Entry> = NonNullable<Parameters<typeof defineProvider<D>>[0]['operations']>;
+  type Words = 'a shape holds a `string` or `boolean`: write every shape constant it uses `as const`';
+  type Widened = typeof base & { operations: { 'items.get': { path: '/items'; result: typeof item };
+    'drafts.create': { method: 'POST'; path: '/drafts'; params: { drafts: { in: 'body'; type: typeof sent } } } } };
+  type AsConst = typeof base & { operations: { 'items.get': { path: '/items'; result: { id: 'string'; count: 'integer' } } } };
+  expectTypeOf<Checked<Widened>['items.get']>().toExtend<Words>();
+  expectTypeOf<Checked<Widened>['drafts.create']>().toExtend<Words>();
+  expectTypeOf<Checked<AsConst>['items.get']>().not.toExtend<Words>();
 }
 
 test('the narrowed types compile', () => {

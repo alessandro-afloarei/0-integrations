@@ -129,7 +129,7 @@ type Unreserved<Ops> = { [K in keyof Ops]: K extends Reserved | `${Reserved}.${s
 type PathParams<P> = P extends `${string}{${infer N}}${infer R}` ? N | PathParams<R> : never;
 /** Whether a shape holds a widened `string` or `boolean`: a constant written without `as const`, which types calls wrongly. */
 type Widened<S> = [S] extends [readonly [infer E]] ? Widened<E> : [S] extends [object] ? true extends { [K in keyof S]-?: Widened<S[K]> }[keyof S]
-  ? true : false : [S] extends [string] ? string extends S ? true : false : [S] extends [boolean] ? boolean extends S ? true : false : false;
+  ? true : false : [S] extends [string | boolean] ? string extends S ? true : boolean extends S ? true : false : false;
 /** Each `{name}` of an operation's path is a required `path` parameter, its `paging` a shape the entry declares, and no
  * parameter's `type` or `result` holds a widened shape. */
 type Declared<Ops, Pagings> = { [K in keyof Ops]: (Ops[K] extends { path: infer P } ? [PathParams<P>] extends [never] ? unknown
@@ -137,7 +137,7 @@ type Declared<Ops, Pagings> = { [K in keyof Ops]: (Ops[K] extends { path: infer 
   & (Ops[K] extends { paging: infer G } ? G extends keyof Pagings ? unknown : 'paging names no shape this entry declares' : unknown)
   & (Widened<{ [P in keyof Ops[K] & ('params' | 'result')]: P extends 'params'
     ? { [N in keyof Ops[K][P]]: Ops[K][P][N] extends { type: infer T } ? T : 'unknown' } : Ops[K][P] }> extends true
-    ? 'a shape holds a `string` or `boolean`: write its constant `as const`' : unknown) };
+    ? 'a shape holds a `string` or `boolean`: write every shape constant it uses `as const`' : unknown) };
 
 /** One provider, as plain data. The literal's type is kept, so a client's types are inferred from it. */
 export function defineProvider<const D extends Entry>(
