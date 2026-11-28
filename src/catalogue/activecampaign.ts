@@ -45,11 +45,12 @@ export const activecampaign = defineProvider({
       params: { ...id, contact: { in: 'body', required: true, type: { 'email?': 'string', ...written },
         description: 'Fields left out keep their current values.' } }, result: { contact } },
     // Subscribes a contact to a list (status 1): a new active membership gets the list's subscribe autoresponders and,
-    // when the list is set to send it, the list's last campaign; its subscribe automations start.
+    // when the list is set to send it, the list's last campaign; its subscribe automations start, and the list's
+    // subscription notification, if set, emails the addresses configured on it.
     'subscriptions.create': { docs: `${ref}/update-list-status-for-contact`, method: 'POST', path: '/contactLists',
-      params: { contactList: { in: 'body', required: true, type: { list: 'integer', contact: 'integer', status: '1',
+      params: { contactList: { in: 'body', required: true, type: { list: 'string', contact: 'string', status: '1',
         'suppressInstantAutoresponder?': 'boolean', 'responder?': 'integer' },
-        description: 'suppressInstantAutoresponder true does not send the list\'s subscribe autoresponders; responder 0 stops its later, scheduled ones. Resubscribing an unsubscribed contact needs the resubscribe permission.' } },
+        description: 'list and contact are the ids the lists and contacts reads give. suppressInstantAutoresponder true does not send the list\'s subscribe autoresponders; responder 0 stops its later, scheduled ones. Resubscribing an unsubscribed contact needs the resubscribe permission.' } },
       result: { contactList: { 'id?': 'string', 'list?': 'string', 'contact?': 'string', 'sdate?': 'string' } } },
     'campaigns.list': { docs: `${ref}/list-all-campaigns`, path: '/campaigns', paging: 'campaigns', records: 'campaigns',
       result: { campaigns: [campaign] } },
