@@ -9,7 +9,7 @@ const list = { id: 'string', 'name?': 'string', 'date_created?': 'string', 'doub
 const member = { id: 'string', 'email_address?': 'string', 'status?': 'string', 'list_id?': 'string', 'contact_id?': 'string',
   'timestamp_signup?': 'string', 'last_changed?': 'string', 'merge_fields?': 'unknown' } as const;
 const campaign = { id: 'string', 'type?': 'string', 'status?': 'string', 'create_time?': 'string', 'send_time?': 'string',
-  'archive_url?': 'string', 'settings?': { 'subject_line?': 'string', 'title?': 'string' }, 'recipients?': { list_id: 'string' } } as const;
+  'archive_url?': 'string', 'settings?': { 'subject_line?': 'string', 'title?': 'string' }, 'recipients?': { 'list_id?': 'string' } } as const;
 const listId = { list_id: { in: 'path', type: 'string', required: true } } as const;
 const subscriberHash = { subscriber_hash: { in: 'path', type: 'string', required: true,
   description: 'The MD5 hash of the lowercase email address; the page also accepts the email address itself or the contact_id.' } } as const;
@@ -23,7 +23,7 @@ export const mailchimp = defineProvider({
   id: 'mailchimp', name: 'Mailchimp', docs: 'https://mailchimp.com/developer/marketing/api-concepts/authentication/',
   categories: ['marketing'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'For your own Mailchimp account: Mailchimp strongly discourages asking people to paste their API key, and an app for someone else\'s account connects with the OAuth 2 sign-in. A key has full access to the account that created it.' }],
+    help: 'For your own Mailchimp account: Mailchimp strongly discourages asking people to paste their API key, and an app for someone else\'s account connects with the OAuth 2 sign-in. A key has full access to the account that created it. Make it as an admin user: the user\'s role and the account\'s plan bound what it can do.' }],
   // A developer registers an app alone, on the Registered Apps page:
   // https://mailchimp.com/developer/marketing/build/start-developing/set-up-an-oauth-app/
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.mailchimp.com/oauth2/authorize', tokenUrl: 'https://login.mailchimp.com/oauth2/token',
@@ -45,7 +45,7 @@ export const mailchimp = defineProvider({
     'members.get': { docs: `${ref}/lists/members/get-member`, path: '/lists/{list_id}/members/{subscriber_hash}', notFound: 'null',
       params: { ...listId, ...subscriberHash }, result: member },
     // Adds a member: on a double opt-in audience `pending` sends Mailchimp's confirmation email, which no parameter
-    // stops; an audience may also have a welcome automation connected (`has_welcome`):
+    // stops; an audience with a welcome automation connected (`has_welcome`) emails the person who joins:
     // https://mailchimp.com/developer/marketing/build/quickstarts/import-and-export-contacts/
     'members.create': { docs: `${ref}/lists/members/create-member`, method: 'POST', path: '/lists/{list_id}/members',
       params: { ...listId, email_address: { in: 'body', type: 'string', required: true },
