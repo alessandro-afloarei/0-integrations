@@ -7,8 +7,8 @@ import { defineProvider } from '../catalogue.js';
 const ref = 'https://help.ortto.com';
 /** The default, Australian and European service endpoints: https://help.ortto.com/a-250-api-reference */
 const hosts = ['api.ap3api.com', 'api.au.ap3api.com', 'api.eu.ap3api.com'] as const;
-const people = { in: 'body', required: true, type: [{ 'fields?': 'unknown', 'tags?': ['string'], 'unset_tags?': ['string'] }],
-  description: 'Up to 100 people, each its person fields by field id (str::email, str::first, str:cm:<custom>), tags to apply and to remove; bol::p and bol::sp the email and SMS permissions (bol::p true sets a person\'s email permission back to true); null clears a field.' } as const;
+const people = { in: 'body', required: true, type: [{ fields: 'unknown', 'tags?': ['string'], 'unset_tags?': ['string'] }],
+  description: 'Up to 100 people, each its person fields by field id (str::email, str::first, str:cm:<custom>), with a value for the merge key: the merge_by fields the call gives, else the unique identifier list of the key\'s Custom API data source; tags to apply and to remove; bol::p and bol::sp the email and SMS permissions (bol::p true sets a person\'s email permission back to true); null clears a field.' } as const;
 
 export const ortto = defineProvider({
   id: 'ortto', name: 'Ortto', docs: `${ref}/a-223-developer-guide`,
@@ -57,13 +57,15 @@ export const ortto = defineProvider({
       path: '/audience/subscribe',
       params: { audience_id: { in: 'body', type: 'string', required: true, description: 'The audience\'s id, from its URL in Ortto.' },
         people: { in: 'body', required: true, type: [{ 'email?': 'string', 'external_id?': 'string', 'person_id?': 'string', subscribed: true }],
-          description: 'Up to 1000 people, each named by email, external_id or person_id and subscribed to the audience\'s email (true subscribes a person who unsubscribed from it again); a person must already be a member of the audience.' },
+          description: 'Up to 1000 people, each named by one of email, external_id or person_id (the entry does not check that one is given) and subscribed to the audience\'s email (true subscribes a person who unsubscribed from it again); a person must already be a member of the audience.' },
         async: { in: 'body', type: 'boolean' } } },
-    // An activity can enter its person into journeys, and can create that person:
-    // https://help.ortto.com/a-733-journey-entry-criteria
+    // An activity can enter its person into journeys, create that person (opted in to email by default) and change
+    // their email permission: https://help.ortto.com/a-733-journey-entry-criteria
+    // https://help.ortto.com/a-239-email-subscription-permission-from-activities
     'events.create': { docs: `${ref}/a-271-create-a-custom-activity-event-create`, method: 'POST', kind: 'write', path: '/activities/create',
-      params: { activities: { in: 'body', required: true, type: [{ activity_id: 'string', 'attributes?': 'unknown', 'fields?': 'unknown' }],
-        description: 'Each activity names its custom activity id, its attributes and the person fields that find or create its person.' },
+      params: { activities: { in: 'body', required: true,
+        type: [{ activity_id: 'string', 'attributes?': 'unknown', 'fields?': 'unknown', 'person_id?': 'string' }],
+        description: 'Each activity names its custom activity id, its attributes, and its person: the person fields that find or create them (with a value for the merge key), or a person_id, which ignores the fields; the entry does not check that one is given. In fields, bol::p sets the email permission (false opts out; true sets it back to true for one who opted out), and a person the activity creates is opted in to email unless bol::p is false.' },
       merge_by: { in: 'body', type: ['string'] } },
       result: { 'activities?': [{ 'person_id?': 'string', 'status?': 'string', 'person_status?': 'string', 'activity_id?': 'string' }] } },
     'campaigns.list': { docs: `${ref}/a-695-retrieve-a-list-of-sent-campaigns-calendar`, method: 'POST', path: '/campaign/calendar',
