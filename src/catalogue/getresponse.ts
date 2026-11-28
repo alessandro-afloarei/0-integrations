@@ -37,11 +37,14 @@ export const getresponse = defineProvider({
       params: { contactId: { in: 'path', type: 'string', required: true } }, result: contact },
     // Adds the contact to a campaign (contact list) through a queue: a 202 with no body. On a double opt-in list the
     // contact is emailed a confirmation message, whose link they must click to be added; the account's autoresponder
-    // cycle can email it too unless its dayOfCycle is null ("not in the cycle"), which this entry does not send.
+    // cycle can email it too unless `dayOfCycle` is null ("not in the cycle"). No page says whether a create subscribes
+    // again a person who unsubscribed from that campaign.
     'contacts.create': { docs: `${ref}/createContact`, method: 'POST', path: '/contacts', kind: 'write',
       params: { email: { in: 'body', type: 'string', required: true },
         campaign: { in: 'body', type: { campaignId: 'string' }, required: true, description: 'The campaign (contact list) to add the contact to.' },
-        name: { in: 'body', type: 'string' } } },
+        name: { in: 'body', type: 'string' },
+        dayOfCycle: { in: 'body', type: 'string', nullable: true,
+          description: 'null: "the contacts is not in the cycle", so its autoresponders send nothing; a day number (as a string, "42") places the contact on that day of the autoresponder cycle, whose messages then email it.' } } },
     // Fields left out stay; a new `campaign.campaignId` moves the contact to that campaign (contact list).
     'contacts.update': { docs: `${ref}/updateContact`, method: 'POST', path: '/contacts/{contactId}',
       params: { contactId: { in: 'path', type: 'string', required: true }, name: { in: 'body', type: 'string' },
