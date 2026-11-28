@@ -827,8 +827,8 @@ Intercom's `message_type`), that parameter is declared, optional unless the page
 field that chooses their author: the credential's own identity speaks. Where the page requires the request to name
 the agent who sends (Atlas's `agentId`), that field is declared, its description saying so. A create may name the
 customer as its first message's author where the page asks for it (Zammad, Dixa), and an entry may leave such a create
-out. A create or an update offers no path and no enum value that sends, deletes or marks spam. Where a status cannot be
-an enum (Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer inside an object), the description
+out. An update offers no path and no enum value that sends, and no create or update offers one that deletes or marks
+spam. Where a status cannot be an enum (Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer inside an object), the description
 names the values the template covers; where the page lists a spam or removed value among them, it says the entry does
 not check the value. Where a reply is only a field of the ticket's create and update (Zendesk's `comment`, with its
 `public`), those declare it, and there is no `<messages>.create`. A note on its own endpoint (Freshdesk's notes, Front's

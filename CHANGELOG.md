@@ -8,9 +8,12 @@ Nothing here is released yet.
   element; an argument fits only that value. Missive sends mail (`messages.create`, `drafts.send: true`), naming its
   sender by address only (`from_field: { address }`). A boolean literal goes wherever `boolean` goes (a path, a
   query, a form or a header), and the derived fake answers a call on a shared route with the operation whose literals
-  the call holds (Missive's send before its draft). An empty slot of a sparse list is checked as an element: it is
-  `param_invalid`, nothing sent, where it was sent as `null`. A shape constant is written `as const`: `defineProvider`
-  refuses a widened `string` or `boolean` at compile time, as the `Shape` type did before.
+  the call holds (Missive's send before its draft); an operation counts as carried only when the call also holds each
+  required key inside its object parameters. A shape constant is written `as const`: `defineProvider` refuses a
+  widened `string` or `boolean` at compile time, as the `Shape` type did before.
+- Breaking: an empty slot of a sparse list argument is checked as an element, as `undefined`: it is `param_invalid`,
+  nothing sent, where it was sent as `null`, unless the element's type is `unknown` (still sent as `null`). An app
+  passes a list with no holes.
 - An entry fixes a value with a literal type; the library's one-value enums became literals, requests unchanged. An
   app's calls do not change at all: each argument's type is the same value as before. An app's own entry may still
   declare a one-value `enum`, which the engine reads as before.
@@ -23,6 +26,10 @@ Nothing here is released yet.
   message is always the agent's normal message, which reaches the user), Gist a teammate's reply or note
   (`messages.create`).
 - Freshchat lists its channels (`channels.list`), the ids a new conversation's `channel_id` takes.
+- Breaking: Help Scout's `conversations.create` no longer takes a thread's `draft`: a draft conversation is
+  `drafts.create`, whose one reply thread Help Scout sends only when someone sends it. A call that passes `draft` on
+  `conversations.create` is a type error, and at run time the key is dropped, so the conversation is created and its
+  reply thread sent. A phone-thread draft, which Help Scout's page also allows, is not declared.
 - Breaking: Groove's, eDesk's and LiveAgent's ticket creates no longer offer a spam or deleted status (Groove's
   `state: 'spam'`, eDesk's `status: 'Spam'`, LiveAgent's `status: 'X'` and `'B'`). A call that passes one is a type
   error, and at run time `param_invalid` with nothing sent: an app passes another status (eDesk's is required) or,
