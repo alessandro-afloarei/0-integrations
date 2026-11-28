@@ -40,9 +40,9 @@ export const braze = defineProvider({
     // change can trigger an action-based campaign or Canvas that messages the user; an SMS group set subscribed enters
     // the double opt-in workflow only with use_double_opt_in_logic: true:
     // https://www.braze.com/docs/user_guide/messaging/campaigns/schedule_your_campaign/triggered_delivery
-    'users.create': { docs: `${ref}/user_data/post_user_track`, method: 'POST', path: '/users/track',
+    'users.create': { docs: `${ref}/user_data/post_user_track`, method: 'POST', kind: 'write', path: '/users/track',
       params: { attributes: { in: 'body', type: ['unknown'], required: true,
-        description: 'Up to 75 user attribute objects, each naming one of external_id, user_alias, braze_id, email or phone; other keys are profile or custom attributes (events and purchases are not declared).' } },
+        description: 'Up to 75 user attribute objects, each naming one of external_id, user_alias, braze_id, email or phone; other keys are profile or custom attributes; email_subscribe and push_subscribe take opted_in, unsubscribed or subscribed (no page says whether a value here re-subscribes a user who unsubscribed); events and purchases are not declared.' } },
       result: { message: 'string', request_id: 'string', 'attributes_processed?': 'integer' } },
     'campaigns.list': { docs: `${ref}/export/campaigns/get_campaigns`, path: '/campaigns/list', paging: 'campaigns', records: 'campaigns',
       params: { include_archived: { in: 'query', type: 'boolean' }, sort_direction: sortDirection },
