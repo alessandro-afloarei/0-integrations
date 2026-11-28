@@ -7,7 +7,6 @@ const form = { id: 'string', 'title?': 'string', '_links?': { 'display?': 'strin
   'settings?': { 'is_public?': 'boolean' } } as const;
 const formId = { form_id: { in: 'path', type: 'string', required: true,
   description: 'The form\'s id, in its URL: u6nXL7 in https://mysite.typeform.com/to/u6nXL7.' } } as const;
-const cursor = 'A response id. Traverses the responses in the order processed, without repeats; not with sort.';
 /** Accounts on the EU Responses Data Center read their responses on its host, and tokens work on both; the new EU
  * data center (api.typeform.eu) has its own sign-in:
  * https://www.typeform.com/developers/get-started/responses-data-center/ */
@@ -33,7 +32,8 @@ export const typeform = defineProvider({
   // No delivery id: the payload's `event_id` is "Unique ID for the webhook", the words of the webhook's own `id`:
   // https://www.typeform.com/developers/webhooks/example-payload/
   webhook: { kind: 'hmac', header: 'typeform-signature', prefix: 'sha256=', encoding: 'base64' },
-  paging: { forms: { kind: 'page', send: { query: 'page' }, list: 'items', total: { pages: 'page_count' } } },
+  paging: { forms: { kind: 'page', send: { query: 'page' }, list: 'items', total: { pages: 'page_count' } },
+    responses: { kind: 'last', next: 'token', send: { query: 'before' }, list: 'items' } },
   operations: {
     'forms.list': { docs: `${reference}/create/reference/retrieve-forms/`, path: '/forms', paging: 'forms', records: 'items',
       params: { page_size: { in: 'query', type: 'number', description: '10 by default, at most 200.' },
@@ -41,14 +41,16 @@ export const typeform = defineProvider({
       result: { items: [{ ...form, 'created_at?': 'string', 'last_updated_at?': 'string' }] } },
     'forms.get': { docs: `${reference}/create/reference/retrieve-form/`, path: '/forms/{form_id}', notFound: 'null', params: formId,
       result: form },
-    // One page: `before` or `after` takes a response id, and no page says which one comes next or how the walk ends.
+    // Each next page sends `before` the last response's `token`, until all are read:
+    // https://www.typeform.com/developers/responses/walkthroughs/
     'responses.list': { docs: `${reference}/responses/reference/retrieve-responses/`, path: '/forms/{form_id}/responses',
+      paging: 'responses', records: 'items',
       params: { ...formId, page_size: { in: 'query', type: 'integer', description: '25 by default, at most 1000.' },
         since: { in: 'query', type: 'string', description: 'Submitted at or after: epoch seconds, or ISO 8601 in UTC (2020-03-20T14:00:59).' },
         until: { in: 'query', type: 'string', description: 'Submitted at or before: epoch seconds, or ISO 8601 in UTC.' },
-        before: { in: 'query', type: 'string', description: `Submitted before this response (exclusive). ${cursor}` },
-        after: { in: 'query', type: 'string', description: `Submitted after this response (exclusive). ${cursor}` } },
-      result: { 'total_items?': 'number', 'page_count?': 'number', items: [{ response_id: 'string', 'landed_at?': 'string',
-        'submitted_at?': 'string', 'answers?': 'unknown', 'hidden?': 'unknown', 'calculated?': { 'score?': 'number' } }] } },
+        after: { in: 'query', type: 'string',
+          description: 'Only responses submitted after this response id (exclusive); not with sort.' } },
+      result: { items: [{ response_id: 'string', 'token?': 'string', 'landed_at?': 'string', 'submitted_at?': 'string',
+        'answers?': 'unknown', 'hidden?': 'unknown', 'calculated?': { 'score?': 'number' } }] } },
   },
 });
