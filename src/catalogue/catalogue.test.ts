@@ -8,7 +8,7 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked } from '../errors.js';
-import { callBase, createClient, credentialOf, filledBase } from '../http.js';
+import { callBase, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
@@ -225,7 +225,7 @@ const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
 const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (1 000 and 60 000 when left out): the cap would cut a longer default';
 const RETRY_ONLY_STATED = "no `http.retry.defaultWaitMs` beside `onlyStated`: an answer that states no wait is not retried, so the default is never read";
 const HOST_PATTERN = "an `http.host` pattern (a domain name, never an address; `*.` and a domain; a non-empty list of those; or `*` alone) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
-const ANY_HOST = "`http.host: '*'` only on a base whose whole host is one placeholder a person types: a host the token answer names needs a domain";
+const ANY_HOST = "`http.host: '*'` only on a base whose whole host is one placeholder a person types: a host the token answer names, or one chosen from `choices`, needs a domain";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
@@ -265,7 +265,8 @@ const runnable = {
   },
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   [ANY_HOST]: (entry: Entry) => entry.http.host !== '*'
-    || (/^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? '') && Object.keys(namedHosts(entry)).length === 0),
+    || (/^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? '') && Object.keys(namedHosts(entry)).length === 0
+      && !(entry.fields ?? []).some(field => field.choices !== undefined && placeholders(entry.http.baseUrl).includes(field.name))),
   // A URL is filled from plain values, never a secret; the body and Basic from either.
   // What the engine cannot fill is `template_missing` at the first sign-in.
   "a token request names only the entry's fields, a plain one in its `url`": (entry: Entry) => {
@@ -287,15 +288,16 @@ const runnable = {
   "a call's `base` one of `http.bases`": (entry: Entry) => calls(entry).every(call => call?.base === undefined
     || Object.hasOwn(entry.http.bases ?? {}, call.base)),
   // A choice the engine would refuse fails here, not when a person picks it.
-  "`fields[].choices` and `default` that fill the base to a host `http.host` takes": (entry: Entry) => {
-    const named = (entry.fields ?? []).filter(field => placeholders(entry.http.baseUrl).includes(field.name));
+  "`fields[].choices` and `default` that fill every declared URL to a host `http.host` takes": (entry: Entry) => {
+    const urls = declaredUrls(entry);
+    const named = (entry.fields ?? []).filter(field => urls.some(url => placeholders(url).includes(field.name)));
     // A saved value has no choices: a stand-in fills it.
     const saved = Object.keys(entry.save ?? {}).map((name): [string, string] => [name, 'x']);
     const first = (field: Field) => field.default ?? field.choices?.[0] ?? 'x';
     return named.every(field => [...field.choices ?? [], ...field.default === undefined ? [] : [field.default]].every(value => {
       const values = { ...Object.fromEntries([...saved, ...named.map((other): [string, string] => [other.name, first(other)])]), [field.name]: value };
       try {
-        return createClient(entry, { token: () => Promise.resolve('t'), fetch: globalThis.fetch, values }).baseUrl !== '';
+        return urls.every(url => filledBase(entry, values, url) !== '');
       } catch { return false; }
     }));
   },
@@ -707,7 +709,7 @@ test.each<[Rule, Entry]>([
     [{ choices: ['api.mailgun.net', 'api.eu.mailgun.com'] }, '*.mailgun.net'],
     [{ default: 'api.mailgun.net' }, '*.mailgun.com'],
     [{ choices: ['api.mailgun.net', 'api.eu.mailgun.net'] }, ['api.mailgun.net', 'api.eu.mailgun.com']],
-  ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill the base to a host `http.host` takes",
+  ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill every declared URL to a host `http.host` takes",
     defineProvider({ ...key, http: { baseUrl: 'https://{region}', host }, auth: [{ kind: 'key' }],
       fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, default: 'k' }] })],
@@ -859,6 +861,20 @@ test.each<[Rule, Entry]>([
   ...['https://api-{host}.k.test/api', 'https://{host}.k.test/api'].map((baseUrl): [Rule, Entry] => [HOST_SPLIT,
     defineProvider({ ...named, http: { ...named.http, baseUrl } })]),
   [HOST_SPLIT, defineProvider({ ...named, auth: [{ ...named.auth[0], refreshUrl: 'https://auth.{host}/token' }] })],
+  // A chosen host is a URL's whole host: composed into another, beside a typed placeholder, or beside a named host, it splits.
+  [HOST_SPLIT, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'region', title: 'Region', choices: ['eu', 'us'] }],
+    http: { baseUrl: 'https://api.{region}.k.test', host: '*.k.test' } })],
+  [HOST_SPLIT, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'region', title: 'Region', choices: ['k.test'] }, { name: 'sub', title: 'Subdomain' }],
+    http: { baseUrl: 'https://{sub}.{region}', host: '*.k.test' } })],
+  [HOST_SPLIT, defineProvider({ ...named, fields: [{ name: 'region', title: 'Region', choices: ['login.k.test'] }],
+    auth: [{ ...named.auth[0], authorizeUrl: 'https://{region}/authorize' }] })],
+  // A closed list names its hosts: the address guard's `*` is for a host a person types.
+  [ANY_HOST, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', choices: ['api.k.test'] }],
+    http: { baseUrl: 'https://{region}', host: '*' } })],
+  // Every declared URL is filled with each choice: an authorize host `http.host` does not take is refused too.
+  ["`fields[].choices` and `default` that fill every declared URL to a host `http.host` takes", defineProvider({ ...oauth2, scopes: { default: [] },
+    fields: [{ name: 'region', title: 'Region', choices: ['login.k.test', 'login.k.example'] }],
+    auth: [{ ...oauth2.auth[0], authorizeUrl: 'https://{region}/authorize' }], http: { ...key.http, host: 'login.k.test' } })],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
 test.each([
@@ -983,6 +999,10 @@ test.each<[string, Entry]>([
   ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
     http: { baseUrl: 'https://api.k.test/{org}' } })],
   ["Wrike's shape: the base and the refresh on the host the token answer names", defineProvider(named)],
+  // Typeform's shape: the base chosen from a closed list, beside fixed OAuth 2 URLs on another host.
+  ['a chosen base beside fixed OAuth 2 URLs', defineProvider({ ...oauth2, scopes: { default: [] }, identify: { request: { path: '/me' }, id: 'id' },
+    fields: [{ name: 'apiHost', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'], default: 'api.k.test' }],
+    http: { baseUrl: 'https://{apiHost}', host: ['api.k.test', 'api.eu.k.test'] } })],
   ["Pipedrive's shape: the base on the origin the token answer names, the refresh fixed", defineProvider({ ...named,
     save: { apiDomain: 'tokenAnswer.api_domain' }, auth: [{ ...named.auth[0], refreshUrl: 'https://login.k.test/token' }],
     http: { baseUrl: 'https://{apiDomain}/api/v1', host: '*.k.test' } })],

@@ -132,14 +132,17 @@ export function namedHosts(entry: Entry): Readonly<Record<string, Path>> {
 
 /** Whether the entry's base, its `http.bases`, an OAuth 2 sign-in's URLs and a token request's URL differ in their host
  * part when any of them takes its host from a typed value, or a typed host sits beside a named one: on a typed host a
- * credential goes only to that host, and a cloud's never reaches it. A named host, the whole host of each URL that names
- * it, beside fixed URLs is no split; composed into another host it is typed. */
+ * credential goes only to that host, and a cloud's never reaches it. A named host, or a chosen one (a field with
+ * `choices`, whose every host the entry wrote), the whole host of each URL that names it, beside fixed URLs is no split;
+ * composed into another host it is typed. A chosen host beside a named one is a split (no entry needs it). */
 export function hostSplit(entry: Entry): boolean {
   // One not well formed is kept whole: never equal to a host part, so it counts as another host.
   const hosts = declaredUrls(entry).map(url => hostPart(url) ?? url);
   const named = namedHosts(entry);
-  const typed = hosts.some(host => placeholders(host).some(name => !Object.hasOwn(named, name) || host !== `https://{${name}}`));
-  return typed && (new Set(hosts).size > 1 || Object.keys(named).length > 0);
+  const chosen = (name: string) => entry.fields?.some(field => field.name === name && field.choices !== undefined) === true;
+  const typed = hosts.some(host => placeholders(host).some(name => !(Object.hasOwn(named, name) || chosen(name)) || host !== `https://{${name}}`));
+  return (typed && (new Set(hosts).size > 1 || Object.keys(named).length > 0))
+    || (Object.keys(named).length > 0 && hosts.some(host => placeholders(host).some(chosen)));
 }
 
 /** Every URL an entry declares: the base, `http.bases`, the OAuth 2 URLs (an RFC 7009 revoke's too) and a token request's. */

@@ -211,6 +211,7 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
     if ('url' in revoke) {
       const { client } = input;
       if (client === undefined) throw new TypeError('oauth_client_required');
+      endpoints(entry, input.values); // every URL filled and checked before a token is read
       const token = revoke.token.map(kind => (kind === 'refresh' ? input.refreshToken : input.accessToken))
         .find((value): value is string => typeof value === 'string' && value !== '');
       if (token !== undefined) await revokeToken(entry, client, token, input);
