@@ -47,7 +47,7 @@ export const buttondown = defineProvider({
           description: 'Skips the confirmation email: "disable it on a per-subscriber basis by providing a type of regular".' } },
       result: subscriber },
     // Changing tags, metadata or notes can start the account's automations, which can email the subscriber.
-    'subscribers.update': { docs: `${ref}/api-subscribers-update`, method: 'PATCH', path: '/subscribers/{id_or_email}',
+    'subscribers.update': { docs: `${ref}/api-subscribers-update`, method: 'PATCH', path: '/subscribers/{id_or_email}', kind: 'write',
       params: { id_or_email: subscriberKey, email_address: { in: 'body', type: 'string' }, tags: { in: 'body', type: ['string'] },
         notes: { in: 'body', type: 'string' }, metadata: { in: 'body', type: 'unknown' },
         type: { in: 'body', type: 'string', enum: ['regular', 'unsubscribed'],
