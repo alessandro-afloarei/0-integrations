@@ -64,6 +64,8 @@ one takes five steps:
      one that deletes or marks spam. Where a status cannot be an enum (Help Scout's `value`, read with its `path`;
      Re:amaze's `status`, an integer inside an object), the description names the values the template covers; where the
      page lists a spam or removed value among them, it says the entry does not check the value;
+   - a `marketing` entry declares nothing that sends to an audience: a campaign or post create stays a draft or waits
+     for a time the caller sets, and a subscriber write or a tracked event is a write that reaches people;
    - a `page` or `offset` list is paged once its page states where its numbering starts, even when no page says what a
      request past the end answers: the walk ends on an empty list, and fails on a page whose list has the same JSON
      text as the one before's or the first's (`page_repeated`) or on the provider's own error;

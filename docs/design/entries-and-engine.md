@@ -867,6 +867,7 @@ way to list it). No `delete`.
 | `calendar` | calendars: `<calendars>.list`, `<events>.list`, `<events>.get`, `<events>.create`, `<events>.update`; scheduling: `<eventTypes>.list`, `<bookings>.list`, `<bookings>.get`, `<bookings>.create` (event types: event types, booking types, appointment types, links; bookings: bookings, scheduled events, events, appointments, meetings) |
 | `meetings` | conferencing: `<meetings>.list`, `<meetings>.get`, `<recordings>.list`, `<meetings>.create`, `<meetings>.update`; note-takers: `<meetings>.list` (or `<transcripts>.list` when the transcript is the object), `<meetings>.get`, `<transcripts>.get` (a conference's meetings: meetings, rooms, sessions, webinars, events; a note-taker's meetings: meetings, calls, recordings, conversations; transcripts: transcripts, transcriptions) |
 | `support` | `<tickets>.list` (or `.search`), `<tickets>.get`, `<tickets>.create`, `<tickets>.update`, `<messages>.list`, `<messages>.create`, `<notes>.create` (where notes have their own endpoint), `<customers>.list` (or `.search`), `<inboxes>.list` (where a list or a create requires an inbox) (tickets: tickets, conversations, chats, issues, threads, works; messages: messages, comments, threads, articles, timeline entries, Freshdesk's and Freshservice's conversations; notes: notes, Front's comments; customers: customers, contacts, users, end users, requesters, people, DevRev's Rev users; inboxes: inboxes, mailboxes, channels, HelpCrunch's applications) |
+| `marketing` | audience: `<lists>.list`, `<subscribers>.list` (or `.search`), `<subscribers>.get`, `<subscribers>.create`, `<subscribers>.update`, `<campaigns>.list`, `<campaigns>.get`; social: `<channels>.list`, `<posts>.list`, `<posts>.get`, `<posts>.create`, `<posts>.update`; forms: `<forms>.list`, `<forms>.get`, `<responses>.list` (or `.search`), `<responses>.get` (lists: lists, audiences, groups, segments, tags, contact lists; subscribers: subscribers, members, contacts, customers, profiles, people, users; campaigns: campaigns, broadcasts, newsletters, emails; channels: channels, profiles, social sets, accounts; posts: posts, drafts, publishing posts, messages; forms: forms, surveys; responses: responses, submissions) |
 
 A category gains its template with the batch that first writes it; its entries written before then (Google, Microsoft,
 Unipile, Fathom, Fireflies, Granola and Zoom for `mail`, `calendar` and `meetings`) are not reshaped to it.
@@ -911,6 +912,30 @@ agent's form). A shared inbox that is also a mailbox (Front, Help Scout, Missive
 home page leads with first, and declares both rows; one operation may fill a slot of each (Front's
 `conversations.list` is `mail`'s `<messages>.list` and `support`'s `<tickets>.list`). Intercom, which listed `support`
 before this row, declares its operations too; its other values keep their shape.
+
+`marketing` has three halves: an email or SMS platform declares the audience half, a social tool the social half and a
+forms tool the forms half, one half unless its pages hold two. Each slot is one object, as in `support`: of lists,
+segments and tags, the one the provider calls its audience is `<lists>`, and the others are rows under
+[Declared in part](../waiting-list.md#declared-in-part). Where the page has them, an entry may also declare
+`<campaigns>.create`, `<subscriptions>.create` (subscribes a person to a list on its own endpoint) and
+`<events>.create` (an event tracked for a person). Where the page gets one subscriber by email, in its path or its
+query, that is `<subscribers>.get`, and the value's description says which values the page accepts.
+
+Nothing that sends to an audience is declared: an action that sends or schedules a campaign, a broadcast trigger, an SMS
+or push send and a post published at once are rows under Declared in part. A `<campaigns>.create` or `<posts>.create` is
+declared only where it can stay a draft or wait for a time the caller sets: a value that would send or publish it is
+fixed by a [literal](#operations) (`isDraft: true`), left out, or, as the caller's time, required; no value that sends
+or publishes at once is offered (an enum value, a literal, a `"now"`, a past time); and its leading comment says that
+the call itself sends nothing. An update follows `support`'s rules: it offers nothing that sends, and one that replaces
+the object is not declared with optional fields. A subscriber create, upsert or subscribe follows the rule above for a
+write that reaches people: its leading comment says when it emails or texts the person (a confirmation, a welcome, an
+autoresponder, a "Reply Y" text) and, for an upsert, that it updates an existing person, and the page's parameter that
+stops the sending is declared, its description quoting what it stops. An `<events>.create` follows it too: its leading
+comment says the event can start a flow or an automation, and the page's flag that starts none is declared where there
+is one. A write that spends credits or data points follows the credits rule above, and the key's `help` names the cost.
+Transactional sends belong to `mail`'s sending service, never to `marketing`. Outside the row: deletes, an unsubscribe
+on its own endpoint (a status in an update stays), automations and workflows, templates, reports and analytics, media
+uploads, ads, links, referral programs and webhook management.
 
 **Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
 its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record
