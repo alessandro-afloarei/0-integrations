@@ -18,7 +18,7 @@ export const sendgrid = defineProvider({
   id: 'sendgrid', name: 'Twilio SendGrid', docs: `${ref}/users-api/retrieve-your-username`,
   categories: ['mail', 'marketing'],
   fields: [{ name: 'apiHost', title: 'Region', choices: hosts, default: 'api.sendgrid.com',
-    help: 'api.sendgrid.com for global users and subusers; api.eu.sendgrid.com for EU regional subusers (Pro plan or above).' },
+    help: 'api.sendgrid.com for global users and subusers; api.eu.sendgrid.com for EU regional subusers (Pro plan or above). The marketing operations need a global account: Marketing Campaigns and related features aren\'t supported in the EU environment.' },
   { name: 'apiKey', title: 'API key', secret: true,
     help: 'A Full Access key, or one with at least whitelabel.read, user.username.read, mail.send and marketing.read (Email Marketing, which also allows its writes). Reading messages needs the paid Email Activity add-on and a key with Email Activity access.' }],
   auth: [{ kind: 'key' }],
@@ -55,13 +55,14 @@ export const sendgrid = defineProvider({
       result: { 'result?': [contact], contact_count: 'number' } },
     'contacts.get': { docs: `${ref}/contacts/get-a-contact-by-id`, path: '/marketing/contacts/{id}', notFound: 'null',
       params: { id: { in: 'path', type: 'string', required: true } }, result: contact },
-    // An upsert: an existing contact is updated, its omitted fields kept. It can start emails: an Automation sends
-    // its series to each contact added to its list or segment (All Contacts by default); no parameter stops it:
-    // https://www.twilio.com/docs/sendgrid/ui/sending-email/getting-started-with-automation
+    // An upsert: an existing contact is updated, omitted fields kept. Adding contacts might affect your Twilio SendGrid
+    // bill: https://www.twilio.com/docs/sendgrid/ui/managing-contacts/create-and-manage-contacts. It can start emails:
+    // an Automation sends its series to each contact added to its list or segment (All Contacts by default); no
+    // parameter stops it: https://www.twilio.com/docs/sendgrid/ui/sending-email/getting-started-with-automation
     'contacts.create': { docs: `${ref}/contacts/add-or-update-a-contact`, method: 'PUT', path: '/marketing/contacts', kind: 'write',
       params: { contacts: { in: 'body', type: [{ email: 'string', 'first_name?': 'string', 'last_name?': 'string' }], required: true,
         description: 'Up to 30,000 contacts, each identified here by its email (the page also takes other identifiers); an existing contact is updated only when all its identifiers are sent.' },
-      list_ids: { in: 'body', type: ['string'], description: 'The lists every contact is added to.' } },
+      list_ids: { in: 'body', type: ['string'], description: 'The lists every contact is added to. This re-subscribes no one: a send to an address on the Global or Group Unsubscribes suppression lists is suppressed.' } },
       result: { 'job_id?': 'string' } },
     'singleSends.list': { docs: `${ref}/single-sends/get-all-single-sends`, path: '/marketing/singlesends', paging: 'next',
       records: 'result', params: { page_size: { in: 'query', type: 'integer' } }, result: { result: [singleSend] } },

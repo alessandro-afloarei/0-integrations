@@ -17,7 +17,7 @@ const campaign = { ID: 'integer', 'Subject?': 'string', 'Status?': 'integer', 'C
 const contactId = { contact_ID: { in: 'path', type: 'string', required: true,
   description: 'The contact\'s ID (as text) or its email address.' } } as const;
 const contactFields = { Name: { in: 'body', type: 'string' },
-  IsExcludedFromCampaigns: { in: 'body', type: 'boolean', description: 'True keeps the contact from every marketing email.' } } as const;
+  IsExcludedFromCampaigns: { in: 'body', type: 'boolean', description: 'True keeps the contact from every marketing email; false takes it off that exclusion list. No page says whether false re-subscribes a contact who unsubscribed.' } } as const;
 const ref = 'https://dev.mailjet.com/openapi/openapi-mailjet';
 
 export const mailjet = defineProvider({
@@ -68,9 +68,10 @@ export const mailjet = defineProvider({
       params: { Email: { in: 'body', type: 'string', required: true, description: 'Not already a contact of the account.' },
         ...contactFields },
       result: { Data: [contact] } },
-    // Every PUT changes only the fields it names; one that changes nothing answers 304, read as a failed call:
+    // Changes a name or the exclusion status; no page names an email it sends. Every PUT changes only the fields it
+    // names; one that changes nothing answers 304, read as a failed call:
     // https://dev.mailjet.com/docs/email-api/email-api-overview/about-mailjet-api
-    'contacts.update': { docs: `${ref}/contacts/put_v3_contact_id`, method: 'PUT', path: '/v3/REST/contact/{contact_ID}',
+    'contacts.update': { docs: `${ref}/contacts/put_v3_contact_id`, method: 'PUT', path: '/v3/REST/contact/{contact_ID}', kind: 'write',
       params: { ...contactId, ...contactFields }, result: { Data: [contact] } },
     // One page: whether a request with only `Offset` keeps today's default is not stated.
     'campaigns.list': { docs: `${ref}/campaigns/get_v3_campaign`, path: '/v3/REST/campaign',
