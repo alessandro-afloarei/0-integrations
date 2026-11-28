@@ -49,7 +49,7 @@ export const typeform = defineProvider({
         since: { in: 'query', type: 'string', description: 'Submitted at or after: epoch seconds, or ISO 8601 in UTC (2020-03-20T14:00:59).' },
         until: { in: 'query', type: 'string', description: 'Submitted at or before: epoch seconds, or ISO 8601 in UTC.' },
         after: { in: 'query', type: 'string',
-          description: 'Only responses submitted after this response id (exclusive); not with sort.' } },
+          description: 'Only responses submitted after this response\'s token (a cursor, exclusive).' } },
       result: { items: [{ response_id: 'string', 'token?': 'string', 'landed_at?': 'string', 'submitted_at?': 'string',
         'answers?': 'unknown', 'hidden?': 'unknown', 'calculated?': { 'score?': 'number' } }] } },
   },
