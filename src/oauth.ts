@@ -92,9 +92,9 @@ type Sent = { values?: Values; fetch?: typeof globalThis.fetch };
 
 /** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. The app's
  * `fetch`, else the entry's default: the address guard for a typed host. */
-function context(entry: Entry, credentials: AnyClient, input: Sent, refresh = false) {
+function context(entry: Entry, credentials: AnyClient, input: Sent, refresh = false, urls = endpoints(entry, input.values)) {
   // Each URL passes the one check every URL the library sends to passes, before anything is sent.
-  const { config, token, refresh: renew, revoke } = endpoints(entry, input.values);
+  const { config, token, refresh: renew, revoke } = urls;
   const fetch = input.fetch ?? defaultFetch(entry);
   const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (refresh ? renew() : token).href,
     ...(revoke ? { revocation_endpoint: revoke.href } : {}) };
@@ -210,10 +210,10 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
     if ('url' in revoke) {
       const { client } = input;
       if (client === undefined) throw new TypeError('oauth_client_required');
-      const c = context(entry, client, input); // every URL filled and checked once, before a token is read
+      const urls = endpoints(entry, input.values); // every URL filled and checked once, before a token is read
       const token = revoke.token.map(kind => (kind === 'refresh' ? input.refreshToken : input.accessToken))
         .find((value): value is string => typeof value === 'string' && value !== '');
-      if (token !== undefined) await revokeToken(c, entry, token);
+      if (token !== undefined) await revokeToken(context(entry, client, input, false, urls), entry, token);
       return;
     }
     const http = createClient(entry, { token: () => Promise.resolve(accessToken ?? ''), fetch: input.fetch ?? defaultFetch(entry),

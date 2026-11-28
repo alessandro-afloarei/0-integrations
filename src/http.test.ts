@@ -1770,6 +1770,15 @@ describe("a chosen host: a stored value that is not exactly one of its field's c
     expect({ urls: fake.calls.map(call => call.url), credentials }).toEqual({ urls: ['https://login.k.test/revoke'], credentials: ['refreshToken'] });
   });
 
+  test('an RFC 7009 revoke with no token builds no client authentication: done, the client secret unread, nothing sent', async () => {
+    const fake = answering();
+    let reads = 0;
+    const app = { clientId: 'c', get clientSecret() { reads++; return ''; } };
+    await expect(revokeGrant(hubspot, { refreshToken: null, client: app, fetch: fake.fetch })).resolves.toBeUndefined();
+    await expect(revokeGrant(gitlabEntry, { client: app, values: {} as never, fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: gitlab {host}'));
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: 0, requests: 0 });
+  });
+
   test("a stored number is no choice, even when its text is one", () => {
     const entry = defineProvider({ id: 'numbered', name: 'Numbered', fields: [{ name: 'port', title: 'Host', choices: ['10'] }],
       auth: [{ kind: 'key' }], http: { baseUrl: 'https://{port}', host: '*' } });
