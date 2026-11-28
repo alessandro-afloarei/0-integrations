@@ -324,13 +324,11 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   `OAuthClient<typeof entry>` has no `clientSecret` (Firecrawl, Brevo).
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
-- A code exchange the server refuses is classified as a `token` sign-in's first request is (no grant existed): a 400,
-  401 or 403, and a 200 the entry's `failed` marks, are `rejected`, their detail the answer's `error` only when that is
-  one of RFC 6749's codes (`invalid_grant`, `invalid_client`, …) and holds nothing sent; any other answer is classified
-  as a call's is (a 404 `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`, the rest
-  `request_failed`), though no code the entry lists as revoked makes it `GrantRevoked`. `GrantRevoked` means a grant that existed (a refresh, a call). A refusal of the exchange, a refresh
-  or a revoke is read from its body even beside a `WWW-Authenticate` challenge (Doorkeeper sends one on every error;
-  RFC 6749 §5.2 asks for one beside a 401 `invalid_client`).
+- A code exchange the server refuses is classified as a `token` sign-in's token answer is (below), since no grant
+  existed: a 200 the entry's `failed` marks is `rejected` too, and a 5xx is `unavailable` before its body is read.
+  `GrantRevoked` means a grant that existed (a refresh, a call). A refusal of the exchange, a refresh or a revoke is
+  read from its body even beside a `WWW-Authenticate` challenge (Doorkeeper sends one on every error; RFC 6749 §5.2
+  asks for one beside a 401 `invalid_client`).
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
   (Atlassian) with `content-type: application/json`, the client's parameters in it as `clientAuth` says (Basic stays a
   header). The answer is read as a form-bodied one is.
@@ -345,8 +343,11 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     `expires_in` that is a positive finite number of seconds is its life (none: kept until refused); the caller that
     requested a token gets it, however short its life. A 2xx without a token is `invalid_response` (`missing_fields`);
     400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the answer's `error` when it is one of the RFC's
-    codes (`invalid_client`, …), else none; any other answer is classified as usual. No detail holds a secret field, a
-    body value filled from one, or the Basic value sent.
+    codes (`invalid_grant`, `invalid_client`, …), else none; any other answer is classified as a call's is (a 404
+    `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`, the rest `request_failed`), no code
+    reading as a revoked grant: the entry's `errors.revoked` list is not read, since no grant existed. A body that
+    breaks while it is read is `unavailable`. No detail holds a secret field, a body value filled from one, or the
+    Basic value sent.
     The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
     the token until it is passed back as refused or a call comes within 60 seconds of its expiry, or after it (that
@@ -604,9 +605,9 @@ type Webhook = (
 `verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
 request. Every comparison is constant time over buffers of equal length, a timestamp is inside its tolerance (item 3),
 and a signature header longer than 8 KiB is `false` before it is parsed.
-`deliveryId` is what an app dedupes on; several body paths are joined with `:`. `deliveryId` is signed content where the
-scheme signs anything: a body path for `hmac` and `ed25519`, the signed id header for `standard`. `basic` and `token`
-sign nothing, so a header is no weaker than the body there.
+`deliveryId` is what an app dedupes on; several body paths are joined with `:`. A catalogue entry's `deliveryId` is
+signed content where the scheme signs anything: a body path for `hmac` and `ed25519`, the signed id header for
+`standard`. `basic` and `token` sign nothing, so a header is no weaker than the body there.
 
 1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
    (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`). The key is the secret's bytes, or
@@ -647,12 +648,11 @@ sign nothing, so a header is no weaker than the body there.
 8. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
 9. `challengeAnswer(webhook, request, secret)` answers a handshake, or is null. It checks the request first with
    `verifyWebhook`, unless the challenge is `unsigned` (Fellow's and Nylas' verification requests carry no signature).
-   The value is read at `echo`: a body path (Slack, Discord, Fellow) or a query parameter (Nylas' `challenge`, on a GET
-   with no body; a request with a body is no query handshake). The value may be read from a request header
-   (`echo: { header }`, Front's `x-front-challenge`), answered only as `text`, after the request verifies (unless the
-   challenge is `unsigned`), where `when` holds when given. It answers when `when` holds (a body path needs one; a query or a header may leave it out, the
-   value's presence then deciding) and the value is a string of 1 to 512 printable ASCII characters without a space,
-   `<` or `>`, or for a JSON answer also a finite number: as JSON `{ [echo]: value }` (a value read from a query or a
+   The value is read at `echo`: a body path (Slack, Discord, Fellow), a query parameter (Nylas' `challenge`, on a GET
+   with no body; a request with a body is no query handshake) or a request header (Front's `x-front-challenge`). It
+   answers when `when` holds (a body path needs one; a query or a header may leave it out, the value's presence then
+   deciding) and the value is a string of 1 to 512 printable ASCII characters without a space, `<` or `>`, or for a
+   JSON answer also a finite number: as JSON `{ [echo]: value }` (a value read from a query or a
    header is answered only as `text`), or with `text` as the value alone, `content-type: text/plain; charset=utf-8`, its
    `content-length` (Nylas refuses a chunked answer) and `x-content-type-options: nosniff`. A challenge answer changes
    nothing and holds nothing secret; an app calls it first, and verifies every other request.

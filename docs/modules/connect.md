@@ -35,7 +35,8 @@ none and starts with a form, and an entry whose kind is not known in the types (
   `GrantRevoked` (no grant existed): a 400, 401 or 403 (a bad, expired or replayed code, a wrong `redirect_uri`,
   verifier or client) and a 200 the entry's `failed` marks (Slack's `ok: false`) are `ProviderHttpError` `rejected`,
   the detail the answer's `error` only when that is one of RFC 6749's codes (`invalid_grant`, `invalid_client`), else
-  null; a 404 is `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`. If the scope check or
+  null; any other 4xx is classified as a call's is (a 404 `not_found`, a 429 `rate_limited` with its wait, a 408
+  `unavailable`, the rest `request_failed`), and a 5xx is `unavailable`. If the scope check or
   identify fails it revokes the new grant best-effort and throws the original error;
   `onRevokeFailed(error)` reports a failed
   cleanup (an entry whose revoke is a request on the base cannot revoke a grant whose host was refused, so that is

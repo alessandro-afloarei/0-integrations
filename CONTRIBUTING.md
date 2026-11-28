@@ -114,12 +114,11 @@ entry:
 - declares a webhook the engine can trust: `{body}` is signed (by default, or in `signed`), and `{timestamp}` exactly
   when a timestamp is declared, read apart from the signature (another `part` or header) and in the unit its page states
   (seconds unless `unit` is `epochMs` or `iso8601`), its `deliveryId` a body path the page names as the event's or the
-  delivery's id where it is `hmac` or `ed25519`; a `part` name holds no `,`, `=` or whitespace, and no `prefix`
-  sits beside it; every header name (a webhook's, a send's, a wait's, `http.headers`
-  keys) is one lowercase HTTP token; a `challenge` echoes a top-level body key where its `when` compares a body `path`
-  (`equals` or `in`), or a query parameter or a request header answered as `text` (its `when` may be left out; a
-  header never the signature's or the timestamp's), and is
-  `unsigned` only where the provider's page says the handshake carries no signature;
+  delivery's id where it is `hmac` or `ed25519`; a `part` name holds no `,`, `=` or whitespace, and no `prefix` sits
+  beside it; every header name (a webhook's, a send's, a wait's, `http.headers` keys) is one lowercase HTTP token; a
+  `challenge` echoes a top-level body key where its `when` compares a body `path` (`equals` or `in`), or a query
+  parameter or a request header answered as `text` (its `when` may be left out; a header never the signature's or the
+  timestamp's), and is `unsigned` only where the provider's page says the handshake carries no signature;
 - retries as the engine can: a `retry.wait` or a rate-limit rule's `wait` reads one header (or a list) or one body
   path, in `s`, `ms`, `epochSeconds`, `epochMs` or `iso8601`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000
   when left out) and never beside `onlyStated`;
