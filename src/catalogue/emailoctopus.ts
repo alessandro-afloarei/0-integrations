@@ -35,7 +35,9 @@ export const emailoctopus = defineProvider({
         tag: { in: 'query', type: 'string' }, ...limit }, result: { data: [contact] } },
     'contacts.get': { docs: `${ref}/Contact/operation/api_lists_list_idcontacts_contact_id_get`, path: '/lists/{list_id}/contacts/{contact_id}',
       notFound: 'null', params: { ...listId, ...contactId }, result: contact },
-    // Adds a contact to the list; the page names no email it sends. An existing contact answers 409 (already exists).
+    // Adds a contact to the list; no page names a confirmation email, but a contact subscribing to a list or tagged can
+    // start the account's automations, which send emails, and no parameter stops them. A contact already in the list is
+    // refused (already-exists).
     'contacts.create': { docs: `${ref}/Contact/operation/api_lists_list_idcontacts_post`, method: 'POST', path: '/lists/{list_id}/contacts',
       params: { ...listId, email_address: { in: 'body', type: 'string', required: true }, ...fields,
         tags: { in: 'body', type: ['string'] }, status }, result: contact },
