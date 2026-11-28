@@ -7,8 +7,8 @@ import { defineProvider } from '../catalogue.js';
 const ref = 'https://help.ortto.com';
 /** The default, Australian and European service endpoints: https://help.ortto.com/a-250-api-reference */
 const hosts = ['api.ap3api.com', 'api.au.ap3api.com', 'api.eu.ap3api.com'] as const;
-const people = { in: 'body', type: [{ 'fields?': 'unknown', 'tags?': ['string'], 'unset_tags?': ['string'] }],
-  description: 'Up to 100 people, each its person fields by field id (str::email, str::first, str:cm:<custom>), tags to apply and to remove; bol::p and bol::sp the email and SMS permissions; null clears a field.' } as const;
+const people = { in: 'body', required: true, type: [{ 'fields?': 'unknown', 'tags?': ['string'], 'unset_tags?': ['string'] }],
+  description: 'Up to 100 people, each its person fields by field id (str::email, str::first, str:cm:<custom>), tags to apply and to remove; bol::p and bol::sp the email and SMS permissions (bol::p true sets a person\'s email permission back to true); null clears a field.' } as const;
 
 export const ortto = defineProvider({
   id: 'ortto', name: 'Ortto', docs: `${ref}/a-223-developer-guide`,
@@ -45,19 +45,24 @@ export const ortto = defineProvider({
       result: { contacts: [{ id: 'string', 'fields?': 'unknown' }] } },
     // A new person's email permission is true unless fields set bol::p false; Ortto asks for the person's consent:
     // https://help.ortto.com/a-225-configuring-peoples-subscription-permissions
-    'people.create': { docs: `${ref}/a-257-create-or-update-one-or-more-people-merge`, method: 'POST', path: '/person/merge',
+    'people.create': { docs: `${ref}/a-257-create-or-update-one-or-more-people-merge`, method: 'POST', kind: 'write', path: '/person/merge',
       params: { people, merge_by: { in: 'body', type: ['string'], description: 'The field ids that find an existing person to update; the key\'s defaults when left out.' },
         merge_strategy: { in: 'body', type: 'integer', description: '1 append only, 2 overwrite existing (the default), 3 ignore existing people.' },
         skip_non_existing: { in: 'body', type: 'boolean', description: 'true updates existing people and adds none.' },
         async: { in: 'body', type: 'boolean' } } },
-    'subscriptions.create': { docs: `${ref}/a-269-subscribe-or-unsubscribe-people-to-from-an-audience-subscribe`, method: 'PUT',
+    // Subscribes each person to the audience's email, again for one who unsubscribed from it; audiences are a journey
+    // entry criterion: https://help.ortto.com/a-269-subscribe-or-unsubscribe-people-to-from-an-audience-subscribe
+    // https://help.ortto.com/a-733-journey-entry-criteria
+    'subscriptions.create': { docs: `${ref}/a-269-subscribe-or-unsubscribe-people-to-from-an-audience-subscribe`, method: 'PUT', kind: 'write',
       path: '/audience/subscribe',
-      params: { audience_id: { in: 'body', type: 'string' },
-        people: { in: 'body', type: [{ 'email?': 'string', subscribed: true }],
-          description: 'Each person subscribed to the audience\'s email; a person must already be a member of the audience.' },
+      params: { audience_id: { in: 'body', type: 'string', required: true, description: 'The audience\'s id, from its URL in Ortto.' },
+        people: { in: 'body', required: true, type: [{ 'email?': 'string', 'external_id?': 'string', 'person_id?': 'string', subscribed: true }],
+          description: 'Up to 1000 people, each named by email, external_id or person_id and subscribed to the audience\'s email (true subscribes a person who unsubscribed from it again); a person must already be a member of the audience.' },
         async: { in: 'body', type: 'boolean' } } },
-    'events.create': { docs: `${ref}/a-271-create-a-custom-activity-event-create`, method: 'POST', path: '/activities/create',
-      params: { activities: { in: 'body', type: [{ 'activity_id?': 'string', 'attributes?': 'unknown', 'fields?': 'unknown' }],
+    // An activity can enter its person into journeys, and can create that person:
+    // https://help.ortto.com/a-733-journey-entry-criteria
+    'events.create': { docs: `${ref}/a-271-create-a-custom-activity-event-create`, method: 'POST', kind: 'write', path: '/activities/create',
+      params: { activities: { in: 'body', required: true, type: [{ activity_id: 'string', 'attributes?': 'unknown', 'fields?': 'unknown' }],
         description: 'Each activity names its custom activity id, its attributes and the person fields that find or create its person.' },
       merge_by: { in: 'body', type: ['string'] } },
       result: { 'activities?': [{ 'person_id?': 'string', 'status?': 'string', 'person_status?': 'string', 'activity_id?': 'string' }] } },
