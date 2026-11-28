@@ -24,7 +24,7 @@ and the values are checked at run time. An entry whose OAuth 2 URLs, base or
 `http.bases` mix a typed host with any other host is refused with `TypeError('host_split: <entry id>')` before
 anything is built or sent: on a typed host a credential goes only to that host. A host chosen from a field's
 `choices` (Intercom's `appHost`, its authorize host per region) is no typed host and may sit beside fixed URLs; a
-refresh and a revoke read it wherever an OAuth 2 URL names it (`endpoints` fills the authorize URL too), so Intercom's
+refresh and a revoke read it wherever an OAuth 2 URL names it (every OAuth 2 URL is filled, the authorize URL too), so Intercom's
 `refreshGrant` and `revokeGrant` take `values: { appHost }`; wherever such a value fills a URL, one that is not exactly
 one of the choices is `base_host_refused` before the client secret or a token is read (Intercom declares no revoke: its
 `revokeGrant` sends nothing). `exchangeCode`, `refreshGrant` and
@@ -58,8 +58,8 @@ first token the entry's `revoke.token` names (it needs `client`, else `oauth_cli
 `revoke.request` sent with the access token, to the `http.bases` entry its `base` names, if any. A 2xx,
 `invalid_grant`, a revoked code and the entry's `goneErrors` are done, and so is an RFC 7009 revoke's 404, an entry
 with no `revoke` or a grant without the token it names once its URLs pass: the revoke's URLs (an RFC 7009 revoke's, a
-request revoke's base) are filled from `values` and checked before a token is read, so one given no token is still
-`template_missing` or `base_host_refused` when its `values` are missing or refused. A request revoke's answer is read as any JSON call's: its 404
+request revoke's base) are filled from `values` and checked before a token is read, so one given no token is
+`template_missing`, `base_value_invalid` or `base_host_refused` when its `values` are missing or refused. A request revoke's answer is read as any JSON call's: its 404
 is `not_found` (a missing route, not a gone token), and a 2xx without JSON is `invalid_response`.
 
 ## A `token` entry: `tokenSource`

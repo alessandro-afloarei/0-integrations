@@ -168,7 +168,8 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
 'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value its `save` keeps.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
-  is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
+  is built, and always before the token is read (a client's token function is not called; a token given as a string
+  is the app's own value, read when the client is built) and before `beforeRequest`. An app's own `baseUrl` is used as given,
   after the one check below that every URL the library sends to passes; on a typed, chosen or named host it must keep the
   filled base's origin (else `base_host_refused`, before the token is read); on a fixed base it is the app's own
   explicit choice of origin.
@@ -211,22 +212,19 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   (a value only in the base's path) is unaffected. No value is ever read from the callback's query: the callback is the
   person's browser.
 - **A host chosen from a field's own list.** A placeholder that is a URL's whole host (`https://{name}`) and names a
-  plain field with `choices` is a *chosen* host: the entry wrote every host it may take. It is no typed host: beside
-  fixed URLs (OAuth 2's, a token request's; a call on a fixed `http.bases` value is still refused, since an own base
-  must keep the filled base's origin), and beside other chosen hosts, it is no split (`hostSplit`). Beside a named host, or composed
-  into another host (`https://api.{region}.example.com`), it is typed, and the split rule applies. Intercom's OAuth 2
-  sign-in is the first: `authorizeUrl: 'https://{appHost}/oauth'` beside its fixed token URL and base.
-  - Its value must be exactly one of the field's choices, case included, wherever it fills a host: the base, an OAuth 2
-    URL, a token request's URL. `filledBase` checks it on every send (a call, identify, an authorize URL, an exchange, a
-    refresh, a revoke, a token request), not only when the person connects. A value outside them is
-    `base_host_refused` before a credential is read or anything is sent; one that is no host part is
-    `base_value_invalid` first, as today. A fixed URL reads no value.
-  - `http.host` is the hosts a templated URL of the entry may have (the base's, an OAuth 2 URL's, a token request's),
-    and each choice of a chosen host is one of its names. A documented list of regional hosts is `choices` with
-    `http.host` those names (Intercom's three API hosts on its key, its three authorize hosts on OAuth 2), and it may sit
-    beside fixed OAuth 2 URLs.
-  - A typed host (a field without `choices`) keeps the split rule. A value the sign-in does not declare is still
-    `value_undeclared` first.
+  plain field with a list of `choices` is a *chosen* host: the entry wrote every host it may take. It is no typed host:
+  beside fixed OAuth 2 URLs and a fixed token request URL, and beside other chosen hosts, it is no split
+  (`hostSplit`). Beside a named host or an `http.bases` value, or composed into another host
+  (`https://api.{region}.example.com`), it splits. Intercom's OAuth 2 sign-in is the first: `authorizeUrl:
+  'https://{appHost}/oauth'` beside its fixed token URL and base.
+  - Its value must be exactly one of the field's choices, a string, case included, wherever it fills a host: the base,
+    an OAuth 2 URL, a token request's URL. `filledBase` checks it on every send whose URL it fills (a call, identify,
+    an authorize URL, an exchange, a refresh, a revoke, a token request), not only when the person connects. A value
+    outside them is `base_host_refused` before a credential is read or anything is sent; one that is no host part is
+    `base_value_invalid` first. A fixed URL reads no value. As for a named host, the engine cannot tell which choice a
+    connection was issued on: an app stores the choice with the connection and passes its kept `values` back unchanged.
+  - Its `http.host` holds a domain (a name, `*.` and a domain, or a list of those), never `'*'`, and each choice matches
+    it; the table checks both.
 - **A host the token answer names.** On an OAuth 2 sign-in alone (on a key or token sign-in it is a typed host), a
   placeholder that is the base's whole host (`https://{host}/…`) and names a `save` key whose value is one
   `tokenAnswer.*` path, and no field, is a *named* host: the token endpoint that issued the grant chose it (Wrike's

@@ -13,12 +13,13 @@ Nothing here is released yet.
   stay on `api.intercom.io`.
 - Breaking: a stored value of a field with `choices` that is not exactly one of them, one differing only in case
   included (`API.EU.INTERCOM.IO`), is `base_host_refused` on every send whose URL it fills (a call, identify, an
-  authorize URL, an exchange, a refresh, a revoke), where its host used to pass because the URL parser lowercases it.
+  authorize URL, an exchange, a refresh, a revoke, a token request), where its host used to pass because the URL parser
+  lowercases it.
   `startConnect` and `finishConnect` already refused it (`connect_field_invalid`), so every connection they made is
   unchanged; an app that stored a value another way stores the choice exactly as written.
 - Breaking: a revoke fills and checks its URLs (an RFC 7009 revoke's, a request revoke's base) before it reads a token:
-  one given no token whose `values` are missing or refused is `template_missing` or `base_host_refused` where it used
-  to be done. Pass the connection's `values` to every `revokeGrant`.
+  one given no token whose `values` are missing or refused is `template_missing`, `base_value_invalid` or
+  `base_host_refused` where it used to be done. Pass the connection's `values` to every `revokeGrant`.
 - Breaking: Intercom's OAuth 2 connections keep `appHost`. `authorizeUrl`, `exchangeCode` and `refreshGrant` need it in
   `values` (`'app.intercom.com'` for a connection made before, the host it signed in on), else `template_missing`
   before anything is sent; `revokeGrant` and `client()` take it, and their calls stay on `api.intercom.io`.
