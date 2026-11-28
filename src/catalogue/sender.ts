@@ -43,7 +43,7 @@ export const sender = defineProvider({
       kind: 'write', params: { subscriber: subscriberKey, firstname: { in: 'body', type: 'string' }, lastname: { in: 'body', type: 'string' },
         groups: { in: 'body', type: ['string'], description: 'The group ids assigned to the subscriber.' },
         subscriber_status: { in: 'body', type: 'string', enum: ['ACTIVE', 'UNSUBSCRIBED'],
-          description: 'The page also takes BOUNCED and SPAM_REPORTED, which the entry does not offer.' },
+          description: 'No page says whether ACTIVE subscribes again a person who unsubscribed. The page also takes BOUNCED and SPAM_REPORTED, which the entry does not offer.' },
         trigger_automation: automation } },
     'campaigns.list': { docs: `${ref}/campaigns/get-all/`, path: '/campaigns', paging: 'page', records: 'data', params: { limit },
       result: { data: [campaign] } },
