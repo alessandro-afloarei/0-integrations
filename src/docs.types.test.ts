@@ -14,9 +14,11 @@ import { mattermost } from './catalogue/mattermost.js';
 import { notion } from './catalogue/notion.js';
 import { nylas } from './catalogue/nylas.js';
 import { aircall } from './catalogue/aircall.js';
+import { front } from './catalogue/front.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { metabase } from './catalogue/metabase.js';
 import { trello } from './catalogue/trello.js';
+import { zendesk } from './catalogue/zendesk.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
@@ -235,7 +237,7 @@ async function designClient() {
 function webhooksDeclared() {
   // `hmac` with a timestamp header (Breakcold)
   const timestamped: Webhook = { kind: 'hmac', header: 'x-webhook-signature', signed: '{timestamp}.{body}', prefix: 'sha256=',
-    timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { header: 'x-webhook-delivery-id' } };
+    timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { body: ['eventId'] } };
   // `hmac` with `part`: `t=…,v1=…` pieces in one header (Stripe)
   const pieces: Webhook = { kind: 'hmac', header: 'stripe-signature', signed: '{timestamp}.{body}', part: 'v1',
     timestamp: { part: 't' }, deliveryId: { body: ['id'] } };
@@ -244,6 +246,9 @@ function webhooksDeclared() {
     timestamp: { header: 'x-signature-timestamp' } };
   // `token`: the header is the secret itself (Google Calendar push)
   const sharedToken: Webhook = { kind: 'token', header: 'x-goog-channel-token' };
+  // `hmac` over an ISO 8601 timestamp header and the body, base64 (Zendesk)
+  const instant: Webhook = { kind: 'hmac', header: 'x-zendesk-webhook-signature', signed: '{timestamp}{body}', encoding: 'base64',
+    timestamp: { header: 'x-zendesk-webhook-signature-timestamp', unit: 'iso8601' } };
   // `hmac` keyed with the secret's hex decoding, over the timestamp header's text and the body (Close)
   const decoded: Webhook = { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
     timestamp: { header: 'close-sig-timestamp' } };
@@ -258,7 +263,11 @@ function webhooksDeclared() {
   // A `challenge` read from a GET's query and answered as text, unsigned: the secret comes after it (Nylas)
   const queried: Webhook = { kind: 'hmac', header: 'x-nylas-signature',
     challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
-  return [timestamped, pieces, signedWithKey, sharedToken, decoded, credentials, standard, challenged, queried];
+  // A `challenge` read from a request header and answered as text, after the request verifies (Front)
+  const headed: Webhook = { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', encoding: 'base64',
+    timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' }, deliveryId: { body: ['payload.id'] },
+    challenge: { when: { path: 'type', equals: 'sync' }, echo: { header: 'x-front-challenge' }, text: true } };
+  return [timestamped, pieces, signedWithKey, sharedToken, instant, decoded, credentials, standard, challenged, queried, headed];
 }
 
 // docs/modules/webhooks.md › Receiving a delivery (its last line, a comment there, is the three calls below).
@@ -320,7 +329,7 @@ test('every docs example compiles', () => {
 test("webhooks.md's declarations are the entries' own (Discord's without its challenge)", () => {
   // `toEqual` reads a property set to undefined as missing.
   expect(webhooksDeclared()).toEqual([breakcold.webhook, stripe.webhook, { ...discord.webhook, challenge: undefined }, google.webhook,
-    close.webhook, mailjet.webhook, gitlab.webhook, slack.webhook, nylas.webhook]);
+    zendesk.webhook, close.webhook, mailjet.webhook, gitlab.webhook, slack.webhook, nylas.webhook, front.webhook]);
 });
 
 test("testing.md's derived-fake examples run", async () => {

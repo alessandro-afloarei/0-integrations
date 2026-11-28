@@ -115,7 +115,53 @@ Nothing here is released yet.
 - An entry's `authorizeParams` no longer replace a parameter the engine sends (`client_id`, `scope`, `redirect_uri`,
   `state`, `code_challenge`, `code_challenge_method`): an app's own entry that named one sent its value in place of the
   engine's, and now sends the engine's. No catalogue entry names one, and the table refuses it.
+- Breaking: a code exchange the server refuses is classified as a `token` sign-in's first request is. A 400, 401 or
+  403, and a 200 the entry's `failed` marks, throw `ProviderHttpError` `rejected`, its detail the answer's `error` only
+  when that is one of RFC 6749's codes, else null. So a bad, expired or replayed code, or a wrong `redirect_uri` or code
+  verifier (`invalid_grant`), is no longer `GrantRevoked`; a wrong client (`invalid_client`), any other OAuth code and
+  an answer with no OAuth body at those statuses are no longer `request_failed`; Slack's `ok: false` is `rejected` with
+  no detail (its own codes, such as `invalid_code`, are none of RFC 6749's). Any other refusal of the exchange is
+  classified as a call's answer is, by the entry's own rules and with the answer's headers as sent: a 404 is
+  `not_found`, a 429 `rate_limited` with its wait, a 408 `unavailable`, each `request_failed` before (or `GrantRevoked`
+  before, for `invalid_grant` or a code the entry lists as revoked); a 5xx is `unavailable` with its stated wait (it had
+  none), or what an entry's rule makes of it. An answer whose body breaks while it is read is `unavailable`, refused
+  (it was `request_failed`) or a 200 (it was `invalid_response`). A 200 the entry's `failed` marks takes its detail
+  from the body's `error`, as a 400 does, not from `errors.detail`'s path. A first token request, an exchange or a
+  `token` sign-in's, no longer reads the entry's own `errors.revoked` list, so an app's own `token` entry that lists a
+  code there gets no `GrantRevoked` from it on a first request. An app that caught `GrantRevoked` or `request_failed`
+  from `finishConnect` or `exchangeCode` to ask the person to connect again catches `rejected`.
+- A first token request's refused answer, an exchange's or a `token` sign-in's, is read up to 10 MiB, the bound a call's
+  error body has; a larger one is classified from its status and headers alone, with no detail (a 503 keeps its wait).
+  A successful answer is read whole, as before. `readCappedBody` (webhooks) now returns null past its cap without
+  waiting for the stream's cancel to settle, so a body handed over as a clone cannot hang it, and a cancel that fails
+  is no longer thrown.
+- Breaking: an OAuth refusal that carries a `WWW-Authenticate` challenge (Doorkeeper sends one on every error, RFC 6749
+  asks for one beside a 401 `invalid_client`) is read from its body as any other refusal is. A refresh refused that way
+  with `invalid_grant` or a code the entry lists as revoked is `GrantRevoked`, no longer `request_failed`: the
+  connection is gone, and an app handles it as any revoked grant (asks the person to connect again). A revoke refused
+  that way with `invalid_grant` is done, no longer `request_failed`; any other such refusal keeps its class and now
+  carries its code as detail.
 - Webhooks:
+  - New: a webhook timestamp may be epoch milliseconds or an ISO 8601 instant (`timestamp.unit`); Zendesk verifies its
+    webhooks.
+  - New: a challenge may be read from a request header (`echo: { header }`, text only); Front verifies its webhooks,
+    answers its validation request and dedupes on the signed event's `payload.id` (the validation request has none).
+  - Breaking: a challenge value read from a query or a header is never answered inside JSON: an app's own untyped
+    declaration whose query `echo` left out `text` (the type and the table already refused it) was answered as JSON and
+    is now null.
+  - Breaking: every catalogue entry with a signed webhook (`hmac`, `ed25519`) dedupes on a body path (the table refuses
+    a header id there). TidyCal reads `id` from the signed body (was the `tidycal-event-id` header): its page says the
+    header carries that same event id, so the value does not change, only where it is read. Breakcold reads `eventId`
+    (was `x-webhook-delivery-id`): its page names both "the delivery event id" but does not say they hold the same
+    value, so treat it as changed. PagerDuty reads `event.id` (was `x-webhook-id`, "unique to the webhook"): the value
+    changes to the event's, the same in every subscription's copy of one event. Where a value changes, a delivery
+    first seen before the update and retried after it reads as new. Linear, Sentry, RocketReach and Todoist declare no
+    `deliveryId` (no page documents a signed per-delivery id), so `deliveryId()` answers null and an app dedupes them
+    on its own key.
+  - Breaking: Fireflies declares no `deliveryId`: `event` and `meeting_id` name the meeting, and a resend after its
+    notes change carries the same pair, so deduping on it dropped every updated transcript or summary. `deliveryId()`
+    answers null; an app dedupes on its own key, for example the event, the meeting id and `reprocessed_at` (absent on a
+    first delivery).
   - Breaking: `challengeAnswer(webhook, request, secret)` verifies the request itself unless the entry marks its
     challenge `unsigned`; call it before `verifyWebhook`. Slack's `url_verification` and Discord's PING are answered
     only under a valid signature: with a wrong secret they were answered, and are now null. A value is answered only as

@@ -75,8 +75,9 @@ describe('connect', () => {
     // Slack's own identity needs no request; this one asks `auth.test`, so an identify would show in the calls.
     const asking = defineProvider({ ...slack, identify: { request: { path: '/auth.test' }, id: 'team_id' } });
     const http = fakeFetch(fakeSlack(data));
+    // Slack's `ok: false` is a refused exchange, `rejected`; its own code (`invalid_code`) is none of RFC 6749's, so no detail.
     await expect(finishConnect(asking, { client, code: 'fixture-denied', redirectUri: callback, fetch: http.fetch, onRevokeFailed: vi.fn() }))
-      .rejects.toMatchObject({ detail: 'invalid_code' });
+      .rejects.toEqual(new ProviderHttpError('rejected', 200, null));
     expect(http.calls.map(call => call.url)).toEqual([tokenUrl]);
   });
 
@@ -646,11 +647,14 @@ describe('connect review regressions', () => {
     const code = await authorize(http);
     const exchange = (redirectUri: string, clientId = 'client', suppliedCode = code) => finishConnect(slack,
       { client: { clientId, clientSecret: 'secret' }, code: suppliedCode, redirectUri, fetch: http.fetch, onRevokeFailed: vi.fn() });
-    await expect(exchange('https://attacker.test/')).rejects.toMatchObject({ detail: 'bad_redirect_uri' });
-    await expect(exchange(callback, 'wrong-client')).rejects.toMatchObject({ detail: 'invalid_client_id' });
-    await expect(exchange(callback, 'client', 'unissued')).rejects.toMatchObject({ detail: 'invalid_code' });
+    // Each refusal is `rejected` with no detail: Slack's own codes (`bad_redirect_uri`, `invalid_client_id`,
+    // `invalid_code`) are none of RFC 6749's. The binding shows in which exchange connects.
+    const refused = new ProviderHttpError('rejected', 200, null);
+    await expect(exchange('https://attacker.test/')).rejects.toEqual(refused);
+    await expect(exchange(callback, 'wrong-client')).rejects.toEqual(refused);
+    await expect(exchange(callback, 'client', 'unissued')).rejects.toEqual(refused);
     await exchange(callback);
-    await expect(exchange(callback)).rejects.toMatchObject({ detail: 'invalid_code' });
+    await expect(exchange(callback)).rejects.toEqual(refused);
   });
 });
 

@@ -23,7 +23,9 @@ export const todoist = defineProvider({
   identify: { request: { path: '/user' }, id: 'id', name: ['full_name', 'email'] },
   errors: { detail: 'error_tag' },
   paging: { cursor: { kind: 'cursor', next: 'next_cursor', send: { query: 'cursor' } } },
-  webhook: { kind: 'hmac', header: 'x-todoist-hmac-sha256', encoding: 'base64', deliveryId: { header: 'x-todoist-delivery-id' } },
+  // No `deliveryId`: `X-Todoist-Delivery-ID` repeats on a redelivery but is not signed (the HMAC covers the payload
+  // alone), so an app that dedupes retries reads it itself. https://developer.todoist.com/api/v1/webhooks
+  webhook: { kind: 'hmac', header: 'x-todoist-hmac-sha256', encoding: 'base64' },
   operations: {
     'tasks.list': { docs: `${v1}/tasks.md`, path: '/tasks', paging: 'cursor', records: 'results',
       params: { project_id: { in: 'query', type: 'string' }, limit }, result: { results: [task] } },

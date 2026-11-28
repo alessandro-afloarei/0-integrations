@@ -4,10 +4,16 @@
 on `oauth4webapi`, each driven by a catalogue entry whose sign-in is OAuth 2. `pkcePair` supplies PKCE where the entry
 uses it. The app owns the state nonce. The scopes asked are joined by the entry's `scopeSeparator` (a space by
 default); none asked sends no `scope` parameter. `exchangeCode` returns only the token-answer fields the entry reads
-(`identify`, `save`, and `scope` when every scope must be granted), never the rest; a token answer the entry's `failed`
-condition marks is refused with the entry's own code. An entry's `authorizeParams` never replace a parameter the
-engine sends (`client_id`, `scope`, `redirect_uri`, `state`, `code_challenge`, `code_challenge_method`). The client's
-secret, the code and the verifier are each read once, so the value checked is the value sent and redacted.
+(`identify`, `save`, and `scope` when every scope must be granted), never the rest. A code exchange the server refuses
+is classified as a `token` sign-in's first request is (no grant existed): a 400, 401 or 403, and a 200 the entry's
+`failed` marks, are `rejected`, their detail the answer's `error` only when that is one of RFC 6749's codes; any other
+answer is classified as a call's is (a 404 `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx
+`unavailable`, the rest `request_failed`), never `GrantRevoked`, which means a grant that existed (a refresh, a call).
+An exchange answer whose body breaks while it is read, refused or a 200, is `unavailable`. A refusal is read from its
+body even beside a `WWW-Authenticate` challenge, as Doorkeeper sends on every error. An entry's `authorizeParams` never
+replace a parameter the engine sends (`client_id`, `scope`, `redirect_uri`, `state`, `code_challenge`,
+`code_challenge_method`). The client's secret, the code and the verifier are each read once, so the value checked is
+the value sent and redacted.
 
 Every OAuth 2 URL (authorize, token, refresh, an RFC 7009 revoke) is filled from the plain fields in `values` (the
 refresh URL also from a host the token answer named, below) and checked as a base is, and a URL that names a value not

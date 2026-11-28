@@ -21,7 +21,7 @@ export const sentry = defineProvider({
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{host}/api/0', host: '*' },
   identify: { request: { path: '/organizations/' } },
-  webhook: { kind: 'hmac', header: 'sentry-hook-signature', deliveryId: { header: 'request-id' } },
+  webhook: { kind: 'hmac', header: 'sentry-hook-signature' },
   operations: {
     'issues.list': { docs: `${events}/list-an-organizations-issues/`, path: '/organizations/{organization_id_or_slug}/issues/',
       params: { ...org, project: { in: 'query', type: 'string' }, query: { in: 'query', type: 'string' },

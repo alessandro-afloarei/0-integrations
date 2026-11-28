@@ -80,7 +80,7 @@ test("accepts Slack's bot token and its team", async () => {
 
 test("Slack's ok:false is a refusal, not a token", async () => {
   await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch, values: { domain: 'slack.com' } }))
-    .rejects.toMatchObject({ name: 'ProviderHttpError', code: 'request_failed', status: 200, detail: 'invalid_code' });
+    .rejects.toMatchObject({ name: 'ProviderHttpError', code: 'rejected', status: 200, detail: null });
   await expect(refreshGrant(slack, client, 'old', { fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch, values: { domain: 'slack.com' } }))
     .rejects.toBeInstanceOf(GrantRevoked);
 });
@@ -117,6 +117,257 @@ test('a refresh without a new refresh token keeps the old one', async () => {
 test('invalid_grant is GrantRevoked', async () => {
   await expect(refreshGrant(hubspot, client, 'old', { fetch: endpoint({ error: 'invalid_grant' }, 400).fetch }))
     .rejects.toBeInstanceOf(GrantRevoked);
+});
+
+test('a code exchange the server refuses is classified as a `token` sign-in\'s first request: no grant existed to revoke', async () => {
+  // A bad, expired or replayed code, a wrong `redirect_uri` or code verifier: RFC 7636 §4.6 answers `invalid_grant`.
+  const codeVerifier = 'private-code-verifier-0123456789';
+  const exchanged = (answer: Response) => exchangeCode(pkced, client, { ...exchange, codeVerifier,
+    fetch: fakeFetch([{ url: /https:/, respond: () => answer }]).fetch });
+  for (const status of [400, 401, 403]) {
+    await expect(exchanged(Response.json({ error: 'invalid_grant' }, { status }))).rejects.toEqual(new ProviderHttpError('rejected', status, 'invalid_grant'));
+  }
+  await expect(exchanged(Response.json({ error: 'invalid_client' }, { status: 401 }))).rejects.toEqual(new ProviderHttpError('rejected', 401, 'invalid_client'));
+  // 400, 401 and 403 are `rejected` whatever the body says; the detail is only one of RFC 6749's codes.
+  await expect(exchanged(Response.json({ error: 'access_denied' }, { status: 403 }))).rejects.toEqual(new ProviderHttpError('rejected', 403, null));
+  await expect(exchanged(new Response('<html>bad request</html>', { status: 400 }))).rejects.toEqual(new ProviderHttpError('rejected', 400, null));
+  // Any other status is classified as a call's answer is.
+  await expect(exchanged(Response.json({ error: 'not_found' }, { status: 404 }))).rejects.toEqual(new ProviderHttpError('not_found', 404, null));
+  await expect(exchanged(Response.json({ error: 'rate_limit_exceeded' }, { status: 429, headers: { 'retry-after': '30' } })))
+    .rejects.toMatchObject({ code: 'rate_limited', status: 429, detail: null, retryAfterMs: 30_000 });
+  await expect(exchanged(new Response(null, { status: 408 }))).rejects.toEqual(new ProviderHttpError('unavailable', 408));
+  await expect(exchanged(Response.json({ error: 'invalid_grant' }, { status: 500 }))).rejects.toEqual(new ProviderHttpError('unavailable', 500));
+  await expect(exchanged(Response.json({ error: 'invalid_grant' }, { status: 409 }))).rejects.toEqual(new ProviderHttpError('request_failed', 409, null));
+  // A 200 the entry's `failed` marks is `rejected` too, its detail filtered alike: Slack's own codes are none of RFC 6749's.
+  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch, values: { domain: 'slack.com' } }))
+    .rejects.toEqual(new ProviderHttpError('rejected', 200, null));
+  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch, values: { domain: 'slack.com' } }))
+    .rejects.toEqual(new ProviderHttpError('rejected', 200, null));
+  await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_grant' }).fetch, values: { domain: 'slack.com' } }))
+    .rejects.toEqual(new ProviderHttpError('rejected', 200, 'invalid_grant'));
+  // Never a revoked grant, though the entry lists the code as revoked: no grant existed.
+  for (const status of [404, 409, 429]) {
+    await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_grant' }, status).fetch, values: { domain: 'slack.com' } }))
+      .rejects.toBeInstanceOf(ProviderHttpError);
+  }
+  // A refresh still ends a grant that existed.
+  await expect(refreshGrant(slack, client, 'old', { fetch: endpoint({ ok: false, error: 'token_revoked' }).fetch, values: { domain: 'slack.com' } }))
+    .rejects.toBeInstanceOf(GrantRevoked);
+});
+
+test('a refusal that carries a `WWW-Authenticate` challenge is read from its body, as any other refusal is', async () => {
+  // Doorkeeper sends the header on every token error; RFC 6749 §5.2 asks for it beside a 401 `invalid_client`.
+  const codeVerifier = 'private-code-verifier-0123456789';
+  const refreshToken = 'private-refresh-token-0123456789';
+  const challenged = (body: string, status: number, scheme = 'Bearer') => fakeFetch([{ url: /https:/, respond: () => new Response(body,
+    { status, headers: { 'content-type': 'application/json', 'www-authenticate': `${scheme} realm="Doorkeeper", error="invalid_grant"` } }) }]).fetch;
+  const exchanged = (fetch: typeof globalThis.fetch) => exchangeCode(pkced, client, { ...exchange, codeVerifier, fetch });
+  const refreshed = (fetch: typeof globalThis.fetch) => refreshGrant(pkced, client, refreshToken, { fetch });
+  const grantError = JSON.stringify({ error: 'invalid_grant', error_description: 'The provided authorization grant is invalid.' });
+  await expect(exchanged(challenged(grantError, 400))).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
+  await expect(refreshed(challenged(grantError, 400))).rejects.toEqual(new GrantRevoked('invalid_grant'));
+  const clientError = JSON.stringify({ error: 'invalid_client' });
+  await expect(exchanged(challenged(clientError, 401, 'Basic'))).rejects.toEqual(new ProviderHttpError('rejected', 401, 'invalid_client'));
+  await expect(refreshed(challenged(clientError, 401, 'Basic'))).rejects.toEqual(new ProviderHttpError('request_failed', 401, 'invalid_client'));
+  // A revoke reads it the same way: `invalid_grant` there is a grant already gone, so the revoke is done.
+  const revoking = challenged(grantError, 400);
+  await expect(revokeGrant(bodied, { accessToken: 'private-access-token-0123456789', client, fetch: revoking })).resolves.toBeUndefined();
+  await expect(revokeGrant(bodied, { accessToken: 'private-access-token-0123456789', client, fetch: challenged(clientError, 401, 'Basic') }))
+    .rejects.toEqual(new ProviderHttpError('request_failed', 401, 'invalid_client'));
+  // Hostile: a body that is not JSON, an `error` that is no short token or echoes what was sent; and a 200 beside the header.
+  // Each request's own secrets: the exchange sends the code and the verifier, the refresh the refresh token.
+  for (const [run, code, sent] of [[exchanged, 'rejected', [client.clientSecret, exchange.code, codeVerifier]],
+    [refreshed, 'request_failed', [client.clientSecret, refreshToken]]] as const) {
+    for (const body of ['<html>denied</html>', JSON.stringify({ error: 'a long sentence, not a code' }), ...sent.map(value => JSON.stringify({ error: value }))]) {
+      const error: unknown = await run(challenged(body, 400)).catch((thrown: unknown) => thrown);
+      expect(error).toEqual(new ProviderHttpError(code, 400, null));
+      const serialized = JSON.stringify({ fields: { ...(error as object) }, message: (error as Error).message, cause: (error as Error).cause });
+      for (const value of [body, ...sent]) expect(serialized).not.toContain(value);
+    }
+  }
+  const granted = fakeFetch([{ url: /https:/, respond: () => Response.json(token, { headers: { 'www-authenticate': 'Bearer realm="x"' } }) }]).fetch;
+  await expect(exchanged(granted)).resolves.toMatchObject({ grant: { accessToken: 'a', refreshToken: 'r' } });
+  await expect(refreshed(granted)).resolves.toMatchObject({ accessToken: 'a', refreshToken: 'r' });
+});
+
+test('a refused answer whose body breaks while it is read is `unavailable`, never the platform\'s own error', async () => {
+  const codeVerifier = 'private-code-verifier-0123456789';
+  // A cut connection, and the request's own timeout firing while the body streams.
+  for (const reason of [new TypeError('terminated'), new DOMException('The operation was aborted due to timeout', 'TimeoutError')]) {
+    const broken = () => new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"err'));
+      controller.error(reason);
+    } }), { status: 400, headers: { 'content-type': 'application/json' } });
+    const fetch = fakeFetch([{ url: /https:/, respond: broken }]).fetch;
+    await expect(exchangeCode(pkced, client, { ...exchange, codeVerifier, fetch })).rejects.toEqual(new ProviderHttpError('unavailable', null));
+    // The refresh and the revoke read the body inside oauth4webapi, as before.
+    await expect(refreshGrant(pkced, client, 'r', { fetch })).rejects.toBeInstanceOf(ProviderHttpError);
+    await expect(revokeGrant(bodied, { accessToken: 'private-access-token-0123456789', client, fetch })).rejects.toBeInstanceOf(ProviderHttpError);
+  }
+});
+
+/** A `token` sign-in and an OAuth 2 sign-in with one `http` and one `errors`: their first token requests compared. */
+function firstRequests(errors: NonNullable<Entry['errors']>, failed?: NonNullable<Extract<Entry['auth'][number], { kind: 'oauth2' }>['failed']>) {
+  const tokened = defineProvider({ id: 'tokened', name: 'Tokened', fields: [{ name: 'clientSecret', title: 'Client secret', secret: true }],
+    auth: [{ kind: 'token', request: { url: 'https://first.test/token', body: { grant_type: 'client_credentials', client_secret: '{clientSecret}' } } }],
+    http: { baseUrl: 'https://api.first.test' }, errors });
+  const exchanged = defineProvider({ id: 'exchanged', name: 'Exchanged', auth: [{ kind: 'oauth2', authorizeUrl: 'https://first.test/authorize',
+    tokenUrl: 'https://first.test/token', pkce: false, ...(failed === undefined ? {} : { failed }) }], http: { baseUrl: 'https://api.first.test' }, errors });
+  const outcome = (run: Promise<unknown>) => run.then(() => 'answered', (error: unknown) => error);
+  return async (answer: () => Response) => {
+    const { fetch } = fakeFetch([{ url: /https:/, respond: answer }]);
+    return { token: await outcome(requestToken(tokened, { secret: { clientSecret: 'private-token-secret' }, fetch })),
+      exchange: await outcome(exchangeCode(exchanged, client, { ...exchange, fetch })) };
+  };
+}
+
+test("an exchange's rule that reads `WWW-Authenticate` sees the answer as sent, as a `token` sign-in's does", async () => {
+  // The header is dropped only where oauth4webapi reads the answer (a refresh, a revoke).
+  const ruled = firstRequests({ rules: [{ when: { status: 404, header: 'www-authenticate' }, code: 'unavailable' }] });
+  const challenged = await ruled(() => Response.json({ error: 'not_found' }, { status: 404, headers: { 'www-authenticate': 'Bearer realm="x"' } }));
+  expect(challenged.exchange).toEqual(challenged.token);
+  expect(challenged.exchange).toEqual(new ProviderHttpError('unavailable', 404, null));
+});
+
+test("an exchange's 5xx keeps its wait, as a `token` sign-in's does", async () => {
+  const busy = await firstRequests({})(() => Response.json({ error: 'temporarily_unavailable' }, { status: 503, headers: { 'retry-after': '30' } }));
+  expect(busy.exchange).toEqual(busy.token);
+  expect(busy.exchange).toMatchObject({ code: 'unavailable', status: 503, retryAfterMs: 30_000 });
+});
+
+test("an exchange's 200 whose body breaks while it is read is `unavailable`, as a `token` sign-in's is", async () => {
+  const broken = await firstRequests({})(() => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode('{"access'));
+    controller.error(new TypeError('terminated'));
+  } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+  expect(broken.exchange).toEqual(broken.token);
+  expect(broken.exchange).toEqual(new ProviderHttpError('unavailable', null));
+});
+
+test("a 200 the `failed` rule marks takes its detail as a 400 does: the body's `error`, an RFC 6749 code", async () => {
+  // `errors.detail` names another path; a `token` sign-in's 400 reads `error`, and so does the exchange, refused either way.
+  const answer = { ok: false, error: 'invalid_grant', reason: 'invalid_client' };
+  const marked = await firstRequests({ detail: 'reason' }, { path: 'ok', equals: false })(() => Response.json(answer));
+  const refused = await firstRequests({ detail: 'reason' })(() => Response.json(answer, { status: 400 }));
+  expect(refused.exchange).toEqual(refused.token);
+  expect([marked.exchange, refused.token]).toEqual([new ProviderHttpError('rejected', 200, 'invalid_grant'),
+    new ProviderHttpError('rejected', 400, 'invalid_grant')]);
+});
+
+/** 10 MiB: the bound the HTTP library puts on a call's error body, and on a first token request's refused answer. */
+const LIMIT = 10 * 1024 * 1024;
+/** Answers of `padding` spaces then `tail`, in 1 MiB chunks pulled one at a time; each answer counts the bytes read from it. */
+function counted(status: number, padding: number, tail: string, headers: Record<string, string> = {}) {
+  const reads: number[] = [];
+  const chunk = new Uint8Array(1024 * 1024).fill(32);
+  const end = new TextEncoder().encode(tail);
+  const answer = () => {
+    const at = reads.push(0) - 1;
+    let sent = 0;
+    return new Response(new ReadableStream<Uint8Array>({ pull(controller) {
+      const part = sent < padding ? chunk.subarray(0, Math.min(chunk.length, padding - sent)) : end;
+      controller.enqueue(part);
+      sent += part.length;
+      reads[at] = (reads[at] ?? 0) + part.length;
+      if (part === end) controller.close();
+    } }, { highWaterMark: 0 }), { status, headers: { 'content-type': 'application/json', ...headers } });
+  };
+  return { answer, reads };
+}
+
+test("a first token request's refused answer is read up to 10 MiB; past it, classified by status and headers alone, on both paths", async () => {
+  const pair = firstRequests({ detail: 'error' });
+  // The reviewer's 503: its JSON error after more than the limit of padding; its wait is a header's.
+  const busy = counted(503, LIMIT + 2 * 1024 * 1024, '{"error":"invalid_grant"}', { 'retry-after': '30' });
+  const unavailable = await pair(busy.answer);
+  expect(unavailable.exchange).toEqual(unavailable.token);
+  expect(unavailable.exchange).toMatchObject({ code: 'unavailable', status: 503, detail: null, retryAfterMs: 30_000 });
+  // The read stops at the limit (one chunk past it at most), on each path.
+  for (const bytes of busy.reads) expect(bytes).toBeLessThanOrEqual(LIMIT + 1024 * 1024);
+  const refused = counted(400, LIMIT + 1, '{"error":"invalid_grant"}');
+  const rejected = await pair(refused.answer);
+  expect(rejected.exchange).toEqual(rejected.token);
+  expect(rejected.exchange).toEqual(new ProviderHttpError('rejected', 400, null));
+  for (const bytes of refused.reads) expect(bytes).toBeLessThanOrEqual(LIMIT + 1024 * 1024);
+  // Exactly at the limit: read whole, and classified with its detail.
+  const tail = '{"error":"invalid_grant"}';
+  const atLimit = await pair(counted(400, LIMIT - tail.length, tail).answer);
+  expect(atLimit.exchange).toEqual(atLimit.token);
+  expect(atLimit.exchange).toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
+  // A refusal that breaks while it is read is `unavailable`, on each path.
+  const broken = await pair(() => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode('{"err'));
+    controller.error(new TypeError('terminated'));
+  } }), { status: 400, headers: { 'content-type': 'application/json' } }));
+  expect(broken.exchange).toEqual(broken.token);
+  expect(broken.exchange).toEqual(new ProviderHttpError('unavailable', null));
+});
+
+test('an oversized refusal handed back as a clone, its original never read, does not hang either path', async () => {
+  // A custom `fetch` that answers with `response.clone()`: cancelling the clone's read waits for the other branch.
+  const busy = counted(503, LIMIT + 2 * 1024 * 1024, '{"error":"invalid_grant"}', { 'retry-after': '30' });
+  const kept: Response[] = [];
+  const cloned = () => { const original = busy.answer(); kept.push(original); return original.clone(); };
+  const answered = await firstRequests({})(cloned);
+  expect(answered.exchange).toEqual(answered.token);
+  expect(answered.exchange).toMatchObject({ code: 'unavailable', status: 503, detail: null, retryAfterMs: 30_000 });
+  expect(kept).toHaveLength(2);
+}, 2000);
+
+test('a refusal that opens with a UTF-8 byte order mark is read as the same answer without one, on both paths', async () => {
+  const withBom = (status: number, json: string) => () => new Response(new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(json)]),
+    { status, headers: { 'content-type': 'application/json' } });
+  const plain = (status: number, json: string) => () => new Response(json, { status, headers: { 'content-type': 'application/json' } });
+  const refused = await firstRequests({})(withBom(400, '{"error":"invalid_grant"}'));
+  expect(refused.exchange).toEqual(refused.token);
+  expect(refused.exchange).toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
+  // A rule that reads the body holds as it does without the mark.
+  const ruled = firstRequests({ rules: [{ when: { status: 503, path: 'error', equals: 'slow_down' }, code: 'rate_limited' }] });
+  const [marked, unmarked] = [await ruled(withBom(503, '{"error":"slow_down"}')), await ruled(plain(503, '{"error":"slow_down"}'))];
+  expect(marked).toEqual(unmarked);
+  expect(marked.exchange).toEqual(marked.token);
+  expect(marked.exchange).toMatchObject({ code: 'rate_limited', status: 503 });
+});
+
+test("a refusal's bytes are decoded as the runtime's own `Response.text()` decodes them, on both paths", async () => {
+  const json = [...new TextEncoder().encode('{"error":"invalid_grant"}')];
+  const mark = [0xef, 0xbb, 0xbf];
+  const ruled = firstRequests({ rules: [{ when: { status: 503, path: 'error', equals: 'invalid_grant' }, code: 'rate_limited' }] });
+  for (const bytes of [[...mark, ...mark, ...json], [...mark, ...json], json, [0xff, 0xfe, ...json], [...json.slice(0, 5), 0xc3, ...json.slice(5)], []]) {
+    for (const status of [400, 503]) {
+      const answer = (body: Uint8Array | string) => () => new Response(body, { status, headers: { 'content-type': 'application/json' } });
+      // What a whole read of the same bytes is, sent again as text: the capped read must classify the bytes the same way.
+      const decoded = await new Response(new Uint8Array(bytes)).text();
+      const [read, expected] = [await ruled(answer(new Uint8Array(bytes))), await ruled(answer(decoded))];
+      expect(read).toEqual(expected);
+      expect(read.exchange).toEqual(read.token);
+    }
+  }
+  // Two leading marks: a whole read drops both, so the detail is kept.
+  const twice = await firstRequests({})(() => new Response(new Uint8Array([...mark, ...mark, ...json]), { status: 400 }));
+  expect(twice.exchange).toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
+  expect(twice.token).toEqual(twice.exchange);
+});
+
+test('a successful token answer past 10 MiB is read whole, on both paths, and an exchange checks `failed` without refusing it', async () => {
+  const large = counted(200, LIMIT + 1024 * 1024, '{"access_token":"a","token_type":"bearer","ok":true}');
+  for (const failed of [undefined, { path: 'ok', equals: false }] as const) {
+    const answered = await firstRequests({}, failed)(large.answer);
+    expect(answered).toEqual({ token: 'answered', exchange: 'answered' });
+  }
+});
+
+test("a refused exchange's detail never echoes the code, the verifier or the client's secret", async () => {
+  const verifier = 'private-code-verifier-0123456789';
+  for (const echoed of [exchange.code, verifier, client.clientSecret]) {
+    await expect(exchangeCode(hubspot, client, { ...exchange, codeVerifier: verifier, fetch: endpoint({ error: echoed }, 400).fetch }))
+      .rejects.toEqual(new ProviderHttpError('rejected', 400, null));
+  }
+  // Slack sends no verifier (`pkce: false`); its 200 refusal is read through `failed`.
+  for (const echoed of [exchange.code, client.clientSecret]) {
+    await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: echoed }).fetch, values: { domain: 'slack.com' } }))
+      .rejects.toEqual(new ProviderHttpError('rejected', 200, null));
+  }
 });
 
 test('a 502 proxy page is unavailable, and the token endpoint is never retried', async () => {
@@ -254,15 +505,15 @@ test('revokeGrant: an entry with no revoke (Microsoft) sends nothing', async () 
   expect(none.calls).toHaveLength(0);
 });
 
-test("a token answer refused inside a 200 is read through the entry's own condition and code", async () => {
+test("a token answer refused inside a 200 is read through the entry's own condition, its own code no detail", async () => {
   await expect(exchangeCode(slack, client, { ...exchange, fetch: endpoint({ ok: false, error: 'invalid_code' }).fetch, values: { domain: 'slack.com' } }))
-    .rejects.toMatchObject({ code: 'request_failed', detail: 'invalid_code' });
+    .rejects.toMatchObject({ code: 'rejected', detail: null });
   // A `failed` other than `ok: false`: today's hard-coded check would accept this answer.
   const strict = defineProvider({ id: 'strict', name: 'Strict', auth: [{ kind: 'oauth2', authorizeUrl: 'https://strict.test/authorize',
     tokenUrl: 'https://strict.test/token', pkce: false, failed: { path: 'error' } }], http: { baseUrl: 'https://api.strict.test' },
     errors: { detail: 'reason' } });
   await expect(exchangeCode(strict, client, { ...exchange, fetch: endpoint({ ...token, error: 'refused', reason: 'code_used' }).fetch }))
-    .rejects.toMatchObject({ code: 'request_failed', detail: 'code_used' });
+    .rejects.toMatchObject({ code: 'rejected', detail: null });
 });
 
 test('an error never carries the Basic client credential the request sent, form-encoded as on the wire', async () => {
@@ -273,11 +524,12 @@ test('an error never carries the Basic client credential the request sent, form-
     tokenUrl: 'https://basic.test/token', pkce: false, clientAuth: 'basic' }], scopes: { default: [] },
     revoke: { url: 'https://basic.test/revoke', token: ['refresh'] }, http: { baseUrl: 'https://api.basic.test' } });
   const echo = endpoint({ error: sent }, 400);
-  for (const run of [
-    () => exchangeCode(basic, basicClient, { ...exchange, fetch: echo.fetch }),
-    () => refreshGrant(basic, basicClient, 'r', { fetch: echo.fetch }),
-    () => revokeGrant(basic, { refreshToken: 'r', client: basicClient, fetch: echo.fetch }),
-  ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  // A refused exchange is `rejected`, a refused refresh or revoke `request_failed`: neither echoes the value.
+  for (const [run, code] of [
+    [() => exchangeCode(basic, basicClient, { ...exchange, fetch: echo.fetch }), 'rejected'],
+    [() => refreshGrant(basic, basicClient, 'r', { fetch: echo.fetch }), 'request_failed'],
+    [() => revokeGrant(basic, { refreshToken: 'r', client: basicClient, fetch: echo.fetch }), 'request_failed'],
+  ] as const) await expect(run()).rejects.toMatchObject({ code, detail: null });
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(`Basic ${sent}`));
 });
 
@@ -304,11 +556,11 @@ test("no error detail echoes the client's Basic value, even from a request that 
   const sent = Buffer.from('id:abcdef').toString('base64');
   const echoing = { clientId: 'id', clientSecret: 'abcdef' };
   const echo = endpoint({ error: sent }, 400);
-  for (const run of [
-    () => exchangeCode(bodied, echoing, { ...exchange, fetch: echo.fetch }),
-    () => refreshGrant(bodied, echoing, 'r', { fetch: echo.fetch }),
-    () => revokeGrant(bodied, { accessToken: 'a', client: echoing, fetch: echo.fetch }),
-  ]) await expect(run()).rejects.toMatchObject({ code: 'request_failed', detail: null });
+  for (const [run, code] of [
+    [() => exchangeCode(bodied, echoing, { ...exchange, fetch: echo.fetch }), 'rejected'],
+    [() => refreshGrant(bodied, echoing, 'r', { fetch: echo.fetch }), 'request_failed'],
+    [() => revokeGrant(bodied, { accessToken: 'a', client: echoing, fetch: echo.fetch }), 'request_failed'],
+  ] as const) await expect(run()).rejects.toMatchObject({ code, detail: null });
   expect(echo.calls.map(call => call.headers.authorization)).toEqual(Array(3).fill(undefined));
 });
 

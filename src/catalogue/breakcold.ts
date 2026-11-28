@@ -11,6 +11,6 @@ export const breakcold = defineProvider({
   errors: { detail: 'error.code' },
   identify: { request: { path: '/workspaces', query: { limit: '100' } } },
   webhook: { kind: 'hmac', header: 'x-webhook-signature', signed: '{timestamp}.{body}', prefix: 'sha256=',
-    timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { header: 'x-webhook-delivery-id' } },
+    timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { body: ['eventId'] } },
   paging: { cursor: { kind: 'cursor', next: 'pagination.cursor', more: 'pagination.hasMore', send: { query: 'cursor' } } },
 });

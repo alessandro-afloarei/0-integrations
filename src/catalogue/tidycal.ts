@@ -15,7 +15,7 @@ export const tidycal = defineProvider({
   http: { baseUrl: 'https://tidycal.com/api', retry: {} },
   identify: { request: { path: '/me' } },
   webhook: { kind: 'hmac', header: 'tidycal-signature', signed: '{timestamp}.{body}', part: 'v1', timestamp: { part: 't' },
-    deliveryId: { header: 'tidycal-event-id' } },
+    deliveryId: { body: ['id'] } },
   paging: { next: { kind: 'nextUrl', next: 'next_page_url' } },
   operations: {
     'bookingTypes.list': { docs: `${ref}/Booking-Types/operation/list-booking-types`, path: '/booking-types', paging: 'next',

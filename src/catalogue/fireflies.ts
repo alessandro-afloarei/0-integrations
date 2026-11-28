@@ -16,7 +16,9 @@ export const fireflies = defineProvider({
   ] },
   identify: { request: { graphql: 'query FirefliesUser { user { user_id email name } }' }, id: 'data.user.user_id',
     name: 'data.user.name' },
-  webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha256=', deliveryId: { body: ['event', 'meeting_id'] } },
+  // No `deliveryId`: `event` and `meeting_id` name the meeting, not the delivery, and a resend after the meeting's notes
+  // change carries the same pair (with `reprocessed_at`): https://docs.fireflies.ai/graphql-api/webhooks-v2
+  webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha256=' },
   operations: { user: { docs: 'https://docs.fireflies.ai/graphql-api/query/user',
     kind: 'read', graphql: 'query FirefliesUser { user { user_id email name } }',
     result: { data: { user: { user_id: 'string', 'email?': 'string', 'name?': 'string' } } } } },
