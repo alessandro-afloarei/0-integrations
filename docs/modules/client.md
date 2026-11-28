@@ -125,8 +125,8 @@ host and `TypeError('url_path_relative')` otherwise.
 - `json(path, options?)` answers the parsed answer, and throws on an error answer.
 - `request(path, options?)` answers `{ status, headers, data }` as it came, whatever the status.
 - `paginate(paging, path, options?)` yields each page's parsed answer, following the entry's paging shape of that name.
-  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered, offset or last-record page that
-  repeats the one before (`page_repeated`), and one whose list is missing or no list (`missing_fields`): an empty list ends it. A next link, from a `Link` header or the body, may be a full URL or a path on the
+  A cursor or next link that comes back is `invalid_response` (`cursor_repeated`), so is a numbered, offset or last-record page whose
+  list has the same JSON text as the one before's or the first's (`page_repeated`), and one whose list is missing or no list, or whose `total` is missing, no non-negative whole number, or not yet reached at an empty page (`missing_fields`): an empty list ends it, and so does a page at which the pages or entries read reach the `total`. A next link, from a `Link` header or the body, may be a full URL or a path on the
   base's origin (Shortcut's search answers a path and query string); one outside the base's origin, path or
   `pathPrefix` is `invalid_response` (`next_link_foreign`), and nothing is sent to it.
 
@@ -161,8 +161,10 @@ header parameter on GraphQL, `nullable`, not a scalar or named `content-type`, `
 (`param_unplaced: <id> <name>`), a paging
 shape the entry does not declare (`paging_unknown: <name>`), `notFound` on a paged operation (`not_found_paged: <id>`), a `records` path that leads
 to no list in the `result` (`records_unshaped: <id>`), an operation on a `page`, `offset` or `last` shape whose `records` is
-not the shape's `list` (`records_unpaged: <id>`), and a parameter (or a literal query in its path) in the place its
-paging shape's `send` writes, which the walk sends itself, or a body cursor beside a form parameter, whose JSON would
+not the shape's `list` (`records_unpaged: <id>`), a GraphQL operation on a shape whose `send` is not `variables`, or
+an operation with a path on one whose `send` is (`paging_unplaced: <id>`), and a parameter (or a literal query in its path) in the place its
+paging shape's `send` writes, which the walk sends itself (for a body path, a body parameter named its first segment
+whose type declares the rest or is no object), or a body cursor beside a form parameter, whose JSON would
 replace the form from the second page (`param_paged: <id> <name>`). A wrong value throws when the call is made,
 before anything is sent.
 

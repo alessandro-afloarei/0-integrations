@@ -4,6 +4,52 @@
 
 Nothing here is released yet.
 
+- A `page`, `offset` or `last` walk whose list has the same JSON text as its first page's is `page_repeated`, as one
+  with the page before's is: a provider that answers its first page's text again past the end no longer has it yielded
+  a second time, or walks on forever. A `last` walk that met its first page's text again now reports `page_repeated`
+  where it reported `cursor_repeated`, and a list whose first and a later page have the same JSON text now stops
+  there.
+- Breaking: a `page` walk may stop at the answer's count (`total: { pages }` or `{ entries }`, read from each answer;
+  one missing or not a non-negative whole number, or an empty page before it is reached, is `invalid_response`).
+  Smartsheet's `sheets.list` and `rows.list` return an async iterator of records, not one page (`for await (const sheet
+  of api.sheets.list())`), walked to `totalPages` and `totalRowCount`. Their `page` argument is gone: an app that paged
+  by hand drops its loop.
+- Breaking: GraphQL lists page through their variables (`send: { variables }`). Linear's `issues.list` and
+  `teams.list` return an async iterator of records, not one page (`for await (const issue of api.issues.list({ teamId
+  }))`). Their `after` variable is gone, and `first` is the page size.
+- Breaking: a body paging value may sit at a path in the body (`send: { body: 'pagination.cursor' }`). Fellow's
+  `recordings.list` returns an async iterator of recordings, not one page (`for await (const recording of
+  api.recordings.list())`). Its `pagination` keeps only `page_size`: `cursor` is gone.
+- Breaking: a raw `paginate` on a body or `variables` place is `request_failed` before the first request in three
+  cases: a form, a JSON body that is no object, or a value on the body path that is no object. A form failed at the
+  second request; a body that was no object was replaced from the second page.
+- Breaking: ZoomInfo's `contacts.search` and `companies.search` return an async iterator of records, not one page
+  (`for await (const contact of api.contacts.search({ data }))`), walked to `meta.page.total`. Their `page[number]`
+  argument is gone: an app that paged by hand drops its loop. A search past its 100th page ends on ZoomInfo's refusal.
+- Breaking: HappyFox's `tickets.list` and `users.list` return an async iterator of records, not one page
+  (`for await (const ticket of api.tickets.list())`), walked to `page_info.page_count`. Their `page` argument is gone.
+- Breaking: eDesk's `channels.list` returns an async iterator of channels, not one page
+  (`for await (const channel of api.channels.list())`), walked to `paginator.totalItemsCount`. Its `page` argument is
+  gone.
+- Breaking: Freshdesk's `tickets.search` returns an async iterator of tickets, not one page
+  (`for await (const ticket of api.tickets.search({ query }))`), walked to the answer's `total`. Its `page` argument is
+  gone. Its page number "should not exceed 10" (300 results); what an 11th page answers, and whether `total` counts
+  past it, are not stated.
+- Breaking: Freshservice's `tickets.search` returns an async iterator of tickets, not one page
+  (`for await (const ticket of api.tickets.search({ query }))`), walked to the answer's `total`. Its `page` argument is
+  gone.
+- Breaking: Plain's `threads.list`, `threads.search` and `customers.list` return an async iterator of records, not one
+  page (`for await (const edge of api.threads.list({ first: 100 }))`). Each record is the connection's edge:
+  `edge.node` is the thread or customer, and a search's `edge.node.thread`. Their `after` variable is gone, and
+  `first`, the page size, is required: the Relay spec Plain follows reports a next page only when it is sent. A
+  thread's `timelineEntries.list` still answers one page.
+- Breaking: monday.com's `boards.list` returns an async iterator of boards, not one page (`for await (const board of
+  api.boards.list())`). Its `page` variable is gone, and `limit` is the page size.
+- Breaking: Intercom's `conversations.search` returns an async iterator of conversations, not one page (`for await
+  (const conversation of api.conversations.search({ query }))`). Its `pagination` keeps only `per_page`:
+  `starting_after` is gone.
+- Breaking: Teamleader Focus's `contacts.list`, `companies.list` and `deals.list` return an async iterator of records,
+  not one page (`for await (const contact of api.contacts.list())`). Their `page` keeps only `size`: `number` is gone.
 - New entries: 25 support providers (atlas, chatwoot, crisp, customerly, devrev, dixa, edesk, freshchat, freshdesk,
   freshservice, gist, groove, happyfox, helpcrunch, helpwise, hiver, liveagent, plain, pylon, reamaze, thena, trengo,
   unthread, zammad, zendesk), each with its category's operations (Plain its reads only). Every entry is `declared`.

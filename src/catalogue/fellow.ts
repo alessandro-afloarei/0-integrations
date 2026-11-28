@@ -2,8 +2,9 @@ import { defineProvider } from '../catalogue.js';
 
 /** Fellow: a person's API key on the workspace's host; the API is on paid plans, enabled by an admin:
  * https://help.fellow.ai/en/articles/11817206-developer-api. 3 requests a second and 10,000 a day per key:
- * https://developers.fellow.ai/reference/request-limits. A cursor in the body's `pagination`: one page a call; the
- * transcript is the recording's. Webhooks: https://developers.fellow.ai/reference/webhooks */
+ * https://developers.fellow.ai/reference/request-limits. Lists page by the cursor in the body's `pagination`, until it is
+ * null: https://developers.fellow.ai/reference/pagination; the transcript is the recording's. Webhooks:
+ * https://developers.fellow.ai/reference/webhooks */
 const recording = { id: 'string', 'title?': 'string', 'created_at?': 'string', 'updated_at?': 'string', 'started_at?': 'string',
   'ended_at?': 'string', 'note_id?': 'string', 'transcript?': 'unknown' } as const;
 const ref = 'https://developers.fellow.ai/reference';
@@ -21,10 +22,11 @@ export const fellow = defineProvider({
   // `challenge` as plain text and is not signed.
   webhook: { kind: 'standard', deliveryId: { header: 'svix-id' },
     challenge: { when: { path: 'type', equals: 'url_verification' }, echo: 'challenge', text: true, unsigned: true } },
+  paging: { cursor: { kind: 'cursor', next: 'recordings.page_info.cursor', send: { body: 'pagination.cursor' } } },
   operations: {
     'recordings.list': { docs: `${ref}/apps_developer_api_api_get_recordings`, method: 'POST', path: '/api/v1/recordings', kind: 'read',
-      params: { pagination: { in: 'body', type: { 'cursor?': 'string', 'page_size?': 'integer' },
-        description: 'cursor: page_info.cursor of the page before (none for the first); page_size: 20 by default, 1 to 50.' },
+      paging: 'cursor', records: 'recordings.data',
+      params: { pagination: { in: 'body', type: { 'page_size?': 'integer' }, description: 'page_size: 20 by default, 1 to 50.' },
       filters: { in: 'body', type: { 'event_guid?': 'string', 'created_at_start?': 'string', 'created_at_end?': 'string',
         'updated_at_start?': 'string', 'updated_at_end?': 'string', 'channel_id?': 'string', 'title?': 'string' } },
       include: { in: 'body', type: { 'transcript?': 'boolean', 'ai_notes?': 'boolean' } } },
