@@ -31,8 +31,8 @@ export const sproutsocial = defineProvider({
       params: { publishing_post_id: { in: 'path', type: 'integer', required: true } }, result: fanned },
     'publishingPosts.create': { docs: `${docs}#create-publishing-post-endpoint`, method: 'POST', path: '/publishing/posts',
       params: {
-        group_id: { in: 'body', type: 'integer', description: 'The group to create the post in.' },
-        customer_profile_ids: { in: 'body', type: ['integer'],
+        group_id: { in: 'body', type: 'integer', required: true, description: 'The group to create the post in.' },
+        customer_profile_ids: { in: 'body', type: ['integer'], required: true,
           description: 'The profiles the post is for, all in the same group; a profile whose network cannot take the post is dropped.' },
         is_draft: { in: 'body', type: true, required: true },
         text: { in: 'body', type: 'string' },
