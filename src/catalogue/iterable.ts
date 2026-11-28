@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Iterable: a project's server-side API key in `Api-Key`, on the project's data center. No endpoint names the
- * project: identify checks the key on its lists. A 429 states its wait in `params.rateLimitReset` (seconds).
- * `users.create` adds a user or updates an existing one; an event can enter users into a journey triggered by it;
- * `campaigns.create` makes a blast campaign with `scheduleSend: false`, so nothing is scheduled or sent. */
+ * project: identify checks the key on its lists. A user update's 429 states its wait in `params.rateLimitReset`
+ * (seconds). `users.create` adds a user or updates an existing one; an event can enter users into a journey triggered
+ * by it; `campaigns.create` makes a blast campaign with `scheduleSend: false`, so nothing is scheduled or sent. */
 const spec = 'https://api.iterable.com/api-docs';
 /** The US and the EU data centers: https://api.iterable.com/api-docs and https://api.eu.iterable.com/api-docs */
 const hosts = ['api.iterable.com', 'api.eu.iterable.com'] as const;
@@ -23,6 +23,10 @@ export const iterable = defineProvider({
   http: { baseUrl: 'https://{apiHost}', host: hosts, retry: { wait: { path: 'params.rateLimitReset', unit: 's' } } },
   errors: { detail: 'code' },
   identify: { request: { path: '/api/lists' } },
+  // The Authorization header set on a system webhook, compared whole: "Basic <token>" as entered, or "Bearer <token>"
+  // for its OAuth 2.0 option; nothing is signed and no id dedupes a retry:
+  // https://support.iterable.com/hc/en-us/articles/208013936-System-Webhooks
+  webhook: { kind: 'token', header: 'authorization' },
   paging: { campaigns: { kind: 'page', send: { query: 'page' }, list: 'campaigns' } },
   operations: {
     'lists.list': { docs: spec, path: '/api/lists',
@@ -30,11 +34,14 @@ export const iterable = defineProvider({
     'users.get': { docs: spec, path: '/api/users/{email}',
       params: { email: { in: 'path', type: 'string', required: true, description: 'The user\'s email address.' } },
       result: { 'user?': { email: 'string', 'userId?': 'string', 'dataFields?': 'unknown' } } },
+    // Can enter the user into a journey whose entry source is a profile update or a new user, which can message them:
+    // https://support.iterable.com/hc/en-us/articles/15934993720468-Start-Tile
     'users.create': { docs: spec, method: 'POST', path: '/api/users/update', anyOf: [['email'], ['userId']],
       params: { ...user, dataFields: { in: 'body', type: 'unknown', description: 'The data stored on the user profile; merged, so missing fields are kept.' },
         mergeNestedObjects: { in: 'body', type: 'boolean' },
         preferUserId: { in: 'body', type: 'boolean', description: 'Creates a user whose new userId the request names (email-based projects).' } },
       result: answer },
+    // Can enter each subscriber into a journey started by subscribing to the list (a welcome series, same page).
     'subscriptions.create': { docs: spec, method: 'POST', path: '/api/lists/subscribe',
       params: { listId: { in: 'body', type: 'integer', required: true },
         subscribers: { in: 'body', type: [{ 'email?': 'string', 'userId?': 'string', 'dataFields?': 'unknown' }], required: true,
