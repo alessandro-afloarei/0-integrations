@@ -21,7 +21,8 @@ export const buttondown = defineProvider({
   // https://docs.buttondown.com/api-accounts-me
   identify: { request: { path: '/accounts/me' } },
   errors: { detail: 'code' },
-  webhook: { kind: 'hmac', header: 'x-buttondown-signature', prefix: 'sha256=' },
+  // `id`: "The unique TypeID of the event that triggered this delivery." (the OpenAPI's `webhooks.event`)
+  webhook: { kind: 'hmac', header: 'x-buttondown-signature', prefix: 'sha256=', deliveryId: { body: ['id'] } },
   paging: { next: { kind: 'nextUrl', next: 'next' } },
   operations: {
     'tags.list': { docs: `${ref}/api-tags-list`, path: '/tags', paging: 'next', records: 'results',
@@ -34,16 +35,24 @@ export const buttondown = defineProvider({
       result: { results: [subscriber] } },
     'subscribers.get': { docs: `${ref}/api-subscribers-retrieve`, path: '/subscribers/{id_or_email}', notFound: 'null',
       params: { id_or_email: subscriberKey }, result: subscriber },
-    // No page says whether a new subscriber is sent a confirmation email; `unactivated` is "pending double opt-in
-    // confirmation". A subscriber already there answers 400. 100 creates a day (a 400 past them).
+    // Emails the person a request to confirm (double opt-in), unactivated until they do, unless type is regular; the
+    // account's automations on a new, confirmed or tagged subscriber can email them too. One already there is a 400.
+    // 100 creates a day (a 400 past them). https://docs.buttondown.com/automation-metadata-sequences
+    // https://docs.buttondown.com/automation-tag-triggers
     'subscribers.create': { docs: `${ref}/api-subscribers-create`, method: 'POST', path: '/subscribers', kind: 'write',
       params: { email_address: { in: 'body', type: 'string', required: true }, tags: { in: 'body', type: ['string'],
         description: 'Tag names; a tag that does not exist is created, which needs a plan with tags.' },
-        notes: { in: 'body', type: 'string' }, metadata: { in: 'body', type: 'unknown' } }, result: subscriber },
+        notes: { in: 'body', type: 'string' }, metadata: { in: 'body', type: 'unknown' },
+        type: { in: 'body', type: 'regular',
+          description: 'Skips the confirmation email: "disable it on a per-subscriber basis by providing a type of regular".' } },
+      result: subscriber },
+    // Changing tags, metadata or notes can start the account's automations, which can email the subscriber.
     'subscribers.update': { docs: `${ref}/api-subscribers-update`, method: 'PATCH', path: '/subscribers/{id_or_email}',
       params: { id_or_email: subscriberKey, email_address: { in: 'body', type: 'string' }, tags: { in: 'body', type: ['string'] },
         notes: { in: 'body', type: 'string' }, metadata: { in: 'body', type: 'unknown' },
-        type: { in: 'body', type: 'string', enum: ['regular', 'unsubscribed'] } }, result: subscriber },
+        type: { in: 'body', type: 'string', enum: ['regular', 'unsubscribed'],
+          description: 'regular reactivates an unsubscribed subscriber with no confirmation email; unsubscribed applies only to an active subscriber and cancels a premium one\'s Stripe subscription.' } },
+      result: subscriber },
     'emails.list': { docs: `${ref}/api-emails-list`, path: '/emails', paging: 'next', records: 'results',
       params: { status: { in: 'query', type: 'string', description: 'Emails with this status (draft, scheduled, sent, …).' } },
       result: { results: [email] } },
