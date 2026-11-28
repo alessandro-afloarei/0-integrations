@@ -47,6 +47,8 @@ export const mailerlite = defineProvider({
         status: { in: 'body', type: 'string', enum: ['active', 'unsubscribed', 'unconfirmed', 'bounced'],
           description: 'New subscribers default to active, or unconfirmed with double opt-in; junk is not offered.' } },
       result: { data: subscriber } },
+    // Adding a group or changing a field can start an automation the account set up, which can email the subscriber:
+    // https://developers.mailerlite.com/api/automation-triggers
     'subscribers.update': { docs: `${ref}/subscribers#update-a-subscriber`, method: 'PUT', path: '/subscribers/{id}',
       params: { id: { in: 'path', type: 'string', required: true }, email: { in: 'body', type: 'string' }, ...fields,
         groups: { in: 'body', type: ['string'], description: 'The complete set of group ids: the subscriber leaves any group not listed.' },
