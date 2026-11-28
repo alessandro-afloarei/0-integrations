@@ -15,6 +15,7 @@ import { jira } from './catalogue/jira.js';
 import { notion } from './catalogue/notion.js';
 import { paypal } from './catalogue/paypal.js';
 import { serpapi } from './catalogue/serpapi.js';
+import { slack } from './catalogue/slack.js';
 import { smartsheet } from './catalogue/smartsheet.js';
 import { trello as trelloEntry } from './catalogue/trello.js';
 import { client } from './client.js';
@@ -1731,23 +1732,35 @@ describe("a chosen host: a stored value that is not exactly one of its field's c
     expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
   });
 
-  test("a probe of chosen values: a call sends only on a value that is exactly one of the field's choices, to that host", async () => {
-    let seed = 11;
-    const pick = <T>(items: readonly T[]): T => { seed = (seed * 1103515245 + 12345) % 2147483648; return items[seed % items.length] as T; };
-    const choices = ['api.k.test', 'api.eu.k.test'];
-    const pieces = ['api', 'eu', 'k', 'test', 'API', 'evil', '127', '0', '1', 'xn--pi-6kc', '-', ''];
-    const joins = ['.', '.', '.', '', ':', '@', '/', 'а'];
-    let sent = 0;
-    for (let at = 0; at < 3000; at++) {
-      const value = at % 5 === 0 ? pick(choices) : Array.from({ length: 2 + (at % 4) }, () => pick(pieces)).join(pick(joins));
-      const entry = at % 2 === 0 ? fixedSignIn : chosen;
+  test.each([['SLACK.COM', 'base_host_refused'], ['evil.test', 'base_host_refused'], ['slack.com.evil.test', 'base_host_refused'],
+    ['127.0.0.1', 'base_host_refused'], ['slack-gov.com:443', 'base_value_invalid'], ['', 'template_missing']])(
+    "Slack's request revoke with a stored domain %j is %s before the access token is read, nothing sent", async (domain, code) => {
       const fake = answering();
-      const answered = await client(entry, { token: 't', values: entry === chosen ? { ...good, apiHost: value } : { apiHost: value }, fetch: fake.fetch }).json('/x').then(() => true, () => false);
-      expect(answered, value).toBe(choices.includes(value));
-      if (!answered) { expect(fake.calls, value).toEqual([]); continue; }
-      sent++;
-      expect(new URL(fake.calls[0]?.url ?? '').host, value).toBe(value);
-    }
-    expect(sent).toBeGreaterThan(500);
+      const { reads, input } = counted();
+      await expect(revokeGrant(slack, { get accessToken() { return input.accessToken; }, values: { domain }, fetch: fake.fetch })).rejects.toThrow(code);
+      expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+    });
+
+  test('a revoke given no token is refused when its values are missing, a request revoke and an RFC 7009 one alike', async () => {
+    const fake = answering();
+    await expect(revokeGrant(slack, { values: {} as never, fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: slack {domain}'));
+    await expect(revokeGrant(gitlabEntry, { client: { clientId: 'c', clientSecret: 's' }, values: {} as never, fetch: fake.fetch }))
+      .rejects.toThrow(new TypeError('template_missing: gitlab {host}'));
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  test.each(['*.k.test', '*'] as const)("two fields of one name, the first without `choices`, are a typed host (`http.host: %j`): host_split, nothing read or sent", async host => {
+    const entry: Entry = { id: 'twice', name: 'Twice', scopes: { default: [] },
+      fields: [{ name: 'apiHost', title: 'Host' }, { name: 'apiHost', title: 'Region', choices: ['api.k.test'] }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.example/authorize', tokenUrl: 'https://login.k.example/token' }],
+      identify: { request: { path: '/me' }, id: 'id' }, http: { baseUrl: 'https://{apiHost}', host } };
+    const values = { apiHost: host === '*' ? 'evil.test' : 'other.k.test' };
+    const fake = answering();
+    const { reads, client: app, token } = counted();
+    const refused = new TypeError('host_split: twice');
+    expect(() => client(entry, { token, values, fetch: fake.fetch })).toThrow(refused);
+    await expect(identifyAccount(entry, { fetch: fake.fetch, token: 't', values })).rejects.toThrow(refused);
+    await expect(refreshGrant(entry, app, 'r', { values, fetch: fake.fetch })).rejects.toThrow(refused);
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
   });
 });

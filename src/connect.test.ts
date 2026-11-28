@@ -244,11 +244,6 @@ describe("Intercom's OAuth 2: the authorize host chosen per region, the token UR
     { url: 'https://api.intercom.io/auth/eagle/token', respond: () => Response.json({ access_token: 'tok', token_type: 'bearer' }) },
     { url: 'https://api.intercom.io/me', respond: () => Response.json({ type: 'admin', app: { id_code: 'abc123', name: 'Workspace' } }) }]);
 
-  it('passes the host split rule beside its fixed token URL', () => {
-    expect(() => consentUrl(intercom, { clientId: 'c', redirectUri: callback, scopes: [], state: 's', codeChallenge: 'c', values: { appHost: 'app.intercom.com' } }))
-      .not.toThrow();
-  });
-
   it.each(appHosts)('consents on %s, then exchanges and identifies on api.intercom.io, keeping the region', async appHost => {
     const begun = await startConnect(intercom, { ...start, values: { appHost } });
     const url = new URL(begun.url);

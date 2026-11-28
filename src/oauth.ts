@@ -199,7 +199,7 @@ async function revokeToken(entry: Entry, client: AnyClient, token: string, input
 }
 
 /** Revokes what the entry's `revoke` names. Done also when the entry declares none, when the grant lacks the token it
- * names, and when the grant is already gone: a 2xx, `invalid_grant`, a revoked code, a `goneErrors` detail, and an RFC 7009
+ * names once its URLs pass (each filled and checked before a token is read), and when the grant is already gone: a 2xx, `invalid_grant`, a revoked code, a `goneErrors` detail, and an RFC 7009
  * revoke's 404 (a request revoke's 404 is a missing route, not a gone token).
  * `client` is the OAuth app, sent only by an RFC 7009 revoke, which refuses to start without it. */
 export async function revokeGrant<const E extends Entry>(entry: E, input: { accessToken?: string; refreshToken?: string | null;
@@ -217,6 +217,7 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
       if (token !== undefined) await revokeToken(entry, client, token, input);
       return;
     }
+    filledBase(entry, input.values ?? {}, callBase(entry, revoke.request).baseUrl); // the base it is sent to, before a token is read
     const { accessToken } = input;
     if (accessToken === undefined) return;
     const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch ?? defaultFetch(entry),

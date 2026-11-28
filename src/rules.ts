@@ -139,7 +139,7 @@ export function hostSplit(entry: Entry): boolean {
   // One not well formed is kept whole: never equal to a host part, so it counts as another host.
   const hosts = declaredUrls(entry).map(url => hostPart(url) ?? url);
   const named = namedHosts(entry);
-  const chosen = (name: string) => entry.fields?.some(field => field.name === name && field.choices !== undefined) === true;
+  const chosen = (name: string) => entry.fields?.find(field => field.name === name)?.choices !== undefined; // the field filledBase reads
   const typed = hosts.some(host => placeholders(host).some(name => !(Object.hasOwn(named, name) || chosen(name)) || host !== `https://{${name}}`));
   return (typed && (new Set(hosts).size > 1 || Object.keys(named).length > 0))
     || (Object.keys(named).length > 0 && hosts.some(host => placeholders(host).some(chosen)));

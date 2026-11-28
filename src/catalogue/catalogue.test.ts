@@ -266,7 +266,7 @@ const runnable = {
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   [ANY_HOST]: (entry: Entry) => entry.http.host !== '*'
     || (/^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? '') && Object.keys(namedHosts(entry)).length === 0
-      && !(entry.fields ?? []).some(field => field.choices !== undefined && placeholders(entry.http.baseUrl).includes(field.name))),
+      && !(entry.fields ?? []).some(field => field.choices !== undefined && placeholders(hostPart(entry.http.baseUrl) ?? '').includes(field.name))),
   // A URL is filled from plain values, never a secret; the body and Basic from either.
   // What the engine cannot fill is `template_missing` at the first sign-in.
   "a token request names only the entry's fields, a plain one in its `url`": (entry: Entry) => {
@@ -301,6 +301,8 @@ const runnable = {
       } catch { return false; }
     }));
   },
+  // The engine reads the first field of a name: a second one's `choices` would be drawn and never checked.
+  '`fields[].name` unique on each sign-in': (entry: Entry) => new Set((entry.fields ?? []).map(field => field.name)).size === (entry.fields ?? []).length,
   // A connect screen draws the choices; the default is what it shows first.
   '`fields[].choices` a non-empty list of unique values that holds the `default`': (entry: Entry) => (entry.fields ?? []).every(field =>
     field.choices === undefined || (field.choices.length > 0 && new Set(field.choices).size === field.choices.length
@@ -712,6 +714,8 @@ test.each<[Rule, Entry]>([
   ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill every declared URL to a host `http.host` takes",
     defineProvider({ ...key, http: { baseUrl: 'https://{region}', host }, auth: [{ kind: 'key' }],
       fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
+  ['`fields[].name` unique on each sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region' }, { name: 'region', title: 'Region', choices: ['api.k.test'] }] })],
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, default: 'k' }] })],
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, choices: ['k'] }] })],
   ["a call's `base` one of `http.bases`", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
@@ -999,6 +1003,10 @@ test.each<[string, Entry]>([
   ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
     http: { baseUrl: 'https://api.k.test/{org}' } })],
   ["Wrike's shape: the base and the refresh on the host the token answer names", defineProvider(named)],
+  // `choices` in the path is no chosen host: a typed host on `'*'` may hold one.
+  ['a typed host on `*` with a path segment from `choices`', defineProvider({ ...key, auth: [{ kind: 'key' }], identify: { request: { path: '/me' }, id: 'id' },
+    fields: [secret, { name: 'host', title: 'Host' }, { name: 'version', title: 'Version', choices: ['v1', 'v2'], default: 'v2' }],
+    http: { baseUrl: 'https://{host}/{version}', host: '*' } })],
   // Typeform's shape: the base chosen from a closed list, beside fixed OAuth 2 URLs on another host.
   ['a chosen base beside fixed OAuth 2 URLs', defineProvider({ ...oauth2, scopes: { default: [] }, identify: { request: { path: '/me' }, id: 'id' },
     fields: [{ name: 'apiHost', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'], default: 'api.k.test' }],
