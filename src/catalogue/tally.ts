@@ -15,7 +15,7 @@ export const tally = defineProvider({
   id: 'tally', name: 'Tally', docs: 'https://developers.tally.so/api-reference/api-keys',
   categories: ['marketing'],
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'From Settings > API keys. It is tied to your own user: it has your permissions and reaches all of your resources.' }],
+    help: 'From Settings > API keys. It is tied to your own user: it has your permissions and reaches all of your resources, and stops working if you leave the organization it was made in.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.tally.so', headers: { 'tally-version': '2025-02-01' }, retry: { defaultWaitMs: 60_000 } },
   identify: { request: { path: '/users/me' }, id: 'id', name: ['fullName', 'email'] },
