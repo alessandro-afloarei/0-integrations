@@ -2,7 +2,8 @@
 
 `webhooks` verifies HMAC and Ed25519 signatures, shared tokens, HTTP Basic credentials and Standard Webhooks with
 `verifyWebhook(entry.webhook, request, secret)` over the exact raw body bytes, and answers URL challenges with
-`challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification.
+`challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification: it gives
+the raw bytes, or null past `maxBytes`, starting the stream's cancel without waiting on it.
 `deliveryId(entry.webhook, request)` reads what the entry declares an app dedupes on: a header, or body paths joined
 with `:`, null when one is missing. A catalogue entry on a signed scheme (`hmac`, `ed25519`) declares a body path,
 never a header (the table refuses a header id there): its signature covers no header, so a replay could rename one.

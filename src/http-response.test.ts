@@ -8,7 +8,7 @@ import { hubspot } from './catalogue/hubspot.js';
 import { lusha } from './catalogue/lusha.js';
 import { slack } from './catalogue/slack.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
-import { classify, codeOf, retryPolicy, safeDetail, waitOf } from './http-response.js';
+import { classify, codeOf, readCappedBody, retryPolicy, safeDetail, waitOf } from './http-response.js';
 import { createClient } from './http.js';
 import { fakeFetch } from './testing.js';
 
@@ -338,4 +338,14 @@ test("a declared header wait is a 429's alone, Retry-After first", () => {
   expect(fail(reset, 404, {}, { 'ratelimit-reset': '3' })).toMatchObject({ code: 'not_found', retryAfterMs: null });
   expect(fail(reset, 503, {}, { 'ratelimit-reset': '3' })).toMatchObject({ code: 'unavailable', retryAfterMs: null });
   expect(fail(reset, 503, {}, { 'ratelimit-reset': '3', 'Retry-After': '7' })).toMatchObject({ code: 'unavailable', retryAfterMs: 7000 });
+});
+
+test('readCappedBody returns past its cap without waiting on the cancel, and a cancel that fails is no unhandled rejection', async () => {
+  const pending = vi.fn(() => new Promise<void>(() => undefined));
+  const refusing = vi.fn(() => Promise.reject(new Error('cancel refused')));
+  for (const cancel of [pending, refusing]) {
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(3)); }, cancel });
+    expect(await readCappedBody({ body }, 2)).toBeNull();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  }
 });

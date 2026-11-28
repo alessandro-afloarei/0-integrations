@@ -67,7 +67,9 @@ Nothing here is released yet.
   from `finishConnect` or `exchangeCode` to ask the person to connect again catches `rejected`.
 - A first token request's refused answer, an exchange's or a `token` sign-in's, is read up to 10 MiB, the bound a call's
   error body has; a larger one is classified from its status and headers alone, with no detail (a 503 keeps its wait).
-  A successful answer is read whole, as before.
+  A successful answer is read whole, as before. `readCappedBody` (webhooks) now returns null past its cap without
+  waiting for the stream's cancel to settle, so a body handed over as a clone cannot hang it, and a cancel that fails
+  is no longer thrown.
 - Breaking: an OAuth refusal that carries a `WWW-Authenticate` challenge (Doorkeeper sends one on every error, RFC 6749
   asks for one beside a 401 `invalid_client`) is read from its body as any other refusal is. A refresh refused that way
   with `invalid_grant` or a code the entry lists as revoked is `GrantRevoked`, no longer `request_failed`: the

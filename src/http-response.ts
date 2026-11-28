@@ -149,7 +149,8 @@ export async function readCappedBody(request: Pick<Request, 'body'>, maxBytes: n
     if (done) return Buffer.concat(chunks, bytes);
     bytes += value.byteLength;
     if (bytes > maxBytes) {
-      await reader.cancel();
+      // Started, never awaited: a cloned stream's cancel waits for its other branch.
+      void reader.cancel().catch(() => undefined);
       return null;
     }
     chunks.push(Buffer.from(value));

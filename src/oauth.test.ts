@@ -303,6 +303,32 @@ test("a first token request's refused answer is read up to 10 MiB; past it, clas
   expect(broken.exchange).toEqual(new ProviderHttpError('unavailable', null));
 });
 
+test('an oversized refusal handed back as a clone, its original never read, does not hang either path', async () => {
+  // A custom `fetch` that answers with `response.clone()`: cancelling the clone's read waits for the other branch.
+  const busy = counted(503, LIMIT + 2 * 1024 * 1024, '{"error":"invalid_grant"}', { 'retry-after': '30' });
+  const kept: Response[] = [];
+  const cloned = () => { const original = busy.answer(); kept.push(original); return original.clone(); };
+  const answered = await firstRequests({})(cloned);
+  expect(answered.exchange).toEqual(answered.token);
+  expect(answered.exchange).toMatchObject({ code: 'unavailable', status: 503, detail: null, retryAfterMs: 30_000 });
+  expect(kept).toHaveLength(2);
+}, 2000);
+
+test('a refusal that opens with a UTF-8 byte order mark is read as the same answer without one, on both paths', async () => {
+  const withBom = (status: number, json: string) => () => new Response(new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(json)]),
+    { status, headers: { 'content-type': 'application/json' } });
+  const plain = (status: number, json: string) => () => new Response(json, { status, headers: { 'content-type': 'application/json' } });
+  const refused = await firstRequests({})(withBom(400, '{"error":"invalid_grant"}'));
+  expect(refused.exchange).toEqual(refused.token);
+  expect(refused.exchange).toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
+  // A rule that reads the body holds as it does without the mark.
+  const ruled = firstRequests({ rules: [{ when: { status: 503, path: 'error', equals: 'slow_down' }, code: 'rate_limited' }] });
+  const [marked, unmarked] = [await ruled(withBom(503, '{"error":"slow_down"}')), await ruled(plain(503, '{"error":"slow_down"}'))];
+  expect(marked).toEqual(unmarked);
+  expect(marked.exchange).toEqual(marked.token);
+  expect(marked.exchange).toMatchObject({ code: 'rate_limited', status: 503 });
+});
+
 test('a successful token answer past 10 MiB is read whole, on both paths, and an exchange checks `failed` without refusing it', async () => {
   const large = counted(200, LIMIT + 1024 * 1024, '{"access_token":"a","token_type":"bearer","ok":true}');
   for (const failed of [undefined, { path: 'ok', equals: false }] as const) {
