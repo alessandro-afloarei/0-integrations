@@ -61,9 +61,12 @@ one takes five steps:
      the request to name the agent who sends (Atlas's `agentId`), that field is declared, its description saying so. A
      create may name the customer as its first message's author where the page asks for it (Zammad, Dixa), and an entry
      may leave such a create out. An update offers no path and no enum value that sends, and no create or update offers
-     one that deletes or marks spam. Where a status cannot be an enum (Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer
-     inside an object), the description names the values the template covers; where the page lists a spam or removed
-     value among them, it says the entry does not check the value;
+     one that deletes or marks spam. Where a status cannot be an enum (Help Scout's `value`, read with its `path`;
+     Re:amaze's `status`, an integer inside an object), the description names the values the template covers; where the
+     page lists a spam or removed value among them, it says the entry does not check the value;
+   - a `page` or `offset` list is paged once its page states where its numbering starts, even when no page says what a
+     request past the end answers: the walk ends on an empty list, and fails on a page whose list has the same JSON
+     text as the one before's or the first's (`page_repeated`) or on the provider's own error;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
@@ -114,8 +117,9 @@ entry:
   hold no placeholder, and a call's `base` names one of them; `http.headers` values hold none either (they are sent as
   written); a token request names only the entry's fields (a plain
   one in its `url`, whose host placeholder needs `http.host`), sends the secret field in its body or Basic, and its
-  `send` names no secret field; a field's `choices` are a non-empty list of unique values holding its `default`, each
-  of them and the `default` fills the base to a host `http.host` takes, and a secret field has neither;
+  `send` names no secret field; a sign-in's field names are unique; a field's `choices` are a non-empty list of
+  unique values holding its `default`, each of them and the `default` fills every declared URL to a host `http.host`
+  takes, and a secret field has neither; a host chosen from `choices` needs a domain in `http.host`, never `'*'`;
 - declares a webhook the engine can trust: `{body}` is signed (by default, or in `signed`), and `{timestamp}` exactly
   when a timestamp is declared, read apart from the signature (another `part` or header); a `part` name holds no `,`,
   `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, a wait's, `http.headers`
@@ -129,9 +133,10 @@ entry:
   place in the request (a GET has no body) and none sits where its paging shape's `send` writes, no `result` holds a
   literal type, no literal is empty or differs from a type name by its case or one edit (`'strng'`, `'Integer'`), no
   parameter whose type is a literal is `nullable` (it would send `null` beside its one value), a paged operation names
-  a declared shape and no `notFound`, a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's
-  `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, no two
-  GraphQL operations share one query text (declare one), and no id is a client call or a dotted prefix of another;
+  a declared shape and no `notFound` (a GraphQL one, a shape sent in `variables`; an operation with a path, never
+  one), a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's `list`), an `anyOf` has two
+  or more sets whose paths name declared arguments and no `required` parameter, no two GraphQL operations share one
+  query text (declare one), and no id is a client call or a dotted prefix of another;
 - has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields
   (the refresh URL may also name a host the token answer names), and whose URLs, base and `http.bases` share one host
   when any of them is typed: a token goes only to the host that issued it; a public client (`clientAuth: 'none'`)

@@ -52,32 +52,49 @@ function relNext(header: string | null): string | undefined {
   return undefined;
 }
 
+/** `value` at `keys` in a copy of `record`, each object on the way copied and a missing one made; one that is no object
+ * is `request_failed`. */
+function written(record: unknown, [key = '', ...rest]: readonly string[], value: unknown): Record<string, unknown> {
+  const object = (record ?? {}) as Record<string, unknown>;
+  if (typeof object !== 'object' || Array.isArray(object)) throw new ProviderHttpError('request_failed', null);
+  return { ...object, [key]: rest.length === 0 ? value : written(Object.hasOwn(object, key) ? object[key] : undefined, rest, value) };
+}
+
 function withCursor(where: Where, options: RequestOptions, cursor: string | number): RequestOptions {
   if ('query' in where) return { ...options, query: { ...options.query, [where.query]: String(cursor) } };
   // A form holds no body cursor: its next page would carry a JSON body as well.
   if (options.form) throw new ProviderHttpError('request_failed', null);
-  const body = typeof options.json === 'object' && options.json !== null ? options.json : {};
-  return { ...options, json: { ...body, [where.body]: cursor } };
+  return { ...options, json: written(options.json, 'body' in where ? where.body.split('.') : ['variables', where.variables], cursor) };
 }
 
 /** A page-number, offset or last-record list's loader: nothing first, then each next value, until the list is empty or
  * `more` is falsy; without `more`, a last-record list also ends on a blank value (`nextCursor`). An offset grows by the
  * entries the list holds, a skipped record included, never a number the answer names; a last-record value is read from
  * the answer's own last entry, so a skipped record still gives it. A missing list, or one that is no list, is
- * `invalid_response`: a malformed answer never reads as an empty list. A list equal to the page before's is
- * `page_repeated`: the provider ignores the value, and would never end. */
+ * `invalid_response`: a malformed answer never reads as an empty list. A list with the same JSON text as the page
+ * before's or the first page's is `page_repeated`: the provider ignores the value, or answers its first page past the
+ * end, and would never end. A `page` list with `total` also ends once the pages, or the entries (a skipped record
+ * included), it read reach the number each answer names; an empty page before then is `invalid_response`. */
 function listed(http: HttpClient, shape: Listed, path: string, options: RequestOptions) {
   let previous: string | undefined;
+  let first: string | undefined;
+  let read = 0;
   return async (page: string | undefined) => {
     const answer = await http.json(path, page === undefined ? options
       : withCursor(shape.send, options, shape.kind === 'last' ? page : Number(page)));
     const list = shape.list === undefined ? answer : readPath(answer, shape.list);
     if (!Array.isArray(list)) throw new ProviderHttpError('invalid_response', null, 'missing_fields');
     const seen = JSON.stringify(list);
-    if (previous !== undefined && seen === previous) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
+    if (previous !== undefined && (seen === previous || seen === first)) throw new ProviderHttpError('invalid_response', null, 'page_repeated');
     previous = seen;
+    first ??= seen;
     if (shape.kind === 'last') return { items: [answer], skipped: [], cursor: list.length === 0 ? null : nextCursor(shape, answer, list.at(-1)) };
-    const end = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more));
+    const total = shape.kind === 'page' ? shape.total : undefined;
+    const count = total && readPath(answer, 'pages' in total ? total.pages : total.entries);
+    read += total && 'pages' in total ? 1 : list.length;
+    // A count that is no count, or an empty page before it is reached, would end the walk short.
+    if (total && !(Number.isSafeInteger(count) && Number(count) >= 0 && (list.length > 0 || read >= Number(count)))) throw new ProviderHttpError('invalid_response', null, 'missing_fields');
+    const end = list.length === 0 || (shape.more !== undefined && !readPath(answer, shape.more)) || (total !== undefined && read >= Number(count));
     const next = shape.kind === 'offset' ? Number(page ?? 0) + list.length
       : Number(page ?? (shape.zeroBased ? 0 : 1)) + 1;
     return { items: [answer], skipped: [], cursor: end ? null : String(next) };
@@ -86,6 +103,7 @@ function listed(http: HttpClient, shape: Listed, path: string, options: RequestO
 
 /** Every page's answer, in order, until the shape names no next page; a cursor that comes back is `cursor_repeated`. */
 export async function* walk(http: HttpClient, shape: Paging, path: string, options: RequestOptions = {}): AsyncGenerator<unknown, void, undefined> {
+  if ('send' in shape) withCursor(shape.send, options, 0); // a request no next value can be written into fails before the first
   const load = shape.kind === 'cursor'
     ? async (cursor: string | undefined) => {
       const answer = await http.json(path, cursor === undefined ? options : withCursor(shape.send, options, cursor));

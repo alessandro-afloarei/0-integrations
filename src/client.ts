@@ -4,7 +4,7 @@ import { callRequest, createClient, defaultFetch, type HttpOptions, type Provide
 import { classify, emptyAnswers, responseJson } from './http-response.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
-import { argumentShape, checkHosts, clashing, fill, isLiteral, pagedParam, pagedRecords, placed, readPath, shapeAt } from './rules.js';
+import { argumentShape, checkHosts, clashing, fill, isLiteral, pagedParam, pagedRecords, pagingPlaced, placed, readPath, shapeAt } from './rules.js';
 
 export type { ProviderResponse, RequestOptions };
 export { guardedFetch } from './guard.js';
@@ -153,6 +153,7 @@ export function client<const E extends Entry>(entry: E, options: ClientOptions):
     }
     const shape = op.notFound === undefined ? pagingOf(paging) : refuse(`not_found_paged: ${id}`);
     if (!pagedRecords(op, shape)) refuse(`records_unpaged: ${id}`);
+    if (!pagingPlaced(op, shape)) refuse(`paging_unplaced: ${id}`);
     const sent = pagedParam(op, shape);
     if (sent !== undefined) refuse(`param_paged: ${id} ${sent}`);
     // The records: the list at `records`, or a list `result` itself (a list at the answer's top level).

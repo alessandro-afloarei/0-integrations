@@ -1,13 +1,12 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Teamleader Focus: OAuth 2 only, scopes chosen at registration. Every method is a POST with a JSON body; a list
- * answers one page (`page.number` is nested in the body). A 429 past the limit; errors are titles only:
+ * pages by the body's `page.number`. A 429 past the limit; errors are titles only:
  * https://developer.focus.teamleader.eu/docs/general-principles. The docs show the latest API version; an older
  * integration sends `x-api-version`: https://developer.focus.teamleader.eu/docs/changelog/upgrading-api-version */
 const contact = { id: 'string', 'first_name?': 'string', 'last_name?': 'string', 'status?': 'string',
   'emails?': [{ 'type?': 'string', 'email?': 'string' }], 'web_url?': 'string', 'added_at?': 'string', 'updated_at?': 'string' } as const;
-const page = { page: { in: 'body', type: { 'size?': 'number', 'number?': 'number' },
-  description: 'The page asked for: size (20 by default) and number (1 by default).' } } as const;
+const page = { page: { in: 'body', type: { 'size?': 'number' }, description: 'size: 20 by default.' } } as const;
 const emails = { emails: { in: 'body', type: [{ type: 'string', email: 'string' }], description: 'Each type is primary.' } } as const;
 const ref = 'https://developer.focus.teamleader.eu/docs/api';
 
@@ -21,8 +20,9 @@ export const teamleader = defineProvider({
   http: { baseUrl: 'https://api.focus.teamleader.eu',
     retry: { defaultWaitMs: 60_000, wait: { header: 'x-ratelimit-reset', unit: 'iso8601' } } },
   identify: { request: { method: 'POST', path: '/users.me' }, id: 'data.id', name: 'data.email' },
+  paging: { page: { kind: 'page', send: { body: 'page.number' }, list: 'data' } },
   operations: {
-    'contacts.list': { docs: `${ref}/contacts-list`, method: 'POST', path: '/contacts.list', kind: 'read',
+    'contacts.list': { docs: `${ref}/contacts-list`, method: 'POST', path: '/contacts.list', kind: 'read', paging: 'page', records: 'data',
       params: { filter: { in: 'body', type: { 'email?': { type: 'string', email: 'string' }, 'company_id?': 'string', 'term?': 'string',
         'updated_since?': 'string' }, description: 'email: { type: "primary", email }; term searches names, email and telephone.' }, ...page },
       result: { data: [contact] } },
@@ -34,11 +34,12 @@ export const teamleader = defineProvider({
     'contacts.update': { docs: `${ref}/contacts-update`, method: 'POST', path: '/contacts.update',
       params: { id: { in: 'body', type: 'string', required: true }, first_name: { in: 'body', type: 'string' },
         last_name: { in: 'body', type: 'string' }, ...emails } },
-    'companies.list': { docs: `${ref}/companies-list`, method: 'POST', path: '/companies.list', kind: 'read',
+    'companies.list': { docs: `${ref}/companies-list`, method: 'POST', path: '/companies.list', kind: 'read', paging: 'page', records: 'data',
       params: { filter: { in: 'body', type: { 'term?': 'string', 'updated_since?': 'string' } }, ...page },
       result: { data: [{ id: 'string', 'name?': 'string', 'status?': 'string', 'website?': 'string', 'web_url?': 'string',
         'added_at?': 'string', 'updated_at?': 'string' }] } },
-    'deals.list': { docs: `${ref}/deals-list`, method: 'POST', path: '/deals.list', kind: 'read', params: page,
+    'deals.list': { docs: `${ref}/deals-list`, method: 'POST', path: '/deals.list', kind: 'read', paging: 'page', records: 'data',
+      params: page,
       result: { data: [{ id: 'string', 'title?': 'string', 'status?': 'string',
         'lead?': { 'customer?': { 'type?': 'string', 'id?': 'string' } }, 'estimated_value?': { 'amount?': 'number', 'currency?': 'string' },
         'web_url?': 'string', 'created_at?': 'string', 'updated_at?': 'string' }] } },

@@ -8,11 +8,11 @@ import { lookupNames } from '../account.js';
 import { defineProvider, signInWith, type Category, type Entry, type Field, type Shape, type Value } from '../catalogue.js';
 import { finishConnect, startConnect } from '../connect.js';
 import { GrantRevoked } from '../errors.js';
-import { callBase, createClient, credentialOf, filledBase } from '../http.js';
+import { callBase, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, isLiteral, namedHosts, oauthUrls, pagedParam, pagedRecords, placed, placeholders, shapeAt } from '../rules.js';
+import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, isLiteral, namedHosts, oauthUrls, pagedParam, pagedRecords, pagingPlaced, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -86,9 +86,18 @@ const webhookParts = { deliveryId: z.union([z.strictObject({ header: headerName 
     echo: z.union([z.string().min(1), z.strictObject({ query: z.string().min(1, 'a challenge `query` names its parameter: give the name') })]),
     text: z.literal(true).optional(), unsigned: z.literal(true).optional() })
     .refine(item => typeof item.echo === 'string' || item.text === true, 'a challenge read from a query is answered as text: give `text: true`').optional() };
-const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: z.string() })]);
+/** A body place's path: no empty segment, none that names a prototype. */
+const bodyPath = z.string().refine(path => path.split('.').every(segment => segment !== '' && !['__proto__', 'constructor', 'prototype'].includes(segment)),
+  'a `body` place is a dotted path of keys: no empty segment, and no `__proto__`, `constructor` or `prototype`');
+const where = z.union([z.strictObject({ query: z.string() }), z.strictObject({ body: bodyPath }),
+  z.strictObject({ variables: z.string().min(1, 'a `variables` place names the GraphQL variable: give the name') })]);
+/** A `page` shape's count: of pages or of entries, one path to it. */
+const countPath = z.string().min(1, "a `total` is a path to the answer's count: give it");
+const total = z.strictObject({ pages: countPath.optional(), entries: countPath.optional() })
+  .refine(item => (item.pages === undefined) !== (item.entries === undefined), 'a `total` counts `pages` or `entries`: give one of them');
 /** A next link's directory: a whole one (`/me/`), so `/meetings` is not under `/me`. */
 const pathPrefix = z.string().regex(/^\/(?:.*\/)?$/u, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)').optional();
+const PAGING_PLACED = 'a GraphQL operation paged only on a shape whose `send` is `variables`, and a path operation never on one';
 const ONE_OF_EACH = 'at most one sign-in of each kind in `auth`: an app picks one by its kind';
 const KEY_OR_TOKEN = 'a `key` or a `token` sign-in, never both: the key is the one the person enters';
 const OAUTH_FIRST = 'OAuth 2 first, then the key or token: an entry used whole is its first sign-in, the one providers ask apps for other people to use';
@@ -168,7 +177,7 @@ const entrySchema = z.strictObject({
   paging: z.record(z.string(), z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('cursor'), next: z.string(), more: z.string().optional(), send: where }),
     z.strictObject({ kind: z.literal('page'), send: where, list: z.string().optional(), more: z.string().optional(),
-      zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional() }),
+      zeroBased: z.literal(true, '`zeroBased` is `true` or left out (the first page is 1)').optional(), total: total.optional() }),
     z.strictObject({ kind: z.literal('offset'), send: where, list: z.string().optional(), more: z.string().optional() }),
     z.strictObject({ kind: z.literal('last'), next: z.string().min(1, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"),
       send: where, list: z.string().optional(), more: z.string().optional() }),
@@ -227,7 +236,7 @@ const oauthUrlList = (entry: Entry) => Object.values(oauthUrls(entry) ?? {});
 const RETRY_DEFAULT = '`http.retry.defaultWaitMs` at most its `maxWaitMs` (1 000 and 60 000 when left out): the cap would cut a longer default';
 const RETRY_ONLY_STATED = "no `http.retry.defaultWaitMs` beside `onlyStated`: an answer that states no wait is not retried, so the default is never read";
 const HOST_PATTERN = "an `http.host` pattern (a domain name, never an address; `*.` and a domain; a non-empty list of those; or `*` alone) exactly when a host (the base's, an OAuth 2 URL's, a token request's) has a placeholder";
-const ANY_HOST = "`http.host: '*'` only on a base whose whole host is one placeholder a person types: a host the token answer names needs a domain";
+const ANY_HOST = "`http.host: '*'` only on a base whose whole host is one placeholder a person types: a host the token answer names, or one chosen from `choices`, needs a domain";
 const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs, the base, or `connection.*`): its connect asks the person for each';
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
@@ -272,7 +281,8 @@ const runnable = {
   },
   // Any host is allowed only where the person types the whole host, which is then address-guarded.
   [ANY_HOST]: (entry: Entry) => entry.http.host !== '*'
-    || (/^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? '') && Object.keys(namedHosts(entry)).length === 0),
+    || (/^https:\/\/\{[^{}]+\}$/u.test(hostPart(entry.http.baseUrl) ?? '') && Object.keys(namedHosts(entry)).length === 0
+      && !(entry.fields ?? []).some(field => field.choices !== undefined && placeholders(hostPart(entry.http.baseUrl) ?? '').includes(field.name))),
   // A URL is filled from plain values, never a secret; the body and Basic from either.
   // What the engine cannot fill is `template_missing` at the first sign-in.
   "a token request names only the entry's fields, a plain one in its `url`": (entry: Entry) => {
@@ -296,18 +306,24 @@ const runnable = {
   "a call's `base` one of `http.bases`": (entry: Entry) => calls(entry).every(call => call?.base === undefined
     || Object.hasOwn(entry.http.bases ?? {}, call.base)),
   // A choice the engine would refuse fails here, not when a person picks it.
-  "`fields[].choices` and `default` that fill the base to a host `http.host` takes": (entry: Entry) => {
-    const named = (entry.fields ?? []).filter(field => placeholders(entry.http.baseUrl).includes(field.name));
+  "`fields[].choices` and `default` that fill every declared URL to a host `http.host` takes": (entry: Entry) => {
+    const urls = declaredUrls(entry);
+    const named = (entry.fields ?? []).filter(field => urls.some(url => placeholders(url).includes(field.name)));
     // A saved value has no choices: a stand-in fills it.
     const saved = Object.keys(entry.save ?? {}).map((name): [string, string] => [name, 'x']);
     const first = (field: Field) => field.default ?? field.choices?.[0] ?? 'x';
     return named.every(field => [...field.choices ?? [], ...field.default === undefined ? [] : [field.default]].every(value => {
       const values = { ...Object.fromEntries([...saved, ...named.map((other): [string, string] => [other.name, first(other)])]), [field.name]: value };
       try {
-        return createClient(entry, { token: () => Promise.resolve('t'), fetch: globalThis.fetch, values }).baseUrl !== '';
+        return urls.filter(url => placeholders(url).includes(field.name)).every(url => filledBase(entry, values, url) !== '');
       } catch { return false; }
     }));
   },
+  // The engine reads a path after the base: one without its `/` would run into the base's last segment (`url_path_relative`).
+  "every request path (an operation's, identify's, a request revoke's) empty or starting with `/` or `?`": (entry: Entry) =>
+    [...operations(entry), ...calls(entry)].every(call => !call || !('path' in call) || /^(?:$|[/?])/u.test(call.path ?? '')),
+  // The engine reads the first field of a name: a second one's `choices` would be drawn and never checked.
+  '`fields[].name` unique on each sign-in': (entry: Entry) => new Set((entry.fields ?? []).map(field => field.name)).size === (entry.fields ?? []).length,
   // A connect screen draws the choices; the default is what it shows first.
   '`fields[].choices` a non-empty list of unique values that holds the `default`': (entry: Entry) => (entry.fields ?? []).every(field =>
     field.choices === undefined || (field.choices.length > 0 && new Set(field.choices).size === field.choices.length
@@ -439,6 +455,11 @@ const runnable = {
   "an operation on a `page`, `offset` or `last` shape whose `records` is the shape's `list` (both left out for a list at the answer's top level)": (entry: Entry) =>
     operations(entry).every(op => { const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
       return shape === undefined || pagedRecords(op, shape); }),
+  // A GraphQL request has room only in its variables, and a path request has none there.
+  [PAGING_PLACED]: (entry: Entry) => operations(entry).every(op => {
+    const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
+    return shape === undefined || pagingPlaced(op, shape);
+  }),
   // The walk sets that parameter itself on every page after the first.
   "no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`": (entry: Entry) => operations(entry).every(op => {
     const shape = op.paging === undefined ? undefined : entry.paging?.[op.paging];
@@ -720,9 +741,15 @@ test.each<[Rule, Entry]>([
     [{ choices: ['api.mailgun.net', 'api.eu.mailgun.com'] }, '*.mailgun.net'],
     [{ default: 'api.mailgun.net' }, '*.mailgun.com'],
     [{ choices: ['api.mailgun.net', 'api.eu.mailgun.net'] }, ['api.mailgun.net', 'api.eu.mailgun.com']],
-  ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill the base to a host `http.host` takes",
+  ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill every declared URL to a host `http.host` takes",
     defineProvider({ ...key, http: { baseUrl: 'https://{region}', host }, auth: [{ kind: 'key' }],
       fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
+  ...([{ operations: { 'items.list': { docs: 'https://k.test/docs/items', path: 'items' } } }, { identify: { request: { path: 'me' }, id: 'id' } },
+    { revoke: { request: { method: 'POST', path: 'revoke' } } }] as const).map((part): [Rule, Entry] => [
+    "every request path (an operation's, identify's, a request revoke's) empty or starting with `/` or `?`",
+    defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], ...part })]),
+  ['`fields[].name` unique on each sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }],
+    fields: [secret, { name: 'region', title: 'Region' }, { name: 'region', title: 'Region', choices: ['api.k.test'] }] })],
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, default: 'k' }] })],
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, choices: ['k'] }] })],
   ["a call's `base` one of `http.bases`", defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret],
@@ -819,11 +846,21 @@ test.each<[Rule, Entry]>([
       result: { data: [{ id: 'string' }], items: [{ id: 'string' }] } } } })],
   ...([[{ kind: 'page', send: { query: 'page' } }, 'page', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'cursor', 'body'],
     [{ kind: 'offset', send: { query: 'offset' } }, 'offset', 'query'], [{ kind: 'cursor', next: 'next', send: { body: 'cursor' } }, 'q', 'form'],
-    [{ kind: 'last', next: 'id', send: { query: 'after' } }, 'after', 'query'], [{ kind: 'last', next: 'id', send: { body: 'after' } }, 'q', 'form']] as const)
+    [{ kind: 'last', next: 'id', send: { query: 'after' } }, 'after', 'query'], [{ kind: 'last', next: 'id', send: { body: 'after' } }, 'q', 'form'],
+    [{ kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } }, 'pagination', 'body']] as const)
     .map(([shape, name, place]): [Rule, Entry] => ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`",
       defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
         operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
           params: { [name]: { in: place, type: 'integer' } } } } })]),
+  ["no `operations[].params` entry in the place its paging shape's `send` writes (the walk sends it), and no `form` one beside a `send.body`",
+    defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: { kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } } },
+      operations: { 'items.list': { docs: 'https://k.test/docs/items', method: 'POST', kind: 'read', path: '/items', paging: 'list',
+        params: { pagination: { in: 'body', type: { 'cursor?': 'string', 'page_size?': 'integer' } } } } } })],
+  ...([[{ kind: 'cursor', next: 'next', send: { query: 'after' } }, { graphql: 'query T($after: String) { t(after: $after) { id } }' }],
+    [{ kind: 'nextUrl', next: 'next' }, { graphql: 'query T { t { id } }' }],
+    [{ kind: 'cursor', next: 'next', send: { variables: 'after' } }, { method: 'POST', path: '/items' }]] as const)
+    .map(([shape, op]): [Rule, Entry] => [PAGING_PLACED, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], paging: { list: shape },
+      operations: { 'items.list': { docs: 'https://k.test/docs/items', kind: 'read', paging: 'list', ...op } } })]),
   ...([
     [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://{host}/token' }, { baseUrl: 'https://api.k.test' }],
     [{ authorizeUrl: 'https://{host}/authorize', tokenUrl: 'https://k.test/token' }, { baseUrl: 'https://{host}/api' }],
@@ -872,6 +909,23 @@ test.each<[Rule, Entry]>([
   ...['https://api-{host}.k.test/api', 'https://{host}.k.test/api'].map((baseUrl): [Rule, Entry] => [HOST_SPLIT,
     defineProvider({ ...named, http: { ...named.http, baseUrl } })]),
   [HOST_SPLIT, defineProvider({ ...named, auth: [{ ...named.auth[0], refreshUrl: 'https://auth.{host}/token' }] })],
+  // A chosen host is a URL's whole host: composed into another, beside a typed placeholder, or beside a named host, it splits.
+  [HOST_SPLIT, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'region', title: 'Region', choices: ['eu', 'us'] }],
+    http: { baseUrl: 'https://api.{region}.k.test', host: '*.k.test' } })],
+  [HOST_SPLIT, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'region', title: 'Region', choices: ['k.test'] }, { name: 'sub', title: 'Subdomain' }],
+    http: { baseUrl: 'https://{sub}.{region}', host: '*.k.test' } })],
+  [HOST_SPLIT, defineProvider({ ...named, fields: [{ name: 'region', title: 'Region', choices: ['login.k.test'] }],
+    auth: [{ ...named.auth[0], authorizeUrl: 'https://{region}/authorize' }] })],
+  // Beside a fixed second base: a call there could not keep the chosen base's origin.
+  [HOST_SPLIT, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'apiHost', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'] }],
+    http: { baseUrl: 'https://{apiHost}', host: ['api.k.test', 'api.eu.k.test'], bases: { auth: 'https://api.k.test/auth' } } })],
+  // A closed list names its hosts: the address guard's `*` is for a host a person types.
+  [ANY_HOST, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', choices: ['api.k.test'] }],
+    http: { baseUrl: 'https://{region}', host: '*' } })],
+  // Every declared URL is filled with each choice: an authorize host `http.host` does not take is refused too.
+  ["`fields[].choices` and `default` that fill every declared URL to a host `http.host` takes", defineProvider({ ...oauth2, scopes: { default: [] },
+    fields: [{ name: 'region', title: 'Region', choices: ['login.k.test', 'login.k.example'] }],
+    auth: [{ ...oauth2.auth[0], authorizeUrl: 'https://{region}/authorize' }], http: { ...key.http, host: 'login.k.test' } })],
 ])('an entry without %s is refused', (rule, bad) => { expect(runnable[rule](bad)).toBe(false); });
 
 test.each([
@@ -996,6 +1050,17 @@ test.each<[string, Entry]>([
   ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
     http: { baseUrl: 'https://api.k.test/{org}' } })],
   ["Wrike's shape: the base and the refresh on the host the token answer names", defineProvider(named)],
+  // A choice in the authorize URL's path beside a named base: each choice fills only the URLs that name its field.
+  ['a named base beside an authorize URL whose path segment is chosen', defineProvider({ ...named, fields: [{ name: 'tenant', title: 'Tenant',
+    choices: ['common', 'organizations'], default: 'common' }], auth: [{ ...named.auth[0], authorizeUrl: 'https://login.k.test/{tenant}/authorize' }] })],
+  // `choices` in the path is no chosen host: a typed host on `'*'` may hold one.
+  ['a typed host on `*` with a path segment from `choices`', defineProvider({ ...key, auth: [{ kind: 'key' }], identify: { request: { path: '/me' }, id: 'id' },
+    fields: [secret, { name: 'host', title: 'Host' }, { name: 'version', title: 'Version', choices: ['v1', 'v2'], default: 'v2' }],
+    http: { baseUrl: 'https://{host}/{version}', host: '*' } })],
+  // Typeform's shape: the base chosen from a closed list, beside fixed OAuth 2 URLs on another host.
+  ['a chosen base beside fixed OAuth 2 URLs', defineProvider({ ...oauth2, scopes: { default: [] }, identify: { request: { path: '/me' }, id: 'id' },
+    fields: [{ name: 'apiHost', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'], default: 'api.k.test' }],
+    http: { baseUrl: 'https://{apiHost}', host: ['api.k.test', 'api.eu.k.test'] } })],
   ["Pipedrive's shape: the base on the origin the token answer names, the refresh fixed", defineProvider({ ...named,
     save: { apiDomain: 'tokenAnswer.api_domain' }, auth: [{ ...named.auth[0], refreshUrl: 'https://login.k.test/token' }],
     http: { baseUrl: 'https://{apiDomain}/api/v1', host: '*.k.test' } })],
@@ -1104,6 +1169,14 @@ test.each<[Record<string, unknown>, string]>([
   [{ kind: 'last', next: 'cursor', send: { query: 'cursor' }, pathPrefix: '/me/' }, 'Unrecognized key: "pathPrefix"'],
   [{ kind: 'last', next: '', send: { query: 'cursor' } }, "a `last` shape's `next` is the key of the last record that holds the next value: give it one"],
   [{ kind: 'linkHeader', next: 'next' }, 'Unrecognized key: "next"'],
+  [{ kind: 'cursor', next: 'next', send: { variables: '' } }, 'a `variables` place names the GraphQL variable: give the name'],
+  ...['a.__proto__.x', 'constructor', 'page.prototype', 'page..number', '', 'page.'].map((body): [Record<string, unknown>, string] => [{ kind: 'cursor', next: 'next', send: { body } },
+    'a `body` place is a dotted path of keys: no empty segment, and no `__proto__`, `constructor` or `prototype`']),
+  [{ kind: 'cursor', next: 'next', send: { query: 'cursor' }, total: { pages: 'pages' } }, 'Unrecognized key: "total"'],
+  [{ kind: 'offset', send: { query: 'offset' }, total: { entries: 'total' } }, 'Unrecognized key: "total"'],
+  [{ kind: 'page', send: { query: 'page' }, total: { pages: 'pages', entries: 'total' } }, 'a `total` counts `pages` or `entries`: give one of them'],
+  [{ kind: 'page', send: { query: 'page' }, total: {} }, 'a `total` counts `pages` or `entries`: give one of them'],
+  [{ kind: 'page', send: { query: 'page' }, total: { entries: '' } }, "a `total` is a path to the answer's count: give it"],
   ...['me', '/me', 'me/'].flatMap(pathPrefix => [{ kind: 'linkHeader', pathPrefix }, { kind: 'nextUrl', next: 'next', pathPrefix }]
     .map((shape): [Record<string, unknown>, string] => [shape, '`pathPrefix` is a whole directory: start and end it with `/` (`/me/`)'])),
 ])('a paging shape %j fails the schema, with what to fix', (shape, message) => {

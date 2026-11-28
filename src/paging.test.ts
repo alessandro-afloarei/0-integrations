@@ -3,8 +3,11 @@ import { defineProvider, type Paging } from './catalogue.js';
 import { createClient, type RequestOptions } from './http.js';
 import { followed, nextCursor, ownPath, walk } from './paging.js';
 import { clickup } from './catalogue/clickup.js';
+import { fellow } from './catalogue/fellow.js';
+import { linear } from './catalogue/linear.js';
+import { smartsheet } from './catalogue/smartsheet.js';
 import { client, type Client } from './client.js';
-import { fakeFetch, sequence } from './testing.js';
+import { fakeFetch, fakeProvider, sequence, type FakeCall } from './testing.js';
 
 const cursor = { kind: 'cursor', next: 'pagination.cursor', more: 'pagination.hasMore', send: { query: 'cursor' } } as const;
 test('cursor: more decides, and a blank cursor with more is cursor_missing', () => {
@@ -174,9 +177,10 @@ test('linkHeader: a link that comes back is cursor_repeated', async () => {
   expect(walked.urls).toEqual([`${linkBase}/builds?per_page=2`, `${linkBase}/builds?page=2`]);
 });
 
-/** Every request's URL and every page a page-number walk yields, or the error it ends on. */
+/** Every request's URL and every page a page-number walk yields, or the error it ends on; a string answer is the JSON text. */
 async function pageWalk(shape: Paging, answers: readonly unknown[], options: RequestOptions = {}) {
-  const fake = fakeFetch([{ url: /https:/, respond: sequence(...answers.map(answer => () => Response.json(answer))) }]);
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(...answers.map(answer => () => (typeof answer === 'string'
+    ? new Response(answer, { headers: { 'content-type': 'application/json' } }) : Response.json(answer)))) }]);
   const pages: unknown[] = [];
   let error: unknown;
   try { for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), shape, '/items', options)) pages.push(page); } catch (caught) { error = caught; }
@@ -214,6 +218,35 @@ test('page: a provider that ignores the page number is page_repeated, and the re
   expect(walked.pages).toEqual([{ data: [1], has_more: true }]);
 });
 
+test('page: a provider that answers the first page again past the end is page_repeated at the first request past it, no duplicate yielded', async () => {
+  const shape = { kind: 'page', send: { query: 'page' }, list: 'data' } as const;
+  const pages = [[1, 2], [3, 4], [5]];
+  const walkOn = async (at: (page: number) => number) => {
+    const fake = fakeFetch([{ url: /https:/, respond: request =>
+      Response.json({ data: pages[at(Number(new URL(request.url).searchParams.get('page') ?? 1))] ?? [] }) }]);
+    const seen: unknown[] = [];
+    let error: unknown;
+    try { for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), shape, '/items')) seen.push(page); } catch (caught) { error = caught; }
+    return { urls: fake.calls.length, seen, error };
+  };
+  for (const at of [(page: number) => (page > 3 ? 1 : page) - 1, (page: number) => (page - 1) % 3]) {
+    const walked = await walkOn(at);
+    expect(walked.error).toMatchObject({ code: 'invalid_response', detail: 'page_repeated' });
+    expect([walked.urls, walked.seen]).toEqual([4, [{ data: [1, 2] }, { data: [3, 4] }, { data: [5] }]]);
+  }
+  // One record repeated across two pages that differ as wholes is no repeat; a one-page list ends as before.
+  const shared = await pageWalk(shape, [{ data: [1, 2] }, { data: [2, 3] }, { data: [] }]);
+  expect([shared.urls.length, shared.error]).toEqual([3, undefined]);
+  const single = await pageWalk(shape, [{ data: [1] }, { data: [] }]);
+  expect([single.urls.length, single.pages, single.error]).toEqual([2, [{ data: [1] }, { data: [] }], undefined]);
+});
+
+test('page: the first page again with its keys in another order has other JSON text, so the walk goes on to the end', async () => {
+  const walked = await pageWalk({ kind: 'page', send: { query: 'page' }, list: 'data' },
+    [{ data: [{ id: 1, name: 'a' }] }, { data: [{ id: 2, name: 'b' }] }, { data: [{ name: 'a', id: 1 }] }, { data: [] }]);
+  expect([walked.urls.length, walked.pages.length, walked.error]).toEqual([4, 4, undefined]);
+});
+
 test('page: a missing list path, or an answer that is not a list, is invalid_response, never an empty end', async () => {
   for (const [shape, answer] of [[{ kind: 'page', send: { query: 'page' }, list: 'result.items' }, { result: {} }],
     [{ kind: 'page', send: { query: 'page' } }, { items: [1] }], [{ kind: 'page', send: { query: 'page' }, list: 'items' }, { items: 'x' }]] as const) {
@@ -222,6 +255,85 @@ test('page: a missing list path, or an answer that is not a list, is invalid_res
     expect(walked.pages).toEqual([]);
     expect(walked.error).toMatchObject({ code: 'invalid_response', detail: 'missing_fields' });
   }
+});
+
+const pages = { kind: 'page', send: { query: 'page' }, list: 'data', total: { pages: 'totalPages' } } as const;
+const entries = { kind: 'page', send: { query: 'page' }, list: 'data', total: { entries: 'total' } } as const;
+test('page with total: stops at the page count without asking past it, where a page past the last answers the last again', async () => {
+  const last = { data: [3], totalPages: 3 };
+  const walked = await pageWalk(pages, [{ data: [1], totalPages: 3 }, { data: [2], totalPages: 3 }, last, last]);
+  expect(walked.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?page=2', 'https://api.acme.test/items?page=3']);
+  expect([walked.pages.length, walked.error]).toEqual([3, undefined]);
+  const zero = await pageWalk({ ...pages, zeroBased: true }, [{ data: [1], totalPages: 3 }, { data: [2], totalPages: 3 }, last, last]);
+  expect(zero.urls).toEqual(['https://api.acme.test/items', 'https://api.acme.test/items?page=1', 'https://api.acme.test/items?page=2']);
+});
+test('page with total: stops once the entries read reach the total; 0 stops after the first page; each answer\'s own total counts', async () => {
+  const counted = await pageWalk(entries, [{ data: [1, 2], total: 5 }, { data: [3, 4], total: 5 }, { data: [5], total: 5 }, { data: [5], total: 5 }]);
+  expect([counted.urls.length, counted.error]).toEqual([3, undefined]);
+  const none = await pageWalk(entries, [{ data: [], total: 0 }, { data: [], total: 0 }]);
+  expect([none.urls.length, none.error]).toEqual([1, undefined]);
+  const nothing = await pageWalk(pages, [{ data: [1], totalPages: 0 }, { data: [2], totalPages: 0 }]);
+  expect([nothing.urls.length, nothing.error]).toEqual([1, undefined]);
+  const dropped = await pageWalk(entries, [{ data: [1, 2], total: 5 }, { data: [3, 4], total: 3 }, { data: [5], total: 3 }]);
+  expect([dropped.urls.length, dropped.error]).toEqual([2, undefined]);
+});
+test('page with total: a total that is missing or no non-negative safe integer is missing_fields, never an end, with no request more', async () => {
+  for (const total of ['"3"', '-1', '1.5', String(2 ** 53), '1e400', 'null', 'true', undefined]) {
+    const answer = `{"data":[1]${total === undefined ? '' : `,"total":${total}`}}`;
+    const walked = await pageWalk(entries, [answer, answer]);
+    expect(walked.error, total).toMatchObject({ code: 'invalid_response', detail: 'missing_fields' });
+    expect([walked.urls.length, walked.pages]).toEqual([1, []]);
+  }
+  const later = await pageWalk(entries, [{ data: [1], total: 5 }, { data: [2] }, { data: [3], total: 5 }]);
+  expect([later.urls.length, later.pages.length, later.error]).toEqual([2, 1, expect.objectContaining({ detail: 'missing_fields' })]);
+});
+test('page with total: a total larger than the pages hold ends on page_repeated, or on an empty page as missing_fields', async () => {
+  const repeated = await pageWalk(entries, [{ data: [1], total: 99 }, { data: [2], total: 99 }, { data: [2], total: 99 }]);
+  expect([repeated.urls.length, repeated.error]).toEqual([3, expect.objectContaining({ code: 'invalid_response', detail: 'page_repeated' })]);
+  const short: unknown = expect.objectContaining({ code: 'invalid_response', detail: 'missing_fields' });
+  const entriesShort = await pageWalk(entries, [{ data: [1, 2], total: 7 }, { data: [3, 4], total: 7 }, { data: [], total: 7 }, { data: [], total: 7 }]);
+  expect([entriesShort.urls.length, entriesShort.pages.length, entriesShort.error]).toEqual([3, 2, short]);
+  const pagesShort = await pageWalk(pages, [{ data: [1], totalPages: 4 }, { data: [2], totalPages: 4 }, { data: [], totalPages: 4 }, { data: [], totalPages: 4 }]);
+  expect([pagesShort.urls.length, pagesShort.pages.length, pagesShort.error]).toEqual([3, 2, short]);
+  for (const [shape, first] of [[entries, { data: [], total: 3 }], [pages, { data: [], totalPages: 2 }]] as const) {
+    const empty = await pageWalk(shape, [first, first]);
+    expect([empty.urls.length, empty.pages, empty.error]).toEqual([1, [], short]);
+  }
+  // An empty first page with a count of 0, or a last counted page that is empty, ends cleanly; so does any empty page
+  // of a shape without `total`.
+  for (const [shape, answers] of [[entries, [{ data: [], total: 0 }]], [pages, [{ data: [], totalPages: 0 }]], [pages, [{ data: [], totalPages: 1 }]],
+    [pages, [{ data: [1], totalPages: 2 }, { data: [], totalPages: 2 }]], [{ kind: 'page', send: { query: 'page' }, list: 'data' }, [{ data: [1], total: 99 }, { data: [] }]]] as const) {
+    const ended = await pageWalk(shape, [...answers, { data: [9] }]);
+    expect([ended.urls.length, ended.error]).toEqual([answers.length, undefined]);
+  }
+});
+test('page with total: a record the parser skips still counts toward the entries', async () => {
+  const things = defineProvider({ id: 'things', name: 'Things', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test' },
+    paging: { page: entries }, operations: { 'things.list': { path: '/things', paging: 'page', records: 'data', result: { data: [{ id: 'string' }] } } } });
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ data: [{ id: 'a' }, { id: 7 }], total: 3 }),
+    () => Response.json({ data: [{ id: 'c' }], total: 3 }), () => Response.json({ data: [{ id: 'c' }], total: 3 })) }]);
+  const seen: unknown[] = [];
+  for await (const thing of client(things, { token, fetch: fake.fetch }).things.list()) seen.push(thing);
+  expect(seen).toEqual([{ id: 'a' }, { id: 'c' }]);
+  expect(fake.calls).toHaveLength(2);
+});
+
+test('Smartsheet walks sheets.list to totalPages and rows.list to totalRowCount on its fake, which answers the last page past the last', async () => {
+  const answer = (count: number, size: number, each: (at: number) => unknown) => ({ query }: FakeCall) => {
+    const page = Math.min(Number(query.page ?? 1), Math.ceil(count / size));
+    return Array.from({ length: Math.min(size, count - (page - 1) * size) }, (_, at) => each((page - 1) * size + at));
+  };
+  const sheets = answer(5, 2, id => ({ id }));
+  const rows = answer(3, 2, id => ({ id }));
+  const values = { apiHost: 'api.smartsheet.com' };
+  const fake = fakeFetch(fakeProvider(smartsheet, { key: 'k', values, operations: {
+    'sheets.list': call => ({ totalPages: 3, data: sheets(call) }), 'rows.list': call => ({ totalRowCount: 3, rows: rows(call) }) } }));
+  const api = client(smartsheet, { token: 'k', fetch: fake.fetch, values });
+  const read = async (items: AsyncIterable<{ id: number }>) => { const ids: number[] = []; for await (const item of items) ids.push(item.id); return ids; };
+  expect(await read(api.sheets.list({ pageSize: 2 }))).toEqual([0, 1, 2, 3, 4]);
+  expect(await read(api.rows.list({ sheetId: 9, pageSize: 2 }))).toEqual([0, 1, 2]);
+  expect(fake.calls.map(call => new URL(call.url).search)).toEqual(['?pageSize=2', '?pageSize=2&page=2', '?pageSize=2&page=3',
+    '?pageSize=2', '?pageSize=2&page=2']);
 });
 
 test('offset: the first request sends no offset, then the records counted so far; an empty list ends the walk', async () => {
@@ -339,5 +451,101 @@ test('ClickUp tasks.list, through client() and raw paginate: { tasks: [] } ends 
     const broken = await run({}, read);
     expect(broken.seen).toHaveLength(1);
     expect(broken.error).toMatchObject({ code: 'invalid_response' });
+  }
+});
+
+/** Linear's `issues.list` walked on a stub: each request's JSON body, every issue's id, and the error it ends on. */
+async function linearIssues(...answers: readonly unknown[]) {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(...answers.map(answer => () => Response.json(answer))) }]);
+  const ids: string[] = [];
+  let error: unknown;
+  try { for await (const item of client(linear, { token: 'k', fetch: fake.fetch }).issues.list({ teamId: 't1', first: 2 })) ids.push(item.id); } catch (caught) { error = caught; }
+  return { bodies: fake.calls.map(call => JSON.parse(call.body) as { query: string; variables: unknown }), ids, error };
+}
+const linearIssue = (id: string) => ({ id, title: 'T', url: 'https://linear.app/x', state: { id: 's', name: 'Todo' }, team: { id: 't1' },
+  createdAt: '2026-01-01', updatedAt: '2026-01-01' });
+const issuesPage = (ids: readonly string[], hasNextPage: boolean, endCursor?: unknown) =>
+  ({ data: { issues: { nodes: ids.map(linearIssue), pageInfo: { hasNextPage, endCursor } } } });
+
+test("variables: Linear's issues.list sends no after first, then the end cursor in its variables, the query unchanged", async () => {
+  const walked = await linearIssues(issuesPage(['a', 'b'], true, 'c2'), issuesPage(['c'], false, 'c3'));
+  expect(walked.error).toBeUndefined();
+  expect(walked.ids).toEqual(['a', 'b', 'c']);
+  expect(walked.bodies.map(body => body.variables)).toEqual([{ teamId: 't1', first: 2 }, { teamId: 't1', first: 2, after: 'c2' }]);
+  expect(walked.bodies[1]?.query).toBe(walked.bodies[0]?.query);
+});
+
+test('variables: a blank or object end cursor with hasNextPage is cursor_missing; one that comes back is cursor_repeated', async () => {
+  for (const endCursor of ['', null, { id: 'c2' }]) {
+    const walked = await linearIssues(issuesPage(['a'], true, endCursor));
+    expect([walked.bodies.length, walked.error]).toEqual([1, expect.objectContaining({ code: 'invalid_response', detail: 'cursor_missing' })]);
+  }
+  const again = await linearIssues(issuesPage(['a'], true, 'c2'), issuesPage(['b'], true, 'c2'));
+  expect([again.bodies.length, again.error]).toEqual([2, expect.objectContaining({ code: 'invalid_response', detail: 'cursor_repeated' })]);
+});
+
+test("variables: a 2xx with errors fails through the entry's errors.failed before any cursor is read", async () => {
+  const walked = await linearIssues({ errors: [{ message: 'x', extensions: { code: 'RATELIMITED' } }], ...issuesPage(['a'], true, 'c2') });
+  expect([walked.bodies.length, walked.ids, walked.error]).toEqual([1, [], expect.objectContaining({ code: 'request_failed', detail: 'RATELIMITED' })]);
+});
+
+test('variables: a page number is sent as a number beside the caller\'s variables', async () => {
+  const boards = defineProvider({ id: 'boards', name: 'Boards', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.acme.test/graphql' },
+    paging: { page: { kind: 'page', send: { variables: 'page' }, list: 'data.boards' } },
+    operations: { 'boards.list': { kind: 'read', graphql: 'query Boards($limit: Int, $page: Int) { boards(limit: $limit, page: $page) { id } }',
+      params: { limit: { in: 'variables', type: 'integer' } }, paging: 'page', records: 'data.boards', result: { data: { boards: [{ id: 'string' }] } } } } });
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ data: { boards: [{ id: 'a' }] } }), () => Response.json({ data: { boards: [] } })) }]);
+  for await (const board of client(boards, { token, fetch: fake.fetch }).boards.list({ limit: 5 })) expect(board).toEqual({ id: 'a' });
+  expect(fake.calls.map(call => (JSON.parse(call.body) as { variables: unknown }).variables)).toEqual([{ limit: 5 }, { limit: 5, page: 2 }]);
+});
+
+test('variables: a raw paginate writes into the body\'s variables, made when missing; a body or variables that is no object is request_failed, nothing sent', async () => {
+  const shape = { kind: 'cursor', next: 'next', send: { variables: 'after' } } as const;
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'c2' }), () => Response.json({})) }]);
+  for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), shape, '', { method: 'POST', json: { query: 'q' } })) expect(page).toBeTypeOf('object');
+  expect(fake.calls.map(call => call.body)).toEqual(['{"query":"q"}', '{"query":"q","variables":{"after":"c2"}}']);
+  for (const json of ['query { a }', { query: 'q', variables: 'x' }, { query: 'q', variables: ['x'] }, ['q']]) {
+    const none = fakeFetch([{ url: /https:/, respond: () => Response.json({ next: 'c2' }) }]);
+    await expect(walk(createClient(acme, { token, fetch: none.fetch }), shape, '', { method: 'POST', json }).next())
+      .rejects.toMatchObject({ code: 'request_failed' });
+    expect(none.calls).toEqual([]);
+  }
+});
+
+test("body path: Fellow's recordings.list sends no cursor first, then pagination.cursor beside the caller's page_size; a null cursor ends", async () => {
+  const answer = (id: string, cursor: string | null) => Response.json({ recordings: { page_info: { cursor, page_size: 1 }, data: [{ id }] } });
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => answer('a', 'c2'), () => answer('b', null)) }]);
+  const ids: string[] = [];
+  for await (const recording of client(fellow, { token: 'k', fetch: fake.fetch, values: { subdomain: 'acme' } })
+    .recordings.list({ pagination: { page_size: 20 } })) ids.push(recording.id);
+  expect(ids).toEqual(['a', 'b']);
+  expect(fake.calls.map(call => call.body)).toEqual(['{"pagination":{"page_size":20}}', '{"pagination":{"page_size":20,"cursor":"c2"}}']);
+});
+
+test("body path: the walk copies each object on the way, so the caller's are never changed; a page number there is a number", async () => {
+  const pagination = { page_size: 20 };
+  const json = { q: 'x', pagination };
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'c2' }), () => Response.json({})) }]);
+  for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), { kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } },
+    '/x', { method: 'POST', json })) expect(page).toBeTypeOf('object');
+  expect(json).toEqual({ q: 'x', pagination: { page_size: 20 } });
+  expect(json.pagination).toBe(pagination);
+  const teamleader = await pageWalk({ kind: 'page', send: { body: 'page.number' }, list: 'data' }, [{ data: [1] }, { data: [] }],
+    { method: 'POST', json: { page: { size: 50 } } });
+  expect(teamleader.bodies).toEqual(['{"page":{"size":50}}', '{"page":{"size":50,"number":2}}']);
+  const made = await pageWalk({ kind: 'page', send: { body: 'page.number' }, list: 'data' }, [{ data: [1] }, { data: [] }], { method: 'POST' });
+  expect(made.bodies).toEqual(['', '{"page":{"number":2}}']);
+});
+
+test('hostile: a body path never writes to a prototype, and a value on the way that is no object is request_failed, nothing sent', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: sequence(() => Response.json({ next: 'c2' }), () => Response.json({})) }]);
+  for await (const page of walk(createClient(acme, { token, fetch: fake.fetch }), { kind: 'cursor', next: 'next', send: { body: '__proto__.polluted' } },
+    '/x', { method: 'POST', json: {} })) expect(page).toBeTypeOf('object');
+  expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  for (const json of [{ pagination: 'x' }, { pagination: ['x'] }, { pagination: 5 }]) {
+    const none = fakeFetch([{ url: /https:/, respond: () => Response.json({ next: 'c2' }) }]);
+    await expect(walk(createClient(acme, { token, fetch: none.fetch }), { kind: 'cursor', next: 'next', send: { body: 'pagination.cursor' } },
+      '/x', { method: 'POST', json }).next()).rejects.toMatchObject({ code: 'request_failed' });
+    expect(none.calls).toEqual([]);
   }
 });

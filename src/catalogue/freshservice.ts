@@ -2,8 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Freshservice: an agent's personal API key as the Basic user, any password (`X`); what it can do follows the agent's
  * role. No request names the key's agent, so a sign-in only checks the key. A reply emails the requester (its cc and
- * bcc too); a note may notify agents (`notify_emails`). Lists follow the `link` header; a 429 waits `Retry-After`:
- * https://api.freshservice.com/ */
+ * bcc too); a note may notify agents (`notify_emails`). Lists follow the `link` header, a search its page number; a
+ * 429 waits `Retry-After`: https://api.freshservice.com/ */
 const ref = 'https://api.freshservice.com/#';
 const ticket = { id: 'number', 'subject?': 'string', 'status?': 'number', 'priority?': 'number', 'requester_id?': 'number',
   'responder_id?': 'number', 'created_at?': 'string', 'updated_at?': 'string' } as const;
@@ -34,7 +34,7 @@ export const freshservice = defineProvider({
   http: { baseUrl: 'https://{domain}.freshservice.com/api/v2', host: '*.freshservice.com', retry: {} },
   identify: { request: { path: '/tickets', query: { per_page: '1' } } },
   errors: { detail: 'errors.0.code' },
-  paging: { link: { kind: 'linkHeader' } },
+  paging: { link: { kind: 'linkHeader' }, search: { kind: 'page', send: { query: 'page' }, list: 'tickets', total: { entries: 'total' } } },
   operations: {
     'tickets.list': { docs: `${ref}view_all_ticket`, path: '/tickets', paging: 'link', records: 'tickets',
       params: { filter: { in: 'query', type: 'string', enum: ['new_and_my_open', 'watching', 'spam', 'deleted'] },
@@ -45,11 +45,10 @@ export const freshservice = defineProvider({
         workspace_id: { in: 'query', type: 'number', description: 'Without it, the primary workspace; 0 lists every workspace.' },
         order_type: { in: 'query', type: 'string', enum: ['asc', 'desc'] }, ...perPage },
       result: { tickets: [ticket] } },
-    // One page; `page` asks for another, and the answer's `total` counts the matches.
-    'tickets.search': { docs: `${ref}filter_tickets`, path: '/tickets/filter',
+    // Pages of 30 to the answer's `total`.
+    'tickets.search': { docs: `${ref}filter_tickets`, path: '/tickets/filter', paging: 'search', records: 'tickets',
       params: { query: { in: 'query', type: 'string', required: true,
-        description: 'Ticket fields in double quotes, up to 512 characters: "priority:3 AND status:2".' },
-      page: { in: 'query', type: 'integer' } },
+        description: 'Ticket fields in double quotes, up to 512 characters: "priority:3 AND status:2".' } },
       result: { 'total?': 'number', tickets: [ticket] } },
     'tickets.get': { docs: `${ref}view_a_ticket`, path: '/tickets/{id}', notFound: 'null', params: id, result: { ticket } },
     // "Calling Create a Ticket without the mandatory description" is refused; the requester is required.

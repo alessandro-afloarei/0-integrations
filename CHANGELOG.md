@@ -20,9 +20,10 @@ Nothing here is released yet.
   declare a one-value `enum`, which the engine reads as before.
 - For contributors: the table test refuses a one-value `enum`, an empty literal, a string literal one edit or a case
   change from a type name (`'strng'`, `'Integer'`), a `nullable` literal parameter, a literal in a `result`, two
-  GraphQL operations with one query text, and a `{placeholder}` in an `http.headers` value. It runs over this library's entries only. The engine checks none of
-  these in an app's own entry: an answer holding another value than a `result` literal is `invalid_response` (a paged
-  list skips that record), and a header's braces are sent as written.
+  GraphQL operations with one query text, and a `{placeholder}` in an `http.headers` value. It runs over this
+  library's entries only. The engine checks none of these in an app's own entry: an answer holding another value than
+  a `result` literal is `invalid_response` (a paged list skips that record), and a header's braces are sent as
+  written.
 - Help Scout creates drafts (`drafts.create`), Freshchat conversations as an agent (`conversations.create`, whose first
   message is always the agent's normal message, which reaches the user), Gist a teammate's reply or note
   (`messages.create`).
@@ -33,6 +34,71 @@ Nothing here is released yet.
   for Groove and LiveAgent, none.
 - Re:amaze's conversation create describes its statuses without the spam ones (3 and 9); the entry does not check the
   number.
+- New: a host chosen from a field's own `choices` (a URL's whole host, `https://{name}`) may sit beside fixed OAuth 2
+  URLs and other chosen hosts; its value is checked against those choices on every send whose URL it fills (a call,
+  identify, an authorize URL, an exchange, a refresh, a revoke, a token request), before a credential is read or
+  anything is sent.
+  Intercom's OAuth 2 sign-in chooses its region's authorize host (`appHost`: `app.intercom.com`, `app.eu.intercom.com`
+  or `app.au.intercom.com`), which an EU or Australian workspace signing in with Google needs; its token URL and base
+  stay on `api.intercom.io`.
+- Breaking: a stored value of a field with `choices` that is not exactly one of them, one differing only in case
+  included (`API.EU.INTERCOM.IO`), is `base_host_refused` on every send whose URL it fills (a call, identify, an
+  authorize URL, an exchange, a refresh, a revoke, a token request), where its host used to pass because the URL parser
+  lowercases it.
+  `startConnect` and `finishConnect` already refused it (`connect_field_invalid`), so every connection they made is
+  unchanged; an app that stored a value another way stores the choice exactly as written.
+- Breaking: a revoke fills and checks its URLs (an RFC 7009 revoke's, a request revoke's base) before it reads a token:
+  one given no token whose `values` are missing or refused is `template_missing`, `base_value_invalid` or
+  `base_host_refused` where it used to be done. Pass the connection's `values` to every `revokeGrant`.
+- Breaking: Intercom's OAuth 2 connections keep `appHost`. `authorizeUrl`, `exchangeCode` and `refreshGrant` need it in
+  `values` (`'app.intercom.com'` for a connection made before, the host it signed in on), else `template_missing`
+  before anything is sent; `revokeGrant` and `client()` take it, and their calls stay on `api.intercom.io`.
+- A `page`, `offset` or `last` walk whose list has the same JSON text as its first page's is `page_repeated`, as one
+  with the page before's is: a provider that answers its first page's text again past the end no longer has it yielded
+  a second time, or walks on forever. A `last` walk that met its first page's text again now reports `page_repeated`
+  where it reported `cursor_repeated`, and a list whose first and a later page have the same JSON text now stops
+  there.
+- Breaking: a `page` walk may stop at the answer's count (`total: { pages }` or `{ entries }`, read from each answer;
+  one missing or not a non-negative whole number, or an empty page before it is reached, is `invalid_response`).
+  Smartsheet's `sheets.list` and `rows.list` return an async iterator of records, not one page (`for await (const sheet
+  of api.sheets.list())`), walked to `totalPages` and `totalRowCount`. Their `page` argument is gone: an app that paged
+  by hand drops its loop.
+- Breaking: GraphQL lists page through their variables (`send: { variables }`). Linear's `issues.list` and
+  `teams.list` return an async iterator of records, not one page (`for await (const issue of api.issues.list({ teamId
+  }))`). Their `after` variable is gone, and `first` is the page size.
+- Breaking: a body paging value may sit at a path in the body (`send: { body: 'pagination.cursor' }`). Fellow's
+  `recordings.list` returns an async iterator of recordings, not one page (`for await (const recording of
+  api.recordings.list())`). Its `pagination` keeps only `page_size`: `cursor` is gone.
+- Breaking: a raw `paginate` on a body or `variables` place is `request_failed` before the first request in three
+  cases: a form, a JSON body that is no object, or a value on the body path that is no object. A form failed at the
+  second request; a body that was no object was replaced from the second page.
+- Breaking: ZoomInfo's `contacts.search` and `companies.search` return an async iterator of records, not one page
+  (`for await (const contact of api.contacts.search({ data }))`), walked to `meta.page.total`. Their `page[number]`
+  argument is gone: an app that paged by hand drops its loop. A search past its 100th page ends on ZoomInfo's refusal.
+- Breaking: HappyFox's `tickets.list` and `users.list` return an async iterator of records, not one page
+  (`for await (const ticket of api.tickets.list())`), walked to `page_info.page_count`. Their `page` argument is gone.
+- Breaking: eDesk's `channels.list` returns an async iterator of channels, not one page
+  (`for await (const channel of api.channels.list())`), walked to `paginator.totalItemsCount`. Its `page` argument is
+  gone.
+- Breaking: Freshdesk's `tickets.search` returns an async iterator of tickets, not one page
+  (`for await (const ticket of api.tickets.search({ query }))`), walked to the answer's `total`. Its `page` argument is
+  gone. Its page number "should not exceed 10" (300 results); what an 11th page answers, and whether `total` counts
+  past it, are not stated.
+- Breaking: Freshservice's `tickets.search` returns an async iterator of tickets, not one page
+  (`for await (const ticket of api.tickets.search({ query }))`), walked to the answer's `total`. Its `page` argument is
+  gone.
+- Breaking: Plain's `threads.list`, `threads.search` and `customers.list` return an async iterator of records, not one
+  page (`for await (const edge of api.threads.list({ first: 100 }))`). Each record is the connection's edge:
+  `edge.node` is the thread or customer, and a search's `edge.node.thread`. Their `after` variable is gone, and
+  `first`, the page size, is required: the Relay spec Plain follows reports a next page only when it is sent. A
+  thread's `timelineEntries.list` still answers one page.
+- Breaking: monday.com's `boards.list` returns an async iterator of boards, not one page (`for await (const board of
+  api.boards.list())`). Its `page` variable is gone, and `limit` is the page size.
+- Breaking: Intercom's `conversations.search` returns an async iterator of conversations, not one page (`for await
+  (const conversation of api.conversations.search({ query }))`). Its `pagination` keeps only `per_page`:
+  `starting_after` is gone.
+- Breaking: Teamleader Focus's `contacts.list`, `companies.list` and `deals.list` return an async iterator of records,
+  not one page (`for await (const contact of api.contacts.list())`). Their `page` keeps only `size`: `number` is gone.
 - New entries: 25 support providers (atlas, chatwoot, crisp, customerly, devrev, dixa, edesk, freshchat, freshdesk,
   freshservice, gist, groove, happyfox, helpcrunch, helpwise, hiver, liveagent, plain, pylon, reamaze, thena, trengo,
   unthread, zammad, zendesk), each with its category's operations (Plain its reads only). Every entry is `declared`.
@@ -173,8 +239,8 @@ Nothing here is released yet.
   holding whitespace (a space or a trailing newline), the URL-safe alphabet (`-`, `_`) or another character outside
   base64, a last character with unused bits set (`YR==`), or one that decodes to only zero bytes, as is now a plain
   `hmac` secret of NUL characters. An unpadded secret is still accepted.
-- Intercom lists OAuth 2 first, on its US hosts (authorize on app.intercom.com, the token and every call on
-  api.intercom.io, which attempts to route a call to the workspace's region), with no revoke; its access token, on the
+- Intercom lists OAuth 2 first (authorize on its region's `appHost`, the token and every call on api.intercom.io,
+  which attempts to route a call to the workspace's region), with no revoke; its access token, on the
   region the person picks, is `signInWith(intercom, 'key')`, sent only to the three regional API hosts. Breaking: a key
   connection that still calls the whole entry with its `apiHost` (`client(intercom, { token, values: { apiHost } })`)
   is now refused (`value_undeclared: intercom apiHost`), nothing sent; an app narrows it with
