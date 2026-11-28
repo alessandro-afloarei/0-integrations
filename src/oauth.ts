@@ -185,8 +185,7 @@ export async function refreshGrant<const E extends Entry>(entry: E, client: OAut
   }
 }
 
-async function revokeToken(entry: Entry, client: AnyClient, token: string, input: Sent): Promise<void> {
-  const c = context(entry, client, input);
+async function revokeToken(c: Context, entry: Entry, token: string): Promise<void> {
   const secrets = [...c.secrets, token];
   const response = await send(c, entry, secrets, () => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options));
   // Any 2xx, as providers answer a revoke with 200 or 204; oauth4webapi accepts only 200.
@@ -211,10 +210,10 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
     if ('url' in revoke) {
       const { client } = input;
       if (client === undefined) throw new TypeError('oauth_client_required');
-      endpoints(entry, input.values); // every URL filled and checked before a token is read
+      const c = context(entry, client, input); // every URL filled and checked once, before a token is read
       const token = revoke.token.map(kind => (kind === 'refresh' ? input.refreshToken : input.accessToken))
         .find((value): value is string => typeof value === 'string' && value !== '');
-      if (token !== undefined) await revokeToken(entry, client, token, input);
+      if (token !== undefined) await revokeToken(c, entry, token);
       return;
     }
     const http = createClient(entry, { token: () => Promise.resolve(accessToken ?? ''), fetch: input.fetch ?? defaultFetch(entry),

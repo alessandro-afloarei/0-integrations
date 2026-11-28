@@ -301,6 +301,9 @@ const runnable = {
       } catch { return false; }
     }));
   },
+  // The engine reads a path after the base: one without its `/` would run into the base's last segment (`url_path_relative`).
+  "every request path (an operation's, identify's, a request revoke's) empty or starting with `/` or `?`": (entry: Entry) =>
+    [...operations(entry), ...calls(entry)].every(call => !call || !('path' in call) || /^(?:$|[/?])/u.test(call.path ?? '')),
   // The engine reads the first field of a name: a second one's `choices` would be drawn and never checked.
   '`fields[].name` unique on each sign-in': (entry: Entry) => new Set((entry.fields ?? []).map(field => field.name)).size === (entry.fields ?? []).length,
   // A connect screen draws the choices; the default is what it shows first.
@@ -714,6 +717,10 @@ test.each<[Rule, Entry]>([
   ] as const).map(([field, host]): [Rule, Entry] => ["`fields[].choices` and `default` that fill every declared URL to a host `http.host` takes",
     defineProvider({ ...key, http: { baseUrl: 'https://{region}', host }, auth: [{ kind: 'key' }],
       fields: [secret, { name: 'region', title: 'Region', ...field }] })]),
+  ...([{ operations: { 'items.list': { docs: 'https://k.test/docs/items', path: 'items' } } }, { identify: { request: { path: 'me' }, id: 'id' } },
+    { revoke: { request: { method: 'POST', path: 'revoke' } } }] as const).map((part): [Rule, Entry] => [
+    "every request path (an operation's, identify's, a request revoke's) empty or starting with `/` or `?`",
+    defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], ...part })]),
   ['`fields[].name` unique on each sign-in', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }, { name: 'region', title: 'Region', choices: ['api.k.test'] }] })],
   ['no `default` or `choices` on a secret field', defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [{ ...secret, default: 'k' }] })],

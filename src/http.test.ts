@@ -1761,6 +1761,15 @@ describe("a chosen host: a stored value that is not exactly one of its field's c
     expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
   });
 
+  test("an RFC 7009 revoke resolves its URLs once: a `values` getter that changes after the check sends nowhere else", async () => {
+    let reads = 0;
+    const values = { apiHost: 'api.k.test', get loginHost() { reads++; return reads === 1 ? 'login.k.test' : 'evil.test'; } };
+    const fake = answering();
+    const { reads: credentials, input } = counted();
+    await revokeGrant(chosen, { client: { clientId: 'c', clientSecret: 's' }, get refreshToken() { return input.refreshToken; }, values, fetch: fake.fetch });
+    expect({ urls: fake.calls.map(call => call.url), credentials }).toEqual({ urls: ['https://login.k.test/revoke'], credentials: ['refreshToken'] });
+  });
+
   test("a stored number is no choice, even when its text is one", () => {
     const entry = defineProvider({ id: 'numbered', name: 'Numbered', fields: [{ name: 'port', title: 'Host', choices: ['10'] }],
       auth: [{ kind: 'key' }], http: { baseUrl: 'https://{port}', host: '*' } });
