@@ -39,11 +39,14 @@ export const typefully = defineProvider({
       result: { results: [draft] } },
     'drafts.get': { docs, path: '/v2/social-sets/{social_set_id}/drafts/{draft_id}', notFound: 'null', params: draftPath,
       result: draft },
-    'drafts.create': { docs, method: 'POST', path: '/v2/social-sets/{social_set_id}/drafts',
+    // Saves a draft: with `publish_at` and `plan_at` left out (neither is offered) nothing is published or scheduled,
+    // and with `share` left out no public link is made.
+    'drafts.create': { docs, method: 'POST', path: '/v2/social-sets/{social_set_id}/drafts', kind: 'write',
       params: { ...socialSetId, platforms: { in: 'body', type: 'unknown', required: true, description: platforms }, ...written },
       result: draft },
+    // Changes a draft's content only: `publish_at` and `plan_at` are not offered, so it publishes or schedules nothing.
     // Editing a draft a person already scheduled changes what it publishes then (publish access).
-    'drafts.update': { docs, method: 'PATCH', path: '/v2/social-sets/{social_set_id}/drafts/{draft_id}',
+    'drafts.update': { docs, method: 'PATCH', path: '/v2/social-sets/{social_set_id}/drafts/{draft_id}', kind: 'write',
       params: { ...draftPath, platforms: { in: 'body', type: 'unknown', description: `${platforms} Only the platforms sent change.` },
         ...written },
       result: draft },
