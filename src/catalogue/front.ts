@@ -35,7 +35,7 @@ export const front = defineProvider({
   // app's signing key (the page's `token`). Front states no window: the library's 300 seconds apply. Saving the URL sends
   // a signed `type: 'sync'` request, answered with `x-front-challenge` as text: https://dev.frontapp.com/docs/application-webhooks
   // Deduped on the signed body's `payload.id`, the event's "Unique identifier", which Front never reuses (the sync request
-  // has none): https://dev.frontapp.com/reference/events
+  // has none): https://dev.frontapp.com/reference/get-event, https://dev.frontapp.com/reference/events
   webhook: { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', encoding: 'base64',
     timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' }, deliveryId: { body: ['payload.id'] },
     challenge: { when: { path: 'type', equals: 'sync' }, echo: { header: 'x-front-challenge' }, text: true } },
