@@ -140,7 +140,7 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
     if (value !== undefined && !BASE_VALUE.test(String(value))) throw invalid(name);
     // The URL parser lowercases a name before `http.host` reads it: only the choices refuse `API.EU.INTERCOM.IO`.
     const choices = entry.fields?.find(field => field.name === name)?.choices;
-    if (value !== undefined && choices !== undefined && !choices.includes(String(value))) throw new TypeError(`base_host_refused: ${entry.id}`);
+    if (value !== undefined && Array.isArray(choices) && (typeof value !== 'string' || !choices.includes(value))) throw new TypeError(`base_host_refused: ${entry.id}`);
     return value;
   }, entry.id) + fill(tail, name => {
     const value = plainValue(values, name);

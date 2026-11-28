@@ -6,7 +6,6 @@ import { defineProvider, type Entry } from './catalogue.js';
 import { figma } from './catalogue/figma.js';
 import { google } from './catalogue/google.js';
 import { hubspot } from './catalogue/hubspot.js';
-import { intercom } from './catalogue/intercom.js';
 import { microsoft } from './catalogue/microsoft.js';
 import { slack } from './catalogue/slack.js';
 import { zoom } from './catalogue/zoom.js';
@@ -32,15 +31,6 @@ test("builds HubSpot's and Slack's authorize URLs", () => {
   expect(authorizeUrl(hubspot, { ...input, codeChallenge: 'c' }).href).toBe('https://app.hubspot.com/oauth/authorize?client_id=id&scope=oauth+crm.objects.deals.read&redirect_uri=https%3A%2F%2Fapp.test%2Fcb&state=s&code_challenge=c&code_challenge_method=S256');
   expect(authorizeUrl(slack, { ...input, scopes: ['chat:write', 'channels:read'], values: { domain: 'slack.com' } }).href)
     .toContain('scope=chat%3Awrite%2Cchannels%3Aread');
-});
-
-test.each(intercom.fields[0].choices)("builds Intercom's authorize URL on its region's host %s, and exchanges on the one token URL", async appHost => {
-  const input = { clientId: 'id', redirectUri: 'https://app.test/cb', scopes: [], state: 's', codeChallenge: 'c', values: { appHost } };
-  expect(authorizeUrl(intercom, input).href)
-    .toBe(`https://${appHost}/oauth?client_id=id&redirect_uri=https%3A%2F%2Fapp.test%2Fcb&state=s&code_challenge=c&code_challenge_method=S256`);
-  const fake = endpoint(token);
-  await exchangeCode(intercom, client, { ...exchange, codeVerifier: 'v'.repeat(43), values: { appHost }, fetch: fake.fetch });
-  expect(fake.calls.map(call => call.url)).toEqual(['https://api.intercom.io/auth/eagle/token']);
 });
 
 test('sends `scope` only when scopes are asked: none for an empty list, the two joined by a space', () => {

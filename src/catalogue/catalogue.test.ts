@@ -297,7 +297,7 @@ const runnable = {
     return named.every(field => [...field.choices ?? [], ...field.default === undefined ? [] : [field.default]].every(value => {
       const values = { ...Object.fromEntries([...saved, ...named.map((other): [string, string] => [other.name, first(other)])]), [field.name]: value };
       try {
-        return urls.every(url => filledBase(entry, values, url) !== '');
+        return urls.filter(url => placeholders(url).includes(field.name)).every(url => filledBase(entry, values, url) !== '');
       } catch { return false; }
     }));
   },
@@ -872,6 +872,9 @@ test.each<[Rule, Entry]>([
     http: { baseUrl: 'https://{sub}.{region}', host: '*.k.test' } })],
   [HOST_SPLIT, defineProvider({ ...named, fields: [{ name: 'region', title: 'Region', choices: ['login.k.test'] }],
     auth: [{ ...named.auth[0], authorizeUrl: 'https://{region}/authorize' }] })],
+  // Beside a fixed second base: a call there could not keep the chosen base's origin.
+  [HOST_SPLIT, defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'apiHost', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'] }],
+    http: { baseUrl: 'https://{apiHost}', host: ['api.k.test', 'api.eu.k.test'], bases: { auth: 'https://api.k.test/auth' } } })],
   // A closed list names its hosts: the address guard's `*` is for a host a person types.
   [ANY_HOST, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region', choices: ['api.k.test'] }],
     http: { baseUrl: 'https://{region}', host: '*' } })],
@@ -1003,6 +1006,9 @@ test.each<[string, Entry]>([
   ['fixed OAuth 2 URLs and a plain field in the base\'s path', defineProvider({ ...oauth2, scopes: { default: [] }, fields: [{ name: 'org', title: 'Organization' }],
     http: { baseUrl: 'https://api.k.test/{org}' } })],
   ["Wrike's shape: the base and the refresh on the host the token answer names", defineProvider(named)],
+  // A choice in the authorize URL's path beside a named base: each choice fills only the URLs that name its field.
+  ['a named base beside an authorize URL whose path segment is chosen', defineProvider({ ...named, fields: [{ name: 'tenant', title: 'Tenant',
+    choices: ['common', 'organizations'], default: 'common' }], auth: [{ ...named.auth[0], authorizeUrl: 'https://login.k.test/{tenant}/authorize' }] })],
   // `choices` in the path is no chosen host: a typed host on `'*'` may hold one.
   ['a typed host on `*` with a path segment from `choices`', defineProvider({ ...key, auth: [{ kind: 'key' }], identify: { request: { path: '/me' }, id: 'id' },
     fields: [secret, { name: 'host', title: 'Host' }, { name: 'version', title: 'Version', choices: ['v1', 'v2'], default: 'v2' }],

@@ -217,11 +217,11 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
       if (token !== undefined) await revokeToken(entry, client, token, input);
       return;
     }
-    filledBase(entry, input.values ?? {}, callBase(entry, revoke.request).baseUrl); // the base it is sent to, before a token is read
-    const { accessToken } = input;
-    if (accessToken === undefined) return;
-    const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch ?? defaultFetch(entry),
+    const http = createClient(entry, { token: () => Promise.resolve(accessToken ?? ''), fetch: input.fetch ?? defaultFetch(entry),
       values: input.values ?? {}, ...callBase(entry, revoke.request) });
+    // The base it is sent to, filled and checked as a call checks it (`baseUrl`), then the token, read once.
+    const accessToken = http.baseUrl && input.accessToken;
+    if (accessToken === undefined) return;
     responseJson(entry, await http.request(...callRequest(revoke.request)));
   } catch (error) {
     const gone = error instanceof GrantRevoked || (error instanceof ProviderHttpError && error.detail !== null

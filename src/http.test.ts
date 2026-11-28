@@ -22,7 +22,7 @@ import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import * as guard from './guard.js';
-import { callRequest, createClient, defaultFetch } from './http.js';
+import { callRequest, createClient, defaultFetch, filledBase } from './http.js';
 import { authorizeUrl, exchangeCode, refreshGrant, requestToken, revokeGrant, tokenSource } from './oauth.js';
 import { fill, hostPart } from './rules.js';
 import { walk } from './paging.js';
@@ -1718,15 +1718,25 @@ describe("a chosen host: a stored value that is not exactly one of its field's c
     ['beside a host the token answer names', { fields: [{ name: 'region', title: 'Region', choices: ['login.k.test'] }], save: { host: 'tokenAnswer.host' },
       auth: [{ kind: 'oauth2', authorizeUrl: 'https://{region}/authorize', tokenUrl: 'https://login.k.test/token' }],
       http: { baseUrl: 'https://{host}/api', host: '*.k.test' } }],
+    ['beside a fixed `http.bases` value', { fields: [{ name: 'region', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'] }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.test/authorize', tokenUrl: 'https://login.k.test/token' }],
+      revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } },
+      http: { baseUrl: 'https://{region}/v1', host: ['api.k.test', 'api.eu.k.test'], bases: { auth: 'https://api.k.test/auth' } } }],
+    // An app's entry built without the types: a string is no list of hosts, so the host is typed.
+    ['given as a string, not a list', { fields: [{ name: 'region', title: 'Region', choices: 'api.k.test api.eu.k.test' }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.example/authorize', tokenUrl: 'https://login.k.example/token' }],
+      http: { baseUrl: 'https://{region}', host: '*.k.test' } }],
   ] as const)('a host from a field with choices %s is host_split on every path, nothing read or sent', async (_, shape) => {
     const entry = { id: 'split', name: 'Split', scopes: { default: [] }, ...shape } as Entry;
-    const values = { region: entry.fields?.[0]?.choices?.[0] ?? '', sub: 'a', host: 'a.k.test' };
+    const values = { region: 'api.eu.k.test', sub: 'a', host: 'a.k.test' };
     const fake = answering();
     const { reads, client: app, token, input } = counted();
     const refused = new TypeError('host_split: split');
     expect(() => authorizeUrl(entry, { clientId: 'c', redirectUri: 'https://app.test/cb', scopes: [], state: 's', codeChallenge: 'c', values })).toThrow(refused);
     expect(() => client(entry, { token, values, fetch: fake.fetch })).toThrow(refused);
     await expect(refreshGrant(entry, app, 'r', { values, fetch: fake.fetch })).rejects.toThrow(refused);
+    await expect(revokeGrant(entry, { get accessToken() { return input.accessToken; }, values, fetch: fake.fetch })).rejects.toThrow(refused);
+    await expect(startConnect(entry, { clientId: 'c', redirectUri: 'https://app.test/cb', state: 's', values })).rejects.toThrow(refused);
     await expect(finishConnect(entry, { client: app, get code() { return input.code; }, redirectUri: input.redirectUri, codeVerifier: 'v'.repeat(43),
       values, fetch: fake.fetch, onRevokeFailed: () => undefined })).rejects.toThrow(refused);
     expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
@@ -1740,6 +1750,22 @@ describe("a chosen host: a stored value that is not exactly one of its field's c
       await expect(revokeGrant(slack, { get accessToken() { return input.accessToken; }, values: { domain }, fetch: fake.fetch })).rejects.toThrow(code);
       expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
     });
+
+  test.each(['evil.test', 'b.named.test'])("a request revoke on a fixed `http.bases` value beside a named base host %j is refused before the access token is read", async host => {
+    const entry = defineProvider({ ...named, http: { ...named.http, bases: { auth: 'https://login.named.test' } },
+      revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } } });
+    const fake = answering();
+    const { reads, input } = counted();
+    await expect(revokeGrant(entry, { get accessToken() { return input.accessToken; }, values: { host }, fetch: fake.fetch }))
+      .rejects.toThrow(new TypeError('base_host_refused: named'));
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+  });
+
+  test("a stored number is no choice, even when its text is one", () => {
+    const entry = defineProvider({ id: 'numbered', name: 'Numbered', fields: [{ name: 'port', title: 'Host', choices: ['10'] }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://{port}', host: '*' } });
+    expect(() => filledBase(entry, { port: 10 })).toThrow(new TypeError('base_host_refused: numbered'));
+  });
 
   test('a revoke given no token is refused when its values are missing, a request revoke and an RFC 7009 one alike', async () => {
     const fake = answering();
