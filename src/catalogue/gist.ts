@@ -37,7 +37,7 @@ export const gist = defineProvider({
           description: 'Closes or reopens the conversation; give teammate_id, or type `bot`, with it.' },
         teammate_id: { in: 'body', type: 'string',
           description: 'The teammate who closes or reopens the conversation: with state, give this or type `bot`.' },
-        type: { in: 'body', type: 'bot' } },
+        type: { in: 'body', type: 'bot', description: 'A bot closes or reopens the conversation, not a teammate: with state, give this or teammate_id.' } },
       result: { conversation } },
     'messages.list': { docs: `${ref}/#retrieve-all-messages-within-a-conversation`, path: '/conversations/{conversation_id}/messages',
       params: { ...conversationId, page: { in: 'query', type: 'integer', description: '1 by default.' },

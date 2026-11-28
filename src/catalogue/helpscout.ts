@@ -41,7 +41,7 @@ export const helpscout = defineProvider({
         mailboxId: { in: 'body', type: 'integer', required: true },
         status: { in: 'body', type: 'string', required: true, enum: ['active', 'closed', 'pending'] },
         customer: { in: 'body', type: customer, required: true },
-        threads: { in: 'body', type: [{ type: 'string', 'text?': 'string', 'customer?': customer, 'draft?': 'boolean' }], required: true,
+        threads: { in: 'body', type: [{ type: 'string', 'text?': 'string', 'customer?': customer }], required: true,
           description: 'At least one; each type is note, chat, phone, reply or customer.' },
         imported: { in: 'body', type: 'boolean', description: 'true sends no emails or notifications.' },
         autoReply: { in: 'body', type: 'boolean' }, assignTo: { in: 'body', type: 'integer' }, tags: { in: 'body', type: ['string'] } },
