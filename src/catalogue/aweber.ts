@@ -37,14 +37,15 @@ export const aweber = defineProvider({
       result: { entries: [subscriber] } },
     'subscribers.get': { docs: `${ref}/Subscribers`, path: '/lists/{listId}/subscribers/{subscriberId}', notFound: 'null',
       params: { listId, subscriberId: { in: 'path', type: 'integer', required: true } }, result: subscriber },
-    // Starts the list's follow-up messages, the first an autoresponse, unless `last_followup_message_number_sent`
-    // is 1001. With `update_existing: 'true'` it updates the subscriber already on the list; else that answers 400.
-    // A 201 answers no body.
+    // Emails the person a confirmation message unless the list turns confirmation off for integrations (a paid plan):
+    // https://docs.aweber.com/subscriber-management/subscribers/why-was-a-confirmation-message-sent-when-confirmat
+    // Then the list's follow-ups start, the first an autoresponse, unless last_followup_message_number_sent is 1001.
+    // update_existing 'true' updates a subscriber already on the list (else a 400); a 201 answers no body.
     'subscribers.create': { docs: `${ref}/Subscribers`, method: 'POST', path: '/lists/{listId}/subscribers', kind: 'write',
       params: { listId, email: { in: 'body', type: 'string', required: true }, name: { in: 'body', type: 'string' },
         misc_notes: { in: 'body', type: 'string' },
         last_followup_message_number_sent: { in: 'body', type: 'integer',
-          description: 'The follow-up last sent: 0 (the default) sends the 1st (autoresponse) follow-up; 1001 sends no follow-ups.' },
+          description: 'The follow-up last sent: 0 (the default) sends the 1st (autoresponse) follow-up, and on an existing subscriber (update_existing) restarts its follow-ups; 1001 sends no follow-ups.' },
         update_existing: { in: 'body', type: 'string', enum: ['true', 'false'],
           description: 'true updates a subscriber already on the list (tags appended, its status unchanged) instead of answering 400.' } } },
     'subscribers.update': { docs: `${ref}/Subscribers`, method: 'PATCH', path: '/lists/{listId}/subscribers/{subscriberId}',
