@@ -125,7 +125,8 @@ async function connectTwoSignIns(oauthClient: OAuthClient, redirectUri: string, 
   // secret: the grant to seal, with `kind: 'oauth2'` kept beside it; account: the Linear user
 
   const api = client(linear, { token: secret.accessToken });
-  const issues = await api.issues.list({ teamId, first: 50 }); // one page: nodes and pageInfo
+  const titles: string[] = [];
+  for await (const issue of api.issues.list({ teamId, first: 50 })) titles.push(issue.title); // every page, 50 at a time
 
   // A person's own key instead: a form, then one call.
   const key = signInWith(linear, 'key');
@@ -134,9 +135,8 @@ async function connectTwoSignIns(oauthClient: OAuthClient, redirectUri: string, 
   // Every later call narrows again with the kind kept (`'oauth2' | 'key'`): a union of the two narrowings.
   const later = client(signInWith(linear, kept.kind), { token: kept.token });
   expectTypeOf(later.issues.get).toBeFunction();
-  expectTypeOf(issues.data.issues.pageInfo.hasNextPage).toEqualTypeOf<boolean>();
   expectTypeOf(own.secret).toEqualTypeOf<Readonly<Record<'apiKey', string>>>();
-  return [url, account, issues, later];
+  return [url, account, titles, later];
 }
 
 // docs/modules/connect.md › OAuth 2 on the person's own server.

@@ -2,8 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** eDesk: an API token as Bearer; the API is the eDesk Connector add-on (https://www.edesk.com/pricing/). A `Message`
  * with `send` is queued to the buyer on the ticket's channel; a `Note` is internal. A create opens a real conversation
- * on some marketplaces. A 429 states no wait (https://developers.edesk.com/reference/rate-limit). Channels answer one
- * page: a page past the last answers the last one again. */
+ * on some marketplaces. A 429 states no wait (https://developers.edesk.com/reference/rate-limit). Channels page to
+ * `paginator.totalItemsCount`: a page past the last answers the last one again. */
 const ref = 'https://developers.edesk.com/reference';
 const ticket = { id: 'integer', 'subject?': 'string', 'status?': 'string', 'channel_id?': 'integer', 'contact_id?': 'integer',
   'uri?': 'string', 'created_at?': 'string', 'last_updated_at?': 'string' } as const;
@@ -25,7 +25,8 @@ export const edesk = defineProvider({
   http: { baseUrl: 'https://api.edesk.com/v1', retry: {} },
   identify: { request: { path: '/whoami' }, id: '{data.token.client_id}:{data.user.id}', name: ['data.user.name', 'data.user.email'] },
   paging: { cursor: { kind: 'cursor', next: 'paginator.nextCursor', send: { query: 'cursor' } },
-    page: { kind: 'page', send: { query: 'page' }, list: 'data' } },
+    page: { kind: 'page', send: { query: 'page' }, list: 'data' },
+    channels: { kind: 'page', send: { query: 'page' }, list: 'data', total: { entries: 'paginator.totalItemsCount' } } },
   operations: {
     'tickets.list': { docs: `${ref}/listtickets`, path: '/tickets', paging: 'cursor', records: 'data',
       params: { ...perPage, order_by: { in: 'query', type: 'string', enum: ['id', 'created_at', 'last_updated_at'] },
@@ -65,10 +66,8 @@ export const edesk = defineProvider({
         filter_channel_id_equals: { in: 'query', type: 'integer' } },
       result: { data: [{ id: 'integer', 'channel_id?': 'integer', 'full_name?': 'string', 'email?': 'string',
         'phone_number?': 'string' }] } },
-    // One page: a page past the last answers the last page again.
-    'channels.list': { docs: `${ref}/listchannels`, path: '/channels',
-      params: { page: { in: 'query', type: 'integer', description: 'From 1.' },
-        itemsPerPage: { in: 'query', type: 'integer', description: '20 (the default), 50, 100, 500 or 1000.' } },
+    'channels.list': { docs: `${ref}/listchannels`, path: '/channels', paging: 'channels', records: 'data',
+      params: { itemsPerPage: { in: 'query', type: 'integer', description: '20 (the default), 50, 100, 500 or 1000.' } },
       result: { data: [{ id: 'integer', 'type?': 'string', 'name?': 'string', 'brand?': 'string', 'country?': 'string',
         'currency?': 'string' }] } },
   },

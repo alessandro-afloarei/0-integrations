@@ -92,9 +92,9 @@ type Sent = { values?: Values; fetch?: typeof globalThis.fetch };
 
 /** A refresh posts to the entry's `refreshUrl` when it names one; every other request to its `tokenUrl`. The app's
  * `fetch`, else the entry's default: the address guard for a typed host. */
-function context(entry: Entry, credentials: AnyClient, input: Sent, refresh = false) {
+function context(entry: Entry, credentials: AnyClient, input: Sent, refresh = false, urls = endpoints(entry, input.values)) {
   // Each URL passes the one check every URL the library sends to passes, before anything is sent.
-  const { config, token, refresh: renew, revoke } = endpoints(entry, input.values);
+  const { config, token, refresh: renew, revoke } = urls;
   const fetch = input.fetch ?? defaultFetch(entry);
   const as: oauth.AuthorizationServer = { issuer: token.origin, token_endpoint: (refresh ? renew() : token).href,
     ...(revoke ? { revocation_endpoint: revoke.href } : {}) };
@@ -192,8 +192,7 @@ export async function refreshGrant<const E extends Entry>(entry: E, client: OAut
   }
 }
 
-async function revokeToken(entry: Entry, client: AnyClient, token: string, input: Sent): Promise<void> {
-  const c = context(entry, client, input);
+async function revokeToken(c: Context, entry: Entry, token: string): Promise<void> {
   const secrets = [...c.secrets, token];
   const response = await send(c, entry, secrets, () => oauth.revocationRequest(c.as, c.client, c.auth, token, c.options));
   // Any 2xx, as providers answer a revoke with 200 or 204; oauth4webapi accepts only 200.
@@ -206,7 +205,7 @@ async function revokeToken(entry: Entry, client: AnyClient, token: string, input
 }
 
 /** Revokes what the entry's `revoke` names. Done also when the entry declares none, when the grant lacks the token it
- * names, and when the grant is already gone: a 2xx, `invalid_grant`, a revoked code, a `goneErrors` detail, and an RFC 7009
+ * names once its URLs pass (each filled and checked before a token is read), and when the grant is already gone: a 2xx, `invalid_grant`, a revoked code, a `goneErrors` detail, and an RFC 7009
  * revoke's 404 (a request revoke's 404 is a missing route, not a gone token).
  * `client` is the OAuth app, sent only by an RFC 7009 revoke, which refuses to start without it. */
 export async function revokeGrant<const E extends Entry>(entry: E, input: { accessToken?: string; refreshToken?: string | null;
@@ -218,15 +217,17 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
     if ('url' in revoke) {
       const { client } = input;
       if (client === undefined) throw new TypeError('oauth_client_required');
+      const urls = endpoints(entry, input.values); // every URL filled and checked once, before a token is read
       const token = revoke.token.map(kind => (kind === 'refresh' ? input.refreshToken : input.accessToken))
         .find((value): value is string => typeof value === 'string' && value !== '');
-      if (token !== undefined) await revokeToken(entry, client, token, input);
+      if (token !== undefined) await revokeToken(context(entry, client, input, false, urls), entry, token);
       return;
     }
-    const { accessToken } = input;
-    if (accessToken === undefined) return;
-    const http = createClient(entry, { token: () => Promise.resolve(accessToken), fetch: input.fetch ?? defaultFetch(entry),
+    const http = createClient(entry, { token: () => Promise.resolve(accessToken ?? ''), fetch: input.fetch ?? defaultFetch(entry),
       values: input.values ?? {}, ...callBase(entry, revoke.request) });
+    // The base it is sent to, filled and checked as a call checks it (`baseUrl`), then the token, read once.
+    const accessToken = http.baseUrl && input.accessToken;
+    if (accessToken === undefined) return;
     responseJson(entry, await http.request(...callRequest(revoke.request)));
   } catch (error) {
     const gone = error instanceof GrantRevoked || (error instanceof ProviderHttpError && error.detail !== null

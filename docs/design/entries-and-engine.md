@@ -147,7 +147,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
 | `save` | Values kept on the connection after sign-in: `{ hubId: 'tokenAnswer.hub_id' }`. | none |
 | `revoke` | `{ url, token: ['refresh', 'access'] }` (RFC 7009) or `{ request }`, each with `goneErrors?`. | none |
-| `http` | `baseUrl`, `host?` (the host a base filled from a value must have, or a list of hosts; `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
+| `http` | `baseUrl`, `host?` (the hosts a templated URL of the entry may have: the base's, an OAuth 2 URL's, a token request's; a name, a list of hosts, or `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
 | `errors` | Where the provider's error code is, and how answers map to error codes (below). | status only |
 | `paging` | Named paging shapes (below). | none |
 | `webhook` | The signature scheme (below). | none |
@@ -157,7 +157,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 
 A placeholder in `http.baseUrl` names a plain field or a `save` key (in the host, one read from the token answer is a
 named host, below). In the host (between `https://` and the next `/`)
-it is a host part, and the base needs `http.host`, the host the filled base must have: a name (`api.example.com`), `*.`
+it is a host part, and the base needs `http.host`, the hosts a templated URL of the entry may have: a name (`api.example.com`), `*.`
 and a domain (any name ending in `.example.com`, never `example.com` itself), a list of those (the filled host
 matches one), or `*` (any). Intercom's region is the first: its access token's `baseUrl: 'https://{apiHost}'`, with
 `apiHost` a field whose `choices` are its three API hosts and `host` those three names; Smartsheet's products are the
@@ -168,8 +168,9 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
 'https://api.atlassian.com/ex/jira/{cloudId}'`, with `cloudId` a value its `save` keeps.
 
 - The base is filled once per client, on its first request or the first read of its `baseUrl`, never when the client
-  is built, and always before the token is read and before `beforeRequest`. An app's own `baseUrl` is used as given,
-  after the one check below that every URL the library sends to passes; on a typed or named host it must keep the
+  is built, and always before the token is read (a client's token function is not called; a token given as a string
+  is the app's own value, read when the client is built) and before `beforeRequest`. An app's own `baseUrl` is used as given,
+  after the one check below that every URL the library sends to passes; on a typed, chosen or named host it must keep the
   filled base's origin (else `base_host_refused`, before the token is read); on a fixed base it is the app's own
   explicit choice of origin.
 - The value is the connection's plain value or saved value, read from the `values` the app passes; none (or a blank
@@ -181,9 +182,9 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   credential is read or anything is sent, so a connection kept from another sign-in never reaches the wrong host.
 - Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 authorize,
   token, refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
-  `http.host` (a name only itself, the URL parser's lowercase form, `*.d` only a name under `d`), else
-  `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then never leaves the
-  filled base's origin.
+  `http.host` (a name only itself, the URL parser's lowercase form, `*.d` only a name under `d`), and a chosen host's
+  value (below) be exactly one of its field's choices, else `TypeError('base_host_refused: <entry id>')`, before a
+  secret is read or sent. The credential then never leaves the filled base's origin.
 - Every URL an entry declares (the base, `http.bases`, the OAuth 2 URLs, a token request's URL) is a well-formed
   template (`hostPart`): `https://`, then ASCII letters, digits, `.`, `-` and `{name}`s with an optional literal port,
   then `/` or the end. Nothing the URL parser reads otherwise (`\`, `@`, `?`, `#`, a third `/`, a tab or newline) can
@@ -210,6 +211,20 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   before anything is built or sent, and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed
   (a value only in the base's path) is unaffected. No value is ever read from the callback's query: the callback is the
   person's browser.
+- **A host chosen from a field's own list.** A placeholder that is a URL's whole host (`https://{name}`) and names a
+  plain field with a list of `choices` is a *chosen* host: the entry wrote every host it may take. It is no typed host:
+  beside fixed OAuth 2 URLs and a fixed token request URL, and beside other chosen hosts, it is no split
+  (`hostSplit`). Beside a named host or an `http.bases` value, or composed into another host
+  (`https://api.{region}.example.com`), it splits. Intercom's OAuth 2 sign-in is the first: `authorizeUrl:
+  'https://{appHost}/oauth'` beside its fixed token URL and base.
+  - Its value must be exactly one of the field's choices, a string, case included, wherever it fills a host: the base,
+    an OAuth 2 URL, a token request's URL. `filledBase` checks it on every send whose URL it fills (a call, identify,
+    an authorize URL, an exchange, a refresh, a revoke, a token request), not only when the person connects. A value
+    outside them is `base_host_refused` before a credential is read or anything is sent; one that is no host part is
+    `base_value_invalid` first. A fixed URL reads no value. As for a named host, the engine cannot tell which choice a
+    connection was issued on: an app stores the choice with the connection and passes its kept `values` back unchanged.
+  - Its `http.host` holds a domain (a name, `*.` and a domain, or a list of those), never `'*'`, and each choice matches
+    it; the table checks both.
 - **A host the token answer names.** On an OAuth 2 sign-in alone (on a key or token sign-in it is a typed host), a
   placeholder that is the base's whole host (`https://{host}/…`) and names a `save` key whose value is one
   `tokenAnswer.*` path, and no field, is a *named* host: the token endpoint that issued the grant chose it (Wrike's
@@ -273,7 +288,7 @@ keeps the global one.
 #### Arriving later
 
 Some pieces of this design are not in the code until a provider or a later step needs them: `oauth2.send`,
-`Operation.base`, placeholders in `identify`'s request path, `Size`, and `Where.variables`.
+`Operation.base`, placeholders in `identify`'s request path, and `Size`.
 
 An entry's **tier** (`declared`, `recorded`) is not written in the entry. The build works it out: an entry with a real
 recording beside it is `recorded`. `verified` arrives with the nightly live checks.
@@ -532,11 +547,12 @@ So a failed 2xx can be a revoked grant, match a rule or be a rate limit before i
 type Paging =
   | { kind: 'cursor'; next: Path; more?: Path; send: Where; size?: Size }
   | { kind: 'offset'; send: Where; list?: Path; more?: Path }
-  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size }
+  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; size?: Size;
+      total?: { pages: Path } | { entries: Path } }
   | { kind: 'last'; next: Path; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string; size?: Size }
   | { kind: 'nextUrl'; next: Path; pathPrefix?: string };
-type Where = { query: string } | { body: string };
+type Where = { query: string } | { body: Path } | { variables: string };
 type Size = { send: Where; value?: number };
 ```
 
@@ -551,10 +567,24 @@ a shape's `send` writes: the walk sends it.
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
   `invalid_response` (`missing_fields`): a malformed answer never reads as an empty list. A page whose list
-  equals the page before's is `invalid_response` (`page_repeated`) and is not yielded: a provider that ignores the page
-  number would otherwise never end. Records are expected to differ between pages (they carry ids), so two adjacent pages
-  that are truly identical end the walk the same way. An operation on a `page` shape names the shape's `list` as its `records` (both
-  absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
+  serialises to the same JSON text as the page before's or the walk's first page's is `invalid_response`
+  (`page_repeated`) and is not yielded: a provider that ignores the page number, or answers its first page again past
+  the end, would otherwise never end. An answer whose list has a different JSON text is not caught: another earlier
+  page, a changed value, or keys written in another order that changes the text. Records are expected to differ
+  between pages (they carry ids), so two such pages that are truly identical end the walk the same way. An operation
+  on a `page` shape names the shape's `list` as its `records` (both absent for a list at the answer's top level), so
+  the walk and the records read one list. `size` arrives later.
+  With `total`, a `page` walk also stops after the page at which the pages it read (`{ pages }`), or the entries it
+  read, a skipped record included (`{ entries }`), reach the number at that path in that page's answer. The number is
+  read from each answer, never carried from an earlier one. It counts what the walk read, never the page number it
+  sent, so `zeroBased` changes nothing. A `total` that is missing, or not a non-negative safe integer, is
+  `invalid_response` (`missing_fields`): a malformed answer never reads as an end. An empty list ends the walk only
+  once the count is reached; before, it is `invalid_response` (`missing_fields`). So a total larger than what the pages
+  hold fails at an empty page (`missing_fields`), at a list with the page before's or the first page's JSON text
+  (`page_repeated`), or on the provider's own error; any other earlier page answered again counts toward the total,
+  and a falsy `more` ends the walk where it stands. Declare `total` where a page past the last answers the last page
+  again, or where no page states what it answers; cite the field's meaning. Pages counted from 1 are cited as for any
+  `page` shape.
 - `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
   request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the
   parser skips included, in `send`'s place (a string in the query, a number in the body). The count is one rule for
@@ -565,6 +595,8 @@ a shape's `send` writes: the walk sends it.
   after it does. The offset grows on every page, so a provider that ignores it is `page_repeated`. An operation on an
   `offset` shape names the shape's `list` as its `records`. Declare it only for an offset that counts the records
   skipped from 0, cited (an example of `0`, or a starting record position); one counted from 1 waits.
+- A `page` or `offset` list whose page states where its numbering starts may be paged although no page says what a
+  request past the end answers: the stop rules above end it.
 - `last`: the `page` kind's walk and stop rules, run by the same loader, with another next value: the value at `next`
   inside the last element of `list` (the answer itself when `list` is absent), sent in `send`'s place (Render's
   `cursor`, a sibling of each resource). The first request sends nothing; an empty list ends the walk. With `more`, a
@@ -572,6 +604,18 @@ a shape's `send` writes: the walk sends it.
   a blank value ends it. The value follows the cursor's rule, and one that comes back is `cursor_repeated`, through the
   one `paginate` guard. The last element is read from the answer itself, so a record the parser skips still gives the
   value. An operation on a `last` shape names the shape's `list` as its `records`.
+- A `body` place is a path. The walk writes its value at that path, copying each object along it and creating the
+  ones missing, so the caller's arguments are never changed. An operation is also `param_paged` when a body parameter is named the path's first segment and its
+  object type declares the rest (with or without `?`), or its type is not an object: the walk would overwrite it. The
+  table refuses an empty segment and a segment `__proto__`, `constructor` or `prototype`.
+- A `variables` place writes the value into the GraphQL request's `variables`, beside the caller's: a cursor as a
+  string, a page number or an offset as a number, as a body place does. `cursor`, `page`, `offset` and `last` take it,
+  and their stop rules do not change. A GraphQL operation pages only on a shape whose `send` is `variables`, and an
+  operation with a path never pages on one: `paging_unplaced: <id>`, from `client()` and the table. An operation that
+  declares a variable of the `send` name is `param_paged`, as in any other place.
+- A request a `body` or `variables` place cannot be written into is `request_failed` before the first request: a form,
+  a JSON body that is not an object, or a value on the body path that is not an object. A missing (or null) body,
+  `variables` object or object on the path starts as `{}`.
 - `linkHeader` reads each answer and its `Link` header through the same classified call as any JSON read (an error
   answer still throws), follows the link-value whose `rel`, split on spaces, holds `next`, and stops when there is none.
   `nextUrl` follows the link at `next` in the body, and stops when there is none.
@@ -769,7 +813,8 @@ a provider whose OAuth 2 cannot be declared yet is not declared with a key alone
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
   scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host`,
   `http.host` the domains its pages name (Freshsales' two), else `'*'`; a documented list of regional hosts is
-  `choices` with `http.host` those names (Intercom's three), never the wider domain. A host the token answer names is
+  `choices` with `http.host` those names (Intercom's three API hosts on its key, its three authorize hosts on OAuth 2),
+  never the wider domain, and it may sit beside fixed OAuth 2 URLs. A host the token answer names is
   no field but a `save` key, `http.host` the narrowest the pages support.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them. A
   scope the provider grants only after an audit or a review is declared, and the leading comment names that gate.

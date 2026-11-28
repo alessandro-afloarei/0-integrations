@@ -11,7 +11,9 @@ none and starts with a form, and an entry whose kind is not known in the types (
   `null`) never does, and is `TypeError('connect_field_invalid: <name>')`. One with `choices` refuses any other value
   with the same error, also before anything is sent. The result's `values` hold
   the value used: `finishConnect(signInWith(intercom, 'key'), { secret: { accessToken }, fetch })` connects to
-  Intercom's US host and answers `values.apiHost === 'api.intercom.io'`.
+  Intercom's US host and answers `values.apiHost === 'api.intercom.io'`. A value that fills a host from `choices` is
+  checked again on every send after the connect (a call, identify, a refresh, a revoke): one that is not exactly a
+  choice, `API.EU.INTERCOM.IO` included, is `base_host_refused` before a credential is read or anything is sent.
   The entry's only secret field is the credential: an entry that declares none is refused first, as the entry's fault,
   with `TypeError('connect_secret_field_missing: <entry id>')`. Then the entry's `identify` runs: with a request it
   checks the credential and learns the account; an entry that declares none sends nothing, and its `account` is `null`.
@@ -125,7 +127,8 @@ const { secret, account } = await finishConnect(linear, { client: oauthClient, c
 // secret: the grant to seal, with `kind: 'oauth2'` kept beside it; account: the Linear user
 
 const api = client(linear, { token: secret.accessToken });
-const issues = await api.issues.list({ teamId, first: 50 }); // one page: nodes and pageInfo
+const titles: string[] = [];
+for await (const issue of api.issues.list({ teamId, first: 50 })) titles.push(issue.title); // every page, 50 at a time
 
 // A person's own key instead: a form, then one call.
 const key = signInWith(linear, 'key');
@@ -145,9 +148,8 @@ OAuth 2 token from a key, so a cloud token used with the key's narrowing would g
 the entry's sign-in does not declare is refused (`value_undeclared`), so a connection kept from another sign-in never
 reaches the wrong host: a key connection's `host` given to the whole entry, or to its OAuth 2 narrowing, sends nothing.
 
-Linear's lists answer one page each: pass `pageInfo.endCursor` as `after` for the next, until `hasNextPage` is false.
-The engine cannot send a GraphQL cursor yet ([waiting list](../waiting-list.md)). A Linear grant lasts 24 hours and
-refreshes with `refreshGrant(linear, …)`, through [credentials](credentials.md).
+Linear's lists page to their end: the walk sends `pageInfo.endCursor` as the `after` variable until `hasNextPage` is
+false. A Linear grant lasts 24 hours and refreshes with `refreshGrant(linear, …)`, through [credentials](credentials.md).
 
 ## OAuth 2 on the person's own server
 

@@ -9,8 +9,7 @@ const named = { 'id?': 'integer', 'name?': 'string' } as const;
 const ticket = { id: 'integer', 'display_id?': 'string', 'subject?': 'string', 'status?': named, 'priority?': named,
   'user?': { 'id?': 'integer', 'email?': 'string' }, 'created_at?': 'string', 'last_updated_at?': 'string' } as const;
 const pageInfo = { 'page_info?': { 'count?': 'integer', 'page_count?': 'integer', 'start_index?': 'integer', 'end_index?': 'integer' } } as const;
-const page = { size: { in: 'query', type: 'integer', description: '10 by default, at most 50.' },
-  page: { in: 'query', type: 'integer', description: 'From 1; `page_info.page_count` is the last.' } } as const;
+const size = { size: { in: 'query', type: 'integer', description: '10 by default, at most 50; `page_info.page_count` counts pages of this size.' } } as const;
 const ticketNumber = { ticket_number: { in: 'path', type: 'string', required: true, description: 'The ticket number, or its ID such as HFS00000001.' } } as const;
 const staff = { staff: { in: 'body', type: 'integer', required: true, description: 'The ID of the agent adding it (from /staff/).' } } as const;
 const changes = { status: { in: 'body', type: 'integer', description: 'A status ID (from /statuses/).' },
@@ -33,11 +32,11 @@ export const happyfox = defineProvider({
   auth: [{ kind: 'key', send: { basic: ['{apiKey}', '{token}'] } }],
   http: { baseUrl: 'https://{host}/api/1.1/json', host: ['*.happyfox.com', '*.happyfox.net'], retry: { onlyStated: true } },
   identify: { request: { path: '/statuses/' } },
+  paging: { pages: { kind: 'page', send: { query: 'page' }, list: 'data', total: { pages: 'page_info.page_count' } } },
   // A ticket's updates come only inside `tickets.get`: no messages list. A contact's reply is sent as the customer.
   operations: {
-    // One page: a list's paging ends at `page_info.page_count`.
-    'tickets.list': { docs: ref, path: '/tickets/',
-      params: { ...page, status: { in: 'query', type: 'string', description: '_all (the default), or a status ID.' },
+    'tickets.list': { docs: ref, path: '/tickets/', paging: 'pages', records: 'data',
+      params: { ...size, status: { in: 'query', type: 'string', description: '_all (the default), or a status ID.' },
         category: { in: 'query', type: 'integer' },
         q: { in: 'query', type: 'string', description: 'A search, such as contact:"james@example.com" or status:"New".' },
         sort: { in: 'query', type: 'string' } },
@@ -65,7 +64,8 @@ export const happyfox = defineProvider({
       params: { ...ticketNumber, ...staff, ...changes,
         alert: { in: 'body', type: 'string', description: 's alerts all subscribers, c the category\'s agents, or an agent ID.' } } },
     'users.list': { docs: 'https://support.happyfox.com/kb/article/1092-contacts-and-contact-groups-api-endpoints/', path: '/users/',
-      params: { ...page, q: { in: 'query', type: 'string', description: 'A search, such as email:adam@example.com.' } },
+      paging: 'pages', records: 'data',
+      params: { ...size, q: { in: 'query', type: 'string', description: 'A search, such as email:adam@example.com.' } },
       result: { ...pageInfo, data: [{ id: 'integer', 'name?': 'string', 'email?': 'string', 'tickets_count?': 'integer',
         'created_at?': 'string', 'updated_at?': 'string' }] } },
   },

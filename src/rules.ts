@@ -59,14 +59,26 @@ export function pagedRecords(op: Operation, shape: Paging): boolean {
   return !(shape.kind === 'page' || shape.kind === 'offset' || shape.kind === 'last') || op.records === shape.list;
 }
 
+/** Whether a paged operation's request has room where its shape writes: a GraphQL one only in its variables, a path one
+ * never there. */
+export function pagingPlaced(op: Operation, shape: Paging): boolean {
+  return ('graphql' in op) === ('send' in shape && 'variables' in shape.send);
+}
+
 /** The parameter an operation declares in the place its paging shape's `send` writes, if any: the walk sends that value
  * itself, and a caller's would start the walk there and be overwritten after the first page. A body cursor beside a form
- * parameter is named too: from the second page its JSON would replace the form. */
+ * parameter is named too: from the second page its JSON would replace the form. So is a body parameter named a body
+ * path's first segment whose type declares the rest (with or without `?`), or is no object: the walk writes inside it. */
 export function pagedParam(op: Operation, shape: Paging): string | undefined {
   const sent = 'send' in shape ? shape.send : undefined;
   // A literal query in the path (`/items?offset=2`) would start the walk there too.
   if (sent && 'query' in sent && 'path' in op && new URL(`https://a.test${op.path}`).searchParams.has(sent.query)) return sent.query;
-  if (sent && 'body' in sent && Object.values(op.params ?? {}).some(param => param.in === 'form')) return sent.body;
+  if (sent && 'body' in sent) {
+    if (Object.values(op.params ?? {}).some(param => param.in === 'form')) return sent.body;
+    const [head = ''] = sent.body.split('.');
+    const holder = op.params?.[head]; // an inherited `constructor` is no parameter: its `in` is undefined
+    if (holder?.in === 'body' && (argumentShape(op, sent.body) !== undefined || typeof holder.type !== 'object' || Array.isArray(holder.type))) return head;
+  }
   return sent === undefined ? undefined
     : Object.entries(op.params ?? {}).find(([name, param]) => param.in in sent && sent[param.in as keyof typeof sent] === name)?.[0];
 }
@@ -120,14 +132,18 @@ export function namedHosts(entry: Entry): Readonly<Record<string, Path>> {
 
 /** Whether the entry's base, its `http.bases`, an OAuth 2 sign-in's URLs and a token request's URL differ in their host
  * part when any of them takes its host from a typed value, or a typed host sits beside a named one: on a typed host a
- * credential goes only to that host, and a cloud's never reaches it. A named host, the whole host of each URL that names
- * it, beside fixed URLs is no split; composed into another host it is typed. */
+ * credential goes only to that host, and a cloud's never reaches it. A named host, or a chosen one (a field with
+ * `choices`, whose every host the entry wrote), the whole host of each URL that names it, beside fixed URLs is no split;
+ * composed into another host it is typed. A chosen host beside a named one or an `http.bases` value is a split (no
+ * entry needs it). */
 export function hostSplit(entry: Entry): boolean {
   // One not well formed is kept whole: never equal to a host part, so it counts as another host.
   const hosts = declaredUrls(entry).map(url => hostPart(url) ?? url);
   const named = namedHosts(entry);
-  const typed = hosts.some(host => placeholders(host).some(name => !Object.hasOwn(named, name) || host !== `https://{${name}}`));
-  return typed && (new Set(hosts).size > 1 || Object.keys(named).length > 0);
+  const chosen = (name: string) => Array.isArray(entry.fields?.find(field => field.name === name)?.choices); // the field filledBase reads
+  const typed = hosts.some(host => placeholders(host).some(name => !(Object.hasOwn(named, name) || chosen(name)) || host !== `https://{${name}}`));
+  return (typed && (new Set(hosts).size > 1 || Object.keys(named).length > 0))
+    || ((Object.keys(named).length > 0 || Object.keys(entry.http.bases ?? {}).length > 0) && hosts.some(host => placeholders(host).some(chosen)));
 }
 
 /** Every URL an entry declares: the base, `http.bases`, the OAuth 2 URLs (an RFC 7009 revoke's too) and a token request's. */

@@ -2,8 +2,10 @@ import { defineProvider } from '../catalogue.js';
 
 /** The three regional API hosts: https://developers.intercom.com/docs/build-an-integration/learn-more/rest-apis */
 const hosts = ['api.intercom.io', 'api.eu.intercom.io', 'api.au.intercom.io'] as const;
+/** The three regional authorize hosts: https://developers.intercom.com/docs/build-an-integration/learn-more/authentication/setting-up-oauth */
+const appHosts = ['app.intercom.com', 'app.eu.intercom.com', 'app.au.intercom.com'] as const;
 
-/** Intercom: OAuth 2 on its US hosts, or the access token on one of three regional hosts (the US by default); `GET /me`
+/** Intercom: OAuth 2 per region, or the access token on one of three regional hosts (the US by default); `GET /me`
  * names the workspace. `replies.create` with `comment` reaches the customer (`note` stays internal); a conversation's
  * parts come with `conversations.get`. Webhooks: `X-Hub-Signature: sha1=<hex HMAC-SHA1>` of the body, keyed with the
  * app's client secret: https://developers.intercom.com/docs/references/2.13/webhooks/webhook-models */
@@ -17,10 +19,13 @@ export const intercom = defineProvider({
   docs: 'https://developers.intercom.com/docs/references/rest-api/api.intercom.io/admins/identifyadmin',
   categories: ['support'],
   // Intercom reviews an app before other workspaces install it; its permissions are ticked in the Developer Hub (/me
-  // needs Read one admin). An EU or AU customer signing in with Google needs its region's authorize host (not here):
+  // needs Read one admin). Each region has its own authorize host, and "if the customer signs in with Google, the wrong
+  // regional host fails rather than prompting"; the token URL is one for every region:
   // https://developers.intercom.com/docs/build-an-integration/learn-more/authentication/setting-up-oauth
   // https://developers.intercom.com/docs/publish-to-the-app-store/review-publish-your-app
-  auth: [{ kind: 'oauth2', authorizeUrl: 'https://app.intercom.com/oauth', tokenUrl: 'https://api.intercom.io/auth/eagle/token' },
+  fields: [{ name: 'appHost', title: 'Region', choices: appHosts, default: 'app.intercom.com',
+    help: 'Where the workspace is hosted: the US, the EU or Australia. A person who signs in with Google must pick their own region.' }],
+  auth: [{ kind: 'oauth2', authorizeUrl: 'https://{appHost}/oauth', tokenUrl: 'https://api.intercom.io/auth/eagle/token' },
   { kind: 'key', fields: [{ name: 'apiHost', title: 'Region', choices: hosts,
     default: 'api.intercom.io', help: 'Where the workspace is hosted: the US, the EU or Australia.' },
   { name: 'accessToken', title: 'Access token', secret: true,
@@ -32,22 +37,22 @@ export const intercom = defineProvider({
   // `api.intercom.io` attempts to route a call to the workspace's region; every request names the API version the entry
   // reads, which overrides the app's: https://developers.intercom.com/docs/build-an-integration/learn-more/rest-apis
   // https://developers.intercom.com/docs/build-an-integration/learn-more/rest-apis/update-your-api-version
-  http: { baseUrl: 'https://api.intercom.io', headers: { accept: 'application/json', 'intercom-version': '2.18' },
+  http: { baseUrl: 'https://api.intercom.io', host: appHosts, headers: { accept: 'application/json', 'intercom-version': '2.18' },
     retry: { defaultWaitMs: 10_000, wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   errors: { detail: 'errors.0.code' },
   identify: { request: { path: '/me' }, id: 'app.id_code', name: 'app.name' },
   webhook: { kind: 'hmac', header: 'x-hub-signature', prefix: 'sha1=', hash: 'sha1' },
-  paging: { cursor: { kind: 'cursor', next: 'pages.next.starting_after', send: { query: 'starting_after' } } },
+  paging: { cursor: { kind: 'cursor', next: 'pages.next.starting_after', send: { query: 'starting_after' } },
+    search: { kind: 'cursor', next: 'pages.next.starting_after', send: { body: 'pagination.starting_after' } } },
   operations: {
     'conversations.list': { docs: `${ref}/conversations/listconversations`, path: '/conversations', paging: 'cursor',
       records: 'conversations', params: { per_page: { in: 'query', type: 'integer', description: '20 by default, at most 150.' } },
       result: { conversations: [conversation] } },
     'conversations.search': { docs: `${ref}/conversations/searchconversations`, method: 'POST', kind: 'read',
-      path: '/conversations/search',
+      path: '/conversations/search', paging: 'search', records: 'conversations',
       params: { query: { in: 'body', type: 'unknown', required: true,
         description: 'A filter (field, operator, value), or AND or OR over a list of filters.' },
-      pagination: { in: 'body', type: { 'per_page?': 'integer', 'starting_after?': 'string' },
-        description: 'One page: pass the answer\'s pages.next.starting_after for the next.' } },
+      pagination: { in: 'body', type: { 'per_page?': 'integer' }, description: 'per_page: 20 by default, at most 150.' } },
       result: { conversations: [conversation], 'pages?': { 'next?': { 'starting_after?': 'string' } } } },
     'conversations.get': { docs: `${ref}/conversations/retrieveconversation`, path: '/conversations/{conversation_id}',
       notFound: 'null', params: conversationId,

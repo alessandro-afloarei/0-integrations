@@ -239,6 +239,86 @@ describe('field defaults and choices', () => {
   });
 });
 
+describe("Intercom's OAuth 2: the authorize host chosen per region, the token URL and the base fixed", () => {
+  const appHosts = intercom.fields[0].choices;
+  const answers = () => fakeFetch([
+    { url: 'https://api.intercom.io/auth/eagle/token', respond: () => Response.json({ access_token: 'tok', token_type: 'bearer' }) },
+    { url: 'https://api.intercom.io/me', respond: () => Response.json({ type: 'admin', app: { id_code: 'abc123', name: 'Workspace' } }) }]);
+
+  it.each(appHosts)('consents on %s, then exchanges and identifies on api.intercom.io, keeping the region', async appHost => {
+    const begun = await startConnect(intercom, { ...start, values: { appHost } });
+    const url = new URL(begun.url);
+    expect(`${url.origin}${url.pathname}`).toBe(`https://${appHost}/oauth`);
+    expect(url.searchParams.get('client_id')).toBe('client');
+    const http = answers();
+    const connected = await finishConnect(intercom, { client, code: 'code', redirectUri: callback, codeVerifier: begun.codeVerifier,
+      values: begun.values, fetch: http.fetch, onRevokeFailed: vi.fn() });
+    expect(connected.values).toEqual({ appHost });
+    expect(http.calls.map(call => call.url)).toEqual(['https://api.intercom.io/auth/eagle/token', 'https://api.intercom.io/me']);
+  });
+
+  it('starts on the US host when no region is given, and returns it in `values`', async () => {
+    const begun = await startConnect(intercom, start);
+    expect(new URL(begun.url).host).toBe('app.intercom.com');
+    expect(begun.values).toEqual({ appHost: 'app.intercom.com' });
+  });
+
+  it.each(['evil.test', 'app.eu.intercom.com.evil.test', '127.0.0.1', '2130706433', 'api.eu.intercom.io', 'APP.EU.INTERCOM.COM'])(
+    'a region of %s is connect_field_invalid at the start and the finish, before the authorize URL or the exchange', async appHost => {
+      const http = answers();
+      let reads = 0;
+      const counted = { clientId: 'client', get clientSecret() { reads++; return 'secret'; } };
+      await expect(startConnect(intercom, { ...start, values: { appHost } })).rejects.toThrow(new TypeError('connect_field_invalid: appHost'));
+      await expect(finishConnect(intercom, { client: counted, code: 'code', redirectUri: callback, codeVerifier: 'v'.repeat(43), values: { appHost },
+        fetch: http.fetch, onRevokeFailed: vi.fn() })).rejects.toThrow(new TypeError('connect_field_invalid: appHost'));
+      expect({ reads, requests: http.calls.length }).toEqual({ reads: 0, requests: 0 });
+    });
+
+  it.each(['evil.test', 'app.eu.intercom.com.evil.test', '127.0.0.1', '2130706433', 'api.eu.intercom.io', 'APP.EU.INTERCOM.COM'])(
+    'a stored region of %s is base_host_refused at the authorize URL and a refresh, before the client secret is read or anything is sent', async appHost => {
+      const http = answers();
+      let reads = 0;
+      const counted = { clientId: 'client', get clientSecret() { reads++; return 'secret'; } };
+      expect(() => consentUrl(intercom, { clientId: 'c', redirectUri: callback, scopes: [], state: 's', codeChallenge: 'c', values: { appHost } }))
+        .toThrow(new TypeError('base_host_refused: intercom'));
+      await expect(refreshGrant(intercom, counted, 'r', { values: { appHost }, fetch: http.fetch })).rejects.toThrow(new TypeError('base_host_refused: intercom'));
+      expect({ reads, requests: http.calls.length }).toEqual({ reads: 0, requests: 0 });
+    });
+
+  it('a refresh kept without `appHost` is template_missing before anything is sent; with it, it posts to the fixed token URL', async () => {
+    const http = answers();
+    await expect(refreshGrant(intercom, client, 'r', { values: {} as never, fetch: http.fetch })).rejects.toThrow(new TypeError('template_missing: intercom {appHost}'));
+    expect(http.calls).toHaveLength(0);
+    await refreshGrant(intercom, client, 'r', { values: { appHost: 'app.au.intercom.com' }, fetch: http.fetch });
+    expect(http.calls.map(call => call.url)).toEqual(['https://api.intercom.io/auth/eagle/token']);
+  });
+
+  it("a call reads no region: the base is fixed, so every call goes to api.intercom.io", async () => {
+    const http = answers();
+    await apiClient(intercom, { token: 'tok', values: { appHost: 'app.eu.intercom.com' }, fetch: http.fetch }).request('/me');
+    expect(http.calls.map(call => call.url)).toEqual(['https://api.intercom.io/me']);
+  });
+
+  it("a value kept from the other sign-in is value_undeclared: the key's `apiHost` on OAuth 2, OAuth 2's `appHost` on the key", async () => {
+    const http = answers();
+    expect(() => apiClient(intercom, { token: 'tok', values: { appHost: 'app.intercom.com', apiHost: 'api.eu.intercom.io' }, fetch: http.fetch }))
+      .toThrow(new TypeError('value_undeclared: intercom apiHost'));
+    expect(() => apiClient(signInWith(intercom, 'key'), { token: 'tok', values: { apiHost: 'api.intercom.io', appHost: 'app.intercom.com' }, fetch: http.fetch }))
+      .toThrow(new TypeError('value_undeclared: intercom appHost'));
+    await expect(refreshGrant(intercom, client, 'r', { values: { apiHost: 'api.eu.intercom.io' } as never, fetch: http.fetch }))
+      .rejects.toThrow(new TypeError('value_undeclared: intercom apiHost'));
+    expect(http.calls).toHaveLength(0);
+  });
+
+  it("a stored key region differing only in case is base_host_refused on a call, before the token is read; before, it was sent", async () => {
+    const http = answers();
+    const token = vi.fn<() => Promise<string>>().mockResolvedValue('tok');
+    await expect(apiClient(signInWith(intercom, 'key'), { token, values: { apiHost: 'API.EU.INTERCOM.IO' }, fetch: http.fetch }).request('/me'))
+      .rejects.toThrow(new TypeError('base_host_refused: intercom'));
+    expect({ reads: token.mock.calls.length, requests: http.calls.length }).toEqual({ reads: 0, requests: 0 });
+  });
+});
+
 describe('a token entry', () => {
   const basic = (pair: string) => `Basic ${Buffer.from(pair).toString('base64')}`;
   const zoomInput = { secret: { clientSecret: 'zoom-secret' }, values: { accountId: 'acc', clientId: 'cid' } };

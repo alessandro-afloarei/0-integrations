@@ -50,8 +50,8 @@ export type Wait = ({ header: string | readonly string[] } | { path: Path }) & {
 export type Retry = { limit?: number; maxWaitMs?: number; defaultWaitMs?: number; onlyStated?: true; wait?: Wait };
 export type RateLimit = { when: readonly (When & { wait?: Wait })[]; defaultWaitMs?: number };
 export type Http = { baseUrl: Template;
-  /** The host a base with a placeholder in its host must have once filled: a name, `*.` and a domain, a list of those
-   * (one must match), or `*` (any) alone. */
+  /** The hosts a templated URL of the entry may have (the base's, an OAuth 2 URL's, a token request's): a name, `*.` and
+   * a domain, a list of those (one must match), or `*` (any) alone. */
   host?: string | readonly string[]; bases?: Readonly<Record<string, string>>; headers?: Readonly<Record<string, string>>;
   timeoutMs?: number; minIntervalMs?: number; retry?: Retry; rateLimit?: RateLimit };
 export type Errors = { detail?: Path | readonly Path[]; allow?: readonly string[]; failed?: When;
@@ -77,14 +77,16 @@ export type Webhook = (
 ) & { deliveryId?: { header: string } | { body: readonly Path[] };
   challenge?: { unsigned?: true } & ({ when: When; echo: Path; text?: true }
     | { when?: When; echo: { query: string } | { header: string }; text: true }) };
-export type Where = { query: string } | { body: string };
-/** `page`: no number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy or `list` (the
- * answer when absent) is empty; a missing or non-list `list` is `invalid_response`. `offset`: as `page`, the next value
- * the offset sent (0 first) plus the entries in `list`. `last`: as `page`, the next value read at `next` in the
+/** Where a walk writes its next value: a query parameter, a path in a JSON body, or a GraphQL variable. */
+export type Where = { query: string } | { body: Path } | { variables: string };
+/** `page`: no number first, then 2, 3 (`zeroBased`: 1, 2) in `send`'s place, until `more` is falsy, `list` (the
+ * answer when absent) is empty, or the pages or entries read (a skipped record counted) reach each answer's `total`; a
+ * missing or non-list `list`, or a `total` that is no non-negative safe integer, or an empty page before it, is `invalid_response`. `offset`: as
+ * `page`, the next value the offset sent (0 first) plus the entries in `list`. `last`: as `page`, the next value read at `next` in the
  * list's last record, by the cursor's rules. `linkHeader`, `nextUrl`: the `Link` header's `rel="next"`, or
  * the value at `next`, read on the base's origin when a path, and kept under the base's path and `pathPrefix`. */
 export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
-  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true }
+  | { kind: 'page'; send: Where; list?: Path; more?: Path; zeroBased?: true; total?: { pages: Path } | { entries: Path } }
   | { kind: 'offset'; send: Where; list?: Path; more?: Path }
   | { kind: 'last'; next: Path; send: Where; list?: Path; more?: Path }
   | { kind: 'linkHeader'; pathPrefix?: string } | { kind: 'nextUrl'; next: Path;
