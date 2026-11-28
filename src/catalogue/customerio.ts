@@ -3,7 +3,7 @@ import { defineProvider } from '../catalogue.js';
 /** Customer.io App API: a private key, Bearer, on its region's host: https://docs.customer.io/files/journeys-app.json
  * No endpoint names the key's account, so a sign-in checks it. A 429 waits `Retry-After`, which a daily quota does not
  * set: https://docs.customer.io/integrations/api/customerio-apis. Segments are the audience. The Track API (people,
- * events) is not declared; nothing here sends a one-time send or triggers a broadcast; webhooks are not declared. */
+ * events) is not declared; nothing here sends a one-time send or triggers a broadcast. */
 const hosts = ['api.customer.io', 'api-eu.customer.io'] as const;
 const identifiers = { 'cio_id?': 'string', 'email?': 'string', 'id?': 'string' } as const;
 const newsletter = { id: 'integer', 'name?': 'string', 'type?': 'string', 'send_state?': 'string', 'created?': 'integer',
@@ -20,6 +20,11 @@ export const customerio = defineProvider({
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{apiHost}/v1', host: hosts, retry: { onlyStated: true } },
   errors: { detail: 'errors.0.code' },
+  // Reporting webhooks: a hex HMAC-SHA256 of `v0:{timestamp}:{body}` keyed with the webhook's signing key; the page
+  // states no tolerance, so the 300 s is this library's.
+  // https://docs.customer.io/integrations/data-out/connections/webhooks
+  webhook: { kind: 'hmac', header: 'x-cio-signature', signed: 'v0:{timestamp}:{body}', timestamp: { header: 'x-cio-timestamp' },
+    deliveryId: { body: ['event_id'] } },
   identify: { request: { path: '/workspaces' } },
   paging: { start: { kind: 'cursor', next: 'next', send: { query: 'start' } } },
   operations: {
