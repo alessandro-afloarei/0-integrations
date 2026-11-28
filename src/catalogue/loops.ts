@@ -7,7 +7,7 @@ import { defineProvider } from '../catalogue.js';
 const contact = { id: 'string', 'email?': 'string', 'firstName?': 'string', 'lastName?': 'string', 'subscribed?': 'boolean',
   'userGroup?': 'string', 'userId?': 'string', 'optInStatus?': 'string' } as const;
 const fields = { firstName: { in: 'body', type: 'string' }, lastName: { in: 'body', type: 'string' },
-  subscribed: { in: 'body', type: 'boolean', description: 'Whether the contact gets campaign and workflow emails; new contacts are subscribed.' },
+  subscribed: { in: 'body', type: 'boolean', description: 'Whether the contact gets campaign and workflow emails; new contacts are subscribed. On an update false unsubscribes and true re-subscribes one who unsubscribed; leave it out otherwise.' },
   userGroup: { in: 'body', type: 'string' }, source: { in: 'body', type: 'string', description: 'API by default.' },
   mailingLists: { in: 'body', type: 'unknown', description: 'Mailing list ids, each true to add the contact or false to remove it.' } } as const;
 const campaign = { id: 'string', url: 'string', name: 'string', status: 'string', createdAt: 'string', updatedAt: 'string',
@@ -31,12 +31,13 @@ export const loops = defineProvider({
     'contacts.get': { docs: `${ref}/find-contact`, path: '/v1/contacts/find',
       params: { email: { in: 'query', type: 'string', description: 'Not with userId.' }, userId: { in: 'query', type: 'string', description: 'Not with email.' } },
       anyOf: [['email'], ['userId']], result: [contact] },
-    // A new contact starts the workflows a contact added triggers, and those of a list it joins through `mailingLists`.
+    // A new contact starts the "Contact added" workflows, and a list it joins through `mailingLists` its "Contact added
+    // to list" ones; they email the contact, and no parameter stops them (the API has no double opt-in).
     'contacts.create': { docs: `${ref}/create-contact`, method: 'POST', path: '/v1/contacts/create',
       params: { email: { in: 'body', type: 'string', required: true }, userId: { in: 'body', type: 'string' }, ...fields },
       result: { success: 'boolean', id: 'string' } },
-    // An upsert: it updates the contact found by email or userId, else creates one; a change can start the workflows a
-    // contact added, updated or added to a list triggers.
+    // An upsert: it updates the contact found by email or userId, else creates one; a change starts the "Contact
+    // updated" workflows (a new contact or list, as on create), which email the contact; no parameter stops them.
     'contacts.update': { docs: `${ref}/update-contact`, method: 'PUT', path: '/v1/contacts/update',
       params: { email: { in: 'body', type: 'string' }, userId: { in: 'body', type: 'string' }, ...fields },
       anyOf: [['email'], ['userId']], result: { success: 'boolean', id: 'string' } },
@@ -48,7 +49,8 @@ export const loops = defineProvider({
     // Creates a draft campaign and its empty email message; nothing is sent, and no schedule is set here.
     'campaigns.create': { docs: `${ref}/create-campaign`, method: 'POST', path: '/v1/campaigns',
       params: { name: { in: 'body', type: 'string', required: true }, ...audience }, result: campaign },
-    // An event starts the workflows it triggers, which email the contact; the contact is created or updated with it.
+    // An event starts the workflows it triggers, which email the contact, and no parameter stops them; the contact is
+    // created or updated with it.
     'events.create': { docs: `${ref}/send-event`, method: 'POST', path: '/v1/events/send',
       params: { eventName: { in: 'body', type: 'string', required: true }, email: { in: 'body', type: 'string' },
         userId: { in: 'body', type: 'string' }, eventProperties: { in: 'body', type: 'unknown' },
