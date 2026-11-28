@@ -932,10 +932,9 @@ write that reaches people: its leading comment says when it emails or texts the 
 autoresponder, a "Reply Y" text) and, for an upsert, that it updates an existing person, and the page's parameter that
 stops the sending is declared, its description quoting what it stops. An `<events>.create` follows it too: its leading
 comment says the event can start a flow or an automation, and the page's flag that starts none is declared where there
-is one. A write that spends credits or data points follows the credits rule above, and the key's `help` names the cost.
-Transactional sends belong to `mail`'s sending service, never to `marketing`. Outside the row: deletes, an unsubscribe
-on its own endpoint (a status in an update stays), automations and workflows, templates, reports and analytics, media
-uploads, ads, links, referral programs and webhook management.
+is one. Transactional sends belong to `mail`'s sending service, never to `marketing`. Outside the row: deletes, an
+unsubscribe on its own endpoint (a status in an update stays), automations and workflows, templates, reports and
+analytics, media uploads, ads, links, referral programs and webhook management.
 
 **Result shapes.** A record declares, when the docs name them, its id, its title or name, its state, its parent's id,
 its web URL and its created and updated times: at most eight keys, nested at most two objects deep below the record
