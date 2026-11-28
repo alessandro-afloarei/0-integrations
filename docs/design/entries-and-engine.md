@@ -542,23 +542,24 @@ a shape's `send` writes: the walk sends it.
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
   `invalid_response` (`missing_fields`): a malformed answer never reads as an empty list. A page whose list
-  serialises to the same JSON text as the page before's or the walk's first page's (the same records, in the same
-  order, each with its keys in the same order) is `invalid_response` (`page_repeated`) and is not yielded: a provider
-  that ignores the page number, or answers its first page again past the end, would otherwise never end. A provider
-  that answers some other earlier page, the same page with a value changed, or the same records with their keys in
-  another order, is not caught: the walk compares the lists' JSON text. Records are expected to differ between pages (they carry ids), so two such pages that are truly
-  identical end the walk the same way. An operation on a `page` shape names the shape's `list` as its `records` (both
-  absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
+  serialises to the same JSON text as the page before's or the walk's first page's is `invalid_response`
+  (`page_repeated`) and is not yielded: a provider that ignores the page number, or answers its first page again past
+  the end, would otherwise never end. An answer whose list has a different JSON text is not caught: another earlier
+  page, a changed value, or keys written in another order that changes the text. Records are expected to differ
+  between pages (they carry ids), so two such pages that are truly identical end the walk the same way. An operation
+  on a `page` shape names the shape's `list` as its `records` (both absent for a list at the answer's top level), so
+  the walk and the records read one list. `size` arrives later.
   With `total`, a `page` walk also stops after the page at which the pages it read (`{ pages }`), or the entries it
   read, a skipped record included (`{ entries }`), reach the number at that path in that page's answer. The number is
   read from each answer, never carried from an earlier one. It counts what the walk read, never the page number it
   sent, so `zeroBased` changes nothing. A `total` that is missing, or not a non-negative safe integer, is
   `invalid_response` (`missing_fields`): a malformed answer never reads as an end. An empty list ends the walk only
   once the count is reached; before, it is `invalid_response` (`missing_fields`). So a total larger than what the pages
-  hold fails at an empty page (`missing_fields`), at the page before or the first page again (`page_repeated`), or on
-  the provider's own error; another earlier page answered again counts toward the total, and a falsy `more` ends the
-  walk where it stands. Declare `total` where a page past the last answers the last page again, or where no page states what
-  it answers; cite the field's meaning. Pages counted from 1 are cited as for any `page` shape.
+  hold fails at an empty page (`missing_fields`), at a list with the page before's or the first page's JSON text
+  (`page_repeated`), or on the provider's own error; any other earlier page answered again counts toward the total,
+  and a falsy `more` ends the walk where it stands. Declare `total` where a page past the last answers the last page
+  again, or where no page states what it answers; cite the field's meaning. Pages counted from 1 are cited as for any
+  `page` shape.
 - `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
   request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the
   parser skips included, in `send`'s place (a string in the query, a number in the body). The count is one rule for
