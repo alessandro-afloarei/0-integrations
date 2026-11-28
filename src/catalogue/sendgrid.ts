@@ -55,9 +55,10 @@ export const sendgrid = defineProvider({
       result: { 'result?': [contact], contact_count: 'number' } },
     'contacts.get': { docs: `${ref}/contacts/get-a-contact-by-id`, path: '/marketing/contacts/{id}', notFound: 'null',
       params: { id: { in: 'path', type: 'string', required: true } }, result: contact },
-    // An upsert: an existing contact is updated, its omitted fields kept. It can start emails: an Automation sends
-    // its series to each contact added to its list or segment (All Contacts by default); no parameter stops it:
-    // https://www.twilio.com/docs/sendgrid/ui/sending-email/getting-started-with-automation
+    // An upsert: an existing contact is updated, omitted fields kept. Adding contacts might affect your Twilio SendGrid
+    // bill: https://www.twilio.com/docs/sendgrid/ui/managing-contacts/create-and-manage-contacts. It can start emails:
+    // an Automation sends its series to each contact added to its list or segment (All Contacts by default); no
+    // parameter stops it: https://www.twilio.com/docs/sendgrid/ui/sending-email/getting-started-with-automation
     'contacts.create': { docs: `${ref}/contacts/add-or-update-a-contact`, method: 'PUT', path: '/marketing/contacts', kind: 'write',
       params: { contacts: { in: 'body', type: [{ email: 'string', 'first_name?': 'string', 'last_name?': 'string' }], required: true,
         description: 'Up to 30,000 contacts, each identified here by its email (the page also takes other identifiers); an existing contact is updated only when all its identifiers are sent.' },
