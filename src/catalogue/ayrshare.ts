@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** Ayrshare Social API: the Primary Profile's API key. `posts.create` fixes `requiresApproval: true`: the post is held
- * "awaiting approval" and nothing is published until someone approves it. No `retry`: repeated 429s within a
- * 5-minute window can suspend the profile (https://www.ayrshare.com/docs/errors/errors-http). X needs two more secret
- * headers this entry cannot send. Webhooks: the digest's encoding is not stated. */
+/** Ayrshare Social API: the Primary Profile's API key (a paid plan). `posts.create` fixes `requiresApproval: true`:
+ * the post waits "awaiting approval" until an update approves it: https://www.ayrshare.com/docs/apis/post/overview
+ * No `retry`: repeated 429s can suspend the profile (https://www.ayrshare.com/docs/errors/errors-http). X needs two
+ * more secret headers this entry cannot send. Webhooks: the digest's encoding is not stated. */
 const post = { id: 'string', 'post?': 'string', 'status?': 'string', 'platforms?': ['string'], 'type?': 'string',
   'created?': 'string', 'scheduleDate?': 'unknown', 'postIds?': 'unknown' } as const;
 const ref = 'https://www.ayrshare.com/docs/apis';
@@ -11,8 +11,9 @@ const ref = 'https://www.ayrshare.com/docs/apis';
 export const ayrshare = defineProvider({
   id: 'ayrshare', name: 'Ayrshare', docs: `${ref}/overview`,
   categories: ['marketing'],
+  // The plans: https://www.ayrshare.com/docs/help-center/product/what-is-the-basic-plan-post-limit
   fields: [{ name: 'apiKey', title: 'API key', secret: true,
-    help: 'The API Key of your Primary Profile, on the API Key page of the Ayrshare dashboard.' }],
+    help: 'The API Key of your Primary Profile, on the API Key page of the Ayrshare dashboard. New accounts need a paid plan: Premium, or Launch, whose 28-day free trial takes a card.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.ayrshare.com/api', headers: { 'content-type': 'application/json' } },
   identify: { request: { path: '/user' }, id: 'refId', name: ['title', 'email'] },
@@ -35,7 +36,7 @@ export const ayrshare = defineProvider({
       params: {
         post: { in: 'body', type: 'string', required: true, description: 'The post\'s text; an empty string for none.' },
         platforms: { in: 'body', type: ['string'], required: true,
-          description: 'The linked networks to post to: bluesky, facebook, gmb, instagram, linkedin, pinterest, reddit, snapchat, telegram, threads, tiktok, twitter, youtube, or all.' },
+          description: 'The linked networks to post to: bluesky, facebook, gmb, instagram, linkedin, pinterest, reddit, snapchat, telegram, threads, tiktok, twitter, youtube, or all; twitter needs two headers this entry does not send.' },
         requiresApproval: { in: 'body', type: true, required: true },
         notes: { in: 'body', type: 'string', description: 'For reference only; returned by the history.' },
         idempotencyKey: { in: 'body', type: 'string', description: 'A unique id: a duplicate is refused.' },
