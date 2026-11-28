@@ -113,7 +113,8 @@ entry:
   hold no placeholder, and a call's `base` names one of them; a token request names only the entry's fields (a plain
   one in its `url`, whose host placeholder needs `http.host`), sends the secret field in its body or Basic, and its
   `send` names no secret field; a field's `choices` are a non-empty list of unique values holding its `default`, each
-  of them and the `default` fills the base to a host `http.host` takes, and a secret field has neither;
+  of them and the `default` fills every declared URL to a host `http.host` takes, and a secret field has neither; a
+  host chosen from `choices` needs `http.host` names, never `'*'`;
 - declares a webhook the engine can trust: `{body}` is signed (by default, or in `signed`), and `{timestamp}` exactly
   when a timestamp is declared, read apart from the signature (another `part` or header); a `part` name holds no `,`,
   `=` or whitespace, and no `prefix` sits beside it; every header name (a webhook's, a send's, a wait's, `http.headers`

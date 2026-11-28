@@ -22,7 +22,11 @@ entry does not declare is a compile error. A wrapper generic over the entry is t
 takes `Entry` and `Values`, as in `(entry: Entry, values: Values) => refreshGrant(entry, client, refreshToken, { values })`,
 and the values are checked at run time. An entry whose OAuth 2 URLs, base or
 `http.bases` mix a typed host with any other host is refused with `TypeError('host_split: <entry id>')` before
-anything is built or sent: on a typed host a credential goes only to that host. `exchangeCode`, `refreshGrant` and
+anything is built or sent: on a typed host a credential goes only to that host. A host chosen from a field's
+`choices` (Intercom's `appHost`, its authorize host per region) is no typed host and may sit beside fixed URLs; a
+refresh and a revoke read it wherever an OAuth 2 URL names it (`endpoints` fills the authorize URL too), so Intercom's
+`refreshGrant` and `revokeGrant` take `values: { appHost }`, and a value that is not exactly one of the choices is
+`base_host_refused` before the client secret or a token is read. `exchangeCode`, `refreshGrant` and
 `revokeGrant` default `fetch` to `guardedFetch` for an entry whose host is typed, else the global one. The exchange, a
 refresh and an RFC 7009 revoke never follow a redirect (a 3xx is `request_failed`); a revoke by request is an ordinary
 call, which follows a redirect only on the same origin, never to another host.

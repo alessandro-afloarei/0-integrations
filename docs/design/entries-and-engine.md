@@ -147,7 +147,7 @@ Only `id`, `name`, `auth` and `http.baseUrl` are required. Everything else has a
 | `identify` | How to learn the account, and so also the credential check (below). | no check |
 | `save` | Values kept on the connection after sign-in: `{ hubId: 'tokenAnswer.hub_id' }`. | none |
 | `revoke` | `{ url, token: ['refresh', 'access'] }` (RFC 7009) or `{ request }`, each with `goneErrors?`. | none |
-| `http` | `baseUrl`, `host?` (the host a base filled from a value must have, or a list of hosts; `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
+| `http` | `baseUrl`, `host?` (the hosts a templated URL of the entry may have: the base's, an OAuth 2 URL's, a token request's; a name, a list of hosts, or `*`: any, address-guarded), `bases?` (named extra base URLs), `headers?`, `timeoutMs?`, `minIntervalMs?`, `retry?`, `rateLimit?`. | 30 s, no pacing |
 | `errors` | Where the provider's error code is, and how answers map to error codes (below). | status only |
 | `paging` | Named paging shapes (below). | none |
 | `webhook` | The signature scheme (below). | none |
@@ -181,9 +181,9 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   credential is read or anything is sent, so a connection kept from another sign-in never reaches the wrong host.
 - Every URL the library sends to (an entry's base, filled or fixed, an app's own, a token URL, an OAuth 2 authorize,
   token, refresh or revoke URL) must parse and be https with no user or password, and a templated host must match
-  `http.host` (a name only itself, the URL parser's lowercase form, `*.d` only a name under `d`), else
-  `TypeError('base_host_refused: <entry id>')`, before a secret is read or sent. The credential then never leaves the
-  filled base's origin.
+  `http.host` (a name only itself, the URL parser's lowercase form, `*.d` only a name under `d`), and a chosen host's
+  value (below) be exactly one of its field's choices, else `TypeError('base_host_refused: <entry id>')`, before a
+  secret is read or sent. The credential then never leaves the filled base's origin.
 - Every URL an entry declares (the base, `http.bases`, the OAuth 2 URLs, a token request's URL) is a well-formed
   template (`hostPart`): `https://`, then ASCII letters, digits, `.`, `-` and `{name}`s with an optional literal port,
   then `/` or the end. Nothing the URL parser reads otherwise (`\`, `@`, `?`, `#`, a third `/`, a tab or newline) can
@@ -210,6 +210,22 @@ placeholder in its host needs no `http.host`. Jira's is the first: `baseUrl:
   before anything is built or sent, and the table runs it as a rule on every sign-in. An entry whose hosts are all fixed
   (a value only in the base's path) is unaffected. No value is ever read from the callback's query: the callback is the
   person's browser.
+- **A host chosen from a field's own list.** A placeholder that is a URL's whole host (`https://{name}`) and names a
+  plain field with `choices` is a *chosen* host: the entry wrote every host it may take. It is no typed host: beside
+  fixed OAuth 2 URLs, and beside other chosen hosts, it is no split (`hostSplit`). Beside a named host, or composed
+  into another host (`https://api.{region}.example.com`), it is typed, and the split rule applies. Intercom's OAuth 2
+  sign-in is the first: `authorizeUrl: 'https://{appHost}/oauth'` beside its fixed token URL and base.
+  - Its value must be exactly one of the field's choices, case included, wherever it fills a host: the base, an OAuth 2
+    URL, a token request's URL. `filledBase` checks it on every send (a call, identify, an authorize URL, an exchange, a
+    refresh, a revoke, a token request), not only when the person connects. A value outside them is
+    `base_host_refused` before a credential is read or anything is sent; one that is no host part is
+    `base_value_invalid` first, as today. A fixed URL reads no value.
+  - `http.host` is the hosts a templated URL of the entry may have (the base's, an OAuth 2 URL's, a token request's),
+    and each choice of a chosen host is one of its names. A documented list of regional hosts is `choices` with
+    `http.host` those names (Intercom's three API hosts on its key, its three authorize hosts on OAuth 2), and it may sit
+    beside fixed OAuth 2 URLs.
+  - A typed host (a field without `choices`) keeps the split rule. A value the sign-in does not declare is still
+    `value_undeclared` first.
 - **A host the token answer names.** On an OAuth 2 sign-in alone (on a key or token sign-in it is a typed host), a
   placeholder that is the base's whole host (`https://{host}/…`) and names a `save` key whose value is one
   `tokenAnswer.*` path, and no field, is a *named* host: the token endpoint that issued the grant chose it (Wrike's
@@ -777,7 +793,8 @@ a provider whose OAuth 2 cannot be declared yet is not declared with a key alone
   credential or the base needs. The key's `help` names the credential the declared operations need (a token type,
   scopes, an access level, a role, an expiry default) when the docs make it matter. A host the person types is `host`,
   `http.host` the domains its pages name (Freshsales' two), else `'*'`; a documented list of regional hosts is
-  `choices` with `http.host` those names (Intercom's three), never the wider domain. A host the token answer names is
+  `choices` with `http.host` those names (Intercom's three API hosts on its key, its three authorize hosts on OAuth 2),
+  never the wider domain, and it may sit beside fixed OAuth 2 URLs. A host the token answer names is
   no field but a `save` key, `http.host` the narrowest the pages support.
 - `scopes`, with an `oauth2` sign-in only: what the declared operations and identify need, as the docs name them. A
   scope the provider grants only after an audit or a review is declared, and the leading comment names that gate.

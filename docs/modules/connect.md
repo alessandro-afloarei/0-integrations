@@ -11,7 +11,9 @@ none and starts with a form, and an entry whose kind is not known in the types (
   `null`) never does, and is `TypeError('connect_field_invalid: <name>')`. One with `choices` refuses any other value
   with the same error, also before anything is sent. The result's `values` hold
   the value used: `finishConnect(signInWith(intercom, 'key'), { secret: { accessToken }, fetch })` connects to
-  Intercom's US host and answers `values.apiHost === 'api.intercom.io'`.
+  Intercom's US host and answers `values.apiHost === 'api.intercom.io'`. A value that fills a host from `choices` is
+  checked again on every send after the connect (a call, identify, a refresh, a revoke): one that is not exactly a
+  choice, `API.EU.INTERCOM.IO` included, is `base_host_refused` before a credential is read or anything is sent.
   The entry's only secret field is the credential: an entry that declares none is refused first, as the entry's fault,
   with `TypeError('connect_secret_field_missing: <entry id>')`. Then the entry's `identify` runs: with a request it
   checks the credential and learns the account; an entry that declares none sends nothing, and its `account` is `null`.
