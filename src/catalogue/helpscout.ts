@@ -2,7 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Help Scout: OAuth 2 on a paid plan (app under My apps): https://docs.helpscout.com/article/1140-mailbox-api
  * A 429 waits `X-RateLimit-Retry-After` seconds: https://developer.helpscout.com/mailbox-api/overview/rate-limiting/
- * A reply thread emails the customer (`imported` sends none). Webhooks: https://developer.helpscout.com/webhooks/
+ * A reply thread emails the customer unless it is a draft (`imported` sends none).
+ * Webhooks: https://developer.helpscout.com/webhooks/
  * Lists follow `_links.next`: https://developer.helpscout.com/mailbox-api/overview/pagination/ */
 const conversation = { id: 'integer', 'number?': 'integer', 'type?': 'string', 'status?': 'string', 'state?': 'string',
   'subject?': 'string', 'mailboxId?': 'integer', 'createdAt?': 'string' } as const;
@@ -41,7 +42,7 @@ export const helpscout = defineProvider({
         mailboxId: { in: 'body', type: 'integer', required: true },
         status: { in: 'body', type: 'string', required: true, enum: ['active', 'closed', 'pending'] },
         customer: { in: 'body', type: customer, required: true },
-        threads: { in: 'body', type: [{ type: 'string', 'text?': 'string', 'customer?': customer }], required: true,
+        threads: { in: 'body', type: [{ type: 'string', 'text?': 'string', 'customer?': customer, 'draft?': 'boolean' }], required: true,
           description: 'At least one; each type is note, chat, phone, reply or customer.' },
         imported: { in: 'body', type: 'boolean', description: 'true sends no emails or notifications.' },
         autoReply: { in: 'body', type: 'boolean' }, assignTo: { in: 'body', type: 'integer' }, tags: { in: 'body', type: ['string'] } },
@@ -52,7 +53,7 @@ export const helpscout = defineProvider({
         status: { in: 'body', type: 'string', required: true, enum: ['active', 'closed', 'pending'] },
         customer: { in: 'body', type: customer, required: true },
         threads: { in: 'body', type: [{ type: 'reply', draft: true, text: 'string', customer }], required: true,
-          description: 'One reply thread, a draft: Help Scout sends the reply only when someone sends it; automatic workflows still run on new conversations.' },
+          description: 'Every thread is a reply and a draft: Help Scout sends a reply only when someone sends it; automatic workflows still run on new conversations.' },
         assignTo: { in: 'body', type: 'integer' }, tags: { in: 'body', type: ['string'] } },
       anyOf: [['customer.id'], ['customer.email']], result: { 'threadIds?': ['integer'] } },
     'conversations.update': { docs: `${ref}/conversations/update/`, method: 'PATCH', path: '/v2/conversations/{conversationId}',

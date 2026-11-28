@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { defineProvider, type Entry } from './catalogue.js';
+import { helpscout } from './catalogue/helpscout.js';
 import { client } from './client.js';
 import { ProviderHttpError } from './errors.js';
 import { fakeFetch, sequence } from './testing.js';
@@ -173,6 +174,13 @@ test('hostile: a hole in a list is an element, checked as one: a literal element
   await expect(client(fixed, { token: 'k', fetch: fake.fetch }).threads.create({ messages, 'x-version': '2026-06-12' }))
     .rejects.toThrow(new TypeError('param_invalid: messages'));
   expect(fake.calls).toEqual([]);
+});
+
+test("Help Scout's create keeps a thread's `draft` as given, so a call that saves a draft never sends a reply", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  await client(helpscout, { token: 'k', fetch: fake.fetch }).conversations.create({ subject: 'Hi', type: 'email', mailboxId: 1,
+    status: 'active', customer: { email: 'ana@example.test' }, threads: [{ type: 'reply', text: 'Hello', draft: true }] });
+  expect(JSON.parse(fake.calls[0]?.body ?? '{}')).toMatchObject({ threads: [{ type: 'reply', text: 'Hello', draft: true }] });
 });
 
 test('hostile: an own `__proto__` key beside a literal is read by the declared keys only', async () => {
