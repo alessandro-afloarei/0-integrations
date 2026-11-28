@@ -23,6 +23,8 @@ export const buffer = defineProvider({
     authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
   // `offline_access` brings the refresh token; each refresh returns a new one.
   scopes: { default: ['account:read', 'posts:read', 'offline_access'] },
+  // No revoke: the server's metadata names a revocation endpoint, and no page states what revoking ends:
+  // https://auth.buffer.com/.well-known/openid-configuration
   http: { baseUrl: 'https://api.buffer.com', retry: {} },
   identify: { request: { graphql: 'query Account { account { id name email } }' }, id: 'data.account.id',
     name: ['data.account.name', 'data.account.email'] },
