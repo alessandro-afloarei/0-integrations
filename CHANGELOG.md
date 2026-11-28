@@ -12,12 +12,13 @@ Nothing here is released yet.
   or `app.au.intercom.com`), which an EU or Australian workspace signing in with Google needs; its token URL and base
   stay on `api.intercom.io`.
 - Breaking: a stored value of a field with `choices` that is not exactly one of them, one differing only in case
-  included (`API.EU.INTERCOM.IO`), is `base_host_refused` on a call, identify, an authorize URL, an exchange, a refresh
-  and a revoke, where its host used to pass because the URL parser lowercases it. `startConnect` and `finishConnect`
-  already refused it (`connect_field_invalid`), so every connection they made is unchanged. A revoke now fills and
-  checks its URLs (an RFC 7009 revoke's, a request revoke's base) before it reads a token: one given no token whose
-  `values` are missing or refused is `template_missing` or `base_host_refused` where it used to be done; pass the
-  connection's `values`.
+  included (`API.EU.INTERCOM.IO`), is `base_host_refused` on every send whose URL it fills (a call, identify, an
+  authorize URL, an exchange, a refresh, a revoke), where its host used to pass because the URL parser lowercases it.
+  `startConnect` and `finishConnect` already refused it (`connect_field_invalid`), so every connection they made is
+  unchanged; an app that stored a value another way stores the choice exactly as written.
+- Breaking: a revoke fills and checks its URLs (an RFC 7009 revoke's, a request revoke's base) before it reads a token:
+  one given no token whose `values` are missing or refused is `template_missing` or `base_host_refused` where it used
+  to be done. Pass the connection's `values` to every `revokeGrant`.
 - Breaking: Intercom's OAuth 2 connections keep `appHost`. `authorizeUrl`, `exchangeCode` and `refreshGrant` need it in
   `values` (`'app.intercom.com'` for a connection made before, the host it signed in on), else `template_missing`
   before anything is sent; `revokeGrant` and `client()` take it, and their calls stay on `api.intercom.io`.
@@ -207,8 +208,8 @@ Nothing here is released yet.
   holding whitespace (a space or a trailing newline), the URL-safe alphabet (`-`, `_`) or another character outside
   base64, a last character with unused bits set (`YR==`), or one that decodes to only zero bytes, as is now a plain
   `hmac` secret of NUL characters. An unpadded secret is still accepted.
-- Intercom lists OAuth 2 first, on its US hosts (authorize on app.intercom.com, the token and every call on
-  api.intercom.io, which attempts to route a call to the workspace's region), with no revoke; its access token, on the
+- Intercom lists OAuth 2 first (authorize on its region's `appHost`, the token and every call on api.intercom.io,
+  which attempts to route a call to the workspace's region), with no revoke; its access token, on the
   region the person picks, is `signInWith(intercom, 'key')`, sent only to the three regional API hosts. Breaking: a key
   connection that still calls the whole entry with its `apiHost` (`client(intercom, { token, values: { apiHost } })`)
   is now refused (`value_undeclared: intercom apiHost`), nothing sent; an app narrows it with
