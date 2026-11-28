@@ -33,12 +33,12 @@ export const loops = defineProvider({
       anyOf: [['email'], ['userId']], result: [contact] },
     // A new contact starts the "Contact added" workflows, and a list it joins through `mailingLists` its "Contact added
     // to list" ones; they email the contact, and no parameter stops them (the API has no double opt-in).
-    'contacts.create': { docs: `${ref}/create-contact`, method: 'POST', path: '/v1/contacts/create',
+    'contacts.create': { docs: `${ref}/create-contact`, method: 'POST', path: '/v1/contacts/create', kind: 'write',
       params: { email: { in: 'body', type: 'string', required: true }, userId: { in: 'body', type: 'string' }, ...fields },
       result: { success: 'boolean', id: 'string' } },
     // An upsert: it updates the contact found by email or userId, else creates one; a change starts the "Contact
     // updated" workflows (a new contact or list, as on create), which email the contact; no parameter stops them.
-    'contacts.update': { docs: `${ref}/update-contact`, method: 'PUT', path: '/v1/contacts/update',
+    'contacts.update': { docs: `${ref}/update-contact`, method: 'PUT', path: '/v1/contacts/update', kind: 'write',
       params: { email: { in: 'body', type: 'string' }, userId: { in: 'body', type: 'string' }, ...fields },
       anyOf: [['email'], ['userId']], result: { success: 'boolean', id: 'string' } },
     'campaigns.list': { docs: `${ref}/list-campaigns`, path: '/v1/campaigns', paging: 'cursor', records: 'data',
@@ -47,11 +47,11 @@ export const loops = defineProvider({
     'campaigns.get': { docs: `${ref}/get-campaign`, path: '/v1/campaigns/{campaignId}', notFound: 'null',
       params: { campaignId: { in: 'path', type: 'string', required: true } }, result: campaign },
     // Creates a draft campaign and its empty email message; nothing is sent, and no schedule is set here.
-    'campaigns.create': { docs: `${ref}/create-campaign`, method: 'POST', path: '/v1/campaigns',
+    'campaigns.create': { docs: `${ref}/create-campaign`, method: 'POST', path: '/v1/campaigns', kind: 'write',
       params: { name: { in: 'body', type: 'string', required: true }, ...audience }, result: campaign },
     // An event starts the workflows it triggers, which email the contact, and no parameter stops them; the contact is
     // created or updated with it.
-    'events.create': { docs: `${ref}/send-event`, method: 'POST', path: '/v1/events/send',
+    'events.create': { docs: `${ref}/send-event`, method: 'POST', path: '/v1/events/send', kind: 'write',
       params: { eventName: { in: 'body', type: 'string', required: true }, email: { in: 'body', type: 'string' },
         userId: { in: 'body', type: 'string' }, eventProperties: { in: 'body', type: 'unknown' },
         mailingLists: { in: 'body', type: 'unknown', description: 'Mailing list ids, each true to add the contact or false to remove it.' },
