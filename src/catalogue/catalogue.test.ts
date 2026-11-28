@@ -235,6 +235,7 @@ const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https:
 const HEADERS_WRITTEN_OUT = '`http.headers` values written out in full, with no placeholder (none is ever filled: the braces would be sent)';
 const NEAR_TYPE_NAME = 'no string literal that differs from a type name by its case or one edit (`strng`, `Integer`): write the type name, or another literal';
 const NULLABLE_LITERAL = 'no `nullable` on a parameter whose type is a literal (it would send `null` beside the one value): leave `nullable` out';
+const ONE_QUERY_TEXT = 'each GraphQL operation its own query text: two with the same text are one operation, so declare one';
 const RESULT_LITERAL = "no literal type in an operation's `result` (a record holding another value would be skipped, silently): give the key its type name";
 const PLACED = "a `params[].in` the operation's request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL, a header a scalar, never `nullable`, never named `content-type`, `host` or a sign-in's credential header)";
 const runnable = {
@@ -376,6 +377,9 @@ const runnable = {
     'boolean', 'unknown'].every(name => literal.toLowerCase() !== name && !oneEdit(literal.toLowerCase(), name))),
   // A literal fixes one value; `nullable` would let a call send `null` as a second.
   [NULLABLE_LITERAL]: (entry: Entry) => params(entry).every(param => param.nullable === undefined || !isLiteral(param.type)),
+  // The derived fake tells GraphQL operations apart by their query alone: a second one of the same text never answers.
+  [ONE_QUERY_TEXT]: (entry: Entry) => { const texts = operations(entry).flatMap(op => ('graphql' in op ? [op.graphql] : []));
+    return new Set(texts).size === texts.length; },
   [RESULT_LITERAL]: (entry: Entry) => operations(entry).every(op => op.result === undefined || !literalIn(op.result)),
   // A paged operation yields its records: a 404 is no record to answer null for.
   '`notFound` only on an operation with no `paging`': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
@@ -760,6 +764,7 @@ test.each<[Rule, Entry]>([
     ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1', '2'] } } } }],
     [NULLABLE_LITERAL, { add: { method: 'POST', path: '/items', params: { flag: { in: 'body', type: true, required: true, nullable: true } } } }],
     [NULLABLE_LITERAL, { add: { method: 'POST', path: '/items', params: { kind: { in: 'body', type: 'reply', nullable: true } } } }],
+    [ONE_QUERY_TEXT, { 'issues.list': { graphql: 'query { issues { id } }' }, 'issues.mine': { graphql: 'query { issues { id } }' } }],
     [RESULT_LITERAL, { list: { path: '/items', result: { kind: 'x' } } }],
     [RESULT_LITERAL, { list: { path: '/items', result: { items: [{ 'draft?': true }] } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],

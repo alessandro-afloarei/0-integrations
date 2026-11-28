@@ -342,6 +342,20 @@ describe('fakeProvider', () => {
         threads: [{ type: 'reply', text: 'Hi', customer: { id: 1 }, draft }] }) }).then(answer);
     await expect(sent(null)).resolves.toEqual({ status: 200, body: { by: 'create' } });
     await expect(sent(true)).resolves.toEqual({ status: 200, body: { by: 'draft' } });
+    // A null for the required list of draft threads carries none of its literals either.
+    await expect(fetch('https://api.helpscout.net/v2/conversations', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ subject: 'Hi', type: 'email', mailboxId: 1, status: 'active', customer: { id: 1 }, threads: null }) }).then(answer))
+      .resolves.toEqual({ status: 200, body: { by: 'create' } });
+  });
+
+  test('a null for an optional list holds none of its literals, and breaks nothing', async () => {
+    const labelled = defineProvider({ id: 'labelled', name: 'Labelled', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.labelled.test' }, operations: {
+      'notes.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'string', required: true } } },
+      'drafts.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'draft', required: true },
+        labels: { in: 'body', type: [{ by: 'agent' }] } } } } });
+    const { fetch } = fakeFetch(fakeProvider(labelled, { key: 'k', operations: { 'notes.create': () => ({ by: 'note' }), 'drafts.create': () => ({ by: 'draft' }) } }));
+    await expect(fetch('https://api.labelled.test/notes', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ kind: 'draft', labels: null }) }).then(answer)).resolves.toEqual({ status: 200, body: { by: 'draft' } });
   });
 
   test('a path literal chooses its operation on a shared route, as its text', async () => {

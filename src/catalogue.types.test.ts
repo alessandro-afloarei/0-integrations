@@ -301,6 +301,13 @@ function literals() {
   defineProvider({ ...base, operations: { 'drafts.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', type: sent } } } } });
   defineProvider({ ...base, operations: { 'items.get': { path: '/items', result: { id: 'string', count: 'integer' } },
     'drafts.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', type: { send: true } } } } } });
+  // A union of shapes (a conditional choosing one) is checked member by member.
+  const nested = { nested: 'agent' };
+  const chosen = Math.random() > 0.5 ? (['agent'] as const) : nested;
+  const kept = Math.random() > 0.5 ? (['agent'] as const) : ({ nested: 'agent' } as const);
+  // @ts-expect-error the object member's `nested` is `string`, not 'agent'
+  defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: chosen } } } } });
+  defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: kept } } } } });
   // The refusal's own words: the operation must then be that message, which no operation is.
   type Checked<D extends Entry> = NonNullable<Parameters<typeof defineProvider<D>>[0]['operations']>;
   type Words = 'a shape holds a `string` or `boolean`: write every shape constant it uses `as const`';

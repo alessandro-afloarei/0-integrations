@@ -110,12 +110,12 @@ function put(into: Record<string, unknown>, path: string, value: unknown): Recor
   return into;
 }
 /** How many of a shape's literals a value sent holds, or -1 when it breaks one or lacks a required key: an object's at
- * each key (a `key?` missing, or a null other than for a required literal, holds none), a list's in every element. */
+ * each key (a `key?` missing or null, or a null for a type name, holds none), a list's in every element. */
 function literalsHeld(shape: Shape, value: unknown): number {
   if (typeof shape !== 'object') return isLiteral(shape) ? (value === shape ? 1 : -1) : 0;
   const held = Array.isArray(shape) ? (Array.isArray(value) ? value : [undefined]).map(item => literalsHeld((shape as readonly [Shape])[0], item))
     : Object.entries(shape).map(([key, inner]) => { const found = readPath(value, key.replace(/\?$/u, ''));
-      return found === undefined ? (key.endsWith('?') ? 0 : -1) : found === null && (key.endsWith('?') || !isLiteral(inner)) ? 0
+      return found === undefined ? (key.endsWith('?') ? 0 : -1) : found === null && (key.endsWith('?') || (typeof inner === 'string' && !isLiteral(inner))) ? 0
         : literalsHeld(inner, found); });
   return held.includes(-1) ? -1 : held.reduce((sum, count) => sum + count, 0);
 }
