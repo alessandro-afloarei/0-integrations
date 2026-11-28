@@ -41,10 +41,10 @@ export const kit = defineProvider({
     'subscribers.get': { docs: `${ref}/subscribers/get-a-subscriber`, path: '/subscribers/{id}', notFound: 'null', params: id,
       result: { subscriber } },
     // An upsert: an existing email address has its first name updated. The page names no email this call sends.
-    'subscribers.create': { docs: `${ref}/subscribers/create-a-subscriber`, method: 'POST', path: '/subscribers',
+    'subscribers.create': { docs: `${ref}/subscribers/create-a-subscriber`, method: 'POST', path: '/subscribers', kind: 'write',
       params: { email_address: { in: 'body', type: 'string', required: true }, ...written,
         state: { in: 'body', type: 'string', enum: ['active', 'inactive', 'cancelled', 'bounced'],
-          description: 'The state a new subscriber is created in, active by default; complained is not offered.' } },
+          description: 'The state a new subscriber is created in, active by default; complained is not offered. An existing subscriber\'s state is not changed: "Updating the subscriber state with this endpoint is not supported".' } },
       result: { subscriber } },
     'subscribers.update': { docs: `${ref}/subscribers/update-a-subscriber`, method: 'PUT', path: '/subscribers/{id}',
       params: { ...id, email_address: { in: 'body', type: 'string', required: true }, ...written }, result: { subscriber } },
@@ -52,20 +52,6 @@ export const kit = defineProvider({
       params: { status: { in: 'query', type: 'string', enum: ['draft', 'scheduled', 'sending', 'completed', 'aborted'] }, ...perPage },
       result: { broadcasts: [broadcast] } },
     'broadcasts.get': { docs: `${ref}/broadcasts/get-a-broadcast`, path: '/broadcasts/{id}', notFound: 'null', params: id,
-      result: { broadcast } },
-    // A draft when `send_at` is null; a time schedules the send for then. The call itself sends nothing, and `public`
-    // is fixed false, so nothing is published to the web.
-    'broadcasts.create': { docs: `${ref}/broadcasts/create-a-broadcast`, method: 'POST', path: '/broadcasts',
-      params: { subject: { in: 'body', type: 'string', required: true }, content: { in: 'body', type: 'string', required: true,
-        description: 'The email\'s HTML.' }, description: { in: 'body', type: 'string', required: true },
-      preview_text: { in: 'body', type: 'string', required: true },
-      published_at: { in: 'body', type: 'string', required: true, description: 'The published timestamp to display, ISO 8601.' },
-      public: { in: 'body', type: false, required: true },
-      send_at: { in: 'body', type: 'string', required: true, nullable: true,
-        description: 'null saves a draft; a future ISO 8601 time schedules the broadcast to send to its subscribers then.' },
-      subscriber_filter: { in: 'body', type: [{ 'all?': [{ type: 'string', ids: ['integer'] }], 'any?': [{ type: 'string', ids: ['integer'] }],
-        'none?': [{ type: 'string', ids: ['integer'] }] }],
-      description: 'One filter group (all, any or none) of segment or tag ids, each `type` segment or tag; all subscribers when left out (the schema marks it required).' } },
       result: { broadcast } },
   },
 });

@@ -2,8 +2,7 @@ import { defineProvider } from '../catalogue.js';
 
 /** EmailOctopus API v2: an API key as Bearer; identify only checks it on the lists list, the page's own check.
  * Campaigns are read only: the API has no campaign create or send. A 429 is retried after a second (the bucket refills
- * 10 tokens a second); `X-RateLimit-Retry-After` states no unit. No webhooks are documented.
- * https://emailoctopus.com/api-documentation/v2 */
+ * 10 tokens a second); `X-RateLimit-Retry-After` states no unit: https://emailoctopus.com/api-documentation/v2 */
 const contact = { id: 'string', email_address: 'string', 'status?': 'string', 'tags?': ['string'], 'fields?': 'unknown',
   'created_at?': 'string', 'last_updated_at?': 'string' } as const;
 const campaign = { id: 'string', 'status?': 'string', 'name?': 'string', 'subject?': 'string', 'to?': ['string'],
@@ -13,7 +12,7 @@ const contactId = { contact_id: { in: 'path', type: 'string', required: true,
   description: 'The contact\'s id, or the MD5 hash of the lowercase email address.' } } as const;
 const limit = { limit: { in: 'query', type: 'integer', description: 'At most 100 results per page.' } } as const;
 const status = { in: 'body', type: 'string', enum: ['pending', 'subscribed', 'unsubscribed'],
-  description: 'No page says whether pending sends a confirmation email.' } as const;
+  description: 'No page says whether a status skips the double opt-in email, or whether subscribed re-subscribes a person who unsubscribed.' } as const;
 const fields = { fields: { in: 'body', type: 'unknown', description: 'Field values keyed by each field\'s tag.' } } as const;
 const ref = 'https://emailoctopus.com/api-documentation/v2#tag';
 
@@ -25,6 +24,10 @@ export const emailoctopus = defineProvider({
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://api.emailoctopus.com', retry: {} },
   identify: { request: { path: '/lists', query: { limit: '1' } } },
+  // `EmailOctopus-Signature` is `sha256=` and the hex HMAC-SHA256 of the raw body, keyed by the endpoint's secret. No
+  // timestamp is signed. No delivery id: a request holds up to 1000 events, each `id` "can be used to ensure you only
+  // process a certain event once": https://help.emailoctopus.com/article/314-webhooks
+  webhook: { kind: 'hmac', header: 'emailoctopus-signature', prefix: 'sha256=' },
   paging: { cursor: { kind: 'cursor', next: 'paging.next.starting_after', send: { query: 'starting_after' } } },
   operations: {
     'lists.list': { docs: `${ref}/List/operation/api_lists_get`, path: '/lists', paging: 'cursor', records: 'data', params: limit,
@@ -35,10 +38,11 @@ export const emailoctopus = defineProvider({
         tag: { in: 'query', type: 'string' }, ...limit }, result: { data: [contact] } },
     'contacts.get': { docs: `${ref}/Contact/operation/api_lists_list_idcontacts_contact_id_get`, path: '/lists/{list_id}/contacts/{contact_id}',
       notFound: 'null', params: { ...listId, ...contactId }, result: contact },
-    // Adds a contact to the list; no page names a confirmation email, but a contact subscribing to a list or tagged can
-    // start the account's automations, which send emails, and no parameter stops them. A contact already in the list is
-    // refused (already-exists).
+    // Adds a contact. With double opt-in on the list the contact is sent a confirmation email: the list decides, not a
+    // parameter (https://help.emailoctopus.com/article/36-how-to-edit-double-opt-in). Subscribing or tagging a
+    // contact can start the account's automations, which send emails; none stops them. A listed contact is refused.
     'contacts.create': { docs: `${ref}/Contact/operation/api_lists_list_idcontacts_post`, method: 'POST', path: '/lists/{list_id}/contacts',
+      kind: 'write',
       params: { ...listId, email_address: { in: 'body', type: 'string', required: true }, ...fields,
         tags: { in: 'body', type: ['string'] }, status }, result: contact },
     'contacts.update': { docs: `${ref}/Contact/operation/api_lists_list_idcontacts_contact_id_put`, method: 'PUT',

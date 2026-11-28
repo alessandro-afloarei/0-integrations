@@ -41,11 +41,11 @@ export const mailerlite = defineProvider({
     // An upsert: an existing email address is updated, its omitted fields and groups kept. On an account with double
     // opt-in a new subscriber starts unconfirmed and receives a confirmation email, which no parameter stops; a group
     // can start automations for the people who join it (https://developers.mailerlite.com/api/groups).
-    'subscribers.create': { docs: `${ref}/subscribers#createupsert-subscriber`, method: 'POST', path: '/subscribers',
+    'subscribers.create': { docs: `${ref}/subscribers#createupsert-subscriber`, method: 'POST', path: '/subscribers', kind: 'write',
       params: { email: { in: 'body', type: 'string', required: true }, ...fields,
         groups: { in: 'body', type: ['string'], description: 'Group ids to add the subscriber to; none is removed.' },
         status: { in: 'body', type: 'string', enum: ['active', 'unsubscribed', 'unconfirmed', 'bounced'],
-          description: 'New subscribers default to active, or unconfirmed with double opt-in; junk is not offered.' } },
+          description: 'New subscribers default to active, or unconfirmed with double opt-in; junk is not offered. For an unsubscribed, bounced or junk subscriber active is ignored (resubscribe, which reactivates them, is not declared).' } },
       result: { data: subscriber } },
     // Adding a group or changing a field can start an automation the account set up, which can email the subscriber:
     // https://developers.mailerlite.com/api/automation-triggers
@@ -53,7 +53,7 @@ export const mailerlite = defineProvider({
       params: { id: { in: 'path', type: 'string', required: true }, email: { in: 'body', type: 'string' }, ...fields,
         groups: { in: 'body', type: ['string'], description: 'The complete set of group ids: the subscriber leaves any group not listed.' },
         status: { in: 'body', type: 'string', enum: ['active', 'unsubscribed', 'bounced'],
-          description: 'unconfirmed and junk are not offered.' } },
+          description: 'unconfirmed and junk are not offered. Setting active on an unsubscribed, bounced or junk subscriber is ignored.' } },
       result: { data: subscriber } },
     'campaigns.list': { docs: `${ref}/campaigns#campaign-list`, path: '/campaigns', paging: 'page', records: 'data',
       params: { 'filter[status]': { in: 'query', type: 'string', enum: ['sent', 'draft', 'ready'],
