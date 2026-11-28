@@ -29,7 +29,10 @@ export const sproutsocial = defineProvider({
         'native_id?': 'string', 'groups?': ['integer'] }] } },
     'publishingPosts.get': { docs: `${docs}#retrieve-publishing-post-endpoint`, path: '/publishing/posts/{publishing_post_id}',
       params: { publishing_post_id: { in: 'path', type: 'integer', required: true } }, result: fanned },
+    // Makes a draft (`is_draft: true`, the only kind Sprout creates) on its calendar: nothing is published or
+    // scheduled until a person does so in Sprout.
     'publishingPosts.create': { docs: `${docs}#create-publishing-post-endpoint`, method: 'POST', path: '/publishing/posts',
+      kind: 'write',
       params: {
         group_id: { in: 'body', type: 'integer', required: true, description: 'The group to create the post in.' },
         customer_profile_ids: { in: 'body', type: ['integer'], required: true,
