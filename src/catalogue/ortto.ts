@@ -8,7 +8,7 @@ const ref = 'https://help.ortto.com';
 /** The default, Australian and European service endpoints: https://help.ortto.com/a-250-api-reference */
 const hosts = ['api.ap3api.com', 'api.au.ap3api.com', 'api.eu.ap3api.com'] as const;
 const people = { in: 'body', required: true, type: [{ fields: 'unknown', 'tags?': ['string'], 'unset_tags?': ['string'] }],
-  description: 'Up to 100 people, each its person fields by field id (str::email, str::first, str:cm:<custom>), with a value for the merge key: the merge_by fields the call gives, else the unique identifier list of the key\'s Custom API data source; tags to apply and to remove; bol::p and bol::sp the email and SMS permissions (bol::p true sets a person\'s email permission back to true); null clears a field.' } as const;
+  description: '1 to 100 people (an empty list is not refused by the entry), each its person fields by field id (str::email, str::first, str:cm:<custom>), with a value for the merge key: the merge_by fields the call gives, else the unique identifier list of the key\'s Custom API data source; tags to apply and to remove; bol::p and bol::sp the email and SMS permissions (bol::p true sets a person\'s email permission back to true); null clears a field.' } as const;
 
 export const ortto = defineProvider({
   id: 'ortto', name: 'Ortto', docs: `${ref}/a-223-developer-guide`,
@@ -57,7 +57,7 @@ export const ortto = defineProvider({
       path: '/audience/subscribe',
       params: { audience_id: { in: 'body', type: 'string', required: true, description: 'The audience\'s id, from its URL in Ortto.' },
         people: { in: 'body', required: true, type: [{ 'email?': 'string', 'external_id?': 'string', 'person_id?': 'string', subscribed: true }],
-          description: 'Up to 1000 people, each named by one of email, external_id or person_id (the entry does not check that one is given) and subscribed to the audience\'s email (true subscribes a person who unsubscribed from it again); a person must already be a member of the audience.' },
+          description: 'Up to 1000 people (an empty list is not refused by the entry), each named by one of email, external_id or person_id (the entry does not check that one is given) and subscribed to the audience\'s email (true subscribes a person who unsubscribed from it again); a person must already be a member of the audience.' },
         async: { in: 'body', type: 'boolean' } } },
     // An activity can enter its person into journeys, create that person (opted in to email by default) and change
     // their email permission: https://help.ortto.com/a-733-journey-entry-criteria
