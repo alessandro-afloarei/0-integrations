@@ -22,7 +22,7 @@ export const rocketreach = defineProvider({
   auth: [{ kind: 'key', send: { header: 'api-key' } }],
   http: { baseUrl: 'https://api.rocketreach.co/api/v2', retry: {} },
   identify: { request: { path: '/account/' }, id: 'id', name: 'email' },
-  webhook: { kind: 'hmac', header: 'x-rocketreach-signature', encoding: 'base64', deliveryId: { header: 'rr-request-id' } },
+  webhook: { kind: 'hmac', header: 'x-rocketreach-signature', encoding: 'base64' },
   operations: {
     'people.search': { docs: `${ref}/people-search-api`, method: 'POST', path: '/person/search', kind: 'write', params: search,
       result: [person] },

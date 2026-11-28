@@ -22,5 +22,7 @@ and keyword search against caller-owned fixture data.
 
 After verifying the raw request with `verifyWebhook`, Fireflies' `parseWebhook(body)` reads the V2 event,
 `meeting_id` and timestamp (number, or legacy string). Unknown fields are omitted; malformed events return null.
-`deliveryId(fireflies.webhook, request)` from `0-integrations/webhooks` reads `event:meeting_id`, the id to dedupe on.
-Apps own deduplication and retain original bytes.
+The entry declares no delivery id: `event` and `meeting_id` name the meeting, and with "Resend when a meeting's notes
+change" on, a resend carries the same pair, so `deliveryId(fireflies.webhook, request)` answers null. Dedupe on your
+own key (the event, the meeting id and the body's `reprocessed_at`, absent on a first delivery) and retain original
+bytes.

@@ -1,7 +1,7 @@
 # Providers
 
 Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers: 132 declared, 0 recorded;
-562 typed operations; webhooks: basic 3, ed25519 1, hmac 41, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
+562 typed operations; webhooks: basic 3, ed25519 1, hmac 43, standard 7, token 3. What waits is in the [waiting list](waiting-list.md).
 
 | Provider | Categories | Sign-in | Operations | Webhook | Tier |
 |---|---|---|---|---|---|
@@ -52,7 +52,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers:
 | [Freshdesk](https://developers.freshdesk.com/api/#authentication) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, conversations.list, conversations.create, notes.create, contacts.list, contacts.search | — | declared |
 | [Freshsales](https://developers.freshworks.com/crm/api/#authentication) | crm | key | contacts.list, contacts.search, contacts.get, contacts.create, contacts.update, accounts.list, deals.list | — | declared |
 | [Freshservice](https://api.freshservice.com/#authentication) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, conversations.list, conversations.create, notes.create, requesters.list | — | declared |
-| [Front](https://dev.frontapp.com/docs/oauth) | support, mail | OAuth 2, key | conversations.list, conversations.search, conversations.get, inboxes.list, drafts.create, messages.create, conversations.update, messages.list, replies.create, comments.create, contacts.list | — | declared |
+| [Front](https://dev.frontapp.com/docs/oauth) | support, mail | OAuth 2, key | conversations.list, conversations.search, conversations.get, inboxes.list, drafts.create, messages.create, conversations.update, messages.list, replies.create, comments.create, contacts.list | hmac | declared |
 | [Gist](https://developers.getgist.com/docs/working-with-oauth) | support | OAuth 2, key | conversations.list, conversations.search, conversations.get, conversations.update, messages.list, messages.create, contacts.list | — | declared |
 | [GitBook](https://gitbook.com/docs/developers/gitbook-api/authentication) | docs | key | pages.list, pages.get, spaces.list | — | declared |
 | [GitHub](https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api) | code | OAuth 2, key | — | — | declared |
@@ -133,7 +133,7 @@ Generated from `src/catalogue/` by `pnpm providers`: do not edit. 132 providers:
 | [Whereby](https://docs.whereby.com/getting-started/overview-of-whereby-embedded/initial-setup) | meetings | key | meetings.list, meetings.get, recordings.list, meetings.create | hmac | declared |
 | [Wrike](https://developers.wrike.com/docs/oauth-20-authorization) | tasks | OAuth 2 | tasks.list, tasks.get, tasks.create, tasks.update, folders.list | — | declared |
 | [Zammad](https://docs.zammad.org/en/latest/api/intro.html) | support | key | tickets.list, tickets.search, tickets.get, tickets.create, tickets.update, articles.list, articles.create, users.list | hmac | declared |
-| [Zendesk](https://developer.zendesk.com/api-reference/introduction/security-and-auth/) | support | OAuth 2, key | tickets.list, tickets.get, tickets.create, tickets.update, comments.list, users.list, users.search | — | declared |
+| [Zendesk](https://developer.zendesk.com/api-reference/introduction/security-and-auth/) | support | OAuth 2, key | tickets.list, tickets.get, tickets.create, tickets.update, comments.list, users.list, users.search | hmac | declared |
 | [Zoom](https://developers.zoom.us/docs/internal-apps/s2s-oauth/) | meetings | token | — | — | declared |
 | [ZoomInfo](https://docs.gtm.ai/docs/client-credentials-flow) | sales | token | contacts.search, contacts.get, companies.search, companies.get | — | declared |
 | [Zulip](https://zulip.com/api/http-headers) | chat | key | channels.list, messages.list, messages.create, users.list | — | declared |

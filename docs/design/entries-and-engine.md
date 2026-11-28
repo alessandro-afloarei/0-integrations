@@ -339,6 +339,11 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   `OAuthClient<typeof entry>` has no `clientSecret` (Firecrawl, Brevo).
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
+- A code exchange's answer is read and classified as a `token` sign-in's token answer is (below), by the same
+  function, since no grant existed; a 200 the entry's `failed` marks is `rejected` too.
+  `GrantRevoked` means a grant that existed (a refresh, a call). A refusal of the exchange, a refresh or a revoke is
+  read from its body even beside a `WWW-Authenticate` challenge (Doorkeeper sends one on every error; RFC 6749 §5.2
+  asks for one beside a 401 `invalid_client`).
 - `oauth2.json`: the code exchange, the refresh and an RFC 7009 revoke send the same parameters as one JSON object
   (Atlassian) with `content-type: application/json`, the client's parameters in it as `clientAuth` says (Basic stays a
   header). The answer is read as a form-bodied one is.
@@ -353,8 +358,13 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     `expires_in` that is a positive finite number of seconds is its life (none: kept until refused); the caller that
     requested a token gets it, however short its life. A 2xx without a token is `invalid_response` (`missing_fields`);
     400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the answer's `error` when it is one of the RFC's
-    codes (`invalid_client`, …), else none; any other answer is classified as usual. No detail holds a secret field, a
-    body value filled from one, or the Basic value sent.
+    codes (`invalid_grant`, `invalid_client`, …), else none; any other answer is classified as a call's is (a 404
+    `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`, the rest `request_failed`), no code
+    reading as a revoked grant: the entry's `errors.revoked` list is not read, since no grant existed. An answer whose
+    body breaks while it is read, refused or not, is `unavailable`. A refused answer is read up to 10 MiB, the bound
+    the HTTP library puts on a call's error body; a larger one is classified from its status and headers alone, with
+    no detail. A 2xx is read whole (an exchange's by oauth4webapi), with no bound. No detail holds a secret field, a body value filled from one, or the
+    Basic value sent.
     The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps
     the token until it is passed back as refused or a call comes within 60 seconds of its expiry, or after it (that
@@ -624,23 +634,26 @@ repeated-cursor guard.
 ### `webhook`
 
 ```ts
-type Timestamp = { header: string; toleranceSeconds?: number };
+type Timestamp = { header: string; unit?: 'epochMs' | 'iso8601'; toleranceSeconds?: number };
 type Webhook = (
   | { kind: 'hmac'; header: string; signed?: Template; prefix?: string; encoding?: 'base64'; hash?: 'sha1';
-      secret?: 'base64' | 'hex'; part?: string; timestamp?: Timestamp | { part: string; toleranceSeconds?: number } }
+      secret?: 'base64' | 'hex'; part?: string;
+      timestamp?: Timestamp | { part: string; unit?: 'epochMs' | 'iso8601'; toleranceSeconds?: number } }
   | { kind: 'ed25519'; header: string; signed?: Template; timestamp?: Timestamp }
   | { kind: 'token'; header: string }
   | { kind: 'standard' }
   | { kind: 'basic' }
 ) & { deliveryId?: { header: string } | { body: readonly Path[] };
   challenge?: { unsigned?: true }
-    & ({ when: When; echo: Path; text?: true } | { when?: When; echo: { query: string }; text: true }) };
+    & ({ when: When; echo: Path; text?: true } | { when?: When; echo: { query: string } | { header: string }; text: true }) };
 ```
 
 `verifyWebhook(entry.webhook, request, secret)` is a boolean over the raw body bytes: it never throws on a hostile
-request. Every comparison is constant time over buffers of equal length, a timestamp is plain seconds inside its
-tolerance (300 seconds by default), and a signature header longer than 8 KiB is `false` before it is parsed.
-`deliveryId` is what an app dedupes on; several body paths are joined with `:`.
+request. Every comparison is constant time over buffers of equal length, a timestamp is inside its tolerance (item 3),
+and a signature header longer than 8 KiB is `false` before it is parsed.
+`deliveryId` is what an app dedupes on; several body paths are joined with `:`. A catalogue entry's `deliveryId` is
+signed content where the scheme signs anything: a body path for `hmac` and `ed25519`, the signed id header for
+`standard`. `basic` and `token` sign nothing, so a header is no weaker than the body there.
 
 1. `hmac` signs the filled `signed` (the raw body by default) with HMAC-SHA256, or HMAC-SHA1 with `hash: 'sha1'`
    (Intercom), and compares `prefix` and the hex digest (base64 with `encoding`). The key is the secret's bytes, or
@@ -653,7 +666,11 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
    passes when one of them equals the digest. A part's value is the signature alone, so the table refuses `prefix`
    beside it (an app's own entry with both compares `prefix` and the digest inside the piece) and a `part` name holding
    a `,`, `=` or whitespace.
-3. `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in
+3. A timestamp is plain epoch seconds by default; `unit: 'epochMs'` reads whole epoch milliseconds, and
+   `unit: 'iso8601'` an ISO 8601 instant with its zone, read as a `Wait` reads one (a fraction, `Z` or an offset; a date
+   alone, no zone or a time the calendar lacks is none). Each is checked within `toleranceSeconds` (300 by default) of
+   now. The header's text, as received, is what is signed. Seconds are compared in whole seconds.
+   `timestamp: { part }` reads the timestamp from the first piece of that name in the same header; `{timestamp}` in
    `signed` is that value. `timestamp.part` needs `part`, and `{timestamp}` is in `signed` exactly when there is a
    `timestamp`: a tolerance on a timestamp that is not signed would let a replay pass with a fresh one. `verifyWebhook`
    is `false` for an app's own declaration whose `signed` lacks `{body}`, or lacks `{timestamp}` beside a timestamp;
@@ -677,22 +694,26 @@ tolerance (300 seconds by default), and a signature header longer than 8 KiB is 
 8. A header send's `value` (`Send.value`, Discord's `Bot {token}`, Trello's) is filled as every credential template is.
 9. `challengeAnswer(webhook, request, secret)` answers a handshake, or is null. It checks the request first with
    `verifyWebhook`, unless the challenge is `unsigned` (Fellow's and Nylas' verification requests carry no signature).
-   The value is read at `echo`: a body path (Slack, Discord, Fellow) or a query parameter (Nylas' `challenge`, on a GET
-   with no body; a request with a body is no query handshake). It answers when `when` holds (a body path needs one; a
-   query may leave it out, the value's presence then deciding) and the value is a string of 1 to 512 printable ASCII
-   characters without a space, `<` or `>`, or for a JSON answer also a finite number: as JSON `{ [echo]: value }` (a
-   query is answered only as `text`), or with `text` as the value alone, `content-type: text/plain; charset=utf-8`, its
+   The value is read at `echo`: a body path (Slack, Discord, Fellow), a query parameter (Nylas' `challenge`, on a GET
+   with no body; a request with a body is no query handshake) or a request header (Front's `x-front-challenge`). It
+   answers when `when` holds (a body path needs one; a query or a header may leave it out, the value's presence then
+   deciding) and the value is a string of 1 to 512 printable ASCII characters without a space, `<` or `>`, or for a
+   JSON answer also a finite number: as JSON `{ [echo]: value }` (a value read from a query or a
+   header is answered only as `text`), or with `text` as the value alone, `content-type: text/plain; charset=utf-8`, its
    `content-length` (Nylas refuses a chunked answer) and `x-content-type-options: nosniff`. A challenge answer changes
    nothing and holds nothing secret; an app calls it first, and verifies every other request.
 
 In the code today: `hmac` (Breakcold, Fireflies, Slack), with `hash` (Intercom), `part` (Stripe) and `secret` (Airtable,
 Chatwork, Close), `ed25519` and `Send.value` (Discord, Trello), `token` (Google; on `authorization`: Krisp),
 `standard` (GitLab; Svix's names: AgentMail, Resend, Fellow, Recall.ai's older accounts), `basic` (Mailjet, Pipedrive,
-Postmark) and `challenge` (Slack, Discord; as text and `unsigned`: Fellow from the body, Nylas from a query). A secret
+Postmark) and `challenge` (Slack, Discord; as text: Front from a header, and `unsigned`, Fellow from the body and Nylas
+from a query). Timestamps are seconds but for Zendesk (`iso8601`) and Front (`epochMs`). A secret
 that keys nothing (one that does not decode exactly, a key of only zero bytes, or a Basic secret without a password) is
 `false`. The table test also refuses a `challenge.when` with a `status` or `detail`, a body `echo` whose `when` reads no
-body `path`, an `echo` path holding a `.`, an empty query name and a query `echo` without `text` (a body `echo` without
-a `when` does not compile). Front's challenge, read from its `x-front-challenge` header, is not declared yet.
+body `path`, an `echo` path holding a `.`, an empty query name, a query or header `echo` without `text`, a header `echo`
+that is no lowercase token or that names the webhook's signature or timestamp header, a timestamp `unit` other than
+`epochMs` and `iso8601`, and a header `deliveryId` on an `hmac` or `ed25519` webhook (its signature does not cover a
+header, so a replay renames it) (a body `echo` without a `when` does not compile).
 
 Left as code in a module, not data: Twilio (sorted form parameters), HubSpot v3 (URI decoding), PayPal (a certificate
 chain), SendGrid (ECDSA DER), Microsoft Graph rich notifications and Jira app tokens (JWT). Not declared until a
@@ -973,7 +994,7 @@ One table test, `src/catalogue/catalogue.test.ts`, runs over every entry in the 
    comparing a token request with the one the engine sends for the good key. Every sign-in of an entry that sends a
    request to sign in (an identify request, or a `token` sign-in's token request) signs in on it with a good key and is
    `rejected` with a bad one, and every OAuth 2 sign-in connects with a good code and is refused with a bad one
-   (`GrantRevoked`), with no recording.
+   (`rejected`, `invalid_grant`), with no recording.
 4. **Module fake**, when the provider's module has one: its kit runs the same cases against the fake, so the fake is
    held to the recording.
 

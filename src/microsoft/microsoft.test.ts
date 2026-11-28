@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { microsoft } from '../catalogue/microsoft.js';
 import { finishConnect, startConnect } from '../connect.js';
-import { GrantRevoked } from '../errors.js';
+import { GrantRevoked, ProviderHttpError } from '../errors.js';
 import { GOOD_KEY, providerKit, type Recording } from '../kit.test-support.js';
 import { refreshGrant } from '../oauth.js';
 import { fakeFetch, sequence } from '../testing.js';
@@ -126,7 +126,7 @@ test('signs a mailbox in with PKCE, keys it by its immutable user id, and rotate
   await expect(refreshGrant(microsoft, KIT_CLIENT, first, { fetch: fake.fetch })).rejects.toBeInstanceOf(GrantRevoked);
   // The same code twice, or one without its verifier, is refused.
   await expect(finishConnect(microsoft, { client: KIT_CLIENT, code: back.searchParams.get('code') ?? '', redirectUri: KIT_REDIRECT,
-    codeVerifier: started.codeVerifier, fetch: fake.fetch, onRevokeFailed: () => undefined })).rejects.toBeInstanceOf(GrantRevoked);
+    codeVerifier: started.codeVerifier, fetch: fake.fetch, onRevokeFailed: () => undefined })).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
 });
 
 test('refuses a mailbox whose user has no address at its first read', async () => {

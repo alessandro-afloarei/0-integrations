@@ -9,15 +9,23 @@ import { close } from './catalogue/close.js';
 import { discord } from './catalogue/discord.js';
 import { fellow } from './catalogue/fellow.js';
 import { fireflies } from './catalogue/fireflies.js';
+import { front } from './catalogue/front.js';
 import { gitlab } from './catalogue/gitlab.js';
 import { google } from './catalogue/google.js';
 import { intercom } from './catalogue/intercom.js';
 import { mailjet } from './catalogue/mailjet.js';
 import { recallai } from './catalogue/recallai.js';
+import { linear } from './catalogue/linear.js';
 import { nylas } from './catalogue/nylas.js';
+import { pagerduty } from './catalogue/pagerduty.js';
 import { pipedrive } from './catalogue/pipedrive.js';
+import { rocketreach } from './catalogue/rocketreach.js';
+import { sentry } from './catalogue/sentry.js';
 import { slack } from './catalogue/slack.js';
 import { stripe } from './catalogue/stripe.js';
+import { tidycal } from './catalogue/tidycal.js';
+import { todoist } from './catalogue/todoist.js';
+import { zendesk } from './catalogue/zendesk.js';
 import { challengeAnswer, deliveryId, readCappedBody, verifyWebhook, type WebhookRequest } from './webhooks.js';
 
 // The real comparison, watched: the Basic test reads what reached it.
@@ -64,6 +72,105 @@ test('refuses a timestamp that is not plain seconds', () => {
   for (const timestamp of ['+1730000000', '1730000000.5', '1730000000000', '']) {
     expect(verifyWebhook(breakcold.webhook, signed(timestamp), secret)).toBe(false);
   }
+});
+
+test('a timestamp in plain seconds keeps its edges on both sides of now', () => {
+  for (const [at, verdict] of [[now - 300, true], [now + 300, true], [now - 301, false], [now + 301, false]] as const) {
+    expect(verifyWebhook(breakcold.webhook, signed(String(at)), secret)).toBe(verdict);
+  }
+  // An instant in another unit is no number of seconds near now.
+  for (const timestamp of [String(now * 1000), new Date(now * 1000).toISOString()]) {
+    expect(verifyWebhook(breakcold.webhook, signed(timestamp), secret)).toBe(false);
+  }
+});
+
+/** The secret of Zendesk's own verification sample, used as its text, as the sample's `createHmac` takes it. */
+const zendeskSecret = 'dGhpc19zZWNyZXRfaXNfZm9yX3Rlc3Rpbmdfb25seQ==';
+/** An instant written as Zendesk's header writes one: `2021-03-25T05:09:27Z`. */
+const iso = (ms: number) => new Date(ms).toISOString().replace('.000Z', 'Z');
+/** Zendesk's recipe, `base64(HMACSHA256(TIMESTAMP + BODY))`, the timestamp header's text as sent. */
+const zendeskSigned = (timestamp: string, rawBody: Uint8Array = body, key = zendeskSecret) => request({
+  'x-zendesk-webhook-signature': createHmac('sha256', key).update(timestamp).update(rawBody).digest('base64'),
+  'x-zendesk-webhook-signature-timestamp': timestamp }, rawBody);
+
+test("verifies Zendesk's base64 signature of its ISO 8601 timestamp and the body, within five minutes", () => {
+  expect(verifyWebhook(zendesk.webhook, zendeskSigned(iso(now * 1000)), zendeskSecret)).toBe(true);
+  for (const [offset, verdict] of [[-300_000, true], [300_000, true], [-301_000, false], [301_000, false]] as const) {
+    expect(verifyWebhook(zendesk.webhook, zendeskSigned(iso(now * 1000 + offset)), zendeskSecret)).toBe(verdict);
+  }
+  // A request with no body (a trigger's GET or DELETE) signs the timestamp alone.
+  expect(verifyWebhook(zendesk.webhook, zendeskSigned(iso(now * 1000), new Uint8Array()), zendeskSecret)).toBe(true);
+  // The same instant with a fraction or an offset, signed as written.
+  for (const timestamp of ['2024-10-27T03:33:20.250Z', '2024-10-27T04:33:20+01:00', '2024-10-27T03:33:20+0000']) {
+    expect(verifyWebhook(zendesk.webhook, zendeskSigned(timestamp), zendeskSecret)).toBe(true);
+  }
+  const good = zendeskSigned(iso(now * 1000));
+  const changed = Buffer.from(body);
+  changed[0] = 1;
+  expect(verifyWebhook(zendesk.webhook, { ...good, rawBody: changed }, zendeskSecret)).toBe(false);
+  expect(verifyWebhook(zendesk.webhook, good, 'another-secret')).toBe(false);
+  expect(verifyWebhook(zendesk.webhook, zendeskSigned(iso(now * 1000), body, 'another-secret'), zendeskSecret)).toBe(false);
+  // The timestamp is signed: a fresh one beside the signature of an old one fails.
+  const old = zendeskSigned(iso((now - 3600) * 1000));
+  old.headers.set('x-zendesk-webhook-signature-timestamp', iso(now * 1000));
+  expect(verifyWebhook(zendesk.webhook, old, zendeskSecret)).toBe(false);
+});
+
+test.each([
+  '2024-10-27', '2024-10-27T03:33:20', '2024-10-27t03:33:20Z', '2024-10-27T03:33:20z', '2024-10-27 03:33:20Z',
+  '2021-02-30T00:00:00Z', '2024-10-27T24:00:00Z', '2024-10-27T03:33:60Z', 'Sun, 27 Oct 2024 03:33:20 GMT',
+  '1730000000', '1730000000000', '+002024-10-27T03:33:20Z', '02024-10-27T03:33:20Z', '-002024-10-27T03:33:20Z', '',
+])('an ISO 8601 timestamp header %j that is no instant with its zone is false, though signed and read loosely as now', timestamp => {
+  // Now is where a looser reader (`Date.parse`) puts it, so only the strict reading refuses it.
+  const loose = Date.parse(timestamp);
+  vi.setSystemTime(Number.isNaN(loose) ? now * 1000 : loose);
+  expect(verifyWebhook(zendesk.webhook, zendeskSigned(timestamp), zendeskSecret)).toBe(false);
+});
+
+/** An app's own declaration of a timestamp in epoch milliseconds, signed before the body with a `.`. */
+const millis: Webhook = { kind: 'hmac', header: 'x-signature', signed: '{timestamp}.{body}', timestamp: { header: 'x-t', unit: 'epochMs' } };
+const millisSigned = (timestamp: string, rawBody: Uint8Array = body) =>
+  request({ 'x-signature': createHmac('sha256', secret).update(`${timestamp}.`).update(rawBody).digest('hex'), 'x-t': timestamp }, rawBody);
+
+test('an `epochMs` timestamp is whole milliseconds within the tolerance of now, to the millisecond', () => {
+  expect(verifyWebhook(millis, millisSigned(String(now * 1000)), secret)).toBe(true);
+  for (const [offset, verdict] of [[-300_000, true], [300_000, true], [-300_001, false], [300_001, false]] as const) {
+    expect(verifyWebhook(millis, millisSigned(String(now * 1000 + offset)), secret)).toBe(verdict);
+  }
+  expect(verifyWebhook({ ...millis, timestamp: { header: 'x-t', unit: 'epochMs', toleranceSeconds: 60 } }, millisSigned(String(now * 1000 - 60_001)), secret)).toBe(false);
+});
+
+test.each(['+1730000000000', '-1730000000000', '1730000000000.0', '1730000000 000', '1730000000\t000', '1.73e12', '0x192c6e0d800', '',
+  String(now), String(now * 1_000_000), '9'.repeat(400), iso(now * 1000)])('an `epochMs` timestamp %j is false, though signed', timestamp => {
+  expect(verifyWebhook(millis, millisSigned(timestamp), secret)).toBe(false);
+});
+
+test('a timestamp and body that sign the same bytes with the boundary moved by one byte are false', () => {
+  // Zendesk signs `{timestamp}{body}` with nothing between: the body's first byte joins the timestamp, or the
+  // timestamp's last byte the body.
+  const stamp = iso(now * 1000);
+  const moved = (timestamp: string, rawBody: Buffer) => ({ ...zendeskSigned(stamp), rawBody,
+    headers: new Headers({ 'x-zendesk-webhook-signature': zendeskSigned(stamp).headers.get('x-zendesk-webhook-signature') ?? '',
+      'x-zendesk-webhook-signature-timestamp': timestamp }) });
+  expect(verifyWebhook(zendesk.webhook, moved(stamp, body), zendeskSecret)).toBe(true);
+  expect(verifyWebhook(zendesk.webhook, moved(stamp + body.toString().slice(0, 1), body.subarray(1)), zendeskSecret)).toBe(false);
+  expect(verifyWebhook(zendesk.webhook, moved(stamp.slice(0, -1), Buffer.concat([Buffer.from('Z'), body])), zendeskSecret)).toBe(false);
+  // The same with milliseconds and a body that starts with a digit.
+  const joined: Webhook = { ...millis, signed: '{timestamp}{body}' };
+  const digits = Buffer.from('1{"event":"created"}');
+  const signature = createHmac('sha256', secret).update(String(now * 1000)).update(digits).digest('hex');
+  const sent = (timestamp: string, rawBody: Buffer) => request({ 'x-signature': signature, 'x-t': timestamp }, rawBody);
+  expect(verifyWebhook(joined, sent(String(now * 1000), digits), secret)).toBe(true);
+  expect(verifyWebhook(joined, sent(String(now * 1000) + '1', digits.subarray(1)), secret)).toBe(false);
+  expect(verifyWebhook(joined, sent(String(now * 100), Buffer.concat([Buffer.from('0'), digits])), secret)).toBe(false);
+});
+
+test('a valid delivery replayed past its tolerance is false, in every unit', () => {
+  const deliveries = [[breakcold.webhook, signed(t), secret], [millis, millisSigned(String(now * 1000)), secret],
+    [zendesk.webhook, zendeskSigned(iso(now * 1000)), zendeskSecret]] as const;
+  for (const [webhook, delivery, key] of deliveries) expect(verifyWebhook(webhook, delivery, key)).toBe(true);
+  vi.setSystemTime(now * 1000 + 301_000);
+  for (const [webhook, delivery, key] of deliveries) expect(verifyWebhook(webhook, delivery, key)).toBe(false);
 });
 
 test('a signature of another length is false, not a throw', () => {
@@ -471,6 +578,59 @@ test('a query challenge echoes the query alone, after the request is verified un
   expect(await answered(challengeAnswer(unsigned, sent({}), ''))).toEqual(asText('abc'));
 });
 
+/** Front's validation request: its page's body, `x-front-challenge`, and the base64 HMAC of `<timestamp>:<body>`
+ * keyed with the token's text, the timestamp in milliseconds. */
+const frontSync = '{"type":"sync","authorization":{"id":"cmp_abc"}}';
+function frontSigned(json: string, headers: Record<string, string> = {}, at = String(now * 1000), key = secret): WebhookRequest {
+  const signature = createHmac('sha256', key).update(`${at}:`).update(json).digest('base64');
+  return request({ 'x-front-signature': signature, 'x-front-request-timestamp': at, ...headers }, Buffer.from(json));
+}
+
+test("verifies Front's base64 signature of its millisecond timestamp, a `:` and the body", () => {
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString()), secret)).toBe(true);
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString(), {}, String(now * 1000 - 300_001)), secret)).toBe(false);
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString(), {}, String(now * 1000 + 300_001)), secret)).toBe(false);
+  // Seconds where Front writes milliseconds: January 1970, not now.
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString(), {}, String(now)), secret)).toBe(false);
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString(), {}, 'x', 'another-secret'), secret)).toBe(false);
+  expect(verifyWebhook(front.webhook, frontSigned(body.toString()), 'another-secret')).toBe(false);
+  const changed = frontSigned(body.toString());
+  expect(verifyWebhook(front.webhook, { ...changed, rawBody: Buffer.from('{"event":"createe"}') }, secret)).toBe(false);
+});
+
+test("answers Front's validation request with `x-front-challenge` alone, as text, only under its signature", async () => {
+  const value = 'b9f4c2a1-random-string';
+  expect(await answered(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }), secret))).toEqual(asText(value));
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }), 'another-secret')).toBeNull();
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }, String(now * 1000), 'another-secret'), secret)).toBeNull();
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync), secret)).toBeNull();
+  // An event is no handshake, though it carries the header.
+  expect(challengeAnswer(front.webhook, frontSigned('{"type":"inbound_received","authorization":{"id":"cmp_abc"}}', { 'x-front-challenge': value }), secret)).toBeNull();
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }, String(now * 1000 - 301_000)), secret)).toBeNull();
+  expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }, String(now)), secret)).toBeNull();
+  for (const hostile of ['a b', 'a<b', 'a>b', 'é', 'x'.repeat(513)]) {
+    expect(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': hostile }), secret)).toBeNull();
+  }
+  // What `Headers` would refuse to hold, read through one that does not.
+  const through = (held: string) => {
+    const sent = frontSigned(frontSync);
+    const headers = { get: (name: string) => (name === 'x-front-challenge' ? held : sent.headers.get(name)),
+      has: (name: string) => sent.headers.has(name) } as unknown as Headers;
+    return challengeAnswer(front.webhook, { ...sent, headers }, secret);
+  };
+  expect(await answered(through(value))).toEqual(asText(value));
+  for (const hostile of ['a\nb', 'a\r\nx-evil: 1', 'a\u0000', '€']) expect(through(hostile)).toBeNull();
+});
+
+test('a value read from a header or a query is never answered as JSON, even by a declaration that leaves out `text`', async () => {
+  const value = 'b9f4c2a1';
+  const json = { ...front.webhook, challenge: { ...front.webhook.challenge, text: undefined } } as unknown as Webhook;
+  expect(challengeAnswer(json, frontSigned(frontSync, { 'x-front-challenge': value }), secret)).toBeNull();
+  const query = { kind: 'token', header: 'x-token', challenge: { echo: { query: 'challenge' }, unsigned: true } } as unknown as Webhook;
+  expect(challengeAnswer(query, { ...request({}, Buffer.alloc(0)), url: 'https://app.test/webhook?challenge=abc' }, '')).toBeNull();
+  expect(await answered(challengeAnswer(front.webhook, frontSigned(frontSync, { 'x-front-challenge': value }), secret))).toEqual(asText(value));
+});
+
 test('a text answer is a string: a number at a body path is not answered as text', async () => {
   const text: Webhook = { kind: 'token', header: 'x-token', challenge: { when: { path: 'type', equals: 1 }, echo: 'value', text: true, unsigned: true } };
   expect(challengeAnswer(text, posted('{"type":1,"value":42}'), '')).toBeNull();
@@ -578,12 +738,80 @@ test('deliveryId reads the declared header or the body paths', () => {
   expect(deliveryId(agentmail.webhook, request({ 'svix-id': 'msg_1' }, Buffer.from('{"event_type":"message.received","event_id":"e1"}')))).toBe('e1');
   expect(deliveryId(gitlab.webhook, standardSigned(standardSignature('msg_1', t)))).toBe('msg_1');
   expect(deliveryId(stripe.webhook, request({}, Buffer.from('{"id":"evt_1","type":"balance.available"}')))).toBe('evt_1');
-  expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }))).toBe('d1');
-  expect(deliveryId(breakcold.webhook, request({}))).toBeNull();
-  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"meeting.transcribed","meeting_id":"m1"}')))).toBe('meeting.transcribed:m1');
-  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
-  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
-  expect(deliveryId(fireflies.webhook, request({}, Buffer.from('not json')))).toBeNull();
+  expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }, Buffer.from('{"eventId":"evt_1"}')))).toBe('evt_1');
+  expect(deliveryId(breakcold.webhook, request({ 'x-webhook-delivery-id': 'd1' }))).toBeNull();
+  // Several body paths are joined with `:`; one missing or empty, or a body that is no JSON, gives none.
+  const joined: Webhook = { kind: 'hmac', header: 'x-signature', deliveryId: { body: ['event', 'meeting_id'] } };
+  expect(deliveryId(joined, request({}, Buffer.from('{"event":"meeting.transcribed","meeting_id":"m1"}')))).toBe('meeting.transcribed:m1');
+  expect(deliveryId(joined, request({}, Buffer.from('{"event":"x"}')))).toBeNull();
+  expect(deliveryId(joined, request({}, Buffer.from('{"event":"","meeting_id":"m"}')))).toBeNull();
+  expect(deliveryId(joined, request({}, Buffer.from('not json')))).toBeNull();
+});
+
+test('Breakcold, PagerDuty and TidyCal dedupe on the id their signed body holds, whatever a replay puts in a header', () => {
+  // Each signed by its page's recipe: Breakcold `sha256=` and the hex HMAC of `<t>.<body>`; PagerDuty `v1=` and the hex
+  // HMAC of the body; TidyCal `t=…,v1=…`, the hex HMAC of `<t>.<body>` keyed with the whole secret, `whsec_` included.
+  const tidycalSecret = 'whsec_tidycal-test-secret';
+  const hex = (key: string, content: string) => createHmac('sha256', key).update(content).digest('hex');
+  const samples = [
+    [breakcold.webhook, secret, 'evt_abc123', (json: string, headers: Record<string, string>) => request({ ...headers,
+      'x-webhook-timestamp': t, 'x-webhook-signature': `sha256=${hex(secret, `${t}.${json}`)}` }, Buffer.from(json)),
+    '{"eventId":"evt_abc123","event":"record.created","data":{"id":"record_id"}}', 'x-webhook-delivery-id'],
+    [pagerduty.webhook, secret, '5ac64822-4adc-4fda-ade0-410becf0de4f', (json: string, headers: Record<string, string>) =>
+      request({ ...headers, 'x-pagerduty-signature': `v1=${hex(secret, json)}` }, Buffer.from(json)),
+    '{"event":{"id":"5ac64822-4adc-4fda-ade0-410becf0de4f","event_type":"incident.priority_updated"}}', 'x-webhook-id'],
+    [tidycal.webhook, tidycalSecret, '6f1b7c52-0f4e-4d0e-9d5e-0a4a8b1f2c33', (json: string, headers: Record<string, string>) =>
+      request({ ...headers, 'tidycal-signature': `t=${t},v1=${hex(tidycalSecret, `${t}.${json}`)}` }, Buffer.from(json)),
+    '{"id":"6f1b7c52-0f4e-4d0e-9d5e-0a4a8b1f2c33","type":"booking.created","data":{}}', 'tidycal-event-id'],
+  ] as const;
+  for (const [webhook, key, id, sign, json, header] of samples) {
+    const sent = sign(json, { [header]: 'first' });
+    expect(verifyWebhook(webhook, sent, key)).toBe(true);
+    expect(deliveryId(webhook, sent)).toBe(id);
+    // A replay renames the header freely: it still verifies, and still dedupes as the delivery it copies.
+    const replayed = sign(json, { [header]: 'renamed' });
+    expect(verifyWebhook(webhook, replayed, key)).toBe(true);
+    expect(deliveryId(webhook, replayed)).toBe(id);
+    const flipped = Buffer.from(json.replace('"', "'"));
+    expect(verifyWebhook(webhook, { ...sent, rawBody: flipped }, key)).toBe(false);
+    expect(verifyWebhook(webhook, sent, 'another-secret')).toBe(false);
+  }
+  // Breakcold's and TidyCal's timestamps are seconds, signed: a stale one is false.
+  vi.setSystemTime((now + 301) * 1000);
+  for (const [webhook, key, , sign, json] of [samples[0], samples[2]]) expect(verifyWebhook(webhook, sign(json, {}), key)).toBe(false);
+});
+
+test('Linear, Sentry, RocketReach and Todoist declare no delivery id: their id headers are not signed', () => {
+  for (const webhook of [linear.webhook, sentry.webhook, rocketreach.webhook, todoist.webhook] as Webhook[]) {
+    expect(webhook.deliveryId).toBeUndefined();
+    expect(deliveryId(webhook, request({ 'linear-delivery': 'a', 'request-id': 'b', 'rr-request-id': 'c', 'x-todoist-delivery-id': 'd' },
+      Buffer.from('{"id":"e"}')))).toBeNull();
+  }
+});
+
+test("Front dedupes on the signed event's `payload.id`; its validation request has none", () => {
+  const event = '{"type":"inbound_received","authorization":{"id":"cmp_abc"},"payload":{"id":"evt_55c8c149","type":"inbound"}}';
+  const ids = { 'x-front-delivery-id': 'a', 'x-request-id': 'b', 'x-webhook-id': 'c' };
+  const sent = frontSigned(event, ids);
+  expect(verifyWebhook(front.webhook, sent, secret)).toBe(true);
+  expect(deliveryId(front.webhook, sent)).toBe('evt_55c8c149');
+  // A replay renames any id-like header freely: it still verifies, and still dedupes as the event it copies.
+  const renamed = frontSigned(event, { 'x-front-delivery-id': 'z', 'x-request-id': 'y', 'x-webhook-id': 'x' });
+  expect(verifyWebhook(front.webhook, renamed, secret)).toBe(true);
+  expect(deliveryId(front.webhook, renamed)).toBe('evt_55c8c149');
+  const sync = frontSigned(frontSync, { 'x-front-challenge': 'c1', ...ids });
+  expect(verifyWebhook(front.webhook, sync, secret)).toBe(true);
+  expect(deliveryId(front.webhook, sync)).toBeNull();
+});
+
+test('Fireflies declares no delivery id: a resend after the notes change carries the same event and meeting id', () => {
+  const sign = (json: string) => request({ 'x-hub-signature': `sha256=${createHmac('sha256', secret).update(json).digest('hex')}` }, Buffer.from(json));
+  const first = sign('{"event":"meeting.transcribed","timestamp":1793520000000,"meeting_id":"ASxwZxCstx"}');
+  const resend = sign('{"event":"meeting.transcribed","timestamp":1793520900000,"meeting_id":"ASxwZxCstx","reprocessed_at":1793520800000}');
+  for (const delivery of [first, resend]) {
+    expect(verifyWebhook(fireflies.webhook, delivery, secret)).toBe(true);
+    expect(deliveryId(fireflies.webhook, delivery)).toBeNull();
+  }
 });
 
 test("Pipedrive dedupes a webhooks v2 delivery on its event's id, and gives a v1 delivery, whose `meta.id` is the object's, none", () => {

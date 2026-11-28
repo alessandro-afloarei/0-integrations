@@ -16,7 +16,7 @@ import { trello as trelloEntry } from './catalogue/trello.js';
 import { zoom } from './catalogue/zoom.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
-import { GrantRevoked } from './errors.js';
+import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { kitValues } from './kit.test-support.js';
 import { exchangeCode, refreshGrant, requestToken, revokeGrant, tokenSource } from './oauth.js';
 import { checkCredentialStore, fakeFetch, fakeProvider, memoryStores, respondFrom, sequence, type FakeCall } from './testing.js';
@@ -432,7 +432,7 @@ describe('fakeProvider', () => {
     expect(start.codeVerifier).toBeUndefined();
     expect(calls[0]).toMatchObject({ url: 'https://basicjson.test/token', body: JSON.stringify({ code: 'kit-code', redirect_uri: redirectUri, grant_type: 'authorization_code' }) });
     await expect(exchangeCode(basicJson, kitClient, { code: 'kit-code', redirectUri, fetch })).resolves.toMatchObject({ extras: { scope: 'read,write' } });
-    await expect(exchangeCode(basicJson, kitClient, { code: 'other', redirectUri, fetch })).rejects.toBeInstanceOf(GrantRevoked);
+    await expect(exchangeCode(basicJson, kitClient, { code: 'other', redirectUri, fetch })).rejects.toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
     await expect(refreshGrant(basicJson, kitClient, 'kit-refresh', { fetch })).resolves.toMatchObject({ accessToken: 'k' });
     await expect(refreshGrant(basicJson, kitClient, 'old', { fetch })).rejects.toBeInstanceOf(GrantRevoked);
     await expect(revokeGrant(basicJson, { refreshToken: 'kit-refresh', client: kitClient, fetch })).resolves.toBeUndefined();
@@ -442,7 +442,8 @@ describe('fakeProvider', () => {
     const { fetch } = fakeFetch(fakeProvider(basicJson, { key: 'k' }));
     const wrong = { clientId: 'kit-client', clientSecret: 'other' };
     const refused = { code: 'request_failed', status: 401, detail: 'invalid_client' };
-    await expect(exchangeCode(basicJson, wrong, { code: 'kit-code', redirectUri, fetch })).rejects.toMatchObject(refused);
+    // The exchange's refusal is `rejected`: no grant existed.
+    await expect(exchangeCode(basicJson, wrong, { code: 'kit-code', redirectUri, fetch })).rejects.toMatchObject({ ...refused, code: 'rejected' });
     await expect(refreshGrant(basicJson, wrong, 'kit-refresh', { fetch })).rejects.toMatchObject(refused);
     await expect(revokeGrant(basicJson, { refreshToken: 'kit-refresh', client: wrong, fetch })).rejects.toMatchObject(refused);
     // The client in the body, where the entry declares Basic, is no client either.

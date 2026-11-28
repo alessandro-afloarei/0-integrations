@@ -1,7 +1,9 @@
 import { createHash, createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
-import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { Webhook } from './catalogue.js';
+import { instantMs } from './http-response.js';
 import { holds, parseJson, readPath } from './rules.js';
+
+export { readCappedBody } from './http-response.js';
 
 export type WebhookRequest = { method: string; url: string; headers: Headers; rawBody: Uint8Array };
 
@@ -36,8 +38,11 @@ export function verifyWebhook(webhook: Webhook, request: WebhookRequest, secret:
   const named = (name: string) => received.split(between).filter(piece => piece.startsWith(name + assign)).map(piece => piece.slice(name.length + 1));
   const stamp = scheme.timestamp;
   const timestamp = stamp === undefined ? '' : 'part' in stamp ? named(stamp.part)[0] ?? '' : request.headers.get(stamp.header) ?? '';
-  // Plain seconds within the tolerance of now. The header's text is what is signed, so a long one loses nothing.
-  if (stamp && !(/^\d+$/.test(timestamp) && Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) <= (stamp.toleranceSeconds ?? 300))) return false;
+  // Seconds, milliseconds or an ISO 8601 instant within the tolerance; the header's text is what is signed.
+  const at = stamp?.unit === 'iso8601' ? instantMs(timestamp)
+    : /^\d+$/.test(timestamp) ? Number(timestamp) * (stamp?.unit === 'epochMs' ? 1 : 1000) : undefined;
+  const now = stamp?.unit === undefined ? Math.floor(Date.now() / 1000) * 1000 : Date.now();
+  if (stamp && !(at !== undefined && Math.abs(now - at) <= (stamp.toleranceSeconds ?? 300) * 1000)) return false;
   // A declaration that does not sign the body, or the timestamp it checks, can verify nothing safely.
   const signed = scheme.signed ?? '{body}';
   if (!signed.includes('{body}') || (stamp !== undefined && !signed.includes('{timestamp}'))) return false;
@@ -96,33 +101,17 @@ export function challengeAnswer(webhook: Webhook, request: WebhookRequest, secre
   if (challenge === undefined) return null;
   const { when, echo, text } = challenge;
   const body = parseJson(Buffer.from(request.rawBody).toString('utf8'));
-  const name = typeof echo === 'string' ? echo : echo.query;
+  const name = typeof echo === 'string' ? echo : 'query' in echo ? echo.query : echo.header;
   // A query handshake carries no body: a delivery to a URL that holds the parameter is an event, verified as one.
-  const value = typeof echo === 'string' ? readPath(body, echo) : request.rawBody.byteLength > 0 ? null
-    : new URLSearchParams(/^[^#?]*\?([^#]*)/u.exec(request.url)?.[1]).get(name);
-  // A body path answers only where `when` holds; a query parameter, wherever it is present.
+  const value = typeof echo === 'string' ? readPath(body, echo) : 'header' in echo ? request.headers.get(name)
+    : request.rawBody.byteLength > 0 ? null : new URLSearchParams(/^[^#?]*\?([^#]*)/u.exec(request.url)?.[1]).get(name);
+  // A body path answers only where `when` holds; a query parameter or a header, wherever it is present.
   const asked = when === undefined ? typeof echo !== 'string' : holds(when, { status: 200, headers: request.headers, body });
-  const safe = typeof value === 'string' ? /^[!-;=?-~]{1,512}$/u.test(value) : !text && typeof value === 'number' && Number.isFinite(value);
+  const safe = typeof value === 'string' ? /^[!-;=?-~]{1,512}$/u.test(value) && (text || typeof echo === 'string')
+    : !text && typeof value === 'number' && Number.isFinite(value);
   // Verified last, so a delivery that is no handshake is verified once, by the app's own `verifyWebhook`.
   if (!asked || !safe || !(challenge.unsigned ?? verifyWebhook(webhook, request, secret))) return null;
   // ASCII, so its length is its byte count: stated, an adapter that streams the answer sends no chunks (Nylas refuses them).
   return text ? new Response(String(value), { headers: { 'content-type': 'text/plain; charset=utf-8',
     'content-length': String(String(value).length), 'x-content-type-options': 'nosniff' } }) : Response.json({ [name]: value });
-}
-
-export async function readCappedBody(request: Request, maxBytes: number): Promise<Buffer | null> {
-  const reader = request.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
-  if (!reader) return Buffer.alloc(0);
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return Buffer.concat(chunks, bytes);
-    bytes += value.byteLength;
-    if (bytes > maxBytes) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(Buffer.from(value));
-  }
 }

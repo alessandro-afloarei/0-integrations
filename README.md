@@ -91,7 +91,7 @@ the [waiting list](docs/waiting-list.md). The providers below also have a module
 | [Exa](docs/modules/exa.md) | Key | web search | — | — |
 | [Fathom](docs/modules/fathom.md) | Key | meetings, transcripts | — | — |
 | [Firecrawl](docs/modules/firecrawl.md) | Key | site maps, page scrapes | — | — |
-| [Fireflies](docs/modules/fireflies.md) | Key | transcripts, search | — | signature, event, delivery id |
+| [Fireflies](docs/modules/fireflies.md) | Key | transcripts, search | — | signature, event |
 | [GitHub](docs/modules/github.md) | Key | repositories, issues, pull requests | — | — |
 | [Google](docs/modules/google.md) | OAuth | Gmail, Google Calendar | — | Calendar push channel token |
 | [Granola](docs/modules/granola.md) | Key | notes, transcripts | — | — |

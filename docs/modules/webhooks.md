@@ -2,10 +2,14 @@
 
 `webhooks` verifies HMAC and Ed25519 signatures, shared tokens, HTTP Basic credentials and Standard Webhooks with
 `verifyWebhook(entry.webhook, request, secret)` over the exact raw body bytes, and answers URL challenges with
-`challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification.
+`challengeAnswer` ([below](#receiving-a-delivery)). Use `readCappedBody(request, maxBytes)` before verification: it gives
+the raw bytes, or null past `maxBytes`, starting the stream's cancel without waiting on it.
 `deliveryId(entry.webhook, request)` reads what the entry declares an app dedupes on: a header, or body paths joined
-with `:`, null when one is missing. Read it only after `verifyWebhook` accepted the request: an id such as Fireflies'
-`event:meeting_id` can be guessed, so deduplicating before verifying lets a forged post suppress the real delivery.
+with `:`, null when one is missing. A catalogue entry on a signed scheme (`hmac`, `ed25519`) declares a body path,
+never a header (the table refuses a header id there): its signature covers no header, so a replay could rename one.
+Read it only after `verifyWebhook` accepted the request: a
+body id such as Stripe's event `id` is no secret, so deduplicating before verifying lets a forged post that copies it
+suppress the real delivery.
 Routing, replay protection, dedupe and the inbox remain in the app.
 
 An entry's `webhook` declares the scheme: the header, what is signed, SHA-256 or SHA-1 (`hash: 'sha1'`, Intercom), and
@@ -14,7 +18,10 @@ that holds the timestamp (`timestamp: { part }`). Any `v1` may match, so Stripe'
 are ignored. A timestamp outside its tolerance (five minutes by default) and a signature header over 8 KiB are
 `false`. `{timestamp}` is signed exactly when a timestamp is declared, and `{body}` is always signed: the catalogue's
 table test refuses an entry that breaks either, and `verifyWebhook` is `false` for an app's own declaration whose
-`signed` lacks `{body}`, or lacks `{timestamp}` beside a declared timestamp.
+`signed` lacks `{body}`, or lacks `{timestamp}` beside a declared timestamp. A timestamp is epoch seconds unless its
+`unit` says `epochMs` (whole milliseconds) or `iso8601` (an instant with its zone, as Zendesk's
+`2021-03-25T05:09:27Z`, read as a `Wait` reads one); a value in another unit, a date alone or an instant with no zone
+is `false`, and the header's text as sent is what is signed. Zendesk states no window, so the five minutes apply.
 
 `secret: 'base64'` or `'hex'` keys the HMAC with the secret's decoding instead of its text: pass the secret as the
 provider gives it, never decoded. The decoding is strict: base64 must encode back to exactly the secret (the `+` and `/`
@@ -68,8 +75,9 @@ bytes, compared as SHA-256 digests as `token` is; the password runs from the fir
 empty password, a missing header, two spaces, base64 without its `=` padding and the credentials in clear are all
 `false`.
 
-[Fireflies](fireflies.md) and [Breakcold](breakcold.md) declare a delivery id; Fireflies' module also parses the event.
-Stripe's entry declares the event's `id` as its delivery id.
+[Breakcold](breakcold.md) declares a delivery id, and Stripe's entry the event's `id`. [Fireflies](fireflies.md)
+declares none (a resend after a meeting's notes change carries the same event and meeting id); its module parses the
+event.
 
 ## Declaring a webhook
 
@@ -80,7 +88,7 @@ import type { Webhook } from '0-integrations/catalogue';
 
 // `hmac` with a timestamp header (Breakcold)
 const timestamped: Webhook = { kind: 'hmac', header: 'x-webhook-signature', signed: '{timestamp}.{body}', prefix: 'sha256=',
-  timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { header: 'x-webhook-delivery-id' } };
+  timestamp: { header: 'x-webhook-timestamp' }, deliveryId: { body: ['eventId'] } };
 // `hmac` with `part`: `t=…,v1=…` pieces in one header (Stripe)
 const pieces: Webhook = { kind: 'hmac', header: 'stripe-signature', signed: '{timestamp}.{body}', part: 'v1',
   timestamp: { part: 't' }, deliveryId: { body: ['id'] } };
@@ -89,6 +97,9 @@ const signedWithKey: Webhook = { kind: 'ed25519', header: 'x-signature-ed25519',
   timestamp: { header: 'x-signature-timestamp' } };
 // `token`: the header is the secret itself (Google Calendar push)
 const sharedToken: Webhook = { kind: 'token', header: 'x-goog-channel-token' };
+// `hmac` over an ISO 8601 timestamp header and the body, base64 (Zendesk)
+const instant: Webhook = { kind: 'hmac', header: 'x-zendesk-webhook-signature', signed: '{timestamp}{body}', encoding: 'base64',
+  timestamp: { header: 'x-zendesk-webhook-signature-timestamp', unit: 'iso8601' } };
 // `hmac` keyed with the secret's hex decoding, over the timestamp header's text and the body (Close)
 const decoded: Webhook = { kind: 'hmac', header: 'close-sig-hash', signed: '{timestamp}{body}', secret: 'hex',
   timestamp: { header: 'close-sig-timestamp' } };
@@ -103,6 +114,10 @@ const challenged: Webhook = { kind: 'hmac', header: 'x-slack-signature', signed:
 // A `challenge` read from a GET's query and answered as text, unsigned: the secret comes after it (Nylas)
 const queried: Webhook = { kind: 'hmac', header: 'x-nylas-signature',
   challenge: { echo: { query: 'challenge' }, text: true, unsigned: true } };
+// A `challenge` read from a request header and answered as text, after the request verifies (Front)
+const headed: Webhook = { kind: 'hmac', header: 'x-front-signature', signed: '{timestamp}:{body}', encoding: 'base64',
+  timestamp: { header: 'x-front-request-timestamp', unit: 'epochMs' }, deliveryId: { body: ['payload.id'] },
+  challenge: { when: { path: 'type', equals: 'sync' }, echo: { header: 'x-front-challenge' }, text: true } };
 ```
 
 ## Receiving a delivery
@@ -114,11 +129,14 @@ with `verifyWebhook` first, unless the entry marks the challenge `unsigned`: Sla
 sends PINGs with invalid signatures, and expects the `401`). Nylas' check is a `GET` with `?challenge=…`, sent before
 Nylas makes the webhook's secret, so it is unsigned; it is answered with the value alone, as
 `text/plain; charset=utf-8` with `x-content-type-options: nosniff` and its `content-length`: Nylas refuses an answer
-sent with chunked encoding, so keep that header when your server sends the `Response`.
+sent with chunked encoding, so keep that header when your server sends the `Response`. Front's validation request,
+sent when the app saves its webhook's URL, is signed like a delivery (a millisecond timestamp) with a body whose `type`
+is `sync`; it is answered with its `x-front-challenge` header's value alone, as text.
 
 A challenge read from the body is answered only where its `when` holds; one read from a query parameter only on a
-request with an empty body (a delivery to a URL holding the parameter is an event, verified as one), where its `when`
-holds or, with none, wherever the value is present, and only as text (`text: true`). The value comes from
+request with an empty body (a delivery to a URL holding the parameter is an event, verified as one), and one read from
+a header on any request, where its `when` holds or, with none, wherever the value is present, and both only as text
+(`text: true`). The value comes from
 whoever sent the request, so it is answered only when it is 1 to 512 printable ASCII characters with no space, `<` or
 `>` (in a JSON answer, a finite number too): never markup, never a header. The answer copies nothing else of the
 request, changes nothing and holds nothing secret; anyone may receive one for an unsigned challenge. Verify every
