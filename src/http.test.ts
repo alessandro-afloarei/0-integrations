@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { identifyAccount } from './account.js';
 import { defineProvider, signInWith, type Entry, type Retry } from './catalogue.js';
 import { aircall } from './catalogue/aircall.js';
 import { breakcold } from './catalogue/breakcold.js';
@@ -14,14 +15,15 @@ import { jira } from './catalogue/jira.js';
 import { notion } from './catalogue/notion.js';
 import { paypal } from './catalogue/paypal.js';
 import { serpapi } from './catalogue/serpapi.js';
+import { slack } from './catalogue/slack.js';
 import { smartsheet } from './catalogue/smartsheet.js';
 import { trello as trelloEntry } from './catalogue/trello.js';
 import { client } from './client.js';
 import { finishConnect, startConnect } from './connect.js';
 import { ProviderHttpError } from './errors.js';
 import * as guard from './guard.js';
-import { callRequest, createClient, defaultFetch } from './http.js';
-import { exchangeCode, refreshGrant, requestToken, revokeGrant, tokenSource } from './oauth.js';
+import { callRequest, createClient, defaultFetch, filledBase } from './http.js';
+import { authorizeUrl, exchangeCode, refreshGrant, requestToken, revokeGrant, tokenSource } from './oauth.js';
 import { fill, hostPart } from './rules.js';
 import { walk } from './paging.js';
 import { fakeFetch, sequence } from './testing.js';
@@ -1588,6 +1590,8 @@ test.each<[string, Entry, string]>([
   ['a typed host beside it', { ...named, fields: [{ name: 'region', title: 'Region' }], http: { ...named.http, baseUrl: 'https://{host}.{region}/api' } }, 'host_split: named'],
   ['a typed host beside it in the sign-in URLs', { ...named, fields: [{ name: 'region', title: 'Region' }],
     auth: [{ kind: 'oauth2', authorizeUrl: 'https://{region}/authorize', tokenUrl: 'https://{region}/token' }] }, 'host_split: named'],
+  ['a chosen host beside it', { ...named, fields: [{ name: 'region', title: 'Region', choices: ['login.named.test'] }],
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{region}/authorize', tokenUrl: 'https://login.named.test/token' }] }, 'host_split: named'],
   // Typed, so split from the fixed sign-in URLs: a field of its name, or a value read from identify's answer.
   ['a field of its name', { ...named, fields: [{ name: 'host', title: 'Host' }] }, 'host_split: named'],
   ["its value read from identify's answer", { ...named, save: { host: 'host' } }, 'host_split: named'],
@@ -1607,4 +1611,200 @@ test.each<[string, Entry, string]>([
   await expect(refreshGrant(entry, oauthClient, 'r', { values, fetch: fake.fetch })).rejects.toThrow(refused);
   await expect(revokeGrant(entry, { accessToken: 'a', values, fetch: fake.fetch })).rejects.toThrow(refused);
   expect(fake.calls).toEqual([]);
+});
+
+describe("a chosen host: a stored value that is not exactly one of its field's choices reaches no host, nothing read first", () => {
+  /** Two chosen hosts, each a URL's whole host: the API's for the base and identify, the sign-in's for every OAuth 2 URL
+   * (an RFC 7009 revoke's too). `http.host` holds both kinds, so a value that is the other field's choice passes the
+   * pattern, and only the choices refuse it. */
+  const chosen = defineProvider({ id: 'chosen', name: 'Chosen', scopes: { default: [] },
+    fields: [{ name: 'apiHost', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'], default: 'api.k.test' },
+      { name: 'loginHost', title: 'Sign-in region', choices: ['login.k.test', 'login.eu.k.test'], default: 'login.k.test' }],
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://{loginHost}/authorize', tokenUrl: 'https://{loginHost}/token' }],
+    revoke: { url: 'https://{loginHost}/revoke', token: ['refresh'] }, identify: { request: { path: '/me' }, id: 'id' },
+    http: { baseUrl: 'https://{apiHost}/v1', host: ['api.k.test', 'api.eu.k.test', 'login.k.test', 'login.eu.k.test'] } });
+  const good = { apiHost: 'api.k.test', loginHost: 'login.k.test' };
+  /** Every way a stored value may leave the choices, as a value of the field whose choices start with `stem`. */
+  const hostile = (stem: string, other: string): [string, string][] => [
+    ['api.hubspot.com', 'base_host_refused'], [`${stem}.k.test.evil.test`, 'base_host_refused'], ['127.0.0.1', 'base_host_refused'],
+    ['2130706433', 'base_host_refused'], [`${stem.toUpperCase()}.EU.K.TEST`, 'base_host_refused'], [`${other}.k.test`, 'base_host_refused'],
+    [`${stem}.k.test:443`, 'base_value_invalid'], [`${stem}.k.test/x`, 'base_value_invalid'], [`x@${stem}.k.test`, 'base_value_invalid'],
+    [`${stem}.k.test.`, 'base_value_invalid'], [`${stem.replace(/[ao]/u, letter => letter === 'a' ? 'а' : 'о')}.k.test`, 'base_value_invalid'], ['[::1]', 'base_value_invalid'],
+    ['', 'template_missing']];
+  /** A fetch that answers every request as a provider would, and counts it. */
+  const answering = () => fakeFetch([{ url: /./u, respond: () => Response.json({ access_token: 'a', refresh_token: 'r', token_type: 'bearer', id: '1' }) }]);
+  /** The client secret, a code, its verifier and a token, each counted when read. */
+  function counted() {
+    const reads: string[] = [];
+    const read = <T>(name: string, value: T) => { reads.push(name); return value; };
+    return { reads, client: { clientId: 'c', get clientSecret() { return read('clientSecret', 's'); } },
+      token: vi.fn<() => Promise<string>>(() => Promise.resolve(read('token', 't'))),
+      input: { redirectUri: 'https://app.test/cb', get code() { return read('code', 'x'); }, get codeVerifier() { return read('codeVerifier', 'v'.repeat(43)); },
+        get refreshToken() { return read('refreshToken', 'r'); }, get accessToken() { return read('accessToken', 'a'); } } };
+  }
+
+  test.each(hostile('api', 'login'))('a stored base value %j is %s on a call and on identify: no read, no request', async (apiHost, code) => {
+    const values = { ...good, apiHost };
+    const fake = answering();
+    const { reads, token, input } = counted();
+    await expect(client(chosen, { token, values, fetch: fake.fetch }).json('/me')).rejects.toThrow(code);
+    await expect(identifyAccount(chosen, { fetch: fake.fetch, get token() { return input.accessToken; }, values })).rejects.toThrow(code);
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+  });
+
+  test.each(hostile('login', 'api'))('a stored sign-in value %j is %s on the authorize URL, an exchange, a refresh and a revoke: no read, no request', async (loginHost, code) => {
+    const values = { ...good, loginHost };
+    const fake = answering();
+    const { reads, client: app, input } = counted();
+    expect(() => authorizeUrl(chosen, { clientId: 'c', redirectUri: 'https://app.test/cb', scopes: [], state: 's', codeChallenge: 'c', values })).toThrow(code);
+    await expect(exchangeCode(chosen, app, { redirectUri: input.redirectUri, get code() { return input.code; },
+      get codeVerifier() { return input.codeVerifier; }, values, fetch: fake.fetch })).rejects.toThrow(code);
+    await expect(refreshGrant(chosen, app, 'r', { values, fetch: fake.fetch })).rejects.toThrow(code);
+    await expect(revokeGrant(chosen, { client: app, get refreshToken() { return input.refreshToken; }, values, fetch: fake.fetch })).rejects.toThrow(code);
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+  });
+
+  test.each([...hostile('api', 'login').map(([apiHost]) => ({ ...good, apiHost })), ...hostile('login', 'api').map(([loginHost]) => ({ ...good, loginHost }))]
+    .filter(values => values.apiHost !== '' && values.loginHost !== ''))('a connect with %j is connect_field_invalid before anything is sent or read', async values => {
+    const fake = answering();
+    const { reads, client: app, input } = counted();
+    await expect(startConnect(chosen, { clientId: 'c', redirectUri: 'https://app.test/cb', state: 's', values })).rejects.toThrow('connect_field_invalid');
+    await expect(finishConnect(chosen, { client: app, get code() { return input.code; }, redirectUri: input.redirectUri, codeVerifier: 'v'.repeat(43),
+      values, fetch: fake.fetch, onRevokeFailed: () => undefined })).rejects.toThrow('connect_field_invalid');
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+  });
+
+  test('each choice sends where the entry wrote it: the base and identify on the API host, every OAuth 2 request on the sign-in host', async () => {
+    for (const apiHost of ['api.k.test', 'api.eu.k.test']) {
+      for (const loginHost of ['login.k.test', 'login.eu.k.test']) {
+        const values = { apiHost, loginHost };
+        const fake = answering();
+        expect(authorizeUrl(chosen, { clientId: 'c', redirectUri: 'https://app.test/cb', scopes: [], state: 's', codeChallenge: 'c', values }).origin)
+          .toBe(`https://${loginHost}`);
+        await finishConnect(chosen, { client: { clientId: 'c', clientSecret: 's' }, code: 'x', redirectUri: 'https://app.test/cb',
+          codeVerifier: 'v'.repeat(43), values, fetch: fake.fetch, onRevokeFailed: () => undefined });
+        await refreshGrant(chosen, { clientId: 'c', clientSecret: 's' }, 'r', { values, fetch: fake.fetch });
+        await revokeGrant(chosen, { client: { clientId: 'c', clientSecret: 's' }, refreshToken: 'r', values, fetch: fake.fetch });
+        await client(chosen, { token: 't', values, fetch: fake.fetch }).json('/items');
+        expect(fake.calls.map(call => call.url)).toEqual([`https://${loginHost}/token`, `https://${apiHost}/v1/me`, `https://${loginHost}/token`,
+          `https://${loginHost}/revoke`, `https://${apiHost}/v1/items`]);
+      }
+    }
+  });
+
+  /** Typeform's shape: the base chosen, every OAuth 2 URL fixed on another host. */
+  const fixedSignIn = defineProvider({ id: 'fixed-sign-in', name: 'Fixed sign-in', scopes: { default: [] },
+    fields: [{ name: 'apiHost', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'], default: 'api.k.test' }],
+    auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.example/authorize', tokenUrl: 'https://login.k.example/token' }],
+    http: { baseUrl: 'https://{apiHost}', host: ['api.k.test', 'api.eu.k.test'] } });
+
+  test('a refresh on fixed OAuth 2 URLs reads no chosen value: it goes to the fixed token URL, and the next call is refused before the token is read', async () => {
+    const fake = answering();
+    const values = { apiHost: 'evil.test' };
+    await refreshGrant(fixedSignIn, { clientId: 'c', clientSecret: 's' }, 'r', { values, fetch: fake.fetch });
+    expect(fake.calls.map(call => call.url)).toEqual(['https://login.k.example/token']);
+    const { reads, token } = counted();
+    await expect(client(fixedSignIn, { token, values, fetch: fake.fetch }).json('/me')).rejects.toThrow(new TypeError('base_host_refused: fixed-sign-in'));
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 1 });
+  });
+
+  test.each([
+    ['composed into another host', { fields: [{ name: 'region', title: 'Region', choices: ['eu', 'us'] }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.test/authorize', tokenUrl: 'https://login.k.test/token' }],
+      http: { baseUrl: 'https://api.{region}.k.test', host: '*.k.test' } }],
+    ['beside a typed placeholder in one host', { fields: [{ name: 'region', title: 'Region', choices: ['k.test'] }, { name: 'sub', title: 'Subdomain' }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.test/authorize', tokenUrl: 'https://login.k.test/token' }],
+      http: { baseUrl: 'https://{sub}.{region}', host: '*.k.test' } }],
+    ['beside a host the token answer names', { fields: [{ name: 'region', title: 'Region', choices: ['login.k.test'] }], save: { host: 'tokenAnswer.host' },
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://{region}/authorize', tokenUrl: 'https://login.k.test/token' }],
+      http: { baseUrl: 'https://{host}/api', host: '*.k.test' } }],
+    ['beside a fixed `http.bases` value', { fields: [{ name: 'region', title: 'Region', choices: ['api.k.test', 'api.eu.k.test'] }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.test/authorize', tokenUrl: 'https://login.k.test/token' }],
+      revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } },
+      http: { baseUrl: 'https://{region}/v1', host: ['api.k.test', 'api.eu.k.test'], bases: { auth: 'https://api.k.test/auth' } } }],
+    // An app's entry built without the types: a string is no list of hosts, so the host is typed.
+    ['given as a string, not a list', { fields: [{ name: 'region', title: 'Region', choices: 'api.k.test api.eu.k.test' }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.example/authorize', tokenUrl: 'https://login.k.example/token' }],
+      http: { baseUrl: 'https://{region}', host: '*.k.test' } }],
+  ] as const)('a host from a field with choices %s is host_split on every path, nothing read or sent', async (_, shape) => {
+    const entry = { id: 'split', name: 'Split', scopes: { default: [] }, ...shape } as Entry;
+    const values = { region: 'api.eu.k.test', sub: 'a', host: 'a.k.test' };
+    const fake = answering();
+    const { reads, client: app, token, input } = counted();
+    const refused = new TypeError('host_split: split');
+    expect(() => authorizeUrl(entry, { clientId: 'c', redirectUri: 'https://app.test/cb', scopes: [], state: 's', codeChallenge: 'c', values })).toThrow(refused);
+    expect(() => client(entry, { token, values, fetch: fake.fetch })).toThrow(refused);
+    await expect(refreshGrant(entry, app, 'r', { values, fetch: fake.fetch })).rejects.toThrow(refused);
+    await expect(revokeGrant(entry, { get accessToken() { return input.accessToken; }, values, fetch: fake.fetch })).rejects.toThrow(refused);
+    await expect(startConnect(entry, { clientId: 'c', redirectUri: 'https://app.test/cb', state: 's', values })).rejects.toThrow(refused);
+    await expect(finishConnect(entry, { client: app, get code() { return input.code; }, redirectUri: input.redirectUri, codeVerifier: 'v'.repeat(43),
+      values, fetch: fake.fetch, onRevokeFailed: () => undefined })).rejects.toThrow(refused);
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+  });
+
+  test.each([['SLACK.COM', 'base_host_refused'], ['evil.test', 'base_host_refused'], ['slack.com.evil.test', 'base_host_refused'],
+    ['127.0.0.1', 'base_host_refused'], ['slack-gov.com:443', 'base_value_invalid'], ['', 'template_missing']])(
+    "Slack's request revoke with a stored domain %j is %s before the access token is read, nothing sent", async (domain, code) => {
+      const fake = answering();
+      const { reads, input } = counted();
+      await expect(revokeGrant(slack, { get accessToken() { return input.accessToken; }, values: { domain }, fetch: fake.fetch })).rejects.toThrow(code);
+      expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+    });
+
+  test.each(['evil.test', 'b.named.test'])("a request revoke on a fixed `http.bases` value beside a named base host %j is refused before the access token is read", async host => {
+    const entry = defineProvider({ ...named, http: { ...named.http, bases: { auth: 'https://login.named.test' } },
+      revoke: { request: { base: 'auth', method: 'POST', path: '/revoke' } } });
+    const fake = answering();
+    const { reads, input } = counted();
+    await expect(revokeGrant(entry, { get accessToken() { return input.accessToken; }, values: { host }, fetch: fake.fetch }))
+      .rejects.toThrow(new TypeError('base_host_refused: named'));
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+  });
+
+  test("an RFC 7009 revoke resolves its URLs once: a `values` getter that changes after the check sends nowhere else", async () => {
+    let reads = 0;
+    const values = { apiHost: 'api.k.test', get loginHost() { reads++; return reads === 1 ? 'login.k.test' : 'evil.test'; } };
+    const fake = answering();
+    const { reads: credentials, input } = counted();
+    await revokeGrant(chosen, { client: { clientId: 'c', clientSecret: 's' }, get refreshToken() { return input.refreshToken; }, values, fetch: fake.fetch });
+    expect({ urls: fake.calls.map(call => call.url), credentials }).toEqual({ urls: ['https://login.k.test/revoke'], credentials: ['refreshToken'] });
+  });
+
+  test('an RFC 7009 revoke with no token builds no client authentication: done, the client secret unread, nothing sent', async () => {
+    const fake = answering();
+    let reads = 0;
+    const app = { clientId: 'c', get clientSecret() { reads++; return ''; } };
+    await expect(revokeGrant(hubspot, { refreshToken: null, client: app, fetch: fake.fetch })).resolves.toBeUndefined();
+    await expect(revokeGrant(gitlabEntry, { client: app, values: {} as never, fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: gitlab {host}'));
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: 0, requests: 0 });
+  });
+
+  test("a stored number is no choice, even when its text is one", () => {
+    const entry = defineProvider({ id: 'numbered', name: 'Numbered', fields: [{ name: 'port', title: 'Host', choices: ['10'] }],
+      auth: [{ kind: 'key' }], http: { baseUrl: 'https://{port}', host: '*' } });
+    expect(() => filledBase(entry, { port: 10 })).toThrow(new TypeError('base_host_refused: numbered'));
+  });
+
+  test('a revoke given no token is refused when its values are missing, a request revoke and an RFC 7009 one alike', async () => {
+    const fake = answering();
+    await expect(revokeGrant(slack, { values: {} as never, fetch: fake.fetch })).rejects.toThrow(new TypeError('template_missing: slack {domain}'));
+    await expect(revokeGrant(gitlabEntry, { client: { clientId: 'c', clientSecret: 's' }, values: {} as never, fetch: fake.fetch }))
+      .rejects.toThrow(new TypeError('template_missing: gitlab {host}'));
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  test.each(['*.k.test', '*'] as const)("two fields of one name, the first without `choices`, are a typed host (`http.host: %j`): host_split, nothing read or sent", async host => {
+    const entry: Entry = { id: 'twice', name: 'Twice', scopes: { default: [] },
+      fields: [{ name: 'apiHost', title: 'Host' }, { name: 'apiHost', title: 'Region', choices: ['api.k.test'] }],
+      auth: [{ kind: 'oauth2', authorizeUrl: 'https://login.k.example/authorize', tokenUrl: 'https://login.k.example/token' }],
+      identify: { request: { path: '/me' }, id: 'id' }, http: { baseUrl: 'https://{apiHost}', host } };
+    const values = { apiHost: host === '*' ? 'evil.test' : 'other.k.test' };
+    const fake = answering();
+    const { reads, client: app, token } = counted();
+    const refused = new TypeError('host_split: twice');
+    expect(() => client(entry, { token, values, fetch: fake.fetch })).toThrow(refused);
+    await expect(identifyAccount(entry, { fetch: fake.fetch, token: 't', values })).rejects.toThrow(refused);
+    await expect(refreshGrant(entry, app, 'r', { values, fetch: fake.fetch })).rejects.toThrow(refused);
+    expect({ reads, requests: fake.calls.length }).toEqual({ reads: [], requests: 0 });
+  });
 });

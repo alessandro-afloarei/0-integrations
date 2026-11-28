@@ -4,6 +4,25 @@
 
 Nothing here is released yet.
 
+- New: a host chosen from a field's own `choices` (a URL's whole host, `https://{name}`) may sit beside fixed OAuth 2
+  URLs and other chosen hosts; its value is checked against those choices on every send whose URL it fills (a call,
+  identify, an authorize URL, an exchange, a refresh, a revoke, a token request), before a credential is read or
+  anything is sent.
+  Intercom's OAuth 2 sign-in chooses its region's authorize host (`appHost`: `app.intercom.com`, `app.eu.intercom.com`
+  or `app.au.intercom.com`), which an EU or Australian workspace signing in with Google needs; its token URL and base
+  stay on `api.intercom.io`.
+- Breaking: a stored value of a field with `choices` that is not exactly one of them, one differing only in case
+  included (`API.EU.INTERCOM.IO`), is `base_host_refused` on every send whose URL it fills (a call, identify, an
+  authorize URL, an exchange, a refresh, a revoke, a token request), where its host used to pass because the URL parser
+  lowercases it.
+  `startConnect` and `finishConnect` already refused it (`connect_field_invalid`), so every connection they made is
+  unchanged; an app that stored a value another way stores the choice exactly as written.
+- Breaking: a revoke fills and checks its URLs (an RFC 7009 revoke's, a request revoke's base) before it reads a token:
+  one given no token whose `values` are missing or refused is `template_missing`, `base_value_invalid` or
+  `base_host_refused` where it used to be done. Pass the connection's `values` to every `revokeGrant`.
+- Breaking: Intercom's OAuth 2 connections keep `appHost`. `authorizeUrl`, `exchangeCode` and `refreshGrant` need it in
+  `values` (`'app.intercom.com'` for a connection made before, the host it signed in on), else `template_missing`
+  before anything is sent; `revokeGrant` and `client()` take it, and their calls stay on `api.intercom.io`.
 - A `page`, `offset` or `last` walk whose list has the same JSON text as its first page's is `page_repeated`, as one
   with the page before's is: a provider that answers its first page's text again past the end no longer has it yielded
   a second time, or walks on forever. A `last` walk that met its first page's text again now reports `page_repeated`
@@ -190,8 +209,8 @@ Nothing here is released yet.
   holding whitespace (a space or a trailing newline), the URL-safe alphabet (`-`, `_`) or another character outside
   base64, a last character with unused bits set (`YR==`), or one that decodes to only zero bytes, as is now a plain
   `hmac` secret of NUL characters. An unpadded secret is still accepted.
-- Intercom lists OAuth 2 first, on its US hosts (authorize on app.intercom.com, the token and every call on
-  api.intercom.io, which attempts to route a call to the workspace's region), with no revoke; its access token, on the
+- Intercom lists OAuth 2 first (authorize on its region's `appHost`, the token and every call on api.intercom.io,
+  which attempts to route a call to the workspace's region), with no revoke; its access token, on the
   region the person picks, is `signInWith(intercom, 'key')`, sent only to the three regional API hosts. Breaking: a key
   connection that still calls the whole entry with its `apiHost` (`client(intercom, { token, values: { apiHost } })`)
   is now refused (`value_undeclared: intercom apiHost`), nothing sent; an app narrows it with

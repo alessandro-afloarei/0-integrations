@@ -125,7 +125,8 @@ function sendable(entry: Entry, url: string): URL {
 /** The entry's base (or another URL of it: a token request's), its placeholders filled from plain or saved values: one
  * in the host a host name, one in the path one encoded segment; a URL with none is used as written. A `sendable` URL,
  * its host, when templated, matching `http.host` or one of its list (equal, `*.d` a name ending in `.d`; `*` alone any,
- * in a list none). Throws before anything is read or sent. */
+ * in a list none), and a value of a field with `choices` exactly one of them, case included. Throws before anything is
+ * read or sent. */
 export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.baseUrl): string {
   const { host = '' } = entry.http;
   const head = hostPart(baseUrl);
@@ -137,6 +138,9 @@ export function filledBase(entry: Entry, values: Values, baseUrl = entry.http.ba
     // A named host may be an https origin (Pipedrive's `api_domain`): its host, checked as a typed one, is the rest.
     const value = Object.hasOwn(namedHosts(entry), name) && typeof given === 'string' ? /^https:\/\/([^/]*)\/?$/u.exec(given)?.[1] ?? given : given;
     if (value !== undefined && !BASE_VALUE.test(String(value))) throw invalid(name);
+    // The URL parser lowercases a name before `http.host` reads it: only the choices refuse `API.EU.INTERCOM.IO`.
+    const choices = entry.fields?.find(field => field.name === name)?.choices;
+    if (value !== undefined && Array.isArray(choices) && (typeof value !== 'string' || !choices.includes(value))) throw new TypeError(`base_host_refused: ${entry.id}`);
     return value;
   }, entry.id) + fill(tail, name => {
     const value = plainValue(values, name);
