@@ -8,20 +8,24 @@ const message = { msg_id: 'string', 'from_email?': 'string', 'to_email?': 'strin
   'last_event_time?': 'string' } as const;
 const address = { email: 'string', 'name?': 'string' } as const;
 const hosts = ['api.sendgrid.com', 'api.eu.sendgrid.com'] as const;
+const contact = { id: 'string', 'email?': 'string', 'first_name?': 'string', 'last_name?': 'string', list_ids: ['string'],
+  created_at: 'string', updated_at: 'string' } as const;
+const singleSend = { id: 'string', 'name?': 'string', 'status?': 'string', 'send_at?': 'string', 'categories?': ['string'],
+  'created_at?': 'string', 'updated_at?': 'string' } as const;
 const ref = 'https://www.twilio.com/docs/sendgrid/api-reference';
 
 export const sendgrid = defineProvider({
   id: 'sendgrid', name: 'Twilio SendGrid', docs: `${ref}/users-api/retrieve-your-username`,
-  categories: ['mail'],
+  categories: ['mail', 'marketing'],
   fields: [{ name: 'apiHost', title: 'Region', choices: hosts, default: 'api.sendgrid.com',
-    help: 'api.sendgrid.com for global users and subusers; api.eu.sendgrid.com for EU regional subusers (Pro plan or above).' },
+    help: 'api.sendgrid.com for global users and subusers; api.eu.sendgrid.com for EU regional subusers (Pro plan or above). The marketing operations need a global account: Marketing Campaigns and related features aren\'t supported in the EU environment.' },
   { name: 'apiKey', title: 'API key', secret: true,
-    help: 'A Full Access key, or one with at least whitelabel.read, user.username.read and mail.send. Reading messages needs the paid Email Activity add-on and a key with Email Activity access.' }],
+    help: 'A Full Access key, or one with at least whitelabel.read, user.username.read, mail.send and marketing.read (Email Marketing, which also allows its writes). Reading messages needs the paid Email Activity add-on and a key with Email Activity access.' }],
   auth: [{ kind: 'key' }],
   http: { baseUrl: 'https://{apiHost}/v3', host: hosts,
     retry: { onlyStated: true, wait: { header: 'x-ratelimit-reset', unit: 'epochSeconds' } } },
   identify: { request: { path: '/user/username' }, id: 'user_id', name: 'username' },
-  paging: { offset: { kind: 'offset', send: { query: 'offset' } } },
+  paging: { offset: { kind: 'offset', send: { query: 'offset' } }, next: { kind: 'nextUrl', next: '_metadata.next' } },
   operations: {
     'messages.search': { docs: `${ref}/email-activity/filter-all-messages`, path: '/messages',
       params: { query: { in: 'query', type: 'string', required: true, description: 'Filter conditions, such as to_email="ada@example.com".' },
@@ -40,5 +44,29 @@ export const sendgrid = defineProvider({
       subject: { in: 'body', type: 'string', description: 'Required unless every personalization has its own.' },
       content: { in: 'body', type: [{ type: 'string', value: 'string' }], required: true,
         description: 'At least one body, each a MIME type and its value: text/plain first, then text/html. (A template send is not declared.)' } } },
+    // Marketing Campaigns: global users and subusers only; EU subusers cannot use Marketing:
+    // https://www.twilio.com/docs/sendgrid/data-residency/faq
+    'lists.list': { docs: `${ref}/lists/get-all-lists`, path: '/marketing/lists', paging: 'next', records: 'result',
+      params: { page_size: { in: 'query', type: 'number', description: '100 by default, at most 1000.' } },
+      result: { result: [{ id: 'string', 'name?': 'string', 'contact_count?': 'integer' }] } },
+    'contacts.search': { docs: `${ref}/contacts/search-contacts`, method: 'POST', path: '/marketing/contacts/search', kind: 'read',
+      params: { query: { in: 'body', type: 'string', required: true,
+        description: 'An SGQL condition, such as email = \'ada@example.com\' (emails are stored in lower case). The first 50 matches.' } },
+      result: { 'result?': [contact], contact_count: 'number' } },
+    'contacts.get': { docs: `${ref}/contacts/get-a-contact-by-id`, path: '/marketing/contacts/{id}', notFound: 'null',
+      params: { id: { in: 'path', type: 'string', required: true } }, result: contact },
+    // An upsert: an existing contact is updated, omitted fields kept. Adding contacts might affect your Twilio SendGrid
+    // bill: https://www.twilio.com/docs/sendgrid/ui/managing-contacts/create-and-manage-contacts. It can start emails:
+    // an Automation sends its series to each contact added to its list or segment (All Contacts by default); no
+    // parameter stops it: https://www.twilio.com/docs/sendgrid/ui/sending-email/getting-started-with-automation
+    'contacts.create': { docs: `${ref}/contacts/add-or-update-a-contact`, method: 'PUT', path: '/marketing/contacts', kind: 'write',
+      params: { contacts: { in: 'body', type: [{ email: 'string', 'first_name?': 'string', 'last_name?': 'string' }], required: true,
+        description: 'Up to 30,000 contacts, each identified here by its email (the page also takes other identifiers); an existing contact is updated only when all its identifiers are sent.' },
+      list_ids: { in: 'body', type: ['string'], description: 'The lists every contact is added to. This re-subscribes no one: a send to an address on the Global or Group Unsubscribes suppression lists is suppressed.' } },
+      result: { 'job_id?': 'string' } },
+    'singleSends.list': { docs: `${ref}/single-sends/get-all-single-sends`, path: '/marketing/singlesends', paging: 'next',
+      records: 'result', params: { page_size: { in: 'query', type: 'integer' } }, result: { result: [singleSend] } },
+    'singleSends.get': { docs: `${ref}/single-sends/get-single-send-by-id`, path: '/marketing/singlesends/{id}', notFound: 'null',
+      params: { id: { in: 'path', type: 'string', required: true } }, result: singleSend },
   },
 });

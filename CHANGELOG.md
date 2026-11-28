@@ -99,6 +99,19 @@ Nothing here is released yet.
   `starting_after` is gone.
 - Breaking: Teamleader Focus's `contacts.list`, `companies.list` and `deals.list` return an async iterator of records,
   not one page (`for await (const contact of api.contacts.list())`). Their `page` keeps only `size`: `number` is gone.
+- New entries: 29 marketing providers (activecampaign, attentive, aweber, ayrshare, braze, buffer, buttondown,
+  campaignmonitor, customerio, emailoctopus, formstack, getresponse, iterable, jotform, kit, klaviyo, loops, mailchimp,
+  mailerlite, omnisend, onesignal, ortto, sender, sproutsocial, surveymonkey, tally, typeform, typefully, zernio), each
+  with its category's operations. Every entry is `declared`. Kit declares no broadcast create: its page makes a draft
+  only with `send_at: null`, which no type can force. EmailOctopus declares its webhook.
+- Mailjet and SendGrid list `marketing`, with its audience operations (Mailjet: `contactLists.list`, `contacts.list`,
+  `contacts.get`, `contacts.create`, `contacts.update`, `campaigns.list`, `campaigns.get`; SendGrid: `lists.list`,
+  `contacts.search`, `contacts.get`, `contacts.create`, `singleSends.list`, `singleSends.get`). A SendGrid key for these
+  needs `marketing.read`, and they serve global users and subusers only: EU subusers cannot use Marketing Campaigns, as
+  the region field's help now says.
+- Breaking: Mailjet's first category is `marketing`, where it was `mail` (`categories` is `['marketing', 'mail']`, in
+  the entry and in `catalogue.json`): an app that groups entries by their first category finds Mailjet under
+  `marketing`.
 - New entries: 25 support providers (atlas, chatwoot, crisp, customerly, devrev, dixa, edesk, freshchat, freshdesk,
   freshservice, gist, groove, happyfox, helpcrunch, helpwise, hiver, liveagent, plain, pylon, reamaze, thena, trengo,
   unthread, zammad, zendesk), each with its category's operations (Plain its reads only). Every entry is `declared`.
