@@ -542,20 +542,21 @@ a shape's `send` writes: the walk sends it.
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
   `invalid_response` (`missing_fields`): a malformed answer never reads as an empty list. A page whose list
-  equals the page before's or the first page's is `invalid_response` (`page_repeated`) and is not yielded: a provider
-  that ignores the page number, or answers its first page again past the end, would otherwise never end. Records are
-  expected to differ between pages (they carry ids), so two such pages that are truly identical end the walk the same
-  way. An operation on a `page` shape names the shape's `list` as its `records` (both
+  equals, as a whole, the page before's or the walk's first page's is `invalid_response` (`page_repeated`) and is not
+  yielded: a provider that ignores the page number, or answers its first page again past the end, would otherwise never
+  end. A provider that answers some other earlier page, or the same page with a value changed, is not caught: the walk
+  compares whole pages. Records are expected to differ between pages (they carry ids), so two such pages that are truly
+  identical end the walk the same way. An operation on a `page` shape names the shape's `list` as its `records` (both
   absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
   With `total`, a `page` walk also stops after the page at which the pages it read (`{ pages }`), or the entries it
   read, a skipped record included (`{ entries }`), reach the number at that path in that page's answer. The number is
   read from each answer, never carried from an earlier one. It counts what the walk read, never the page number it
   sent, so `zeroBased` changes nothing. A `total` that is missing, or not a non-negative safe integer, is
-  `invalid_response` (`missing_fields`): a malformed answer never reads as an end. A falsy `more` still ends the
-  walk, and `page_repeated` still applies. An empty list ends it only once the count is reached: before, it is
-  `invalid_response` (`missing_fields`), so the walk never ends short of the count. A total larger than what the pages
-  hold ends loudly (`page_repeated`, `missing_fields`, or the provider's own error), unless a declared `more` ends the
-  walk first. Declare `total` where a page past the last answers the last page again, or where no page states what
+  `invalid_response` (`missing_fields`): a malformed answer never reads as an end. An empty list ends the walk only
+  once the count is reached; before, it is `invalid_response` (`missing_fields`). So a total larger than what the pages
+  hold fails at an empty page (`missing_fields`), at the page before or the first page again (`page_repeated`), or on
+  the provider's own error; another earlier page answered again counts toward the total, and a falsy `more` ends the
+  walk where it stands. Declare `total` where a page past the last answers the last page again, or where no page states what
   it answers; cite the field's meaning. Pages counted from 1 are cited as for any `page` shape.
 - `offset`: the `page` kind's walk and stop rules, run by the same loader, with another next value: nothing on the first
   request, then the offset sent (0 for the first page) plus the number of entries in the page's `list`, a record the
@@ -568,8 +569,7 @@ a shape's `send` writes: the walk sends it.
   `offset` shape names the shape's `list` as its `records`. Declare it only for an offset that counts the records
   skipped from 0, cited (an example of `0`, or a starting record position); one counted from 1 waits.
 - A `page` or `offset` list whose page states where its numbering starts may be paged although no page says what a
-  request past the end answers. The walk ends on an empty list. A provider that answers otherwise past the end, with
-  the page before or the first page again (`page_repeated`) or with its own error, fails loudly, never silently.
+  request past the end answers: the stop rules above end it.
 - `last`: the `page` kind's walk and stop rules, run by the same loader, with another next value: the value at `next`
   inside the last element of `list` (the answer itself when `list` is absent), sent in `send`'s place (Render's
   `cursor`, a sibling of each resource). The first request sends nothing; an empty list ends the walk. With `more`, a
@@ -578,16 +578,14 @@ a shape's `send` writes: the walk sends it.
   one `paginate` guard. The last element is read from the answer itself, so a record the parser skips still gives the
   value. An operation on a `last` shape names the shape's `list` as its `records`.
 - A `body` place is a path. The walk writes its value at that path, copying each object along it and creating the
-  ones missing, so the caller's arguments are never changed. No body place declared before paths holds a dot, so none
-  changed meaning. An operation is also `param_paged` when a body parameter is named the path's first segment and its
+  ones missing, so the caller's arguments are never changed. An operation is also `param_paged` when a body parameter is named the path's first segment and its
   object type declares the rest (with or without `?`), or its type is not an object: the walk would overwrite it. The
   table refuses an empty segment and a segment `__proto__`, `constructor` or `prototype`.
 - A `variables` place writes the value into the GraphQL request's `variables`, beside the caller's: a cursor as a
   string, a page number or an offset as a number, as a body place does. `cursor`, `page`, `offset` and `last` take it,
   and their stop rules do not change. A GraphQL operation pages only on a shape whose `send` is `variables`, and an
   operation with a path never pages on one: `paging_unplaced: <id>`, from `client()` and the table. An operation that
-  declares a variable of the `send` name is `param_paged`, as in any other place. A raw `paginate` on a `variables`
-  shape needs a JSON body.
+  declares a variable of the `send` name is `param_paged`, as in any other place.
 - A request a `body` or `variables` place cannot be written into is `request_failed` before the first request: a form,
   a JSON body that is not an object, or a value on the body path that is not an object. A missing (or null) body,
   `variables` object or object on the path starts as `{}`.

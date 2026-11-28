@@ -61,7 +61,8 @@ one takes five steps:
      object), the description names the values the template covers; where the page lists a spam or removed value among
      them, it says the entry does not check the value;
    - a `page` or `offset` list is paged once its page states where its numbering starts, even when no page says what a
-     request past the end answers: the walk ends on an empty list, and a provider that answers otherwise fails loudly;
+     request past the end answers: the walk ends on an empty list, and fails on a page equal, as a whole, to the one
+     before or the first (`page_repeated`) or on the provider's own error;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;
@@ -124,8 +125,8 @@ entry:
   when left out) and never beside `onlyStated`;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
   place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation names
-  a declared shape and no `notFound` (a GraphQL one a shape sent in `variables`, and only it), a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's
-  `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id is
+  a declared shape and no `notFound` (a GraphQL one, a shape sent in `variables`; an operation with a path, never
+  one), a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id is
   a client call or a dotted prefix of another;
 - has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields
   (the refresh URL may also name a host the token answer names), and whose URLs, base and `http.bases` share one host
