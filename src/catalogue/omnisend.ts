@@ -11,7 +11,7 @@ const written = { firstName: { in: 'body', type: 'string' }, lastName: { in: 'bo
   tags: { in: 'body', type: ['string'] },
   identifiers: { in: 'body', type: [{ id: 'string', type: 'string', 'channels?': { 'email?': channel, 'sms?': channel },
     'sendWelcomeMessage?': 'boolean' }],
-  description: 'Each an email or a phone (type email or phone; E.164 with its country code), its channel (email for an email, sms for a phone) subscribed, unsubscribed or nonSubscribed. sendWelcomeMessage false sends no welcome message for it (true by default, when the welcome workflow is on).' } } as const;
+  description: 'Each an email or a phone (type email or phone; E.164 with its country code), its channel (email for an email, sms for a phone) subscribed, unsubscribed or nonSubscribed. The status with the latest status date is kept, and one dated earlier than the stored one is not applied; no page says more about setting subscribed on a contact who unsubscribed. sendWelcomeMessage false sends no welcome message for it (true by default, when the welcome workflow is on).' } } as const;
 const campaign = { id: 'string', 'name?': 'string', 'status?': 'string', 'channel?': 'string', 'type?': 'string',
   'createdAt?': 'string', 'updatedAt?': 'string' } as const;
 const id = { id: { in: 'path', type: 'string', required: true } } as const;
@@ -42,10 +42,10 @@ export const omnisend = defineProvider({
     // An upsert: a contact with the email given is updated. An identifier sends a welcome message when the welcome
     // workflow is on, unless its `sendWelcomeMessage` is false; a contact that enters a segment starts the automations
     // triggered on it: https://api-docs.omnisend.com/reference/post_automations
-    'contacts.create': { docs: `${ref}/post_contacts`, method: 'POST', path: '/contacts', params: written, result: contact },
+    'contacts.create': { docs: `${ref}/post_contacts`, method: 'POST', path: '/contacts', kind: 'write', params: written, result: contact },
     // An identifier added here sends a welcome message as on create, unless its `sendWelcomeMessage` is false; a
     // contact that enters a segment starts its automations, as on create.
-    'contacts.update': { docs: `${ref}/patch_contacts-id`, method: 'PATCH', path: '/contacts/{id}', params: { ...id, ...written },
+    'contacts.update': { docs: `${ref}/patch_contacts-id`, method: 'PATCH', path: '/contacts/{id}', kind: 'write', params: { ...id, ...written },
       result: contact },
     'campaigns.list': { docs: `${ref}/get_campaigns`, path: '/campaigns', paging: 'after', records: 'campaigns',
       params: { limit: { in: 'query', type: 'integer', description: '100 by default, 1 to 250.' },
@@ -53,14 +53,15 @@ export const omnisend = defineProvider({
       result: { campaigns: [campaign] } },
     'campaigns.get': { docs: `${ref}/get_campaigns-id`, path: '/campaigns/{id}', notFound: 'null', params: id, result: campaign },
     // A contact's event can trigger the automations that start on it, which may email or text the contact.
-    'events.create': { docs: `${ref}/post_events`, method: 'POST', path: '/events',
-      params: { eventName: { in: 'body', type: 'string' },
-        origin: { in: 'body', type: 'string', description: 'api for your own store; an app sets its own name.' },
-        contact: { in: 'body', type: { 'id?': 'string', 'email?': 'string', 'phone?': 'string' },
+    'events.create': { docs: `${ref}/post_events`, method: 'POST', path: '/events', kind: 'write',
+      params: { eventName: { in: 'body', type: 'string', required: true },
+        origin: { in: 'body', type: 'string', required: true, description: 'api for your own store; an app sets its own name.' },
+        contact: { in: 'body', required: true, type: { 'id?': 'string', 'email?': 'string', 'phone?': 'string' },
           description: 'Created or updated from what is given here.' },
         properties: { in: 'body', type: 'unknown' }, eventTime: { in: 'body', type: 'string', description: 'ISO 8601; now by default.' },
         eventVersion: { in: 'body', type: 'string',
           description: 'Only for a recommended event, its documented version; leave it out for a custom event.' },
-        eventID: { in: 'body', type: 'string', description: 'A UUID; with eventTime it dedupes historical events, not real-time ones.' } } },
+        eventID: { in: 'body', type: 'string', description: 'A UUID; with eventTime it dedupes historical events, not real-time ones.' } },
+      anyOf: [['contact.id'], ['contact.email'], ['contact.phone']] },
   },
 });
