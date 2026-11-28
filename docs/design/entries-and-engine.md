@@ -324,8 +324,8 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
   `OAuthClient<typeof entry>` has no `clientSecret` (Firecrawl, Brevo).
 - `oauth2.refreshUrl` is where a refresh posts (Figma's `/v1/oauth/refresh`); the code exchange still posts to
   `tokenUrl`. A refresh answer without a `refresh_token` keeps the one sent.
-- A code exchange the server refuses is classified as a `token` sign-in's token answer is (below), since no grant
-  existed: a 200 the entry's `failed` marks is `rejected` too, and a 5xx is `unavailable` before its body is read.
+- A code exchange's answer is read and classified as a `token` sign-in's token answer is (below), by the same
+  function, since no grant existed; a 200 the entry's `failed` marks is `rejected` too.
   `GrantRevoked` means a grant that existed (a refresh, a call). A refusal of the exchange, a refresh or a revoke is
   read from its body even beside a `WWW-Authenticate` challenge (Doorkeeper sends one on every error; RFC 6749 §5.2
   asks for one beside a 401 `invalid_client`).
@@ -345,8 +345,8 @@ type TokenRequest = { url: Template; body: Record<string, Template>; json?: true
     400, 401 and 403 are `rejected` (RFC 6749 §5.2), their detail the answer's `error` when it is one of the RFC's
     codes (`invalid_grant`, `invalid_client`, …), else none; any other answer is classified as a call's is (a 404
     `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx `unavailable`, the rest `request_failed`), no code
-    reading as a revoked grant: the entry's `errors.revoked` list is not read, since no grant existed. A body that
-    breaks while it is read is `unavailable`. No detail holds a secret field, a body value filled from one, or the
+    reading as a revoked grant: the entry's `errors.revoked` list is not read, since no grant existed. An answer whose
+    body breaks while it is read, refused or not, is `unavailable`. No detail holds a secret field, a body value filled from one, or the
     Basic value sent.
     The request is sent once, never retried: it is no read of the provider's API.
   - `tokenSource(entry, { secret, values, fetch? })` (from `./oauth`) is the token function `client()` takes: it keeps

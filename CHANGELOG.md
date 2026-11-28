@@ -56,11 +56,15 @@ Nothing here is released yet.
   verifier (`invalid_grant`), is no longer `GrantRevoked`; a wrong client (`invalid_client`), any other OAuth code and
   an answer with no OAuth body at those statuses are no longer `request_failed`; Slack's `ok: false` is `rejected` with
   no detail (its own codes, such as `invalid_code`, are none of RFC 6749's). Any other refusal of the exchange is
-  classified as a call's answer is: a 404 is `not_found`, a 429 `rate_limited` with its wait, a 408 `unavailable`, each
-  `request_failed` before (or `GrantRevoked` before, for `invalid_grant` or a code the entry lists as revoked); a 5xx is
-  `unavailable`, as before; a refused answer whose body breaks while it is read is `unavailable` (it was
-  `request_failed`). An app that caught `GrantRevoked` or `request_failed` from `finishConnect` or `exchangeCode` to ask
-  the person to connect again catches `rejected`.
+  classified as a call's answer is, by the entry's own rules and with the answer's headers as sent: a 404 is
+  `not_found`, a 429 `rate_limited` with its wait, a 408 `unavailable`, each `request_failed` before (or `GrantRevoked`
+  before, for `invalid_grant` or a code the entry lists as revoked); a 5xx is `unavailable` with its stated wait (it had
+  none), or what an entry's rule makes of it. An answer whose body breaks while it is read is `unavailable`, refused
+  (it was `request_failed`) or a 200 (it was `invalid_response`). A 200 the entry's `failed` marks takes its detail
+  from the body's `error`, as a 400 does, not from `errors.detail`'s path. A first token request, an exchange or a
+  `token` sign-in's, no longer reads the entry's own `errors.revoked` list, so an app's own `token` entry that lists a
+  code there gets no `GrantRevoked` from it on a first request. An app that caught `GrantRevoked` or `request_failed`
+  from `finishConnect` or `exchangeCode` to ask the person to connect again catches `rejected`.
 - Breaking: an OAuth refusal that carries a `WWW-Authenticate` challenge (Doorkeeper sends one on every error, RFC 6749
   asks for one beside a 401 `invalid_client`) is read from its body as any other refusal is. A refresh refused that way
   with `invalid_grant` or a code the entry lists as revoked is `GrantRevoked`, no longer `request_failed`: the

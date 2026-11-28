@@ -1,6 +1,6 @@
 import * as oauth from 'oauth4webapi';
 import { lookupNames } from './account.js';
-import type { Entry, Kept, Plain, Values, ValuesOption } from './catalogue.js';
+import type { Entry, Kept, Plain, Values, ValuesOption, When } from './catalogue.js';
 import { GrantRevoked, ProviderHttpError } from './errors.js';
 import { callBase, callRequest, createClient, defaultFetch, filledBase, type ProviderResponse } from './http.js';
 import { classify, codeOf, responseJson, safeDetail, sentWith } from './http-response.js';
@@ -76,14 +76,10 @@ type CustomFetch = NonNullable<oauth.HttpRequestOptions<'POST', URLSearchParams>
 const jsonBodies = (fetch: typeof globalThis.fetch): CustomFetch => (url, options) => fetch(url, { ...options,
   headers: { ...options.headers, 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(options.body)) });
 
-/** A refusal is read from its body: oauth4webapi reads a `WWW-Authenticate` challenge first and never its code (Doorkeeper
- * sends one on every error). A token answer that states no `token_type` is read as Bearer, as most OAuth clients read it
- * (ClickUp's states none); only a 2xx answer to a grant (an exchange or a refresh) is read, a revoke sends no `grant_type`. */
+/** A token answer that states no `token_type` is read as Bearer, as most OAuth clients read it (ClickUp's states none).
+ * Only a 2xx answer to a grant (an exchange or a refresh) is read; a revoke sends no `grant_type`. */
 const bearerByDefault = (send: CustomFetch): CustomFetch => async (url, options) => {
   const response = await send(url, options);
-  if (!response.ok && response.headers.has('www-authenticate')) {
-    return new Response(response.body, { status: response.status, headers: [...response.headers].filter(([name]) => name !== 'www-authenticate') });
-  }
   if (!response.ok || !options.body.has('grant_type')) return response;
   const body: unknown = await response.clone().json().catch(() => null);
   if (typeof body !== 'object' || body === null || !('access_token' in body) || 'token_type' in body) return response;
@@ -133,7 +129,12 @@ async function send(c: Context, entry: Entry, secrets: readonly string[], work: 
     if (error instanceof ProviderHttpError) throw error; // the address guard's refusal
     throw new ProviderHttpError('unavailable', null);
   }
+  if (exchange) return response; // the exchange reads every answer itself
   if (response.status >= 500) throw new ProviderHttpError('unavailable', response.status);
+  // A refusal is read from its body: oauth4webapi reads a `WWW-Authenticate` challenge (Doorkeeper's on every error) first.
+  if (!response.ok && response.headers.has('www-authenticate')) {
+    return new Response(response.body, { status: response.status, headers: [...response.headers].filter(([name]) => name !== 'www-authenticate') });
+  }
   const { failed } = c.config;
   if (failed !== undefined && response.status === 200) {
     let body: unknown;
@@ -144,7 +145,7 @@ async function send(c: Context, entry: Entry, secrets: readonly string[], work: 
     }
     const code = codeOf(entry.errors, body);
     if (holds(failed, { status: response.status, headers: response.headers, body, code })) {
-      throw exchange ? new ProviderHttpError('rejected', response.status, rfcDetail(code, secrets)) : refusal(code ?? '', entry, response.status, secrets);
+      throw refusal(code ?? '', entry, response.status, secrets);
     }
   }
   return response;
@@ -169,8 +170,9 @@ export async function exchangeCode<const E extends Entry>(entry: E, client: OAut
   if (codeVerifier) params.set('code_verifier', codeVerifier);
   const secrets = [...c.secrets, code, codeVerifier ?? ''];
   const response = await send(c, entry, secrets, () => oauth.genericTokenEndpointRequest(c.as, c.client, c.auth, 'authorization_code', params, c.options), true);
-  const refused = response.ok ? null : firstTokenError(entry, sentWith({ status: response.status, headers: response.headers,
-    data: parseJson(await response.text().catch(() => { throw new ProviderHttpError('unavailable', null); })) }, secrets), secrets);
+  // Read whole as a `token` sign-in's first answer is: one that breaks while it is read is `unavailable`.
+  const text = await response.clone().text().catch(() => { throw new ProviderHttpError('unavailable', null); });
+  const refused = firstTokenError(entry, sentWith({ status: response.status, headers: response.headers, data: parseJson(text) }, secrets), secrets, c.config.failed);
   if (refused) throw refused;
   try {
     const answer = await oauth.processGenericTokenEndpointResponse(c.as, c.client, response, c.processing);
@@ -236,15 +238,15 @@ export async function revokeGrant<const E extends Entry>(entry: E, input: { acce
 }
 
 const RFC6749_ERRORS = ['invalid_request', 'invalid_client', 'invalid_grant', 'unauthorized_client', 'unsupported_grant_type', 'invalid_scope'];
-/** A refusal's detail: the answer's `error` only when that is one of RFC 6749's codes, and holds nothing sent. */
-const rfcDetail = (code: unknown, secrets: readonly string[]) => (typeof code === 'string' && RFC6749_ERRORS.includes(code) ? safeDetail(code, secrets) : null);
-
-/** A first token request's answer (a code exchange, a `token` sign-in) as its error, or null: RFC 6749 §5.2's 400, 401
- * and 403 are a refused client or grant, `rejected`; any other is classified as a call's answer is, but no code reads
- * as a revoked grant: none existed. */
-function firstTokenError(entry: Entry, response: ProviderResponse, secrets: readonly string[]): Error | null {
-  const { status } = response;
-  if (status === 400 || status === 401 || status === 403) return new ProviderHttpError('rejected', status, rfcDetail(readPath(response.data, 'error'), secrets));
+/** A first token request's answer (a code exchange, a `token` sign-in) as its error, or null: RFC 6749 §5.2's 400, 401,
+ * 403 and a 200 `failed` marks are `rejected`, the detail the answer's `error` if one of the RFC's codes; any other is
+ * classified as a call's answer is, but no code reads as a revoked grant: none existed. */
+function firstTokenError(entry: Entry, response: ProviderResponse, secrets: readonly string[], failed?: When): Error | null {
+  const { status, headers, data } = response;
+  if ([400, 401, 403].includes(status) || (status === 200 && failed !== undefined && holds(failed, { status, headers, body: data, code: codeOf(entry.errors, data) }))) {
+    const code = readPath(data, 'error');
+    return new ProviderHttpError('rejected', status, typeof code === 'string' && RFC6749_ERRORS.includes(code) ? safeDetail(code, secrets) : null);
+  }
   return status >= 200 && status < 300 ? null : classify({ http: entry.http, errors: { ...entry.errors, revoked: [] } }, response);
 }
 type TokenInput = { secret: Readonly<Record<string, string>>; values?: Values; fetch?: typeof fetch };

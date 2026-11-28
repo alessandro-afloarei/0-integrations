@@ -7,9 +7,9 @@ default); none asked sends no `scope` parameter. `exchangeCode` returns only the
 (`identify`, `save`, and `scope` when every scope must be granted), never the rest. A code exchange the server refuses
 is classified as a `token` sign-in's first request is (no grant existed): a 400, 401 or 403, and a 200 the entry's
 `failed` marks, are `rejected`, their detail the answer's `error` only when that is one of RFC 6749's codes; any other
-4xx is classified as a call's is (a 404 `not_found`, a 429 `rate_limited` with its wait, a 408 `unavailable`, the rest
-`request_failed`), and a 5xx is `unavailable`; never `GrantRevoked`, which means a grant that existed (a refresh, a
-call). A body that breaks while it is read is `unavailable`. A refusal is read from its body even beside a
+answer is classified as a call's is (a 404 `not_found`, a 429 `rate_limited` with its wait, a 408 or 5xx
+`unavailable`, the rest `request_failed`), never `GrantRevoked`, which means a grant that existed (a refresh, a call).
+An exchange answer whose body breaks while it is read, refused or a 200, is `unavailable`. A refusal is read from its body even beside a
 `WWW-Authenticate` challenge, as Doorkeeper sends on every error. An entry's `authorizeParams` never replace a
 parameter the engine sends (`client_id`, `scope`, `redirect_uri`, `state`, `code_challenge`, `code_challenge_method`).
 The client's secret, the code and the verifier are each read once, so the value checked is the value sent and

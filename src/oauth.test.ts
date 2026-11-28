@@ -206,6 +206,54 @@ test('a refused answer whose body breaks while it is read is `unavailable`, neve
   }
 });
 
+/** A `token` sign-in and an OAuth 2 sign-in with one `http` and one `errors`: their first token requests compared. */
+function firstRequests(errors: NonNullable<Entry['errors']>, failed?: NonNullable<Extract<Entry['auth'][number], { kind: 'oauth2' }>['failed']>) {
+  const tokened = defineProvider({ id: 'tokened', name: 'Tokened', fields: [{ name: 'clientSecret', title: 'Client secret', secret: true }],
+    auth: [{ kind: 'token', request: { url: 'https://first.test/token', body: { grant_type: 'client_credentials', client_secret: '{clientSecret}' } } }],
+    http: { baseUrl: 'https://api.first.test' }, errors });
+  const exchanged = defineProvider({ id: 'exchanged', name: 'Exchanged', auth: [{ kind: 'oauth2', authorizeUrl: 'https://first.test/authorize',
+    tokenUrl: 'https://first.test/token', pkce: false, ...(failed === undefined ? {} : { failed }) }], http: { baseUrl: 'https://api.first.test' }, errors });
+  const outcome = (run: Promise<unknown>) => run.then(() => 'answered', (error: unknown) => error);
+  return async (answer: () => Response) => {
+    const { fetch } = fakeFetch([{ url: /https:/, respond: answer }]);
+    return { token: await outcome(requestToken(tokened, { secret: { clientSecret: 'private-token-secret' }, fetch })),
+      exchange: await outcome(exchangeCode(exchanged, client, { ...exchange, fetch })) };
+  };
+}
+
+test("an exchange's rule that reads `WWW-Authenticate` sees the answer as sent, as a `token` sign-in's does", async () => {
+  // The header is dropped only where oauth4webapi reads the answer (a refresh, a revoke).
+  const ruled = firstRequests({ rules: [{ when: { status: 404, header: 'www-authenticate' }, code: 'unavailable' }] });
+  const challenged = await ruled(() => Response.json({ error: 'not_found' }, { status: 404, headers: { 'www-authenticate': 'Bearer realm="x"' } }));
+  expect(challenged.exchange).toEqual(challenged.token);
+  expect(challenged.exchange).toEqual(new ProviderHttpError('unavailable', 404, null));
+});
+
+test("an exchange's 5xx keeps its wait, as a `token` sign-in's does", async () => {
+  const busy = await firstRequests({})(() => Response.json({ error: 'temporarily_unavailable' }, { status: 503, headers: { 'retry-after': '30' } }));
+  expect(busy.exchange).toEqual(busy.token);
+  expect(busy.exchange).toMatchObject({ code: 'unavailable', status: 503, retryAfterMs: 30_000 });
+});
+
+test("an exchange's 200 whose body breaks while it is read is `unavailable`, as a `token` sign-in's is", async () => {
+  const broken = await firstRequests({})(() => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode('{"access'));
+    controller.error(new TypeError('terminated'));
+  } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+  expect(broken.exchange).toEqual(broken.token);
+  expect(broken.exchange).toEqual(new ProviderHttpError('unavailable', null));
+});
+
+test("a 200 the `failed` rule marks takes its detail as a 400 does: the body's `error`, an RFC 6749 code", async () => {
+  // `errors.detail` names another path; a `token` sign-in's 400 reads `error`, and so does the exchange, refused either way.
+  const answer = { ok: false, error: 'invalid_grant', reason: 'invalid_client' };
+  const marked = await firstRequests({ detail: 'reason' }, { path: 'ok', equals: false })(() => Response.json(answer));
+  const refused = await firstRequests({ detail: 'reason' })(() => Response.json(answer, { status: 400 }));
+  expect(refused.exchange).toEqual(refused.token);
+  expect([marked.exchange, refused.token]).toEqual([new ProviderHttpError('rejected', 200, 'invalid_grant'),
+    new ProviderHttpError('rejected', 400, 'invalid_grant')]);
+});
+
 test("a refused exchange's detail never echoes the code, the verifier or the client's secret", async () => {
   const verifier = 'private-code-verifier-0123456789';
   for (const echoed of [exchange.code, verifier, client.clientSecret]) {
