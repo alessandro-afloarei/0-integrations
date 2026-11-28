@@ -6,6 +6,8 @@ Nothing here is released yet.
 
 - A `page`, `offset` or `last` walk whose page equals its first page is `page_repeated`, as one equal to the page before
   is: a provider that answers its first page again past the end no longer yields it a second time, or walks on forever.
+  A `last` walk that met its first page again now reports `page_repeated` where it reported `cursor_repeated`, and a
+  list whose first and a later page are equal as wholes now stops there.
 - Breaking: a `page` walk may stop at the answer's count (`total: { pages }` or `{ entries }`, read from each answer;
   one missing or not a non-negative whole number, or an empty page before it is reached, is `invalid_response`).
   Smartsheet's `sheets.list` and `rows.list` return an async iterator of records, not one page (`for await (const sheet
@@ -30,8 +32,8 @@ Nothing here is released yet.
   gone.
 - Breaking: Freshdesk's `tickets.search` returns an async iterator of tickets, not one page
   (`for await (const ticket of api.tickets.search({ query }))`), walked to the answer's `total`. Its `page` argument is
-  gone. Freshdesk serves 10 pages of a search (300 results); what an 11th answers is not stated, and a search with
-  more results than ten pages hold does not end quietly.
+  gone. Its page number "should not exceed 10" (300 results); what an 11th page answers, and whether `total` counts
+  past it, are not stated.
 - Breaking: Freshservice's `tickets.search` returns an async iterator of tickets, not one page
   (`for await (const ticket of api.tickets.search({ query }))`), walked to the answer's `total`. Its `page` argument is
   gone.

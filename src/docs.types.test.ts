@@ -124,7 +124,7 @@ async function connectTwoSignIns(oauthClient: OAuthClient, redirectUri: string, 
 
   const api = client(linear, { token: secret.accessToken });
   const titles: string[] = [];
-for await (const issue of api.issues.list({ teamId, first: 50 })) titles.push(issue.title); // every page, 50 at a time
+  for await (const issue of api.issues.list({ teamId, first: 50 })) titles.push(issue.title); // every page, 50 at a time
 
   // A person's own key instead: a form, then one call.
   const key = signInWith(linear, 'key');
