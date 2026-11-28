@@ -39,18 +39,19 @@ export const activecampaign = defineProvider({
       result: { contacts: [contact] } },
     'contacts.get': { docs: `${ref}/get-contact`, path: '/contacts/{id}', notFound: 'null', params: id, result: { contact } },
     // A new contact only: it subscribes to no list here (`subscriptions.create` does); an existing email is a 422.
-    'contacts.create': { docs: `${ref}/create-a-new-contact`, method: 'POST', path: '/contacts',
+    'contacts.create': { docs: `${ref}/create-a-new-contact`, method: 'POST', path: '/contacts', kind: 'write',
       params: { contact: { in: 'body', required: true, type: { email: 'string', ...written } } }, result: { contact } },
-    'contacts.update': { docs: `${ref}/update-a-contact-new`, method: 'PUT', path: '/contacts/{id}',
+    // Changes the contact's fields alone; it subscribes it to no list.
+    'contacts.update': { docs: `${ref}/update-a-contact-new`, method: 'PUT', path: '/contacts/{id}', kind: 'write',
       params: { ...id, contact: { in: 'body', required: true, type: { 'email?': 'string', ...written },
         description: 'Fields left out keep their current values.' } }, result: { contact } },
     // Subscribes a contact to a list (status 1): a new active membership gets the list's subscribe autoresponders and,
     // when the list is set to send it, the list's last campaign; its subscribe automations start, and the list's
     // subscription notification, if set, emails the addresses configured on it.
-    'subscriptions.create': { docs: `${ref}/update-list-status-for-contact`, method: 'POST', path: '/contactLists',
+    'subscriptions.create': { docs: `${ref}/update-list-status-for-contact`, method: 'POST', path: '/contactLists', kind: 'write',
       params: { contactList: { in: 'body', required: true, type: { list: 'string', contact: 'string', status: '1',
         'suppressInstantAutoresponder?': 'boolean', 'responder?': 'integer' },
-        description: 'list and contact are the ids the lists and contacts reads give. suppressInstantAutoresponder true does not send the list\'s subscribe autoresponders; responder 0 stops its later, scheduled ones. Resubscribing an unsubscribed contact needs the resubscribe permission.' } },
+        description: 'list and contact are the ids the lists and contacts reads give. suppressInstantAutoresponder true does not send the list\'s subscribe autoresponders; responder 0 stops its later, scheduled ones. From unsubscribed (2) to active (1) it re-subscribes a contact to a list they had manually unsubscribed from, and needs the resubscribe permission.' } },
       result: { contactList: { 'id?': 'string', 'list?': 'string', 'contact?': 'string', 'sdate?': 'string' } } },
     'campaigns.list': { docs: `${ref}/list-all-campaigns`, path: '/campaigns', paging: 'campaigns', records: 'campaigns',
       result: { campaigns: [campaign] } },
