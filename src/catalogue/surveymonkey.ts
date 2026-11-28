@@ -1,9 +1,9 @@
 import { defineProvider } from '../catalogue.js';
 
-/** SurveyMonkey: OAuth 2 for an app reaching many accounts. A new app is a draft no other account can authenticate (90
- * days); a Private app (one team, paid plans) needs no review; a Public app is reviewed and approved by SurveyMonkey.
- * Scopes are set on the app (View Users, View Surveys, View Responses); tokens do not expire; the token answer's
- * `access_url` names the account's data center. A 429 resets by the minute or by the day: no retry. */
+/** SurveyMonkey: OAuth 2. A new app is a draft, disabled after 90 days unless deployed, that no other account can
+ * authenticate; a Private app (one team, paid plans) needs no review; a Public app is reviewed and approved first. The
+ * app sets the scopes (View Users, Surveys, Responses); tokens do not expire; the token answer's `access_url` names the
+ * account's data center. A 429 resets by the minute or by the day: no retry. */
 const survey = { id: 'string', 'title?': 'string', 'nickname?': 'string', 'href?': 'string' } as const;
 const surveyId = { in: 'path', type: 'string', required: true } as const;
 const perPage = { in: 'query', type: 'integer', description: 'Resources a page, at most 1000 unless otherwise specified.' } as const;
