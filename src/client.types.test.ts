@@ -8,6 +8,7 @@ import { paypal } from './catalogue/paypal.js';
 import { zoom } from './catalogue/zoom.js';
 import { client, type Client, type ProviderResponse, type RequestOptions } from './client.js';
 import { finishConnect } from './connect.js';
+import { refreshGrant } from './oauth.js';
 
 // A fake provider, pure data: its client's types are inferred from this literal.
 const acme = defineProvider({
@@ -154,6 +155,18 @@ async function defaults(accessToken: string) {
   await finishConnect(signInWith(intercom, 'key'), { secret: { accessToken }, values: { apiHots: 'x' }, fetch });
 }
 
+// Intercom's OAuth 2 connection keeps its region: a refresh takes `values: { appHost }`, required.
+async function region(refreshToken: string) {
+  const app = { clientId: 'c', clientSecret: 's' };
+  await refreshGrant(intercom, app, refreshToken, { values: { appHost: 'app.intercom.com' } });
+  // @ts-expect-error a misspelt field is no plain field of Intercom's OAuth 2 sign-in
+  await refreshGrant(intercom, app, refreshToken, { values: { appHots: 'app.intercom.com' } });
+  // @ts-expect-error `appHost` is required: a refresh fills the authorize URL with it
+  await refreshGrant(intercom, app, refreshToken, { values: {} });
+  // @ts-expect-error `values` is required on a refresh
+  await refreshGrant(intercom, app, refreshToken);
+}
+
 // A token entry's finish is a form's: its secret fields, its plain fields unless each has a default, `fetch` optional.
 async function tokenFinish(clientSecret: string, password: string, host: string, username: string) {
   // @ts-expect-error Zoom's account and client ids have no default, so `values` is required
@@ -167,6 +180,7 @@ async function tokenFinish(clientSecret: string, password: string, host: string,
 test('defineProvider keeps an entry with operations', () => {
   expect(defaults).toBeTypeOf('function');
   expect(tokenFinish).toBeTypeOf('function');
+  expect(region).toBeTypeOf('function');
   expect(acme.id).toBe('acme');
   expect(typed).toBeTypeOf('function');
 });
