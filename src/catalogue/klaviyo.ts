@@ -40,9 +40,10 @@ export const klaviyo = defineProvider({
       'page[size]': { ...size, description: '20 by default, at most 100.' } }, result: { data: [profile] } },
     'profiles.get': { docs: `${ref}/get_profile`, path: '/profiles/{id}', notFound: 'null', params: id, result: { data: profile } },
     // A profile's consent to marketing is given by `subscriptions.create`, not here.
-    'profiles.create': { docs: `${ref}/create_profile`, method: 'POST', path: '/profiles',
+    'profiles.create': { docs: `${ref}/create_profile`, method: 'POST', path: '/profiles', kind: 'write',
       params: { data: { in: 'body', required: true, type: { type: 'profile', attributes: written } } }, result: { data: profile } },
-    'profiles.update': { docs: `${ref}/update_profile`, method: 'PATCH', path: '/profiles/{id}',
+    // Changes the profile's fields alone; consent to marketing is `subscriptions.create`'s.
+    'profiles.update': { docs: `${ref}/update_profile`, method: 'PATCH', path: '/profiles/{id}', kind: 'write',
       params: { ...id, data: { in: 'body', required: true, type: { type: 'profile', id: 'string', attributes: written },
         description: 'data.id is the path\'s id; a field left out is unchanged, one set to null is cleared.' } }, result: { data: profile } },
     'lists.list': { docs: `${ref}/get_lists`, path: '/lists', paging: 'next', records: 'data',
@@ -52,24 +53,26 @@ export const klaviyo = defineProvider({
     // Subscribes people to email marketing and lifts their unsubscribe, spam-report and user suppressions: on a list
     // with double opt-in each is first emailed a confirmation, and its "Added to list" flows start;
     // `historical_import: true` sends neither.
-    'subscriptions.create': { docs: `${ref}/bulk_subscribe_profiles`, method: 'POST', path: '/profile-subscription-bulk-create-jobs',
+    'subscriptions.create': { docs: `${ref}/bulk_subscribe_profiles`, method: 'POST', path: '/profile-subscription-bulk-create-jobs', kind: 'write',
       params: { data: { in: 'body', required: true, type: { type: 'profile-subscription-bulk-create-job',
         attributes: { profiles: { data: [{ type: 'profile', 'id?': 'string', attributes: { 'email?': 'string',
           subscriptions: { email: { marketing: { consent: 'SUBSCRIBED', 'consented_at?': 'string' } } } } }] },
         'historical_import?': 'boolean' },
         'relationships?': { list: { data: { type: 'list', id: 'string' } } } },
-        description: 'Email marketing for up to 1000 profiles. historical_import true bypasses double opt-in emails and "Added to list" flows; each profile then needs a past consented_at. Without a list the account\'s default opt-in setting applies.' } } },
+        description: 'Email marketing for up to 1000 profiles; it removes their UNSUBSCRIBE, SPAM_REPORT and USER_SUPPRESSED suppressions, so it re-subscribes those who unsubscribed. historical_import true bypasses double opt-in emails and "Added to list" flows; each profile then needs a past consented_at. Without a list the account\'s default opt-in setting applies.' } } },
     'campaigns.list': { docs: `${ref}/get_campaigns`, path: '/campaigns', paging: 'next', records: 'data',
       params: { filter: { in: 'query', type: 'string', description: 'For example contains(name,\'Spring\'), or any(id,[…]).' },
         'page[size]': { ...size, description: '100 by default, at most 100.' } }, result: { data: [campaign] } },
     'campaigns.get': { docs: `${ref}/get_campaign`, path: '/campaigns/{id}', notFound: 'null', params: id, result: { data: campaign } },
     // An event can start its metric's flows, which may email or text the person; `backfill: true` starts none.
-    'events.create': { docs: `${ref}/create_event`, method: 'POST', path: '/events',
+    'events.create': { docs: `${ref}/create_event`, method: 'POST', path: '/events', kind: 'write',
       params: { data: { in: 'body', required: true, type: { type: 'event', attributes: { properties: 'unknown', 'time?': 'string',
         'value?': 'number', 'unique_id?': 'string', 'backfill?': 'boolean',
         metric: { data: { type: 'metric', attributes: { name: 'string' } } },
         profile: { data: { type: 'profile', 'id?': 'string', attributes: { 'email?': 'string', 'phone_number?': 'string',
           'external_id?': 'string' } } } } },
-        description: 'The profile needs an identifier (id, email or phone_number); it is created, or its properties updated. backfill true records the event without triggering flows.' } } },
+        description: 'The profile is created, or its properties updated. backfill true records the event without triggering flows.' } },
+      anyOf: [['data.attributes.profile.data.id'], ['data.attributes.profile.data.attributes.email'],
+        ['data.attributes.profile.data.attributes.phone_number'], ['data.attributes.profile.data.attributes.external_id']] },
   },
 });
