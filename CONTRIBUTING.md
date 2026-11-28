@@ -61,8 +61,8 @@ one takes five steps:
      object), the description names the values the template covers; where the page lists a spam or removed value among
      them, it says the entry does not check the value;
    - a `page` or `offset` list is paged once its page states where its numbering starts, even when no page says what a
-     request past the end answers: the walk ends on an empty list, and fails on a page equal, as a whole, to the one
-     before or the first (`page_repeated`) or on the provider's own error;
+     request past the end answers: the walk ends on an empty list, and fails on a page whose list has the same JSON
+     text as the one before's or the first's (`page_repeated`) or on the provider's own error;
    - every header the docs say each request needs is in `http.headers`, `content-type` included;
    - when the provider says an app for other people must use OAuth, the key's `help` says the key is for the person's
      own account, and a provider whose OAuth 2 cannot be declared yet waits instead of being declared with a key alone;

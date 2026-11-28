@@ -241,6 +241,12 @@ test('page: a provider that answers the first page again past the end is page_re
   expect([single.urls.length, single.pages, single.error]).toEqual([2, [{ data: [1] }, { data: [] }], undefined]);
 });
 
+test('page: the first page again with its keys in another order has other JSON text, so the walk goes on to the end', async () => {
+  const walked = await pageWalk({ kind: 'page', send: { query: 'page' }, list: 'data' },
+    [{ data: [{ id: 1, name: 'a' }] }, { data: [{ id: 2, name: 'b' }] }, { data: [{ name: 'a', id: 1 }] }, { data: [] }]);
+  expect([walked.urls.length, walked.pages.length, walked.error]).toEqual([4, 4, undefined]);
+});
+
 test('page: a missing list path, or an answer that is not a list, is invalid_response, never an empty end', async () => {
   for (const [shape, answer] of [[{ kind: 'page', send: { query: 'page' }, list: 'result.items' }, { result: {} }],
     [{ kind: 'page', send: { query: 'page' } }, { items: [1] }], [{ kind: 'page', send: { query: 'page' }, list: 'items' }, { items: 'x' }]] as const) {

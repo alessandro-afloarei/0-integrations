@@ -542,10 +542,11 @@ a shape's `send` writes: the walk sends it.
   place; a page number in the body is a number. It stops on a falsy `more` when one is declared, and on a page whose
   `list` (the answer itself when `list` is absent) is empty. A `list` that is missing or not a list is
   `invalid_response` (`missing_fields`): a malformed answer never reads as an empty list. A page whose list
-  equals, as a whole, the page before's or the walk's first page's is `invalid_response` (`page_repeated`) and is not
-  yielded: a provider that ignores the page number, or answers its first page again past the end, would otherwise never
-  end. A provider that answers some other earlier page, or the same page with a value changed, is not caught: the walk
-  compares whole pages. Records are expected to differ between pages (they carry ids), so two such pages that are truly
+  serialises to the same JSON text as the page before's or the walk's first page's (the same records, in the same
+  order, each with its keys in the same order) is `invalid_response` (`page_repeated`) and is not yielded: a provider
+  that ignores the page number, or answers its first page again past the end, would otherwise never end. A provider
+  that answers some other earlier page, the same page with a value changed, or the same records with their keys in
+  another order, is not caught: the walk compares the lists' JSON text. Records are expected to differ between pages (they carry ids), so two such pages that are truly
   identical end the walk the same way. An operation on a `page` shape names the shape's `list` as its `records` (both
   absent for a list at the answer's top level), so the walk and the records read one list. `size` arrives later.
   With `total`, a `page` walk also stops after the page at which the pages it read (`{ pages }`), or the entries it

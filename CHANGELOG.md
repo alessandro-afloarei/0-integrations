@@ -4,10 +4,10 @@
 
 Nothing here is released yet.
 
-- A `page`, `offset` or `last` walk whose page equals its first page is `page_repeated`, as one equal to the page before
-  is: a provider that answers its first page again past the end no longer yields it a second time, or walks on forever.
-  A `last` walk that met its first page again now reports `page_repeated` where it reported `cursor_repeated`, and a
-  list whose first and a later page are equal as wholes now stops there.
+- A `page`, `offset` or `last` walk whose list has the same JSON text as its first page's is `page_repeated`, as one
+  with the page before's is: a provider that answers its first page again past the end no longer yields it a second
+  time, or walks on forever. A `last` walk that met its first page again now reports `page_repeated` where it reported
+  `cursor_repeated`, and a list whose first and a later page have the same JSON text now stops there.
 - Breaking: a `page` walk may stop at the answer's count (`total: { pages }` or `{ entries }`, read from each answer;
   one missing or not a non-negative whole number, or an empty page before it is reached, is `invalid_response`).
   Smartsheet's `sheets.list` and `rows.list` return an async iterator of records, not one page (`for await (const sheet
