@@ -308,6 +308,13 @@ function literals() {
   // @ts-expect-error the object member's `nested` is `string`, not 'agent'
   defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: chosen } } } } });
   defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: kept } } } } });
+  // A widened scalar beside an object member is refused too.
+  const flag = Math.random() > 0.5 ? sent.send : ({ nested: 'agent' } as const);
+  const word = Math.random() > 0.5 ? nested.nested : ({ nested: 'agent' } as const);
+  // @ts-expect-error `boolean | { nested: 'agent' }`: the `boolean` is widened
+  defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: flag } } } } });
+  // @ts-expect-error `string | { nested: 'agent' }`: the `string` is widened
+  defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: word } } } } });
   // The refusal's own words: the operation must then be that message, which no operation is.
   type Checked<D extends Entry> = NonNullable<Parameters<typeof defineProvider<D>>[0]['operations']>;
   type Words = 'a shape holds a `string` or `boolean`: write every shape constant it uses `as const`';

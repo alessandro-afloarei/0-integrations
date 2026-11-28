@@ -182,9 +182,10 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     routes.push(route(method, base(), path, call => paths.filter(([m, p]) => m === method && p === path).map(([, , op, answer]) => {
       const params = Object.entries(op.params ?? {});
       // The call's arguments as one object of the parameters, `name?` for an optional one; a boolean literal outside the
-      // JSON body arrives as its text.
+      // JSON body arrives as its text, and a `null` for a `nullable` one is carried with no literal.
       const held = literalsHeld(Object.fromEntries(params.map(([name, param]) => [param.required ? name : `${name}?`,
-        param.in === 'body' || typeof param.type !== 'boolean' ? param.type : String(param.type)])),
+        param.nullable && readPath(call.body, name) === null ? 'unknown'
+          : param.in === 'body' || typeof param.type !== 'boolean' ? param.type : String(param.type)])),
         Object.fromEntries(params.map(([name, param]) => [name, param.in === 'path' || param.in === 'query' ? readPath(call[param.in], name)
           : param.in === 'header' ? readPath(call.headers, name.toLowerCase()) : readPath(call.body, name)])));
       return [held, held < 0 ? 0 : params.filter(([, param]) => param.required).length, answer] as const;

@@ -128,7 +128,7 @@ type Unreserved<Ops> = { [K in keyof Ops]: K extends Reserved | `${Reserved}.${s
 /** The `{name}`s of a path template. */
 type PathParams<P> = P extends `${string}{${infer N}}${infer R}` ? N | PathParams<R> : never;
 /** Whether a shape (each member of a union) holds a widened `string` or `boolean`: a constant written without `as const`. */
-type Widened<S> = Shape extends S ? false : [S] extends [string | boolean] ? string extends S ? true : boolean extends S ? true : false
+type Widened<S> = Shape extends S ? false : object extends S ? false : string extends S ? true : boolean extends S ? true
   : S extends readonly [infer E] ? Widened<E> : S extends object ? true extends { [K in keyof S]-?: Widened<S[K]> }[keyof S] ? true : false : false;
 /** Each `{name}` of an operation's path is a required `path` parameter, its `paging` a shape the entry declares, and no
  * parameter's `type` or `result` holds a widened shape. */

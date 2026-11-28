@@ -348,6 +348,15 @@ describe('fakeProvider', () => {
       .resolves.toEqual({ status: 200, body: { by: 'create' } });
   });
 
+  test('a null for a parameter the entry declares nullable is carried, with no literal counted', async () => {
+    const nullable = defineProvider({ id: 'nullable', name: 'Nullable', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.nullable.test' }, operations: {
+      'notes.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'string', required: true } } },
+      'drafts.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'draft', required: true },
+        labels: { in: 'body', type: [{ by: 'agent' }], required: true, nullable: true } } } } });
+    const { fetch } = fakeFetch(fakeProvider(nullable, { key: 'k', operations: { 'notes.create': () => ({ by: 'note' }), 'drafts.create': () => ({ by: 'draft' }) } }));
+    await expect(client(nullable, { token: 'k', fetch }).drafts.create({ kind: 'draft', labels: null })).resolves.toEqual({ by: 'draft' });
+  });
+
   test('a null for an optional list holds none of its literals, and breaks nothing', async () => {
     const labelled = defineProvider({ id: 'labelled', name: 'Labelled', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.labelled.test' }, operations: {
       'notes.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'string', required: true } } },
