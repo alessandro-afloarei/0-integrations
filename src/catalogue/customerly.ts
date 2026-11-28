@@ -11,7 +11,7 @@ const message = { id: 'integer', 'conversation_id?': 'integer', 'type?': 'string
   'sent_date?': 'integer', 'account?': { 'account_id?': 'integer', 'name?': 'string' },
   'contact?': { 'contact_id?': 'integer', 'name?': 'string' } } as const;
 const conversationId = { conversation_id: { in: 'path', type: 'integer', required: true } } as const;
-const sent = { sender_type: { in: 'body', type: 'string', required: true, enum: ['account'],
+const sent = { sender_type: { in: 'body', type: 'account', required: true,
   description: 'The account (team member) account_id sends the message: this entry takes the account\'s form only.' },
 account_id: { in: 'body', type: 'integer', required: true }, content: { in: 'body', type: 'string', description: 'HTML.' },
 attachments: { in: 'body', type: [{ filename: 'string', base64: 'string' }] } } as const;

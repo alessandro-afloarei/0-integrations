@@ -5,8 +5,10 @@ import { discord } from './catalogue/discord.js';
 import { fireflies } from './catalogue/fireflies.js';
 import { folk } from './catalogue/folk.js';
 import { gitlab as gitlabEntry } from './catalogue/gitlab.js';
+import { helpscout } from './catalogue/helpscout.js';
 import { lemlist } from './catalogue/lemlist.js';
 import { metabase } from './catalogue/metabase.js';
+import { missive } from './catalogue/missive.js';
 import { notion } from './catalogue/notion.js';
 import { serpapi } from './catalogue/serpapi.js';
 import { slack } from './catalogue/slack.js';
@@ -307,6 +309,95 @@ describe('fakeProvider', () => {
     const api = client(lemlist, { token: 'k', fetch });
     await expect(api.contacts.create({ email: 'a@example.test' })).resolves.toEqual({ data: { _id: 'created' } });
     await expect(api.contacts.update({ contactId: 'c1' })).resolves.toEqual({ data: { _id: 'updated' } });
+  });
+
+  test("Missive's draft and send share a route: a call whose `drafts.send` is `true` is the send, any other the draft", async () => {
+    const { fetch } = fakeFetch(fakeProvider(missive, { key: 'k', operations: {
+      'drafts.create': () => ({ by: 'draft' }), 'messages.create': () => ({ by: 'send' }) } }));
+    const api = client(missive, { token: 'k', fetch });
+    await expect(api.drafts.create({ drafts: { subject: 'Hi' } })).resolves.toEqual({ by: 'draft' });
+    await expect(api.messages.create({ drafts: { send: true, subject: 'Hi' } })).resolves.toEqual({ by: 'send' });
+    const sent = (drafts: unknown) => fetch('https://public.missiveapp.com/v1/drafts', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ drafts }) }).then(answer);
+    for (const drafts of [{ send: false }, { send: 'true' }, {}]) await expect(sent(drafts)).resolves.toEqual({ status: 200, body: { by: 'draft' } });
+  });
+
+  test('of two operations on one route, the one whose literals all hold answers, in every list element, the most literals first', async () => {
+    const authored = defineProvider({ id: 'authored', name: 'Authored', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.authored.test' },
+      operations: { 'threads.create': { method: 'POST', path: '/threads', params: { messages: { in: 'body', type: ['unknown'], required: true } } },
+        'replies.create': { method: 'POST', path: '/threads', params: { messages: { in: 'body', required: true, type: [{ actor: 'agent', 'draft?': true }] } } } } });
+    const { fetch } = fakeFetch(fakeProvider(authored, { key: 'k', operations: {
+      'threads.create': () => ({ by: 'thread' }), 'replies.create': () => ({ by: 'reply' }) } }));
+    const sent = (messages: unknown) => fetch('https://api.authored.test/threads', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ messages }) }).then(answer).then(({ body }) => (body as { by: string }).by);
+    expect(await Promise.all([[{ actor: 'agent' }, { actor: 'agent', draft: true }], [{ actor: 'agent' }, { actor: 'user' }],
+      [{ actor: 'agent', draft: false }], [{ actor: 'agent ' }], ['agent']].map(sent))).toEqual(['reply', 'thread', 'thread', 'thread', 'thread']);
+  });
+
+  test("a null is no literal's value: Help Scout's thread with `draft: null` is the create's, not the draft's", async () => {
+    const { fetch } = fakeFetch(fakeProvider(helpscout, { key: 'k', operations: {
+      'conversations.create': () => ({ by: 'create' }), 'drafts.create': () => ({ by: 'draft' }) } }));
+    const sent = (draft: unknown) => fetch('https://api.helpscout.net/v2/conversations', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ subject: 'Hi', type: 'email', mailboxId: 1, status: 'active', customer: { id: 1 },
+        threads: [{ type: 'reply', text: 'Hi', customer: { id: 1 }, draft }] }) }).then(answer);
+    await expect(sent(null)).resolves.toEqual({ status: 200, body: { by: 'create' } });
+    await expect(sent(true)).resolves.toEqual({ status: 200, body: { by: 'draft' } });
+    // A null for the required list of draft threads carries none of its literals either.
+    await expect(fetch('https://api.helpscout.net/v2/conversations', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ subject: 'Hi', type: 'email', mailboxId: 1, status: 'active', customer: { id: 1 }, threads: null }) }).then(answer))
+      .resolves.toEqual({ status: 200, body: { by: 'create' } });
+  });
+
+  test('a null for a parameter the entry declares nullable is carried, with no literal counted', async () => {
+    const nullable = defineProvider({ id: 'nullable', name: 'Nullable', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.nullable.test' }, operations: {
+      'notes.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'string', required: true } } },
+      'drafts.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'draft', required: true },
+        labels: { in: 'body', type: [{ by: 'agent' }], required: true, nullable: true } } } } });
+    const { fetch } = fakeFetch(fakeProvider(nullable, { key: 'k', operations: { 'notes.create': () => ({ by: 'note' }), 'drafts.create': () => ({ by: 'draft' }) } }));
+    await expect(client(nullable, { token: 'k', fetch }).drafts.create({ kind: 'draft', labels: null })).resolves.toEqual({ by: 'draft' });
+  });
+
+  test('a null for an optional list holds none of its literals, and breaks nothing', async () => {
+    const labelled = defineProvider({ id: 'labelled', name: 'Labelled', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.labelled.test' }, operations: {
+      'notes.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'string', required: true } } },
+      'drafts.create': { method: 'POST', path: '/notes', params: { kind: { in: 'body', type: 'draft', required: true },
+        labels: { in: 'body', type: [{ by: 'agent' }] } } } } });
+    const { fetch } = fakeFetch(fakeProvider(labelled, { key: 'k', operations: { 'notes.create': () => ({ by: 'note' }), 'drafts.create': () => ({ by: 'draft' }) } }));
+    await expect(fetch('https://api.labelled.test/notes', { method: 'POST', headers: { authorization: 'Bearer k' },
+      body: JSON.stringify({ kind: 'draft', labels: null }) }).then(answer)).resolves.toEqual({ status: 200, body: { by: 'draft' } });
+  });
+
+  test('a path literal chooses its operation on a shared route, as its text', async () => {
+    const pathed = defineProvider({ id: 'pathed', name: 'Pathed', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.pathed.test' }, operations: {
+      'x.get': { path: '/x/{mode}', params: { mode: { in: 'path', type: 'string', required: true } } },
+      'x.on': { path: '/x/{mode}', params: { mode: { in: 'path', type: true, required: true } } },
+      'x.archived': { path: '/x/{mode}', params: { mode: { in: 'path', type: 'archived', required: true } } } } });
+    const { fetch } = fakeFetch(fakeProvider(pathed, { key: 'k', operations: { 'x.get': () => ({ by: 'get' }), 'x.on': () => ({ by: 'on' }),
+      'x.archived': () => ({ by: 'archived' }) } }));
+    const api = client(pathed, { token: 'k', fetch });
+    await expect(api.x.on({ mode: true })).resolves.toEqual({ by: 'on' });
+    await expect(api.x.archived({ mode: 'archived' })).resolves.toEqual({ by: 'archived' });
+    await expect(api.x.get({ mode: 'open' })).resolves.toEqual({ by: 'get' });
+  });
+
+  test('a literal that arrives as text holds as its text: a boolean in a query, a header or a form, and a string in a query', async () => {
+    const shared = defineProvider({ id: 'shared', name: 'Shared', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.shared.test' }, operations: {
+      'items.list': { path: '/items' }, 'items.inbox': { path: '/items', params: { inbox: { in: 'query', type: true, required: true } } },
+      'items.mine': { path: '/items', params: { 'x-mine': { in: 'header', type: true, required: true } } },
+      'items.old': { path: '/items', params: { version: { in: 'query', type: 'v2', required: true } } },
+      'notes.create': { method: 'POST', path: '/notes', params: { text: { in: 'form', type: 'string', required: true } } },
+      'notes.pin': { method: 'POST', path: '/notes', params: { text: { in: 'form', type: 'string', required: true }, pinned: { in: 'form', type: true, required: true } } } } });
+    const by = (name: string) => () => ({ by: name });
+    const { fetch } = fakeFetch(fakeProvider(shared, { key: 'k', operations: { 'items.list': by('list'), 'items.inbox': by('inbox'),
+      'items.mine': by('mine'), 'items.old': by('old'), 'notes.create': by('create'), 'notes.pin': by('pin') } }));
+    const api = client(shared, { token: 'k', fetch });
+    await expect(api.items.inbox({ inbox: true })).resolves.toEqual({ by: 'inbox' });
+    await expect(api.items.mine({ 'x-mine': true })).resolves.toEqual({ by: 'mine' });
+    await expect(api.items.old({ version: 'v2' })).resolves.toEqual({ by: 'old' });
+    await expect(api.notes.pin({ text: 'a', pinned: true })).resolves.toEqual({ by: 'pin' });
+    await expect(api.notes.create({ text: 'a' })).resolves.toEqual({ by: 'create' });
+    const sent = (query: string) => fetch(`https://api.shared.test/items${query}`, { headers: { authorization: 'Bearer k' } }).then(answer);
+    for (const query of ['?inbox=false', '?inbox=1', '?version=v1']) await expect(sent(query)).resolves.toEqual({ status: 200, body: { by: 'list' } });
   });
 
   test('a function receives the headers; of two operations on one route, the one whose required header the call carries answers', async () => {

@@ -92,8 +92,10 @@ export type Paging = { kind: 'cursor'; next: Path; more?: Path; send: Where }
   | { kind: 'linkHeader'; pathPrefix?: string } | { kind: 'nextUrl'; next: Path;
   /** A whole directory after the base's path, starting and ending with `/` (`/me/`). */
   pathPrefix?: string };
-/** A value's declared type. In an object, a key ending in `?` may be missing or null, and is read as absent. */
-export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
+/** A value's declared type: a type name, a literal (`true`, `false`, or another string: only that value), a list or an
+ * object. In an object, a key ending in `?` may be missing or null, and is read as absent. */
+export type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | (string & {}) | boolean
+  | readonly [Shape] | { readonly [key: string]: Shape };
 /** An operation's argument and where it is sent: `body` in a JSON object, `form` in a form-encoded body (never beside a
  * `body` one), `header` as the request header of its name; `nullable` lets it be sent as JSON `null`. */
 export type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables' | 'header'; type: Shape; required?: true; nullable?: true;
@@ -120,7 +122,7 @@ type Scalars = { string: string; integer: number; number: number; boolean: boole
 /** An optional shape key without its `?`; never for a required one. */
 type OptionalKey<K> = K extends `${infer N}?` ? N : never;
 /** The TypeScript type a shape declares: a `key?` is optional, never null (a null is read as absent). */
-export type TypeOf<S> = S extends keyof Scalars ? Scalars[S] : S extends readonly [infer E] ? TypeOf<E>[]
+export type TypeOf<S> = S extends keyof Scalars ? Scalars[S] : S extends string | boolean ? S : S extends readonly [infer E] ? TypeOf<E>[]
   : { -readonly [K in keyof S as Exclude<K, `${string}?`>]: TypeOf<S[K]> } & { -readonly [K in keyof S as OptionalKey<K>]?: TypeOf<S[K]> };
 /** The client's own calls: an operation id whose first segment EQUALS one is refused (`'requests.create'` is fine), and
  * so is `then` itself, which would make the client a thenable. `clashing` in rules.ts is the run time's copy. */
@@ -129,10 +131,17 @@ type Unreserved<Ops> = { [K in keyof Ops]: K extends Reserved | `${Reserved}.${s
   ? "json, request, paginate and then are the client's own: rename this operation" : Ops[K] };
 /** The `{name}`s of a path template. */
 type PathParams<P> = P extends `${string}{${infer N}}${infer R}` ? N | PathParams<R> : never;
-/** Each `{name}` of an operation's path is a required `path` parameter, and its `paging` a shape the entry declares. */
+/** Whether a shape (each member of a union) holds a widened `string` or `boolean`: a constant written without `as const`. */
+type Widened<S> = Shape extends S ? false : object extends S ? false : string extends S ? true : boolean extends S ? true
+  : S extends readonly [infer E] ? Widened<E> : S extends object ? true extends { [K in keyof S]-?: Widened<S[K]> }[keyof S] ? true : false : false;
+/** Each `{name}` of an operation's path is a required `path` parameter, its `paging` a shape the entry declares, and no
+ * parameter's `type` or `result` holds a widened shape. */
 type Declared<Ops, Pagings> = { [K in keyof Ops]: (Ops[K] extends { path: infer P } ? [PathParams<P>] extends [never] ? unknown
   : { params: { [N in PathParams<P> & string]: { in: 'path'; required: true } } } : unknown)
-  & (Ops[K] extends { paging: infer G } ? G extends keyof Pagings ? unknown : 'paging names no shape this entry declares' : unknown) };
+  & (Ops[K] extends { paging: infer G } ? G extends keyof Pagings ? unknown : 'paging names no shape this entry declares' : unknown)
+  & (Widened<{ [P in keyof Ops[K] & ('params' | 'result')]: P extends 'params'
+    ? { [N in keyof Ops[K][P]]: Ops[K][P][N] extends { type: infer T } ? T : 'unknown' } : Ops[K][P] }> extends true
+    ? 'a shape holds a `string` or `boolean`: write every shape constant it uses `as const`' : unknown) };
 
 /** One provider, as plain data. The literal's type is kept, so a client's types are inferred from it. */
 export function defineProvider<const D extends Entry>(

@@ -136,7 +136,9 @@ An operation's dotted id is a path on the client: `'pages.markdown'` is `api.pag
 [providers](../providers.md) lists each entry's operations.
 
 - Each argument is checked by its declared type before anything is sent: `TypeError('param_missing: <name>')` or
-  `TypeError('param_invalid: <name>')`. An argument that is not declared, or is `undefined`, is not sent. An operation
+  `TypeError('param_invalid: <name>')`. A literal type (`true`, `'agent'`), at the top level, inside an object or in each
+  list element, fits only that value: Missive's `messages.create({ drafts: { send: true, … } })` sends, and its
+  `drafts.create` never does. An argument that is not declared, or is `undefined`, is not sent. An operation
   with no required parameter may be called with no argument. An operation that declares body parameters sends a JSON
   object, `{}` when no body argument is given; one that declares form parameters sends a form-encoded body, each value
   a scalar as its string (an object or a list is `param_invalid`), with the form's `content-type` over any other.

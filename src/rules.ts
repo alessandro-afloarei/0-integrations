@@ -31,6 +31,9 @@ export function shapeAt(shape: Shape | undefined, path: Path): Shape | undefined
   return Object.hasOwn(keys, path) ? keys[path] : dot === -1 ? undefined : shapeAt(keys[path.slice(0, dot)], path.slice(dot + 1));
 }
 
+/** Whether a shape is a literal: `true`, `false`, or a string that is no type name. */
+export const isLiteral = (shape: Shape) => typeof shape === 'boolean' || (typeof shape === 'string' && !['string', 'integer', 'number', 'boolean', 'unknown'].includes(shape));
+
 /** The declared shape an `anyOf` path names: a parameter's `type`, then at each dot a key of an object, a `key?` named without its `?`. */
 export function argumentShape(op: Operation, path: Path): Shape | undefined {
   const own = (shape: Shape | undefined, key: string) => typeof shape === 'object' && !Array.isArray(shape) && Object.hasOwn(shape, key)
@@ -45,7 +48,7 @@ export function argumentShape(op: Operation, path: Path): Shape | undefined {
  * named `content-type`, `host` or a sign-in's credential header (`authorization` unless its `send` names another). */
 export function placed(entry: Entry, op: Operation, name: string, param: Param): boolean {
   const credentials = entry.auth.map(auth => ('send' in auth && 'header' in auth.send ? auth.send.header : 'authorization').toLowerCase());
-  if (param.in === 'header') return !('graphql' in op) && param.nullable === undefined && typeof param.type === 'string'
+  if (param.in === 'header') return !('graphql' in op) && param.nullable === undefined && typeof param.type !== 'object'
     && !['content-type', 'host', ...credentials].includes(name.toLowerCase());
   return 'graphql' in op ? param.in === 'variables'
     : param.in !== 'variables' && (param.in !== 'path' || placeholders(op.path).includes(name))

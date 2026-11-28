@@ -10,7 +10,7 @@ const entry = { id: 'string', type: 'string', object: 'string', 'body?': 'unknow
 const revUser = { id: 'string', 'display_id?': 'string', 'display_name?': 'string', 'full_name?': 'string', 'email?': 'string',
   'rev_org?': { 'id?': 'string', 'display_name?': 'string' }, 'created_date?': 'string', 'modified_date?': 'string' } as const;
 const limit = { limit: { in: 'query', type: 'integer', description: '50 by default.' } } as const;
-const ticket = { type: { in: 'body', type: 'string', enum: ['ticket'] } } as const;
+const ticket = { type: { in: 'body', type: 'ticket' } } as const;
 const ref = 'https://developer.devrev.ai/api-reference';
 
 export const devrev = defineProvider({
@@ -49,7 +49,7 @@ export const devrev = defineProvider({
         limit: { in: 'query', type: 'integer', description: 'A page may hold fewer entries, even none, before the last.' } },
       result: { timeline_entries: [entry] } },
     'timelineEntries.create': { docs: `${ref}/timeline-entries/create`, method: 'POST', path: '/timeline-entries.create',
-      params: { type: { in: 'body', type: 'string', required: true, enum: ['timeline_comment'] },
+      params: { type: { in: 'body', type: 'timeline_comment', required: true },
         object: { in: 'body', type: 'string', required: true, description: 'The ticket\'s ID.' }, body: { in: 'body', type: 'string' },
         visibility: { in: 'body', type: 'string', enum: ['external', 'internal', 'private', 'public'],
           description: '`external` (the default) is visible to the customer; `internal` to your organization only; `private` to the creator.' } },

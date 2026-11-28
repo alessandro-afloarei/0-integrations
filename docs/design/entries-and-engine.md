@@ -729,7 +729,8 @@ type Operation = ({ method?: Method; path: Template } | { graphql: string }) & {
   paging?: string; notFound?: 'null'; base?: string; anyOf?: readonly (readonly Path[])[] };
 type Param = { in: 'path' | 'query' | 'body' | 'form' | 'variables' | 'header'; type: Shape; required?: true;
   nullable?: true; enum?: readonly string[]; description?: string };
-type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly [Shape] | { readonly [key: string]: Shape };
+type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | (string & {}) | boolean
+  | readonly [Shape] | { readonly [key: string]: Shape };
 ```
 
 - `docs` is the provider's page that states the operation's method, path, parameters and answer, https. Every operation
@@ -739,10 +740,18 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   says `kind: 'read'`: the engine retries only a call marked idempotent, a GET by default and an operation of
   `kind: 'read'`.
 - A shape key ending in `?` may be missing or null, and is read as absent.
+- A shape that is neither a type name nor a list nor an object is a literal: `true`, `false`, or a string other than
+  `string`, `integer`, `number`, `boolean` and `unknown`. An argument fits it only when it is that value. A value the
+  page fixes (a "Must be …", the one value an operation takes) is a literal, at the top level, inside an object or in
+  each element of a list: the call states it, so a send reads as a send (Missive's `messages.create` is its draft with
+  `drafts.send: true`). `enum` lists two or more values (the table refuses an `enum` of one value); one value is a
+  literal type. A literal is for arguments only: `result` holds none, and none is the empty string: the table refuses
+  both. A literal equal to a type name cannot be written, and an entry that needs one waits.
 - `result` is checked by a small walker that drops undeclared keys. Without `result` the answer is `unknown`, and a 2xx
   with an empty body (a 202, a 201, a 204) answers `null`, which `unknown` already covers. Any other answer without
   JSON, and an empty 2xx to an operation with a `result`, is `invalid_response`.
-- A path's `{name}` must be a declared `path` parameter; the compiler refuses the entry otherwise.
+- A path's `{name}` must be a declared `path` parameter, and a shape constant is written `as const` (widened, its
+  `string` or `boolean` is no type name or literal); the compiler refuses the entry otherwise.
 - An operation id's first dot-separated segment is never `json`, `request` or `paginate` (compared for equality, so
   `requests.list` is fine): those are the client's own calls. Nor is an id `then`, which would make the client a
   thenable. No id has an empty segment or is a dotted prefix of another (`pages` beside `pages.markdown`). The
@@ -768,6 +777,8 @@ type Shape = 'string' | 'integer' | 'number' | 'boolean' | 'unknown' | readonly 
   never on a GET and never in one operation together, on a GraphQL operation only `variables`, and a `header` one
   only as a scalar, never `nullable`, never named `content-type`, `host` or the credential's header of any sign-in
   (`authorization` unless its `send` names another).
+- A parameter the page requires only when another argument has a given value, or only in some configurations, is
+  declared optional, its description naming the condition; the provider's answer is the check.
 - `anyOf` lists sets of arguments, of which a call must give every one of at least one set: an operation that finds or
   creates one record by any of several equal inputs (`[['email'], ['phone', 'last_name']]`). A path names a parameter
   or, past a dot, a key of its object `type` (`contact.email`, a `key?` written without its `?`), and is read
@@ -882,12 +893,12 @@ Intercom's `message_type`), that parameter is declared, optional unless the page
 field that chooses their author: the credential's own identity speaks. Where the page requires the request to name
 the agent who sends (Atlas's `agentId`), that field is declared, its description saying so. A create may name the
 customer as its first message's author where the page asks for it (Zammad, Dixa), and an entry may leave such a create
-out. An update offers no path and no enum value that sends, deletes or marks spam. Where a status cannot be an enum
-(Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer inside an object), the description names
-the values the template covers; where the page lists a spam or removed value among them, it says the entry does not
-check the value. Where a reply is only a field of the ticket's create and update (Zendesk's `comment`, with its `public`), those declare it, and there is no
-`<messages>.create`. A note on its own endpoint (Freshdesk's notes, Front's comments) is `<notes>.create`, a write too:
-it may notify agents (Freshdesk's `notify_emails`).
+out. An update offers no path and no enum value that sends, and no create or update offers one that deletes or marks
+spam. Where a status cannot be an enum (Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer
+inside an object), the description names the values the template covers; where the page lists a spam or removed value
+among them, it says the entry does not check the value. Where a reply is only a field of the ticket's create and update (Zendesk's `comment`, with its
+`public`), those declare it, and there is no `<messages>.create`. A note on its own endpoint (Freshdesk's notes, Front's
+comments) is `<notes>.create`, a write too: it may notify agents (Freshdesk's `notify_emails`).
 
 A `<tickets>.create` that emails the customer or notifies agents declares the page's parameter to send none, where
 there is one (Help Scout's `imported`, LiveAgent's `do_not_send_mail`), optional, and its leading comment says so.
@@ -916,7 +927,7 @@ it to its container and the page size; on a write, the body fields the docs mark
 say are writable; `required` and `enum` only where the docs say so, a parameter their prose calls required included.
 A header the page requires on one operation is a required `header` parameter (PagerDuty's `From`). `http.headers` holds
 the value most declared operations share; an operation whose page fixes another ("Must be set to …") declares it as a
-required `header` parameter with that one value as its `enum` (Cal.com's `cal-api-version`).
+required `header` parameter whose type is that value (Cal.com's `cal-api-version`).
 A send that needs a multipart body (attachments) or a raw RFC 5322 message is declared with only the plain fields its
 page lets it take; a multipart body waits.
 When a page states that at least one of several equal inputs is required to find or create one record (in a sentence, a

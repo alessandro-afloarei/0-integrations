@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { defineProvider, type Entry } from './catalogue.js';
+import { helpscout } from './catalogue/helpscout.js';
 import { client } from './client.js';
 import { ProviderHttpError } from './errors.js';
 import { fakeFetch, sequence } from './testing.js';
@@ -120,6 +121,73 @@ test('an argument the request cannot carry is a TypeError before any request', a
   await expect(list({}).next()).rejects.toThrow(new TypeError('param_missing: teamId'));
   await expect(list({ teamId: 'T', state: 'merged' }).next()).rejects.toThrow(new TypeError('param_invalid: state'));
   expect(fake.calls).toEqual([]);
+});
+
+/** Literal types: a send fixed inside an object, an author fixed in each list element, a version fixed in a header. */
+const fixed = defineProvider({ id: 'fixed', name: 'Fixed', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: {
+  'messages.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', required: true, type: { send: true, 'subject?': 'string' } } } },
+  'threads.create': { method: 'POST', path: '/threads', params: { messages: { in: 'body', required: true, type: [{ actor_type: 'agent', 'text?': 'string' }] },
+    kind: { in: 'body', type: 'string' }, 'x-version': { in: 'header', type: '2026-06-12', required: true } } } } });
+
+test('a literal type fits only its value, at the top level, inside an object and in each list element; a type name stays a type', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const api = client(fixed, { token: 'k', fetch: fake.fetch });
+  await api.messages.create({ drafts: { send: true, subject: 'Hi' } });
+  await api.threads.create({ messages: [{ actor_type: 'agent', text: 'a' }, { actor_type: 'agent' }], kind: 'x', 'x-version': '2026-06-12' });
+  await api.threads.create({ messages: [], 'x-version': '2026-06-12' });
+  expect(wire(fake)).toEqual([['POST', `${BASE}/drafts`, '{"drafts":{"send":true,"subject":"Hi"}}'],
+    ['POST', `${BASE}/threads`, '{"messages":[{"actor_type":"agent","text":"a"},{"actor_type":"agent"}],"kind":"x"}'],
+    ['POST', `${BASE}/threads`, '{"messages":[]}']]);
+  expect(fake.calls.map(call => call.headers['x-version'])).toEqual([undefined, '2026-06-12', '2026-06-12']);
+});
+
+test('hostile: a value beside a literal is refused before anything is sent: false, missing, the string "true", a padded string', async () => {
+  const fake = fakeFetch([]);
+  const api = client(fixed, { token: 'k', fetch: fake.fetch });
+  for (const drafts of [{ send: false }, {}, { send: 'true' }, { send: 1 }, { subject: 'Hi' }]) {
+    await expect(untyped(api.messages.create)({ drafts })).rejects.toThrow(new TypeError('param_invalid: drafts'));
+  }
+  for (const messages of [[{ actor_type: 'agent' }, { actor_type: 'user' }], [{ actor_type: 'agent ' }], [{}], ['agent']]) {
+    await expect(untyped(api.threads.create)({ messages, 'x-version': '2026-06-12' })).rejects.toThrow(new TypeError('param_invalid: messages'));
+  }
+  for (const version of ['2026-06-13', ' 2026-06-12', 20260612]) {
+    await expect(untyped(api.threads.create)({ messages: [], 'x-version': version })).rejects.toThrow(new TypeError('param_invalid: x-version'));
+  }
+  expect(fake.calls).toEqual([]);
+});
+
+test('a boolean literal goes where a boolean goes, sent as its text: in a query and in a header', async () => {
+  const flagged = defineProvider({ id: 'flagged', name: 'Flagged', auth: [{ kind: 'key' }], http: { baseUrl: BASE }, operations: {
+    'items.list': { path: '/items', params: { inbox: { in: 'query', type: true, required: true }, 'x-flag': { in: 'header', type: false, required: true } } } } });
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  const api = client(flagged, { token: 'k', fetch: fake.fetch });
+  await api.items.list({ inbox: true, 'x-flag': false });
+  await expect(untyped(api.items.list)({ inbox: false, 'x-flag': false })).rejects.toThrow(new TypeError('param_invalid: inbox'));
+  await expect(untyped(api.items.list)({ inbox: true, 'x-flag': 'false' })).rejects.toThrow(new TypeError('param_invalid: x-flag'));
+  expect(fake.calls.map(call => [call.url, call.headers['x-flag']])).toEqual([[`${BASE}/items?inbox=true`, 'false']]);
+});
+
+test('hostile: a hole in a list is an element, checked as one: a literal element left out is refused', async () => {
+  const fake = fakeFetch([]);
+  const messages = new Array<{ actor_type: 'agent' }>(2);
+  messages[1] = { actor_type: 'agent' };
+  await expect(client(fixed, { token: 'k', fetch: fake.fetch }).threads.create({ messages, 'x-version': '2026-06-12' }))
+    .rejects.toThrow(new TypeError('param_invalid: messages'));
+  expect(fake.calls).toEqual([]);
+});
+
+test("Help Scout's create keeps a thread's `draft` as given, so a call that saves a draft never sends a reply", async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  await client(helpscout, { token: 'k', fetch: fake.fetch }).conversations.create({ subject: 'Hi', type: 'email', mailboxId: 1,
+    status: 'active', customer: { email: 'ana@example.test' }, threads: [{ type: 'reply', text: 'Hello', draft: true }] });
+  expect(JSON.parse(fake.calls[0]?.body ?? '{}')).toMatchObject({ threads: [{ type: 'reply', text: 'Hello', draft: true }] });
+});
+
+test('hostile: an own `__proto__` key beside a literal is read by the declared keys only', async () => {
+  const fake = fakeFetch([{ url: /https:/, respond: json({}) }]);
+  await untyped(client(fixed, { token: 'k', fetch: fake.fetch }).messages.create)(
+    { drafts: JSON.parse('{"__proto__":{"send":false,"to":"x"},"send":true}') as unknown });
+  expect(wire(fake)).toEqual([['POST', `${BASE}/drafts`, '{"drafts":{"send":true}}']]);
 });
 
 test('an answer keeps its declared keys; a key? missing or null is absent; anything else out of shape is invalid_response', async () => {
@@ -489,7 +557,7 @@ const headed = defineProvider({ id: 'headed', name: 'Headed', auth: [{ kind: 'ke
     'incidents.create': { method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
       title: { in: 'body', type: 'string' } } },
     'items.list': { path: '/items', paging: 'cursor', records: 'items', result: { items: ['string'], 'next?': 'string' },
-      params: { 'x-version': { in: 'header', type: 'string', enum: ['2'], required: true }, 'x-page': { in: 'header', type: 'integer' } } },
+      params: { 'x-version': { in: 'header', type: '2', required: true }, 'x-page': { in: 'header', type: 'integer' } } },
   } });
 
 test('a header parameter is sent as a header: required, given, replacing the entry\'s and the app\'s, never the credential', async () => {
@@ -502,7 +570,7 @@ test('a header parameter is sent as a header: required, given, replacing the ent
     headers: { from: 'ana@acme.test', 'x-app': 'a', 'x-version': '1', accept: 'application/json', authorization: 'Bearer k' } });
 });
 
-test("a required one-value header replaces the entry's and the app's of its name on every page; without it or another, nothing is sent", async () => {
+test("a required literal header replaces the entry's and the app's of its name on every page; without it or another, nothing is sent", async () => {
   const fake = fakeFetch([{ url: /https:/, respond: sequence(json({ items: ['a'], next: 'c2' }), json({ items: ['b'] })) }]);
   const api = client(headed, { token: 'k', fetch: fake.fetch, headers: { 'x-version': 'app' } });
   const list = (args: Record<string, unknown>) => untyped(api.items.list)(args) as AsyncGenerator<string>;

@@ -15,7 +15,7 @@ const perPage = { per_page: { in: 'query', type: 'integer', required: true,
 const internal = 'true keeps the article to agents; an outgoing email article is still sent.';
 const newArticle = 'A new article on the ticket. type: email, phone, note and more';
 const written = { title: { in: 'body', type: 'string' }, group: { in: 'body', type: 'string', description: 'A group\'s name.' },
-  state: { in: 'body', type: 'string', description: 'A state\'s name, such as open.' },
+  state: { in: 'body', type: 'string', description: 'A state\'s name, such as new, open or closed (the entry does not check the value).' },
   priority: { in: 'body', type: 'string', description: 'A priority\'s name, such as 3 high.' },
   article: { in: 'body', type: { 'subject?': 'string', 'body?': 'string', 'type?': 'string', 'internal?': 'boolean' },
     description: `${newArticle}; internal: ${internal}` },

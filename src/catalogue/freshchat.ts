@@ -1,15 +1,15 @@
 import { defineProvider } from '../catalogue.js';
 
 /** Freshchat: an API key an admin generates, Bearer, on the account's host; a 429 past the plan's hourly limit. A
- * message an agent sends reaches the user. No list holds every conversation: `conversations.list` names one user's;
- * `messages.list` answers one page. No conversation create: its message names its own actor. Webhooks are RSA-signed:
+ * message an agent sends reaches the user, a new conversation's too (the agent's normal message). No list holds
+ * every conversation: `conversations.list` names one user's; `messages.list` answers one page. Signed webhooks (RSA):
  * https://crmsupport.freshworks.com/support/solutions/articles/50000004461-freshchat-webhooks-payload-structure-and-authentication */
 const conversation = { conversation_id: 'string', 'status?': 'string', 'channel_id?': 'string', 'assigned_agent_id?': 'string',
   'assigned_group_id?': 'string', 'app_id?': 'string', 'properties?': 'unknown' } as const;
 const message = { id: 'string', 'conversation_id?': 'string', 'message_type?': 'string', 'actor_type?': 'string',
   'actor_id?': 'string', 'user_id?': 'string', 'created_time?': 'string', 'message_parts?': 'unknown' } as const;
 const conversationId = { conversation_id: { in: 'path', type: 'string', required: true } } as const;
-const agent = { actor_type: { in: 'body', type: 'string', required: true, enum: ['agent'] },
+const agent = { actor_type: { in: 'body', type: 'agent', required: true },
   actor_id: { in: 'body', type: 'string', required: true, description: 'The agent sending the message.' } } as const;
 const assigned = { assigned_agent_id: { in: 'body', type: 'string', description: 'With status assigned, give this or assigned_group_id.' },
   assigned_group_id: { in: 'body', type: 'string' },
@@ -36,6 +36,14 @@ export const freshchat = defineProvider({
       params: { user_id: { in: 'path', type: 'string', required: true } }, result: { conversations: [{ id: 'string' }] } },
     'conversations.get': { docs: `${ref}/#retrieve_a_conversation`, path: '/conversations/{conversation_id}', notFound: 'null',
       params: conversationId, result: conversation },
+    'conversations.create': { docs: `${ref}/#create_a_conversation`, method: 'POST', path: '/conversations',
+      params: { channel_id: { in: 'body', type: 'string', required: true, description: 'The topic the conversation is created under: an id from channels.list.' },
+        messages: { in: 'body', required: true,
+          type: [{ actor_type: 'agent', actor_id: 'string', 'message_parts?': [{ text: { content: 'string' } }] }],
+          description: 'Each an agent\'s: actor_id is the agent the page requires.' },
+        users: { in: 'body', type: [{ id: 'string' }], required: true, description: 'The user the conversation is with.' },
+        status, ...assigned, assigned_agent_id: { in: 'body', type: 'string' } },
+      result: conversation },
     'conversations.update': { docs: `${ref}/#update_a_conversation`, method: 'PUT', path: '/conversations/{conversation_id}',
       params: { ...conversationId, status, ...assigned }, result: conversation },
     'messages.list': { docs: `${ref}/#list_messages`, path: '/conversations/{conversation_id}/messages',
@@ -55,5 +63,10 @@ export const freshchat = defineProvider({
         ['updated_from'], ['updated_to']],
       result: { users: [{ id: 'string', 'first_name?': 'string', 'last_name?': 'string', 'email?': 'string', 'phone?': 'string',
         'reference_id?': 'string', 'created_time?': 'string', 'updated_time?': 'string' }] } },
+    'channels.list': { docs: `${ref}/#list_all_channels`, path: '/channels', paging: 'next', records: 'channels',
+      params: { locale: { in: 'query', type: 'string', description: 'An ISO-639 code: the topics in that language; without it, the primary language\'s.' },
+        ...perPage },
+      result: { channels: [{ id: 'string', 'name?': 'string', 'enabled?': 'boolean', 'public?': 'boolean', 'locale?': 'string',
+        'updated_time?': 'string' }] } },
   },
 });

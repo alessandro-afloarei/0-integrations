@@ -4,7 +4,7 @@ import { callRequest, createClient, defaultFetch, type HttpOptions, type Provide
 import { classify, emptyAnswers, responseJson } from './http-response.js';
 import { walk } from './paging.js';
 import { parseAnswer, parseEntries } from './parse.js';
-import { argumentShape, checkHosts, clashing, fill, pagedParam, pagedRecords, pagingPlaced, placed, readPath, shapeAt } from './rules.js';
+import { argumentShape, checkHosts, clashing, fill, isLiteral, pagedParam, pagedRecords, pagingPlaced, placed, readPath, shapeAt } from './rules.js';
 
 export type { ProviderResponse, RequestOptions };
 export { guardedFetch } from './guard.js';
@@ -48,14 +48,16 @@ export type ClientOptions = Omit<HttpOptions, 'token' | 'fetch'> & { token: stri
 type Given = Readonly<Record<string, unknown>>;
 
 const INVALID = Symbol('invalid');
-/** A value read by its shape: declared keys only, a `key?` missing or null left out; INVALID when it does not fit. */
+/** A value read by its shape: declared keys only, a `key?` missing or null left out, a literal only itself; INVALID when it
+ * does not fit. */
 function shaped(shape: Shape, value: unknown): unknown {
-  if (typeof shape === 'string') {
-    const fits = shape === 'integer' ? Number.isSafeInteger(value) : shape === 'number' ? Number.isFinite(value) : typeof value === shape;
+  if (typeof shape !== 'object') {
+    const fits = shape === 'integer' ? Number.isSafeInteger(value) : shape === 'number' ? Number.isFinite(value)
+      : isLiteral(shape) ? value === shape : typeof value === shape;
     return shape === 'unknown' || fits ? value : INVALID;
   }
   if (Array.isArray(shape)) {
-    const items = Array.isArray(value) ? value.map(item => shaped((shape as readonly [Shape])[0], item)) : [INVALID];
+    const items = Array.isArray(value) ? Array.from(value, item => shaped((shape as readonly [Shape])[0], item)) : [INVALID];
     return items.includes(INVALID) ? INVALID : items;
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return INVALID;

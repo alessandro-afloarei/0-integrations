@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'vitest';
-import { defineProvider, signInWith, type Entry, type Own, type SignIn } from './catalogue.js';
+import { defineProvider, signInWith, type Entry, type Own, type SignIn, type TypeOf } from './catalogue.js';
 import { clickup } from './catalogue/clickup.js';
 import { firecrawl } from './catalogue/firecrawl.js';
 import { jira } from './catalogue/jira.js';
@@ -274,7 +274,59 @@ async function clientByEntry(clientId: string, clientSecret: string, code: strin
   expectTypeOf<OAuthClient>().toEqualTypeOf<{ clientId: string; clientSecret: string }>();
 }
 
+/** A send fixed inside an object, an author fixed in each list element. */
+const fixed = defineProvider({ id: 'fixed', name: 'Fixed', auth: [{ kind: 'key' }], http: { baseUrl: 'https://api.fixed.test' }, operations: {
+  'messages.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', required: true, type: { send: true, 'subject?': 'string' } },
+    messages: { in: 'body', type: [{ actor_type: 'agent' }] } } } } });
+
+// Never called: the types are the test.
+function literals() {
+  expectTypeOf<TypeOf<{ send: true }>>().branded.toEqualTypeOf<{ send: true }>();
+  expectTypeOf<TypeOf<[{ actor_type: 'agent'; 'text?': 'string' }]>>().branded.toEqualTypeOf<{ actor_type: 'agent'; text?: string }[]>();
+  expectTypeOf<TypeOf<'string'>>().toEqualTypeOf<string>();
+  const api = client(fixed, { token: 't' });
+  expectTypeOf<Parameters<typeof api.messages.create>[0]>().branded
+    .toEqualTypeOf<{ drafts: { send: true; subject?: string }; messages?: { actor_type: 'agent' }[] }>();
+  // @ts-expect-error `send` is the literal `true`
+  void api.messages.create({ drafts: { send: false } });
+  // @ts-expect-error each element's `actor_type` is the literal 'agent'
+  void api.messages.create({ drafts: { send: true }, messages: [{ actor_type: 'user' }] });
+  // A shape constant written without `as const` widens to `string` or `boolean`, which would type the call wrongly.
+  const item = { id: 'string', count: 'integer' };
+  const sent = { send: true };
+  const base = { id: 'w', name: 'W', auth: [{ kind: 'key' }], http: { baseUrl: 'https://w.test' } } as const;
+  // @ts-expect-error a result whose `count` is `string`, not 'integer'
+  defineProvider({ ...base, operations: { 'items.get': { path: '/items', result: item } } });
+  // @ts-expect-error a parameter whose `send` is `boolean`, not `true`
+  defineProvider({ ...base, operations: { 'drafts.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', type: sent } } } } });
+  defineProvider({ ...base, operations: { 'items.get': { path: '/items', result: { id: 'string', count: 'integer' } },
+    'drafts.create': { method: 'POST', path: '/drafts', params: { drafts: { in: 'body', type: { send: true } } } } } });
+  // A union of shapes (a conditional choosing one) is checked member by member.
+  const nested = { nested: 'agent' };
+  const chosen = Math.random() > 0.5 ? (['agent'] as const) : nested;
+  const kept = Math.random() > 0.5 ? (['agent'] as const) : ({ nested: 'agent' } as const);
+  // @ts-expect-error the object member's `nested` is `string`, not 'agent'
+  defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: chosen } } } } });
+  defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: kept } } } } });
+  // A widened scalar beside an object member is refused too.
+  const flag = Math.random() > 0.5 ? sent.send : ({ nested: 'agent' } as const);
+  const word = Math.random() > 0.5 ? nested.nested : ({ nested: 'agent' } as const);
+  // @ts-expect-error `boolean | { nested: 'agent' }`: the `boolean` is widened
+  defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: flag } } } } });
+  // @ts-expect-error `string | { nested: 'agent' }`: the `string` is widened
+  defineProvider({ ...base, operations: { 'items.create': { method: 'POST', path: '/items', params: { item: { in: 'body', type: word } } } } });
+  // The refusal's own words: the operation must then be that message, which no operation is.
+  type Checked<D extends Entry> = NonNullable<Parameters<typeof defineProvider<D>>[0]['operations']>;
+  type Words = 'a shape holds a `string` or `boolean`: write every shape constant it uses `as const`';
+  type Widened = typeof base & { operations: { 'items.get': { path: '/items'; result: typeof item };
+    'drafts.create': { method: 'POST'; path: '/drafts'; params: { drafts: { in: 'body'; type: typeof sent } } } } };
+  type AsConst = typeof base & { operations: { 'items.get': { path: '/items'; result: { id: 'string'; count: 'integer' } } } };
+  expectTypeOf<Checked<Widened>['items.get']>().toExtend<Words>();
+  expectTypeOf<Checked<Widened>['drafts.create']>().toExtend<Words>();
+  expectTypeOf<Checked<AsConst>['items.get']>().not.toExtend<Words>();
+}
+
 test('the narrowed types compile', () => {
-  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide, ownTypes, clientByEntry].every(item => typeof item === 'function')).toBe(true);
+  expect([narrowed, stored, typedHost, valuesByEntry, valuesWide, ownTypes, clientByEntry, literals].every(item => typeof item === 'function')).toBe(true);
   expect(mailed.auth.map(auth => auth.kind)).toEqual(['oauth2', 'key']);
 });

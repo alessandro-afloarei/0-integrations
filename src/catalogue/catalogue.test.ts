@@ -12,7 +12,7 @@ import { callBase, credentialOf, filledBase } from '../http.js';
 import { refreshGrant, revokeGrant } from '../oauth.js';
 import { retryPolicy } from '../http-response.js';
 import { BAD_KEY, catalogueEntries, catalogueRecordings, GOOD_KEY, kitValues, recordedSignIn, replayProblem, signIn } from '../kit.test-support.js';
-import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, namedHosts, oauthUrls, pagedParam, pagedRecords, pagingPlaced, placed, placeholders, shapeAt } from '../rules.js';
+import { argumentShape, clashing, declaredUrls, ENGINE_PARAMS, hostPart, hostSplit, isLiteral, namedHosts, oauthUrls, pagedParam, pagedRecords, pagingPlaced, placed, placeholders, shapeAt } from '../rules.js';
 import { fakeFetch, fakeProvider } from '../testing.js';
 import { tierOf } from '../tier.js';
 
@@ -51,15 +51,26 @@ const value = z.union([z.string(), z.array(z.string())]);
 const method = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const request = z.strictObject({ method: method.optional(), path: template.optional(),
   query: z.record(z.string(), z.string()).optional(), graphql: z.string().optional(), base: z.string().optional() });
+const ONE_VALUE_ENUM = 'an enum lists two or more values: write the one value as the type';
+const EMPTY_LITERAL = 'a literal type is the one value a caller sends: an empty string is none';
+/** A type name, a literal (`true`, `false`, another string), a list or an object. */
 const shape: z.ZodType<Shape> = z.lazy(() =>
-  z.union([z.enum(['string', 'integer', 'number', 'boolean', 'unknown']), z.tuple([shape]), z.record(z.string(), shape)]));
+  z.union([z.string().min(1, EMPTY_LITERAL), z.boolean(), z.tuple([shape]), z.record(z.string(), shape)]));
+/** A shape's string literals, anywhere in it. */
+const stringLiterals = (item: Shape): string[] => (typeof item === 'object' ? Object.values(item as Record<string, Shape>).flatMap(stringLiterals)
+  : typeof item === 'string' && isLiteral(item) ? [item] : []);
+/** Whether two different strings are one insertion, deletion or substitution apart. */
+const oneEdit = (a: string, b: string) => { let at = 0; while (at < a.length && a[at] === b[at]) at++;
+  return a.slice(at + 1) === b.slice(at + 1) || a.slice(at + 1) === b.slice(at) || a.slice(at) === b.slice(at + 1); };
+/** Whether a shape holds a literal anywhere. */
+const literalIn = (item: Shape): boolean => (typeof item === 'object' ? Object.values(item as Record<string, Shape>).some(literalIn) : isLiteral(item));
 /** Every category once: the compiler refuses one missing from `Category` or not in it. */
 const CATEGORIES: Record<Category, true> = { tasks: true, docs: true, chat: true, code: true, monitoring: true, crm: true,
   sales: true, mail: true, calendar: true, meetings: true, support: true, marketing: true, finance: true, hr: true,
   storage: true, ecommerce: true, phone: true, design: true, analytics: true, search: true };
 const operationParts = { docs: https.optional(), kind: z.enum(['read', 'write', 'delete']).optional(),
   params: z.record(z.string(), z.strictObject({ in: z.enum(['path', 'query', 'body', 'form', 'variables', 'header']), type: shape,
-    required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).optional(),
+    required: z.literal(true).optional(), nullable: z.literal(true).optional(), enum: z.array(z.string()).min(2, ONE_VALUE_ENUM).optional(),
     description: z.string().optional() }))
     .refine(params => Object.entries(params).every(([name, param]) => param.in !== 'header' || headerName.safeParse(name).success), headerMessage)
     .optional(),
@@ -235,6 +246,11 @@ const OAUTH_READS = 'every plain field read by an `oauth2` sign-in (in its URLs,
 const OAUTH_PLAIN_URLS = 'an `oauth2` URL that names only plain fields (no secret, and no saved value: none exists before the exchange); a refresh URL may name the host the token answer names';
 const HOST_SPLIT = 'the base, `http.bases`, the OAuth 2 URLs and a token request\'s URL on one host when any of them is typed (`hostSplit`): on a typed host a credential goes only to that host';
 const WELL_FORMED_URLS = 'every URL a well-formed template (`hostPart`): `https://`, then letters, digits, `.`, `-` and `{name}`s with an optional literal port, then `/` or the end';
+const HEADERS_WRITTEN_OUT = '`http.headers` values written out in full, with no placeholder (none is ever filled: the braces would be sent)';
+const NEAR_TYPE_NAME = 'no string literal that differs from a type name by its case or one edit (`strng`, `Integer`): write the type name, or another literal';
+const NULLABLE_LITERAL = 'no `nullable` on a parameter whose type is a literal (it would send `null` beside the one value): leave `nullable` out';
+const ONE_QUERY_TEXT = 'each GraphQL operation its own query text: two with the same text are one operation, so declare one';
+const RESULT_LITERAL = "no literal type in an operation's `result` (a record holding another value would be skipped, silently): give the key its type name";
 const PLACED = "a `params[].in` the operation's request has (a path parameter in its `path`, no body or form on a GET, never a body beside a form, only variables on GraphQL, a header a scalar, never `nullable`, never named `content-type`, `host` or a sign-in's credential header)";
 const runnable = {
   // The host the URL parser reads is then the host part every other rule reads.
@@ -289,6 +305,8 @@ const runnable = {
   // A named base is used as written: a `{name}` in it would send the token to a host spelt with braces.
   '`http.bases` written out in full, with no placeholder (none is ever filled)': (entry: Entry) =>
     Object.values(entry.http.bases ?? {}).every(base => placeholders(base).length === 0),
+  // A header the entry sends on every call is sent as written: a `{name}` in it would send the braces.
+  [HEADERS_WRITTEN_OUT]: (entry: Entry) => Object.values(entry.http.headers ?? {}).every(value => placeholders(value).length === 0),
   // Otherwise the call is refused, `base_unknown`, when it is made.
   "a call's `base` one of `http.bases`": (entry: Entry) => calls(entry).every(call => call?.base === undefined
     || Object.hasOwn(entry.http.bases ?? {}, call.base)),
@@ -370,11 +388,20 @@ const runnable = {
   '`params[].enum` only on a `type: \'string\'` parameter': (entry: Entry) => params(entry).every(param => param.enum === undefined || param.type === 'string'),
   // A path segment, a query value and a form value are one string each: never null, a list or an object.
   'only a scalar, non-`nullable` parameter `in` a path, a query or a form': (entry: Entry) => params(entry).every(param =>
-    !['path', 'query', 'form'].includes(param.in) || (param.nullable === undefined && typeof param.type === 'string')),
+    !['path', 'query', 'form'].includes(param.in) || (param.nullable === undefined && typeof param.type !== 'object')),
   // The rule `client()` applies to each path, and a group worth the name: a required parameter is given anyway.
   '`anyOf`: two or more sets of one or more paths, each to a declared argument (a parameter, or a key of its object `type`), none a `required` parameter': (entry: Entry) =>
     operations(entry).every(op => op.anyOf === undefined || (op.anyOf.length > 1 && op.anyOf.every(set => set.length > 0
       && set.every(path => argumentShape(op, path) !== undefined && op.params?.[path]?.required !== true)))),
+  // A misspelt type name would be a literal the caller must repeat: `'strng'` fits only `'strng'`.
+  [NEAR_TYPE_NAME]: (entry: Entry) => params(entry).flatMap(param => stringLiterals(param.type)).every(literal => ['string', 'integer', 'number',
+    'boolean', 'unknown'].every(name => literal.toLowerCase() !== name && !oneEdit(literal.toLowerCase(), name))),
+  // A literal fixes one value; `nullable` would let a call send `null` as a second.
+  [NULLABLE_LITERAL]: (entry: Entry) => params(entry).every(param => param.nullable === undefined || !isLiteral(param.type)),
+  // The derived fake tells GraphQL operations apart by their query alone: a second one of the same text never answers.
+  [ONE_QUERY_TEXT]: (entry: Entry) => { const texts = operations(entry).flatMap(op => ('graphql' in op ? [op.graphql] : []));
+    return new Set(texts).size === texts.length; },
+  [RESULT_LITERAL]: (entry: Entry) => operations(entry).every(op => op.result === undefined || !literalIn(op.result)),
   // A paged operation yields its records: a 404 is no record to answer null for.
   '`notFound` only on an operation with no `paging`': (entry: Entry) => operations(entry).every(op => op.paging === undefined || op.notFound === undefined),
   // A saved value would replace the field the person entered, which `Connected` types as a string.
@@ -753,6 +780,11 @@ test.each<[Rule, Entry]>([
     revoke: { request: { base: 'api', method: 'POST', path: '/revoke' } } })],
   ['`http.bases` written out in full, with no placeholder (none is ever filled)', defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], http: { ...key.http, bases: { api: 'https://{region}.k.test' } } })],
+  [HEADERS_WRITTEN_OUT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret, { name: 'region', title: 'Region' }],
+    http: { ...key.http, headers: { 'x-region': '{region}' } } })],
+  [HEADERS_WRITTEN_OUT, defineProvider({ ...key, auth: [{ kind: 'key' }], fields: [secret], http: { ...key.http, headers: { 'x-api-key': 'Key {apiKey}' } } })],
+  ...(['strng', 'Integer', 'numbers', 'boolen', 'UNKNOWN', 'sting'] as const).map((name): [Rule, Entry] => [NEAR_TYPE_NAME, defineProvider({ ...key,
+    auth: [{ kind: 'key' }], fields: [secret], operations: { add: { method: 'POST', path: '/items', params: { item: { in: 'body', type: [{ kind: name }] } } } } })]),
   ["`save` keys apart from the fields' names", defineProvider({ ...key, auth: [{ kind: 'key' }],
     fields: [secret, { name: 'region', title: 'Region' }], identify: { request: { path: '/me' } }, save: { region: 'region' } })],
   ...([
@@ -778,7 +810,12 @@ test.each<[Rule, Entry]>([
     ['`notFound` only on an operation with no `paging`', { list: { path: '/items', paging: 'cursor', notFound: 'null' } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data.itemz', result: { data: { items: ['string'] } } } }],
     ["an `operations[].records` path to a list in the operation's `result`", { list: { path: '/items', records: 'data', result: { data: { items: ['string'] } } } }],
-    ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1'] } } } }],
+    ['`params[].enum` only on a `type: \'string\'` parameter', { list: { path: '/items', params: { n: { in: 'query', type: 'integer', enum: ['1', '2'] } } } }],
+    [NULLABLE_LITERAL, { add: { method: 'POST', path: '/items', params: { flag: { in: 'body', type: true, required: true, nullable: true } } } }],
+    [NULLABLE_LITERAL, { add: { method: 'POST', path: '/items', params: { kind: { in: 'body', type: 'reply', nullable: true } } } }],
+    [ONE_QUERY_TEXT, { 'issues.list': { graphql: 'query { issues { id } }' }, 'issues.mine': { graphql: 'query { issues { id } }' } }],
+    [RESULT_LITERAL, { list: { path: '/items', result: { kind: 'x' } } }],
+    [RESULT_LITERAL, { list: { path: '/items', result: { items: [{ 'draft?': true }] } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: 'string', nullable: true } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { list: { path: '/items', params: { q: { in: 'query', type: ['string'] } } } }],
     ['only a scalar, non-`nullable` parameter `in` a path, a query or a form', { get: { path: '/items/{id}', params: { id: { in: 'path', type: { a: 'string' }, required: true } } } }],
@@ -1155,6 +1192,8 @@ test.each<[string, Record<string, unknown>, string]>([
 
 test.each<[string, object, string]>([
   ['a header parameter named with a capital', { From: { in: 'header', type: 'string' } }, headerMessage],
+  ['an empty literal type', { kind: { in: 'body', type: { kind: '' } } }, EMPTY_LITERAL],
+  ['a one-value enum', { state: { in: 'query', type: 'string', enum: ['open'] } }, ONE_VALUE_ENUM],
   ['a header parameter named with a space', { 'x from': { in: 'header', type: 'string' } }, headerMessage],
 ])('%s fails the schema, with what to fix', (_, params, message) => {
   const bad = { ...key, auth: [{ kind: 'key' }], fields: [secret], operations: { add: { method: 'POST', path: '/items', params } } };
@@ -1242,13 +1281,14 @@ test('an entry whose operations keep every rule passes them all', () => {
         result: { data: { items: [{ id: 'string' }] }, 'next?': 'string' } },
       'pages.events': { docs: 'https://k.test/docs/events', path: '/events', paging: 'cursor', records: 'a.b', result: { 'a.b': ['string'], a: { b: 'string' } } },
       'requests.create': { docs: 'https://k.test/docs/requests', method: 'POST', path: '/requests', params: { title: { in: 'body', type: 'string', required: true },
-        state: { in: 'query', type: 'string', enum: ['open'] }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
+        state: { in: 'query', type: 'open' }, inbox: { in: 'query', type: true }, parent: { in: 'body', type: { id: 'string' }, nullable: true } } },
       'then.later': { docs: 'https://k.test/docs/later', path: '/later' },
       'people.get': { docs: 'https://k.test/docs/people', method: 'POST', path: '/people', anyOf: [['email'], ['person.name', 'person.company.domain']],
         params: { email: { in: 'body', type: 'string' }, person: { in: 'body', type: { 'name?': 'string', 'company?': { domain: 'string' } }, required: true } } },
       me: { docs: 'https://k.test/docs/me', graphql: 'query Me($first: Int) { me { id } }', params: { first: { in: 'variables', type: 'integer' } } },
       'incidents.create': { docs: 'https://k.test/docs/incidents', method: 'POST', path: '/incidents', params: { from: { in: 'header', type: 'string', required: true },
-        'x-version': { in: 'header', type: 'string', enum: ['2026-05-01'], required: true, description: 'The version this operation needs.' } } },
+        'x-version': { in: 'header', type: '2026-05-01', required: true, description: 'The version this operation needs.' },
+        'x-dry-run': { in: 'header', type: false } } },
     } });
   expect(Object.keys(runnable).filter(rule => !runnable[rule as Rule](good))).toEqual([]);
   expect(entrySchema.safeParse(good).error).toBeUndefined();

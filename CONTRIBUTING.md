@@ -36,13 +36,17 @@ one takes five steps:
    - a result key is required only when the docs explicitly mark it required (a `required` list, words saying so, a
      non-null `!` in a published GraphQL schema), or it is the record's id; a non-nullable type or an example value is
      not enough; the envelope a list is read from stays required;
-   - a parameter the docs' prose calls required is required;
+   - a parameter the docs' prose calls required is required; one they require only when another argument has a given
+     value, or only in some configurations, is optional, its description naming the condition;
    - read what each page requires, not only what you declare: every parameter it marks required (path, query or body),
      a parameter that turns paging on, and, when the page asks for at least one of several filters, the one that limits
      the list to its one container (a project, a board), are required, and when none of them is its container the list
      declares the page's sets as `anyOf`; a header the page requires on one operation is a required `header` parameter
-     (PagerDuty's `From`); a header whose value the page fixes for one operation is a required `header` parameter with
-     that one value as its `enum` (Cal.com's `cal-api-version`);
+     (PagerDuty's `From`); a header whose value the page fixes for one operation is a required `header` parameter
+     whose type is that value (Cal.com's `cal-api-version`); an `enum` lists two or more values;
+   - a value the page fixes (a "Must be …", the one value an operation takes) is a literal type: `send: true`,
+     `actor_type: 'agent'`, at the top level, inside an object or in each list element, so the call states it; never in
+     a `result`;
    - when the page states that at least one of several equal inputs that find or create one record (an email, a LinkedIn
      URL, a domain) is required, none is required and the operation declares the page's sets as `anyOf`
      (`[['email'], ['phone', 'last_name']]`), which the descriptions do not repeat; a rule that reads two ways gives the
@@ -56,10 +60,10 @@ one takes five steps:
      an update declare no field that chooses their author: the credential's own identity speaks. Where the page requires
      the request to name the agent who sends (Atlas's `agentId`), that field is declared, its description saying so. A
      create may name the customer as its first message's author where the page asks for it (Zammad, Dixa), and an entry
-     may leave such a create out. An update offers no path and no enum value that sends, deletes or marks spam. Where
-     a status cannot be an enum (Help Scout's `value`, read with its `path`; Re:amaze's `status`, an integer inside an
-     object), the description names the values the template covers; where the page lists a spam or removed value among
-     them, it says the entry does not check the value;
+     may leave such a create out. An update offers no path and no enum value that sends, and no create or update offers
+     one that deletes or marks spam. Where a status cannot be an enum (Help Scout's `value`, read with its `path`;
+     Re:amaze's `status`, an integer inside an object), the description names the values the template covers; where the
+     page lists a spam or removed value among them, it says the entry does not check the value;
    - a `page` or `offset` list is paged once its page states where its numbering starts, even when no page says what a
      request past the end answers: the walk ends on an empty list, and fails on a page whose list has the same JSON
      text as the one before's or the first's (`page_repeated`) or on the provider's own error;
@@ -110,7 +114,8 @@ entry:
   key is a field's name; each placeholder in the base names a plain field or a `save` key, either in its host, with
   `http.host` declared (`'*'` only when the whole host is one placeholder a person types, never a host the token
   answer names, which only the refresh URL among the OAuth 2 URLs may also name), or as one segment of its path; `http.bases`
-  hold no placeholder, and a call's `base` names one of them; a token request names only the entry's fields (a plain
+  hold no placeholder, and a call's `base` names one of them; `http.headers` values hold none either (they are sent as
+  written); a token request names only the entry's fields (a plain
   one in its `url`, whose host placeholder needs `http.host`), sends the secret field in its body or Basic, and its
   `send` names no secret field; a sign-in's field names are unique; a field's `choices` are a non-empty list of
   unique values holding its `default`, each of them and the `default` fills every declared URL to a host `http.host`
@@ -127,10 +132,13 @@ entry:
   path, in `s`, `ms`, `epochSeconds`, `epochMs` or `iso8601`, and `retry.defaultWaitMs` is at most `maxWaitMs` (60 000
   when left out) and never beside `onlyStated`;
 - declares operations a client can call: each `{name}` in a path is a required path parameter, every parameter has a
-  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, a paged operation names
+  place in the request (a GET has no body) and none sits where its paging shape's `send` writes, no `result` holds a
+  literal type, no literal is empty or differs from a type name by its case or one edit (`'strng'`, `'Integer'`), no
+  parameter whose type is a literal is `nullable` (it would send `null` beside its one value), a paged operation names
   a declared shape and no `notFound` (a GraphQL one, a shape sent in `variables`; an operation with a path, never
-  one), a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's `list`), an `anyOf` has two or more sets whose paths name declared arguments and no `required` parameter, and no id is
-  a client call or a dotted prefix of another;
+  one), a records path leads to a list (on a `page`, `offset` or `last` shape, the shape's `list`), an `anyOf` has two
+  or more sets whose paths name declared arguments and no `required` parameter, no two GraphQL operations share one
+  query text (declare one), and no id is a client call or a dotted prefix of another;
 - has an `oauth2` sign-in that reads every plain field (its connect asks for each), whose URLs name only plain fields
   (the refresh URL may also name a host the token answer names), and whose URLs, base and `http.bases` share one host
   when any of them is typed: a token goes only to the host that issued it; a public client (`clientAuth: 'none'`)

@@ -34,7 +34,7 @@ export const liveagent = defineProvider({
         departmentid: { in: 'body', type: 'string', required: true }, recipient: { in: 'body', type: 'string', required: true },
         message: { in: 'body', type: 'string', required: true }, recipient_name: { in: 'body', type: 'string' },
         carbon_copies: { in: 'body', type: 'string' }, blind_carbon_copies: { in: 'body', type: 'string' },
-        status: { in: 'body', type: 'string', enum: ['N', 'T', 'P', 'R', 'X', 'B', 'A', 'C', 'W'], description: 'N by default: N new, T chatting, P calling, R resolved, X deleted, B spam, A answered, C open, W postponed.' },
+        status: { in: 'body', type: 'string', enum: ['N', 'T', 'P', 'R', 'A', 'C', 'W'], description: 'N by default: N new, T chatting, P calling, R resolved, A answered, C open, W postponed.' },
         do_not_send_mail: { in: 'body', type: 'string', enum: ['Y', 'N'], description: 'Y sends no mail; N is the default.' },
         is_html_message: { in: 'body', type: 'string', enum: ['Y', 'N'] }, tags: { in: 'body', type: ['string'], description: 'Tag IDs.' } },
       result: { id: 'string', 'subject?': 'string', 'status?': 'string', 'owner_contactid?': 'string', 'departmentid?': 'string',

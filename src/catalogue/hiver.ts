@@ -34,7 +34,8 @@ export const hiver = defineProvider({
       path: '/inboxes/{inbox_id}/conversations/{conversation_id}', params: one, result: { data: [conversation] } },
     'conversations.update': { docs: `${ref}/conversations/update-conversation-in-the-inbox`, method: 'PATCH',
       path: '/inboxes/{inbox_id}/conversations/{conversation_id}',
-      params: { ...one, status: { in: 'body', type: { 'name?': 'string' } }, assignee: { in: 'body', type: { 'email?': 'string' } },
+      params: { ...one, status: { in: 'body', type: { 'name?': 'string' }, description: 'name: open, close or pending.' },
+        assignee: { in: 'body', type: { 'email?': 'string' } },
         tags: { in: 'body', type: { 'to_apply?': 'unknown', 'to_remove?': 'unknown' }, description: 'The tags to apply and to remove.' } } },
   },
 });

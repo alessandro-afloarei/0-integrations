@@ -11,7 +11,7 @@ const message = { 'body?': 'unknown', 'visibility?': 'integer', 'origin?': 'inte
   'user?': { 'name?': 'string', 'email?': 'string' } } as const;
 const slug = { slug: { in: 'path', type: 'string', required: true } } as const;
 const page = { page: { in: 'query', type: 'integer', description: 'The page; the answer gives page_size and page_count.' } } as const;
-const statuses = '0 Open, 1 Responded, 2 Done, 3 Spam, 4 Archived, 5 On Hold, 6 Auto-Done, 7 AI Agent Assigned, 8 AI Agent Done, 9 Spam (identified by AI)';
+const statuses = '0 Open, 1 Responded, 2 Done, 4 Archived, 5 On Hold, 6 Auto-Done, 7 AI Agent Assigned or 8 AI Agent Done (the entry does not check the value)';
 const ref = 'https://www.reamaze.com/api';
 
 export const reamaze = defineProvider({
@@ -40,12 +40,12 @@ export const reamaze = defineProvider({
       params: { conversation: { in: 'body', required: true, type: { 'subject?': 'string', 'category?': 'string', 'status?': 'integer',
         'tag_list?': ['string'], 'assignee?': 'string', 'user?': { 'name?': 'string', 'email?': 'string' },
         'message?': { 'body?': 'string', 'recipients?': ['string'], 'suppress_notifications?': 'boolean' } },
-      description: `A conversation made on behalf of a customer (user): category should be set to the slug of the channel to create it in; assignee a staff email; status a number (${statuses}); message.suppress_notifications true sends no email or integration notification.` } },
+      description: `A conversation made on behalf of a customer (user): category should be set to the slug of the channel to create it in; assignee a staff email; status a number: ${statuses}; message.suppress_notifications true sends no email or integration notification.` } },
       result: conversation },
     'conversations.update': { docs: `${ref}/put_conversations`, method: 'PUT', path: '/conversations/{slug}',
       params: { ...slug, conversation: { in: 'body', required: true, type: { 'status?': 'integer', 'tag_list?': ['string'],
         'assignee?': { 'email?': 'string' }, 'category?': 'string' },
-      description: `Each key optional. status: 0 Open, 1 Responded, 2 Done, 4 Archived, 5 On Hold, 6 Auto-Done, 7 AI Agent Assigned or 8 AI Agent Done (the entry does not check the value). assignee.email: a staff user's email. category: an email channel's slug to move it to.` } },
+      description: `Each key optional. status: ${statuses}. assignee.email: a staff user's email. category: an email channel's slug to move it to.` } },
       result: conversation },
     'messages.list': { docs: `${ref}/get_messages`, path: '/conversations/{slug}/messages',
       params: { ...slug, filter: { in: 'query', type: 'string', enum: ['staff', 'customer'] }, ...page },
@@ -58,7 +58,7 @@ export const reamaze = defineProvider({
     'contacts.list': { docs: `${ref}/get_contacts`, path: '/contacts',
       params: { q: { in: 'query', type: 'string', description: 'Searches contacts by name or email.' },
         type: { in: 'query', type: 'string', enum: ['email', 'mobile'] },
-        sort: { in: 'query', type: 'string', enum: ['date'], description: 'By name by default; date orders newest first.' }, ...page },
+        sort: { in: 'query', type: 'date', description: 'By name by default; date orders newest first.' }, ...page },
       result: { 'page_count?': 'integer', 'total_count?': 'integer', contacts: [{ 'name?': 'string', 'email?': 'string', 'friendly_name?': 'string' }] } },
   },
 });
