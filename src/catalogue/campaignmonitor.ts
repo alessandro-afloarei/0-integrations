@@ -9,7 +9,6 @@ const subscriber = { EmailAddress: 'string', 'Name?': 'string', 'Date?': 'string
 const listId = { listid: { in: 'path', type: 'string', required: true } } as const;
 const clientId = { clientid: { in: 'path', type: 'string', required: true,
   description: 'A client\'s ClientID, from GET /clients.json.' } } as const;
-const email = { email: { in: 'query', type: 'string', required: true } } as const;
 const pageSize = { pagesize: { in: 'query', type: 'integer', description: '1000 by default.' } } as const;
 const written = { Name: { in: 'body', type: 'string' }, MobileNumber: { in: 'body', type: 'string' },
   CustomFields: { in: 'body', type: [{ Key: 'string', Value: 'string' }] } } as const;
@@ -36,8 +35,9 @@ export const campaignmonitor = defineProvider({
       result: [{ ListID: 'string', 'Name?': 'string' }] },
     'subscribers.list': { docs: `${ref}/lists/#active-subscribers-2`, path: '/lists/{listid}/active.json', paging: 'page',
       records: 'Results', params: { ...listId, ...pageSize }, result: { Results: [subscriber] } },
-    'subscribers.get': { docs: `${ref}/subscribers/#getting-a-subscribers-details`, path: '/subscribers/{listid}.json', notFound: 'null',
-      params: { ...listId, ...email }, result: subscriber },
+    'subscribers.get': { docs: `${ref}/subscribers/#getting-a-subscribers-details`, path: '/subscribers/{listid}.json',
+      params: { ...listId, email: { in: 'query', type: 'string', required: true,
+        description: 'A subscriber not in the list is an error with detail 203.' } }, result: subscriber },
     // Adds or updates a subscriber. A new one is sent the list's follow-up email, and its verification email (double
     // opt-in) or confirmation email; no parameter stops them: https://www.campaignmonitor.com/api/v3-3/subscribers/
     'subscribers.create': { docs: `${ref}/subscribers/#adding-a-subscriber`, method: 'POST', path: '/subscribers/{listid}.json',
