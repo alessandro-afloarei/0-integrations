@@ -110,12 +110,13 @@ function put(into: Record<string, unknown>, path: string, value: unknown): Recor
   return into;
 }
 /** How many of a shape's literals a value sent holds, or -1 when it breaks one or lacks a required key: an object's at
- * each key (a `key?` missing, or a null, holds none), a list's in every element. */
+ * each key (a `key?` missing, or a null other than for a required literal, holds none), a list's in every element. */
 function literalsHeld(shape: Shape, value: unknown): number {
   if (typeof shape !== 'object') return isLiteral(shape) ? (value === shape ? 1 : -1) : 0;
   const held = Array.isArray(shape) ? (Array.isArray(value) ? value : [undefined]).map(item => literalsHeld((shape as readonly [Shape])[0], item))
     : Object.entries(shape).map(([key, inner]) => { const found = readPath(value, key.replace(/\?$/u, ''));
-      return found === undefined ? (key.endsWith('?') ? 0 : -1) : found === null ? 0 : literalsHeld(inner, found); });
+      return found === undefined ? (key.endsWith('?') ? 0 : -1) : found === null && (key.endsWith('?') || !isLiteral(inner)) ? 0
+        : literalsHeld(inner, found); });
   return held.includes(-1) ? -1 : held.reduce((sum, count) => sum + count, 0);
 }
 /** The paths a value reads from identify's answer, never the token answer or a connection value: each a template
@@ -175,16 +176,16 @@ export function fakeProvider<const E extends Entry>(entry: E, data: { key: strin
     if ('graphql' in op) graphql.push([base(), op.graphql, answer]);
     else paths.push([op.method ?? 'GET', op.path, op, answer]);
   }
-  // One route per method and path: of its operations, one whose required query, body and header parameters the call all
-  // carries and whose literals all hold in it, the most literals first, then the most required parameters.
+  // One route per method and path: of its operations, one whose required path, query, body, form and header parameters
+  // the call all carries and whose literals all hold in it, the most literals first, then the most required parameters.
   for (const [method, path] of paths.filter(([method, path], at) => paths.findIndex(([m, p]) => m === method && p === path) === at)) {
     routes.push(route(method, base(), path, call => paths.filter(([m, p]) => m === method && p === path).map(([, , op, answer]) => {
-      const params = Object.entries(op.params ?? {}).filter(([, param]) => param.in !== 'path');
+      const params = Object.entries(op.params ?? {});
       // The call's arguments as one object of the parameters, `name?` for an optional one; a boolean literal outside the
       // JSON body arrives as its text.
       const held = literalsHeld(Object.fromEntries(params.map(([name, param]) => [param.required ? name : `${name}?`,
         param.in === 'body' || typeof param.type !== 'boolean' ? param.type : String(param.type)])),
-        Object.fromEntries(params.map(([name, param]) => [name, param.in === 'query' ? readPath(call.query, name)
+        Object.fromEntries(params.map(([name, param]) => [name, param.in === 'path' || param.in === 'query' ? readPath(call[param.in], name)
           : param.in === 'header' ? readPath(call.headers, name.toLowerCase()) : readPath(call.body, name)])));
       return [held, held < 0 ? 0 : params.filter(([, param]) => param.required).length, answer] as const;
     }).reduce((best, next) => (next[0] > best[0] || (next[0] === best[0] && next[1] > best[1]) ? next : best))[2](call)));
