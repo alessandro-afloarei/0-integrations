@@ -2,13 +2,13 @@ import { defineProvider } from '../catalogue.js';
 
 /** Ortto: a custom API key in `X-Api-Key` on the instance's region; reads are POSTs too. No endpoint names the account:
  * identify checks the key on the audiences list. A 429 states its wait in `error.try-in-seconds` (seconds).
- * `people.create` creates people or updates existing ones (no page names a message it sends); an activity can add its
- * person to journeys: https://help.ortto.com/a-233-custom-activities-guide */
+ * `people.create` creates people, subscribed to email by default, or updates existing ones; their fields and tags, and
+ * an activity, can enter a person into journeys: https://help.ortto.com/a-733-journey-entry-criteria */
 const ref = 'https://help.ortto.com';
 /** The default, Australian and European service endpoints: https://help.ortto.com/a-250-api-reference */
 const hosts = ['api.ap3api.com', 'api.au.ap3api.com', 'api.eu.ap3api.com'] as const;
 const people = { in: 'body', type: [{ 'fields?': 'unknown', 'tags?': ['string'], 'unset_tags?': ['string'] }],
-  description: 'Up to 100 people, each its person fields by field id (str::email, str::first, str:cm:<custom>), tags to apply and to remove.' } as const;
+  description: 'Up to 100 people, each its person fields by field id (str::email, str::first, str:cm:<custom>), tags to apply and to remove; bol::p and bol::sp the email and SMS permissions; null clears a field.' } as const;
 
 export const ortto = defineProvider({
   id: 'ortto', name: 'Ortto', docs: `${ref}/a-223-developer-guide`,
@@ -16,15 +16,15 @@ export const ortto = defineProvider({
   fields: [{ name: 'apiHost', title: 'Region', choices: hosts, default: 'api.ap3api.com',
     help: 'Your instance region: api.au.ap3api.com for Australia, api.eu.ap3api.com for Europe, api.ap3api.com for every other.' },
   { name: 'apiKey', title: 'Custom API key', secret: true,
-    help: 'The private API key of a Custom API (advanced) data source in your Ortto account; Ortto asks for a separate key for each application. Its default merge strategy applies when a request names none.' }],
+    help: 'The private API key of a Custom API (advanced) data source in your Ortto account; Ortto asks for a separate key for each application. Its Merge strategy setting (the default merge_by fields) applies when a request names none.' }],
   auth: [{ kind: 'key', send: { header: 'x-api-key' } }],
   http: { baseUrl: 'https://{apiHost}/v1', host: hosts, headers: { 'content-type': 'application/json' },
     // https://help.ortto.com/a-235-rate-limits
     retry: { wait: { path: 'error.try-in-seconds', unit: 's' } } },
   errors: { detail: 'error.code' },
   identify: { request: { method: 'POST', path: '/audiences/get' } },
-  // The Basic auth username and password set on the webhook in Ortto; nothing is signed:
-  // https://help.ortto.com/a-251-configuring-a-webhook
+  // The Basic auth username and password set on the webhook in Ortto; nothing is signed, and Ortto names campaign_id,
+  // contact_id and run_id together as the dedupe key: https://help.ortto.com/a-251-configuring-a-webhook
   webhook: { kind: 'basic' },
   paging: { people: { kind: 'offset', send: { body: 'offset' }, list: 'contacts', more: 'has_more' },
     audiences: { kind: 'offset', send: { body: 'offset' } } },
@@ -43,9 +43,11 @@ export const ortto = defineProvider({
         q: { in: 'body', type: 'string' }, sort_by_field_id: { in: 'body', type: 'string' },
         sort_order: { in: 'body', type: 'string', enum: ['asc', 'desc'] } },
       result: { contacts: [{ id: 'string', 'fields?': 'unknown' }] } },
+    // A new person's email permission is true unless fields set bol::p false; Ortto asks for the person's consent:
+    // https://help.ortto.com/a-225-configuring-peoples-subscription-permissions
     'people.create': { docs: `${ref}/a-257-create-or-update-one-or-more-people-merge`, method: 'POST', path: '/person/merge',
       params: { people, merge_by: { in: 'body', type: ['string'], description: 'The field ids that find an existing person to update; the key\'s defaults when left out.' },
-        merge_strategy: { in: 'body', type: 'integer', description: '2 (overwrite existing) by default.' },
+        merge_strategy: { in: 'body', type: 'integer', description: '1 append only, 2 overwrite existing (the default), 3 ignore existing people.' },
         skip_non_existing: { in: 'body', type: 'boolean', description: 'true updates existing people and adds none.' },
         async: { in: 'body', type: 'boolean' } } },
     'subscriptions.create': { docs: `${ref}/a-269-subscribe-or-unsubscribe-people-to-from-an-audience-subscribe`, method: 'PUT',
