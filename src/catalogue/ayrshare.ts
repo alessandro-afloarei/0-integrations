@@ -32,7 +32,9 @@ export const ayrshare = defineProvider({
       result: { history: [post] } },
     'posts.get': { docs: `${ref}/post/get-post`, path: '/post/{id}',
       params: { id: { in: 'path', type: 'string', required: true, description: 'The Ayrshare Post ID.' } }, result: post },
-    'posts.create': { docs: `${ref}/post/post`, method: 'POST', path: '/post',
+    // Holds the post "awaiting approval" (`requiresApproval: true`): nothing is published until a person approves it in
+    // the dashboard or by `PATCH /api/post` (not declared); approved, it publishes then (no `scheduleDate` is offered).
+    'posts.create': { docs: `${ref}/post/post`, method: 'POST', path: '/post', kind: 'write',
       params: {
         post: { in: 'body', type: 'string', required: true, description: 'The post\'s text; an empty string for none.' },
         platforms: { in: 'body', type: ['string'], required: true,

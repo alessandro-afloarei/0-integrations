@@ -27,7 +27,6 @@ export const zernio = defineProvider({
   // token works on the REST API too: https://zernio.com/auth.md
   auth: [{ kind: 'oauth2', authorizeUrl: 'https://zernio.com/oauth/authorize', tokenUrl: 'https://zernio.com/api/oauth/token',
     clientAuth: 'none', authorizeParams: { response_type: 'code' } }, { kind: 'key' }],
-  // `posts:write` includes `posts:read`.
   // Each declared read of posts takes `posts:read` or `posts:write`, and `posts.create` `posts:write`; accounts and
   // `/users/me` take `accounts:read` (`x-oauth-scopes`): https://zernio.com/openapi.json
   scopes: { default: ['accounts:read', 'posts:write'] },
@@ -57,7 +56,9 @@ export const zernio = defineProvider({
       limit: { in: 'query', type: 'integer', description: '10 by default, at most 500.' } },
       result: { posts: [post] } },
     'posts.get': { docs: `${docs}/posts/get-post`, path: '/posts/{postId}', notFound: 'null', params: postId, result: { post } },
-    'posts.create': { docs: `${docs}/posts/create-post`, method: 'POST', path: '/posts',
+    // Saves a draft (`isDraft: true` wins over any schedule): nothing is published, scheduled or queued; no schedule
+    // field is offered, and a draft is changed in Zernio's app.
+    'posts.create': { docs: `${docs}/posts/create-post`, method: 'POST', path: '/posts', kind: 'write',
       params: { ...written, isDraft: { in: 'body', type: true, required: true },
         profileId: { in: 'body', type: 'string', description: 'Files a draft with no platforms under this profile.' } },
       result: { post } },
