@@ -43,10 +43,11 @@ password); for an OAuth 2 entry, the access token its token URL gives.
   same method and path (folk's `people.list` and `people.search`), one whose required path, query, body, form and
   header parameters the request all carries (and, inside an object parameter, each of its required keys), and whose
   literals in those places all hold in it (in each list element; a `null` is no literal's value, nor a list's or an
-  object's, but is carried for a `nullable` parameter), answers: the one with the most literals held first, a list's counted once for each of its elements
-  (Missive's `messages.create`, `drafts.send: true`, before its `drafts.create`), then the most such parameters, the
-  first declared on a tie; when none carries its own, the first declared answers. GraphQL operations are told apart by their query alone: of two with
-  the same query, the first declared answers, whatever literals their variables fix. Its function gets `{ path, query, body, headers }` (a form body as its fields, each a string; the request's
+  object's, but is carried for a `nullable` parameter), answers: the one with the most literals held first, a list's
+  counted once for each of its elements (Missive's `messages.create`, `drafts.send: true`, before its `drafts.create`),
+  then the most such parameters, the first declared on a tie; when none carries its own, the first declared answers.
+  GraphQL operations are told apart by their query alone: of two with the same query, the first declared answers,
+  whatever literals their variables fix. Its function gets `{ path, query, body, headers }` (a form body as its fields, each a string; the request's
   headers, lowercase) and returns the JSON answered with 200, `undefined` for a 404, or a `Response` answered as it is. Paging is
   the function's: it answers each page as it likes.
   On a route two operations share, every request is routed afresh: a next page whose request drops the filter is
