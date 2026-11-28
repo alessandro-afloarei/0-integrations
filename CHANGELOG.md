@@ -19,8 +19,8 @@ Nothing here is released yet.
   app's calls do not change at all: each argument's type is the same value as before. An app's own entry may still
   declare a one-value `enum`, which the engine reads as before.
 - For contributors: the table test refuses a one-value `enum`, an empty literal, a string literal one edit or a case
-  change from a type name (`'strng'`, `'Integer'`), a `nullable` literal parameter, a literal in a `result`, and a
-  `{placeholder}` in an `http.headers` value. It runs over this library's entries only. The engine checks none of
+  change from a type name (`'strng'`, `'Integer'`), a `nullable` literal parameter, a literal in a `result`, two
+  GraphQL operations with one query text, and a `{placeholder}` in an `http.headers` value. It runs over this library's entries only. The engine checks none of
   these in an app's own entry: an answer holding another value than a `result` literal is `invalid_response` (a paged
   list skips that record), and a header's braces are sent as written.
 - Help Scout creates drafts (`drafts.create`), Freshchat conversations as an agent (`conversations.create`, whose first
