@@ -239,7 +239,7 @@ const RFC6749_ERRORS = ['invalid_request', 'invalid_client', 'invalid_grant', 'u
 /** A first token answer: a refusal read up to 10 MiB (the bound the HTTP library puts on a call's error body), else no body
  * and so no detail; a 2xx whole (an exchange's from a clone, oauth4webapi reading it after). A broken read is `unavailable`. */
 async function firstAnswer(response: Response, secrets: readonly string[]): Promise<ProviderResponse> {
-  const read = response.ok ? response.text() : readCappedBody(response, 10 * 1024 * 1024).then(bytes => new TextDecoder().decode(bytes ?? undefined));
+  const read = response.ok ? response.text() : readCappedBody(response, 10 * 1024 * 1024).then(bytes => new Response(bytes).text());
   const text = await read.catch(() => { throw new ProviderHttpError('unavailable', null); });
   return sentWith({ status: response.status, headers: response.headers, data: parseJson(text) }, secrets);
 }

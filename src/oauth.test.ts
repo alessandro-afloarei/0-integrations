@@ -329,6 +329,26 @@ test('a refusal that opens with a UTF-8 byte order mark is read as the same answ
   expect(marked.exchange).toMatchObject({ code: 'rate_limited', status: 503 });
 });
 
+test("a refusal's bytes are decoded as the runtime's own `Response.text()` decodes them, on both paths", async () => {
+  const json = [...new TextEncoder().encode('{"error":"invalid_grant"}')];
+  const mark = [0xef, 0xbb, 0xbf];
+  const ruled = firstRequests({ rules: [{ when: { status: 503, path: 'error', equals: 'invalid_grant' }, code: 'rate_limited' }] });
+  for (const bytes of [[...mark, ...mark, ...json], [...mark, ...json], json, [0xff, 0xfe, ...json], [...json.slice(0, 5), 0xc3, ...json.slice(5)], []]) {
+    for (const status of [400, 503]) {
+      const answer = (body: Uint8Array | string) => () => new Response(body, { status, headers: { 'content-type': 'application/json' } });
+      // What a whole read of the same bytes is, sent again as text: the capped read must classify the bytes the same way.
+      const decoded = await new Response(new Uint8Array(bytes)).text();
+      const [read, expected] = [await ruled(answer(new Uint8Array(bytes))), await ruled(answer(decoded))];
+      expect(read).toEqual(expected);
+      expect(read.exchange).toEqual(read.token);
+    }
+  }
+  // Two leading marks: a whole read drops both, so the detail is kept.
+  const twice = await firstRequests({})(() => new Response(new Uint8Array([...mark, ...mark, ...json]), { status: 400 }));
+  expect(twice.exchange).toEqual(new ProviderHttpError('rejected', 400, 'invalid_grant'));
+  expect(twice.token).toEqual(twice.exchange);
+});
+
 test('a successful token answer past 10 MiB is read whole, on both paths, and an exchange checks `failed` without refusing it', async () => {
   const large = counted(200, LIMIT + 1024 * 1024, '{"access_token":"a","token_type":"bearer","ok":true}');
   for (const failed of [undefined, { path: 'ok', equals: false }] as const) {
