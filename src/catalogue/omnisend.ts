@@ -40,9 +40,11 @@ export const omnisend = defineProvider({
       result: { contacts: [contact] } },
     'contacts.get': { docs: `${ref}/get_contacts-id`, path: '/contacts/{id}', notFound: 'null', params: id, result: contact },
     // An upsert: a contact with the email given is updated. An identifier sends a welcome message when the welcome
-    // workflow is on, unless its `sendWelcomeMessage` is false.
+    // workflow is on, unless its `sendWelcomeMessage` is false; a contact that enters a segment starts the automations
+    // triggered on it: https://api-docs.omnisend.com/reference/post_automations
     'contacts.create': { docs: `${ref}/post_contacts`, method: 'POST', path: '/contacts', params: written, result: contact },
-    // An identifier added here sends a welcome message as on create, unless its `sendWelcomeMessage` is false.
+    // An identifier added here sends a welcome message as on create, unless its `sendWelcomeMessage` is false; a
+    // contact that enters a segment starts its automations, as on create.
     'contacts.update': { docs: `${ref}/patch_contacts-id`, method: 'PATCH', path: '/contacts/{id}', params: { ...id, ...written },
       result: contact },
     'campaigns.list': { docs: `${ref}/get_campaigns`, path: '/campaigns', paging: 'after', records: 'campaigns',
@@ -57,6 +59,8 @@ export const omnisend = defineProvider({
         contact: { in: 'body', type: { 'id?': 'string', 'email?': 'string', 'phone?': 'string' },
           description: 'Created or updated from what is given here.' },
         properties: { in: 'body', type: 'unknown' }, eventTime: { in: 'body', type: 'string', description: 'ISO 8601; now by default.' },
+        eventVersion: { in: 'body', type: 'string',
+          description: 'Only for a recommended event, its documented version; leave it out for a custom event.' },
         eventID: { in: 'body', type: 'string', description: 'A UUID; with eventTime it dedupes historical events, not real-time ones.' } } },
   },
 });
