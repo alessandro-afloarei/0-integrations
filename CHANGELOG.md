@@ -80,12 +80,14 @@ Nothing here is released yet.
     declaration whose query `echo` left out `text` (the type and the table already refused it) was answered as JSON and
     is now null.
   - Breaking: every catalogue entry with a signed webhook (`hmac`, `ed25519`) dedupes on a body path (the table refuses
-    a header id there). Breakcold reads `eventId` (was the `x-webhook-delivery-id` header), PagerDuty `event.id` (was
-    `x-webhook-id`) and TidyCal `id` (was `tidycal-event-id`) from the signed body, so the ids `deliveryId()` returns
-    for them change value: a delivery first seen before the update and retried after it reads as new. PagerDuty's id
-    is now the event's, the same in every subscription's copy, where `X-Webhook-Id` was per webhook.
-    Linear, Sentry, RocketReach and Todoist declare no `deliveryId` (no page documents a signed per-delivery id), so
-    `deliveryId()` answers null and an app dedupes them on its own key.
+    a header id there). TidyCal reads `id` from the signed body (was the `tidycal-event-id` header): its page says the
+    header carries that same event id, so the value does not change, only where it is read. Breakcold reads `eventId`
+    (was `x-webhook-delivery-id`): its page names both "the delivery event id" but does not say they hold the same
+    value, so treat it as changed. PagerDuty reads `event.id` (was `x-webhook-id`, "unique to the webhook"): the value
+    changes to the event's, the same in every subscription's copy of one event. Where a value changes, a delivery
+    first seen before the update and retried after it reads as new. Linear, Sentry, RocketReach and Todoist declare no
+    `deliveryId` (no page documents a signed per-delivery id), so `deliveryId()` answers null and an app dedupes them
+    on its own key.
   - Breaking: Fireflies declares no `deliveryId`: `event` and `meeting_id` name the meeting, and a resend after its
     notes change carries the same pair, so deduping on it dropped every updated transcript or summary. `deliveryId()`
     answers null; an app dedupes on its own key, for example the event, the meeting id and `reprocessed_at` (absent on a
