@@ -2,7 +2,8 @@ import { defineProvider } from '../catalogue.js';
 
 /** Typefully Public API v2: an API key for your own account. A draft create or update never sends `publish_at` (its
  * "now" publishes at once) nor `share`: the draft is saved and nothing is published or scheduled. A 429 waits
- * `X-RateLimit-User-Reset`, a Unix timestamp. The webhook names no event or delivery id, so it is not declared. */
+ * `X-RateLimit-User-Reset`, a Unix timestamp. The webhook is not declared: no page states its timestamp tolerance, and
+ * a failed delivery retries for an hour. */
 const socialSet = { id: 'integer', name: 'string', username: 'string', 'profile_image_url?': 'string', 'team?': 'unknown' } as const;
 const draft = { id: 'integer', social_set_id: 'integer', status: 'string', 'draft_title?': 'string', 'preview?': 'string',
   private_url: 'string', created_at: 'string', 'updated_at?': 'string' } as const;
@@ -26,7 +27,7 @@ export const typefully = defineProvider({
   http: { baseUrl: 'https://api.typefully.com', retry: { wait: { header: 'x-ratelimit-user-reset', unit: 'epochSeconds' } } },
   identify: { request: { path: '/v2/me' }, id: 'id', name: ['name', 'email'] },
   errors: { detail: 'error.code' },
-  paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'results' } },
+  paging: { offset: { kind: 'offset', send: { query: 'offset' }, list: 'results', more: 'next' } },
   operations: {
     'socialSets.list': { docs, path: '/v2/social-sets', paging: 'offset', records: 'results', params: limit,
       result: { results: [socialSet] } },
@@ -41,6 +42,7 @@ export const typefully = defineProvider({
     'drafts.create': { docs, method: 'POST', path: '/v2/social-sets/{social_set_id}/drafts',
       params: { ...socialSetId, platforms: { in: 'body', type: 'unknown', required: true, description: platforms }, ...written },
       result: draft },
+    // Editing a draft a person already scheduled changes what it publishes then (publish access).
     'drafts.update': { docs, method: 'PATCH', path: '/v2/social-sets/{social_set_id}/drafts/{draft_id}',
       params: { ...draftPath, platforms: { in: 'body', type: 'unknown', description: `${platforms} Only the platforms sent change.` },
         ...written },
