@@ -40,10 +40,11 @@ export const campaignmonitor = defineProvider({
         description: 'A subscriber not in the list is an error with detail 203.' } }, result: subscriber },
     // Adds or updates a subscriber. A new one is sent the list's follow-up email, and its verification email (double
     // opt-in) or confirmation email; no parameter stops them: https://www.campaignmonitor.com/api/v3-3/subscribers/
-    'subscribers.create': { docs: `${ref}/subscribers/#adding-a-subscriber`, method: 'POST', path: '/subscribers/{listid}.json',
+    // An unsubscribed address is not added again (error 206): `Resubscribe`, which re-adds, is left out.
+    'subscribers.create': { docs: `${ref}/subscribers/#adding-a-subscriber`, method: 'POST', path: '/subscribers/{listid}.json', kind: 'write',
       params: { ...listId, EmailAddress: { in: 'body', type: 'string', required: true }, ...written,
         ConsentToTrack: consent }, result: 'string' },
-    // Leaves out `Resubscribe`, which sends the welcome and confirmation emails an add sends.
+    // Leaves out `Resubscribe`: without it an inactive subscriber is not resubscribed; with it the add's emails go out.
     'subscribers.update': { docs: `${ref}/subscribers/#updating-a-subscriber`, method: 'PUT', path: '/subscribers/{listid}.json',
       params: { ...listId, email: { in: 'query', type: 'string', required: true, description: 'The subscriber\'s current email address.' },
         EmailAddress: { in: 'body', type: 'string', description: 'A new email address.' }, ...written, ConsentToTrack: consent } },
